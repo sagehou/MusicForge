@@ -1,0 +1,20 @@
+services:
+  musicforge:
+    image: ghcr.io/sagehou/musicforge:${MUSICFORGE_VERSION:-latest}
+    container_name: musicforge
+    restart: unless-stopped
+    user: "${PUID:-10001}:${PGID:-10001}"
+    ports:
+      - "127.0.0.1:8787:8787"
+    environment:
+      MUSICFORGE_PUBLIC_URL: ${MUSICFORGE_PUBLIC_URL:-http://localhost:8787}
+      MUSICFORGE_LOG_LEVEL: INFO
+    volumes:
+      - ${CONFIG_DIR:-./config}:/config
+      - ${FLAC_DIR:-./flac}:/music/source:ro
+      - ${OUTPUT_DIR:-./streaming}:/music/output
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    stop_grace_period: 30s

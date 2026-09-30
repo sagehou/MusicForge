@@ -1,0 +1,167 @@
+name: CI and release
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: musicforge-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: false
+      - name: Install ffmpeg in CI
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+      - name: Generate initial source lockfiles in CI
+        run: |
+          if [ ! -f web/package-lock.json ]; then
+            (cd web && npm install --package-lock-only --ignore-scripts)
+          fi
+          if [ ! -f go.sum ]; then
+            go mod tidy
+          fi
+          gofmt -w cmd internal web/embed.go
+          if git ls-files --error-unmatch go.sum >/dev/null 2>&1; then
+            git diff --exit-code -- '*.go' go.mod go.sum web/package-lock.json
+          fi
+      - name: Frontend typecheck and build
+        working-directory: web
+        run: npm ci && npm run build
+      - name: Backend race, integration tests and vet
+        run: |
+          go test -mod=readonly -race -count=1 -timeout=5m ./...
+          go vet -mod=readonly ./...
+          go build -mod=readonly -trimpath -o .ci/musicforge ./cmd/musicforge
+      - name: Browser validation against the actual application
+        run: |
+          mkdir -p .ci/config .ci/source/Artist/Album .ci/output
+          ffmpeg -v error -f lavfi -i sine=frequency=440:duration=2 -c:a flac -metadata artist='CI Artist' -metadata album='CI Album' -metadata title='CI Track' .ci/source/Artist/Album/01.flac
+          touch -d '2 minutes ago' .ci/source/Artist/Album/01.flac
+          MUSICFORGE_CONFIG_DIR="$PWD/.ci/config" MUSICFORGE_PUBLIC_URL=http://127.0.0.1:8787 .ci/musicforge >.ci/server.log 2>&1 &
+          server_pid=$!
+          trap 'kill "$server_pid" 2>/dev/null || true' EXIT
+          cd web
+          npx playwright install --with-deps chromium
+          MUSICFORGE_TEST_ROOT="$(dirname "$PWD")/.ci" npm test
+      - name: CI-generated source snapshot
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: canonical-source
+          path: |
+            go.mod
+            go.sum
+            cmd/**/*.go
+            internal/**/*.go
+            web/embed.go
+            web/package-lock.json
+          retention-days: 14
+      - name: Browser reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-results
+          path: |
+            web/test-results
+            web/playwright-report
+          retention-days: 14
+
+  image:
+    needs: validate
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            arch: amd64
+          - runner: ubuntu-24.04-arm
+            arch: arm64
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: canonical-source
+          path: .
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        if: startsWith(github.ref, 'refs/tags/v')
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build native architecture image
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/${{ matrix.arch }}
+          load: true
+          tags: musicforge:validation
+          build-args: VERSION=${{ github.ref_name }}
+          cache-from: type=gha,scope=${{ matrix.arch }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.arch }}
+      - name: Container smoke test
+        run: |
+          docker run -d --name musicforge-validation -p 8787:8787 musicforge:validation
+          for i in $(seq 1 30); do
+            if docker exec musicforge-validation musicforge -healthcheck; then break; fi
+            sleep 1
+          done
+          docker exec musicforge-validation musicforge -healthcheck
+          curl --fail http://localhost:8787/api/auth/me
+          docker stop musicforge-validation
+      - name: Push validated architecture on version tags
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          VERSION: ${{ github.ref_name }}
+          ARCH: ${{ matrix.arch }}
+        run: |
+          docker tag musicforge:validation "ghcr.io/${GITHUB_REPOSITORY,,}:$VERSION-$ARCH"
+          docker push "ghcr.io/${GITHUB_REPOSITORY,,}:$VERSION-$ARCH"
+
+  publish:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: image
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Publish multiarchitecture version and stable latest
+        env:
+          VERSION: ${{ github.ref_name }}
+        run: |
+          [[ "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]
+          image="ghcr.io/${GITHUB_REPOSITORY,,}"
+          tags=(--tag "$image:$VERSION")
+          if [[ "$VERSION" != *-* ]]; then tags+=(--tag "$image:latest"); fi
+          docker buildx imagetools create "${tags[@]}" "$image:$VERSION-amd64" "$image:$VERSION-arm64"
+          docker buildx imagetools inspect "$image:$VERSION"

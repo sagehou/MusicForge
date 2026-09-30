@@ -1,0 +1,13 @@
+/web/dist/
+/web/node_modules/
+/web/.vite/
+/web/test-results/
+/web/playwright-report/
+/.ci/
+/musicforge
+/config/
+/.env
+*.db
+*.db-shm
+*.db-wal
+coverage.out

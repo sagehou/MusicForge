@@ -1,0 +1,10 @@
+.git
+.github
+**/node_modules
+web/dist
+.ci
+**/test-results
+**/playwright-report
+docs
+AGENTS.md
+README.md

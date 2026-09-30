@@ -1,0 +1,7 @@
+{
+  "listen": ":8787",
+  "public_url": "https://musicforge.example.com",
+  "log_level": "INFO",
+  "ffmpeg": "ffmpeg",
+  "ffprobe": "ffprobe"
+}

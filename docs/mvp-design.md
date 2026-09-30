@@ -1,6 +1,8 @@
 # MusicForge MVP 设计基线
 
-此文件记录设计访谈中确认的共识，作为实现和验收基线。部署与 CI 说明见 [README](../README.md)。
+[English](mvp-design.en.md) · **简体中文**
+
+此文件记录确认的产品行为，作为实现和验收基线。部署与 CI 说明见[中文 README](../README.zh-CN.md)。中英文设计文档应同步更新。
 
 开发环境与发布约束见 [AGENTS.md](../AGENTS.md)。
 
@@ -23,8 +25,6 @@ MusicForge 是自托管的音乐流媒体版本构建工具：Lidarr 管理 FLAC
 - SQLite 保存库索引、产物状态、任务队列、账号和网页设置。
 - React 构建产物随应用发布；运行镜像包含 ffmpeg 和 ffprobe。
 - 保持清晰的功能划分，采用标准库与必要的成熟依赖。
-
-最初的 Web/Worker 双容器方案已被单容器方案取代。
 
 ## 挂载与文件管理范围
 
@@ -179,8 +179,6 @@ output/Artist/Album/01 - Title.opus
 - 不使用 Forward Auth 或 OIDC Proxy 头部认证；Authentik 可作为原生 OIDC 提供方。
 - 反向代理负责 HTTPS 和请求转发。
 
-该认证范围取代最初的“无本地账号、只读取认证代理身份”的方案。
-
 ## Web UI
 
 技术栈：React、TypeScript、TailwindCSS、shadcn/ui。
@@ -190,6 +188,8 @@ output/Artist/Album/01 - Title.opus
 - Jobs：任务状态、错误日志、单曲与批量失败重试。
 - Settings：源/输出路径、编码格式、模式及其参数、转换并发、扫描间隔、OIDC 与集成配置。
 - 登录页面与首次初始化向导。
+- 支持英文与简体中文。首次访问按浏览器偏好选择，不支持的语言回退英文；页面提供语言切换，手动选择保存在浏览器中。
+- 文案、常见 API 错误、日期与数字随语言变化，切换保留未提交输入及筛选。标签、路径及原始诊断日志保留原文。
 
 ## 配置与质量要求
 

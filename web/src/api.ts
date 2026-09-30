@@ -6,6 +6,6 @@ export async function api<T>(path: string, method = "GET", body?: unknown): Prom
     body: body === undefined ? undefined : JSON.stringify(body),
   });
   const value = await response.json();
-  if (!response.ok) { if (response.status === 401 && !path.startsWith("/auth/")) window.dispatchEvent(new Event("session-expired")); throw new Error(value.error || "请求失败"); }
+  if (!response.ok) { if (response.status === 401 && !path.startsWith("/auth/")) window.dispatchEvent(new Event("session-expired")); throw new Error(value.error || "Request failed"); }
   return value as T;
 }

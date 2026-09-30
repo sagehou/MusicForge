@@ -1,121 +1,178 @@
 # MusicForge
 
-Self-hosted incremental builds for your streaming music library. Lidarr owns the FLAC masters; MusicForge produces Opus or MP3; Navidrome reads the output.
+**English** · [Simplified Chinese](README.zh-CN.md)
+
+MusicForge builds a streaming edition of your lossless music collection. Lidarr manages the FLAC masters, MusicForge generates Opus or MP3 with ffmpeg, and Navidrome serves the output. Incremental builds process only tracks that need work.
 
 ```text
 Lidarr FLAC library (read-only)
-            ↓
+              ↓
 MusicForge · SQLite · ffmpeg
-            ↓
-Opus / MP3 library (read-write)
-            ↓
+              ↓
+Opus or MP3 library (read-write)
+              ↓
 Navidrome (read-only)
 ```
 
-One container, one administrator, one source library, one output library. Native images support `linux/amd64` and `linux/arm64`.
+One container, one administrator, one source library and one output library. Images are published at `ghcr.io/sagehou/musicforge` for `linux/amd64` and `linux/arm64`.
 
-## Deployment
+## Features
 
-Copy `.env.example` to `.env`, set the host paths and public URL, then use the provided `docker-compose.yml`:
+- Index FLAC files and metadata in SQLite; convert new or changed tracks.
+- Move byte-identical renamed files without re-encoding.
+- Preserve tags and ReplayGain; store album artwork once as `cover.jpg`.
+- Validate replacements before retiring playable output.
+- Recover durable background jobs after restart; retry failures automatically.
+- Receive Lidarr import/upgrade webhooks and refresh Navidrome after build or deletion batches.
+- Use English or Simplified Chinese, local administrator login and optional native OIDC.
 
-```sh
-mkdir -p /srv/musicforge/config /srv/music/streaming
-chown -R 10001:10001 /srv/musicforge/config /srv/music/streaming
-docker compose pull
-docker compose up -d
-docker compose logs musicforge
-```
+Cloud sync, distributed workers, multiple libraries, multiple users and plugins are outside the MVP scope. See the [design baseline](docs/mvp-design.en.md) for the full behavior contract.
 
-Use your own UID/GID through `PUID` and `PGID` when necessary. That user must be able to read FLAC and write `/config` and the output directory. `/config` must be on a local host filesystem suitable for SQLite WAL; do not place it on NFS/SMB. The FLAC mount is read-only. The initial output directory must be empty and dedicated to MusicForge.
+## Deploy with Docker Compose
 
-The default Compose port binds to `127.0.0.1:8787`. Configure your reverse proxy to forward the public HTTPS origin to this port. Set `MUSICFORGE_PUBLIC_URL` to that exact origin, with no path. The application serves from `/`, not a subpath.
+You need Docker Engine with Compose v2, an existing FLAC library and an empty, dedicated output directory. The Compose example binds to the Docker host's loopback address for use with a reverse proxy.
 
-Open the web UI and enter the `setup_code` printed in the first-start logs. Create the only administrator, then configure and enable the library in Settings. Setup is permanently disabled after creation. The initial encoding is **Opus VBR 192kbps**; MP3 VBR recommends **V2**. Both codecs also offer CBR.
+1. Download the deployment files:
 
-Configure Navidrome to read the same physical output directory, preferably as a read-only mount. It can use a different container path.
+   ```sh
+   mkdir musicforge && cd musicforge
+   curl -fsSLO https://raw.githubusercontent.com/sagehou/MusicForge/main/docker-compose.yml
+   curl -fsSL https://raw.githubusercontent.com/sagehou/MusicForge/main/.env.example -o .env
+   ```
 
-## Incremental behavior
+2. Edit `.env` to set host directories, `PUID`/`PGID` and the public origin. Pin `MUSICFORGE_VERSION` to a published version such as `v0.1.0`, or use `latest` to follow stable releases. Default paths:
 
-- New FLAC, changed bytes/tags, or missing output: automatically queue conversion.
-- Ordinary scans compare size and modification time; changed files get complete-file SHA-256 and ffprobe metadata. Use **完整校验** for a full hash pass.
-- A byte-identical rename/move relocates the registered output without re-encoding.
-- Encoding changes mark existing artifacts **待重建**. Start them manually in Library.
-- Source files must remain unchanged for 30 seconds. An input that changes during encoding is re-scanned without consuming an attempt.
-- A temporary artifact must pass codec, duration, stream and complete decoding checks before replacing the playable file. Changing codec removes the old format only after validation.
-- Normal source deletion retains the output as **过期**. It remains playable until you use the explicit bulk deletion action.
-- Lidarr upgrades clean up only the explicitly replaced old artifacts after every new track in the event has a validated current output.
-- Unregistered files are never overwritten or deleted. Directory conflicts appear in job logs.
-- Audio metadata and ReplayGain are preserved. Album artwork is stored once as `cover.jpg`; source external covers take priority, then the first embedded cover in disc/track order.
+   | Host path | Container path | Access |
+   | --- | --- | --- |
+   | `/srv/musicforge/config` | `/config` | Read-write; local host disk |
+   | `/srv/music/flac` | `/music/source` | Read-only |
+   | `/srv/music/streaming` | `/music/output` | Read-write; initially empty |
 
-If both size and mtime stay unchanged despite modified bytes, ordinary scans can miss that change. Full verification detects it. Fast checking deliberately avoids hashing the entire collection on each scan.
+3. Create the writable directories and grant the configured UID/GID access. For the default `10001:10001`:
 
-Jobs get up to three failed attempts (initial plus two retries), then wait for manual retry. The same failed build target is not reset by ordinary scans. Pending and interrupted work survives a restart; interrupted encoding restarts at the beginning of that track.
+   ```sh
+   mkdir -p /srv/musicforge/config /srv/music/streaming
+   chown -R 10001:10001 /srv/musicforge/config /srv/music/streaming
+   docker compose pull
+   docker compose up -d
+   docker compose logs musicforge
+   ```
 
-Disconnected storage pauses jobs instead of expiring the collection. The output ownership marker and source mount identity protect against a missing mount appearing as an empty library. After an intentional source mount replacement, verify the paths and save Settings to acknowledge the mount. Do not remove the output `.musicforge` ownership marker.
+   Run the ownership command with sufficient host permissions. The selected user also needs read access to FLAC. `/config` must use a local filesystem suitable for SQLite WAL, not NFS/SMB. Mount source and output separately.
 
-Container paths cannot change after indexing; change host mount locations while keeping the container paths stable. Back up `/config` with the application stopped, including the database. Keep your FLAC backup independently.
+4. Forward the public HTTPS origin to `127.0.0.1:8787` through your reverse proxy. Set `MUSICFORGE_PUBLIC_URL` to that exact origin, for example `https://musicforge.example.com`, without a path. MusicForge serves from `/`.
 
-## Lidarr
+5. Open the Web UI. Enter `setup_code` from the first-start container logs and create the sole administrator. Passwords must contain 12–72 bytes. Setup closes permanently once the account exists.
 
-Add a native **Webhook** connection:
+6. In **Settings**, use container paths `/music/source` and `/music/output`, enable scanning and save. Initial encoding is **Opus VBR at 192 kbps**. MP3 VBR recommends **V2**; both codecs also support CBR, with 192 kbps recommended.
 
-- URL: `https://musicforge.example.com/api/webhook/lidarr`
-- Username: `musicforge`
-- Password: the independent webhook secret saved in MusicForge Settings.
-- Enable release import and upgrade notifications.
+Give Navidrome a read-only mount of the same physical output directory. Its container path may differ; its corresponding library root must be this output directory.
 
-`Test` succeeds without conversion. Native `Download` events use `trackFiles[].path`, `isUpgrade`, and `deletedFiles[].path`. The optional Lidarr source prefix maps its container paths to MusicForge's source root. Every mapped path is confined to that root. Bearer authentication with the same secret is also supported for custom clients.
+## Interface and language
 
-## Navidrome
+The UI detects English or Chinese from browser language preferences and falls back to English for unsupported languages. A language selector is available during setup, at login and in the application header. Manual selection is saved in this browser and applies immediately, preserving form input and library filters. If browser storage is unavailable, selection lasts for the current visit.
 
-Set the Navidrome URL, username, password and library ID. Automatic refresh coalesces changed album directories after conversion/deletion batches. Navidrome 0.59.0+ receives targeted `startScan` requests; older versions receive a normal scan. Removed directories use the nearest surviving parent. Settings includes a manual refresh action.
+Navigation, forms, statuses, confirmations, notifications, common API errors, dates and numbers follow the selected language. Music tags, paths and raw job/system diagnostics retain their original content.
 
-The integration uses the Subsonic salted-token API and does not send the plaintext password as a query parameter. Use HTTPS if the service is reached across an untrusted network.
+| Page | Main actions |
+| --- | --- |
+| Overview | Library counts, completion, recent jobs and storage status |
+| Library | Search/filter, scan, full verification, rebuild and expired-artifact deletion |
+| Jobs | Queue status, logs and individual/bulk failed-job retries |
+| Settings | Paths, encoding, scans, concurrency, integrations, OIDC and password |
+
+## Incremental builds and file lifecycle
+
+FLAC is the source of truth. MusicForge manages generated audio and covers; use the Web UI to maintain output.
+
+| Trigger | Behavior |
+| --- | --- |
+| New FLAC, changed content/tags or missing output | Automatically queue a build |
+| Byte-identical rename or move | Relocate the registered artifact without re-encoding |
+| Encoding profile change | Mark artifacts **Needs rebuild**; start manually in Library |
+| Normal source deletion | Keep output as **Expired · Source deleted** until manual deletion |
+| Lidarr upgrade | Delete explicitly replaced artifacts after all replacement tracks validate |
+| Output codec switch | Retire each old-format file after its replacement validates |
+
+Ordinary scans compare size and modification time. New or changed files receive complete-file SHA-256 verification and metadata probing. **Full verification** hashes every source file and detects content changes that leave both size and mtime unchanged. Tag changes rebuild audio because output files carry those tags.
+
+Sources must stay unchanged for 30 seconds before conversion. Changes during encoding discard the temporary output and trigger a re-scan without consuming a failed attempt. Replacements must pass codec, duration, stream and full decoding checks before publication. Failure preserves playable output.
+
+Expired artifacts remain in the output and Navidrome until explicit deletion. **Delete all expired** and **Delete selected expired artifacts** schedule deletion and a playback-library refresh. Unregistered files are never overwritten or deleted; path conflicts fail visibly.
+
+Tags and ReplayGain are preserved. Each album gets one external `cover.jpg`, using source external artwork first, then an embedded cover in disc/track order. External artwork changes update the cover independently of audio encoding.
+
+## Reliability and maintenance
+
+Jobs allow three failed attempts: the initial attempt and two automatic retries with increasing delays. Exhausted jobs wait for manual retry; ordinary scans do not reset unchanged failed targets. Pending and interrupted work survives restart. Interrupted encoding starts again from the beginning of that track.
+
+Offline storage pauses affected jobs. Incomplete scans never expire unseen files. Mount identity and the output `.musicforge` ownership marker protect against missing mounts appearing as empty libraries. After an intentional source mount change, verify paths and save Settings to acknowledge it. Keep the ownership marker intact.
+
+Container root paths cannot change after indexing. Relocate storage through host mounts while retaining container paths. Back up all of `/config`, including its database, with MusicForge stopped; keep an independent FLAC backup. Upgrade by selecting an image version in `.env`, then running `docker compose pull` and `docker compose up -d`.
+
+## Lidarr integration
+
+Create a native **Webhook** connection in Lidarr:
+
+| Field | Value |
+| --- | --- |
+| URL | `https://musicforge.example.com/api/webhook/lidarr` |
+| Username | `musicforge` |
+| Password | The independent webhook secret saved in MusicForge Settings |
+| Events | Release import and upgrade notifications |
+
+The connection test creates no conversion work. Native `Download` events use `trackFiles[].path`, `isUpgrade` and `deletedFiles[].path`. Set **Lidarr source path prefix** if Lidarr sees a different source root. Mapped paths must remain within MusicForge's FLAC root. Custom clients may use Bearer authentication with the same secret.
+
+## Navidrome integration
+
+Save the URL, username, password and library ID in Settings. Automatic refresh combines changed album directories after conversion/deletion batches. Navidrome 0.59.0+ receives targeted `startScan` requests; older versions receive regular scans. Removed directories use the nearest surviving parent. **Refresh Navidrome manually** uses saved settings.
+
+Authentication uses the Subsonic salted-token API; plaintext passwords are not sent in query parameters. Use HTTPS across untrusted networks.
 
 ## Authentication and recovery
 
-The single local administrator can additionally bind a native OIDC identity. Authenticating proxy headers are not used.
+The local administrator has access to all operations. You may additionally bind one native OIDC identity. Authenticating proxy headers are not used.
 
-1. Set the public HTTPS origin in `MUSICFORGE_PUBLIC_URL`.
-2. Configure the OIDC issuer, client ID and secret in Settings and save.
-3. Register `https://musicforge.example.com/api/auth/oidc/callback` as a redirect URI at the provider.
-4. While logged in locally, click **绑定当前 OIDC 身份** and complete the provider flow.
+1. Set `MUSICFORGE_PUBLIC_URL` to the public HTTPS origin.
+2. Save the issuer URL, client ID and secret in Settings. Use the provider's exact issuer, including any trailing slash.
+3. Register `https://musicforge.example.com/api/auth/oidc/callback` as the redirect URI.
+4. While signed in locally, select **Bind your OIDC identity** and complete the provider flow.
 
-Only the bound `issuer + sub` can log in. Other provider users are rejected. OIDC state, nonce, PKCE and server-side browser sessions are validated. All UI mutations require a CSRF token. Secret settings are omitted from API reads.
+Only the bound `issuer + sub` can use OIDC. State, nonce, PKCE and server-side sessions are checked. UI mutations require CSRF tokens; API reads omit secret settings. Keep the local password for recovery.
 
-To recover the local password, stop the running container, then supply a new password through stdin to the same image and `/config` volume:
+To reset a forgotten password, stop MusicForge, then supply the new password through stdin using the same image and `/config` volume. Run in Bash:
 
-```sh
+```bash
 docker compose stop musicforge
-read -rs -p 'New password: ' password
-printf '%s\n' "$password" | docker compose run --rm -T musicforge -reset-password-stdin
-unset password
+read -rs -p 'New password: ' new_password
+printf '%s\n' "$new_password" | docker compose run --rm -T musicforge -reset-password-stdin
+unset new_password
 docker compose up -d
 ```
 
-Passwords require 12–72 bytes. Recovery revokes all sessions and requires exclusive access to `/config`.
+Passwords require 12–72 bytes. Recovery needs exclusive access to `/config` and revokes all sessions.
 
 ## Runtime configuration
 
-Optional `/config/config.json` follows `config.example.json`. Environment values override runtime configuration:
+Optional `/config/config.json` follows [config.example.json](config.example.json). Environment variables override startup configuration:
 
-| Variable | Default |
+| Variable | Default / purpose |
 | --- | --- |
 | `MUSICFORGE_CONFIG_DIR` | `/config` |
 | `MUSICFORGE_LISTEN` | `:8787` |
-| `MUSICFORGE_PUBLIC_URL` | empty; required for OIDC and HTTPS cookies |
+| `MUSICFORGE_PUBLIC_URL` | Empty; set for OIDC and HTTPS cookies |
 | `MUSICFORGE_LOG_LEVEL` | `INFO` |
 | `MUSICFORGE_FFMPEG` | `ffmpeg` |
 | `MUSICFORGE_FFPROBE` | `ffprobe` |
 
-Library, encoding and integration settings live only in SQLite. Logs are JSON. `/healthz` is a public database liveness check; library availability is reported separately in the authenticated Dashboard. SQLite migrations run transactionally at startup and newer unknown schemas are rejected.
+Library, encoding and integration settings live only in SQLite. Logs are JSON. Public `/healthz` checks database liveness; the authenticated Overview reports library availability separately. Migrations run transactionally at startup; unknown newer schemas are rejected.
 
 ## Development and releases
 
-**Do not install dependencies, compile, execute tests, or build images in the local workspace.** Follow [AGENTS.md](AGENTS.md). Local changes are source/document/workflow edits and static inspection only.
+Follow [AGENTS.md](AGENTS.md): local work is source/document/workflow editing and static inspection only. Dependency installation, compilation, executable tests and image builds run exclusively in GitHub Actions. Keep dependency directories, compiler caches and build outputs out of the local workspace. Generate or update lockfiles through Actions.
 
-[GitHub Actions](.github/workflows/ci.yml) installs dependencies, builds the frontend and backend, runs race-enabled Go tests with real ffmpeg, browser tests against the real app, and native container smoke tests for both architectures. Initial dependency lockfiles and formatted Go source are generated as the `canonical-source` artifact; retrieve and commit those source files before releasing.
+[CI](.github/workflows/ci.yml) builds frontend/backend, runs race-enabled Go tests with real ffmpeg, exercises the actual app in Chromium and smoke-tests native containers on both architectures. The `canonical-source` artifact supplies CI-generated lockfiles and formatted Go source when needed.
 
-PRs and `main` pushes validate without publishing. Version tags such as `v0.1.0` publish `ghcr.io/sagehou/musicforge:v0.1.0` only after validation. Stable tags update `latest`; prereleases leave `latest` unchanged. Architecture tags are combined into the versioned multiarchitecture manifest.
+Pull requests and `main` pushes validate without publishing. Version tags such as `v0.1.0` publish the matching GHCR image after validation. Stable releases update `latest`; prereleases do not.
 
-The agreed behavior and scope are in [docs/mvp-design.md](docs/mvp-design.md).
+Translations live in [web/src/locales](web/src/locales); keep keys and interpolation placeholders aligned. Browser tests cover language detection, selection/persistence and bilingual workflows. License information is in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

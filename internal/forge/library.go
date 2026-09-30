@@ -436,7 +436,7 @@ func (a *App) finalize(s Settings, p promotion) error {
 		return err
 	}
 	if p.Old != "" && p.Old != p.Target {
-		if err = a.removeOwned(s, p.Old, p.ID); err != nil {
+		if err = a.removeOwned(s, p.Old, p.ID); err != nil && !errors.Is(err, sql.ErrNoRows) {
 			return err
 		}
 	}
@@ -444,7 +444,7 @@ func (a *App) finalize(s Settings, p promotion) error {
 	return err
 }
 
-func (a *App) recoverFiles(ctx context.Context, s Settings) error {
+func (a *App) recoverPromotions(ctx context.Context, s Settings) error {
 	rows, err := a.db.Query("SELECT value FROM meta WHERE key LIKE 'promotion:%'")
 	if err != nil {
 		return err
@@ -484,7 +484,12 @@ func (a *App) recoverFiles(ctx context.Context, s Settings) error {
 			}
 		}
 	}
-	rows, err = a.db.Query("SELECT path FROM managed WHERE kind='temp'")
+	return nil
+}
+
+func (a *App) recoverFiles(ctx context.Context, s Settings) error {
+	if err:=a.recoverPromotions(ctx,s);err!=nil{return err}
+	rows, err := a.db.Query("SELECT path FROM managed WHERE kind='temp'")
 	if err != nil {
 		return err
 	}
@@ -532,6 +537,7 @@ func (a *App) build(ctx context.Context, j Job, r BuildRequest) error {
 		a.files.Unlock()
 		return err
 	}
+	if err = a.recoverPromotions(ctx,s);err!=nil{a.files.Unlock();return err}
 	source, err := a.source(r.ID)
 	if err != nil {
 		a.files.Unlock()
@@ -637,13 +643,12 @@ func (a *App) build(ctx context.Context, j Job, r BuildRequest) error {
 	args = append(args, r.Profile.Args()...)
 	args = append(args, temp)
 	if _, err = runTool(ctx, a.cfg.FFmpeg, args...); err != nil {
-		a.recordSourceError(source.ID, err)
-		return a.classifyStorage(s, err)
+		return a.buildError(s,source,err)
 	}
 	if err = a.validateArtifact(ctx, temp, r.Profile, source.Duration); err != nil {
-		a.recordSourceError(source.ID, err)
-		return a.classifyStorage(s, err)
+		return a.buildError(s,source,err)
 	}
+	file,err:=os.Open(temp);if err!=nil{return err};err=file.Sync();file.Close();if err!=nil{return err}
 	hash, err := fileHash(ctx, temp)
 	if err != nil {
 		return err
@@ -690,10 +695,13 @@ func (a *App) build(ctx context.Context, j Job, r BuildRequest) error {
 func (a *App) recordSourceError(id int64, err error) {
 	_, _ = a.db.Exec("UPDATE sources SET error=? WHERE id=?", err.Error(), id)
 }
-func (a *App) classifyStorage(s Settings, err error) error {
+func (a *App) buildError(s Settings,source Source,err error) error {
 	if storageErr := a.storage(s); storageErr != nil {
 		return storageErr
 	}
+	path,pathErr:=safePath(s.Source,source.Rel)
+	if pathErr==nil {info,statErr:=os.Stat(path);if os.IsNotExist(statErr)||statErr==nil&&!sameStat(info,source){_,_=a.enqueue("scan","scan:periodic",ScanRequest{},false);return later("Source changed during conversion; temporary artifact discarded",10)}}
+	a.recordSourceError(source.ID,err)
 	return err
 }
 func (a *App) validateArtifact(ctx context.Context, path string, e Encoding, duration float64) error {

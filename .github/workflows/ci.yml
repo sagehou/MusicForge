@@ -82,6 +82,12 @@ jobs:
             web/test-results
             web/playwright-report
           retention-days: 14
+      - name: Worker diagnostics
+        if: failure()
+        run: |
+          if [ -f .ci/server.log ]; then
+            sed '/"setup_code"/d' .ci/server.log
+          fi
 
   image:
     needs: validate

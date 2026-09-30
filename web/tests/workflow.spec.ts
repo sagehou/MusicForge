@@ -22,8 +22,8 @@ test("administrator setup, real incremental build, and login", async ({ page }) 
   await page.getByRole("button", { name: "保存设置", exact: true }).click();
   await expect(page.getByRole("status")).toContainText("设置已保存");
   await page.getByRole("link", { name: "音乐库", exact: true }).click();
-  await expect(page.getByText("CI Track", { exact: true })).toBeVisible();
-  await expect(page.getByText("已就绪", { exact: true })).toBeVisible({ timeout: 30000 });
+  await expect(page.getByText("CI Track", { exact: true })).toBeVisible({ timeout: 30000 });
+  await expect(page.getByRole("table").getByText("已就绪", { exact: true })).toBeVisible({ timeout: 30000 });
   await page.getByRole("link", { name: "概览", exact: true }).click();
   await expect(page.getByText("100%", { exact: true })).toBeVisible();
   await page.screenshot({ path: "test-results/dashboard.png", fullPage: true });

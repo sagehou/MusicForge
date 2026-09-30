@@ -72,7 +72,7 @@ func (a *App) enqueue(kind, key string, args any, manual bool) (int64, error) {
 	tx, err := a.db.Begin(); if err != nil { return 0, err }; defer tx.Rollback()
 	var id int64; var state string
 	err = tx.QueryRow("SELECT id,state FROM jobs WHERE dedup=? ORDER BY id DESC LIMIT 1", key).Scan(&id,&state)
-	if err == nil && (state == "pending" || state == "running" || (state == "failed" && !manual)) { return id, nil }
+	if err == nil && (state == "pending" || state == "running" || (state == "failed" && !manual && (kind == "convert" || kind == "move"))) { return id, nil }
 	if err != nil && err != sql.ErrNoRows { return 0, err }
 	now := time.Now().Unix()
 	result, err := tx.Exec("INSERT INTO jobs(kind,dedup,args,created,updated) VALUES(?,?,?,?,?)",kind,key,string(b),now,now)

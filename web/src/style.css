@@ -2,6 +2,9 @@
 @tailwind components;
 @tailwind utilities;
 
+.field-label { display: flex; flex-direction: column; gap: 8px; }
+.field-label > span { color: #b9c6da; font-size: 12px; }
+
 :root { font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", sans-serif; color: #e8eef7; background: #0c1017; font-synthesis: none; color-scheme: dark; }
 * { box-sizing: border-box; }
 body { margin: 0; }

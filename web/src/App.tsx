@@ -23,7 +23,7 @@ function useResource<T>(path: string, poll = false) {
 }
 function Badge({ status }: { status: string }) { return <span className={`badge badge-${status}`}><span />{statuses[status] || status}</span>; }
 function Empty({ title, children }: { title: string; children?: ReactNode }) { return <div className="empty"><Disc3 size={36} strokeWidth={1.2} /><h3>{title}</h3><p>{children}</p></div>; }
-function Field({ label, hint, children }: { label: string; hint?: string; children: ReactNode }) { return <label className="field"><span>{label}</span>{children}{hint && <small>{hint}</small>}</label>; }
+function Field({ label, hint, children }: { label: string; hint?: string; children: ReactNode }) { return <div className="field"><label className="field-label"><span>{label}</span>{children}</label>{hint && <small>{hint}</small>}</div>; }
 function Loading({ error }: { error?: string }) { return <div className="empty">{error ? <p role="alert">{error}</p> : <Loader2 className="animate-spin" />}</div>; }
 
 export function App() {

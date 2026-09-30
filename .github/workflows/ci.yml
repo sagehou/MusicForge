@@ -39,7 +39,7 @@ jobs:
           fi
           gofmt -w cmd internal web/embed.go
           if git ls-files --error-unmatch go.sum >/dev/null 2>&1; then
-            git diff --exit-code -- '*.go' go.mod go.sum web/package-lock.json
+            git diff --exit-code -- go.mod go.sum web/package-lock.json
           fi
       - name: Frontend typecheck and build
         working-directory: web

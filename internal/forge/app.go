@@ -96,7 +96,7 @@ func (a *App) worker(ctx context.Context,conversion bool,slot int) {
   }
   progress:=1.0;if state!="success"{progress=0}
   if _,updateErr:=a.db.Exec("UPDATE jobs SET state=?,attempts=?,progress=?,log=?,not_before=?,updated=? WHERE id=?",state,attempts,progress,message,time.Now().Unix()+int64(wait),time.Now().Unix(),j.ID);updateErr!=nil{a.logger.Error("job state persistence failed","job",j.ID,"error",updateErr)}
-  a.logger.Info("job finished","job",j.ID,"kind",j.Kind,"state",state,"attempts",attempts)
+  a.logger.Info("job finished","job",j.ID,"kind",j.Kind,"state",state,"attempts",attempts,"detail",message)
  }
 }
 

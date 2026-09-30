@@ -826,6 +826,21 @@ func (a *App) deleteExpired(ids []int64) error {
 	return nil
 }
 
+type artworkMemo struct {Album string `json:"album"`;Rel string `json:"rel"`;Hash string `json:"hash"`}
+
+func (a *App) embeddedArtwork(ctx context.Context,s Settings,dir string,tracks []Source)(string,string,error){
+ sort.Slice(tracks,func(i,j int)bool{if tracks[i].Disc!=tracks[j].Disc{return tracks[i].Disc<tracks[j].Disc};if tracks[i].Track!=tracks[j].Track{return tracks[i].Track<tracks[j].Track};return tracks[i].Rel<tracks[j].Rel})
+ snapshot:=make([]struct{Rel,Hash string},len(tracks));for i,track:=range tracks{snapshot[i]=struct{Rel,Hash string}{track.Rel,track.Hash}};b,_:=json.Marshal(snapshot);album:=digest(string(b));key:="artwork:"+digest(dir)
+ memo:=artworkMemo{};value,err:=a.meta(key);if err!=nil&&err!=sql.ErrNoRows{return "","",err}
+ cached:=err==nil&&json.Unmarshal([]byte(value),&memo)==nil&&memo.Album==album
+ if !cached {
+  memo=artworkMemo{Album:album}
+  for _,track:=range tracks{path,err:=safePath(s.Source,track.Rel);if err!=nil{return "","",err};p,err:=a.probe(ctx,path);if err!=nil{return "","",err};for _,stream:=range p.Streams{if stream.Type=="video"&&stream.Disposition.Attached==1{memo.Rel=track.Rel;memo.Hash=track.Hash;break}};if memo.Rel!=""{break}}
+  b,_=json.Marshal(memo);if err=a.setMeta(key,string(b));err!=nil{return "","",err}
+ }
+ if memo.Rel==""{return "","",nil};path,err:=safePath(s.Source,memo.Rel);return path,"embedded:"+memo.Hash,err
+}
+
 func (a *App) artwork(ctx context.Context, s Settings, dir string, tracks []Source) error {
 	var input, signature string
 	embedded := false
@@ -853,36 +868,8 @@ func (a *App) artwork(ctx context.Context, s Settings, dir string, tracks []Sour
 		break
 	}
 	if input == "" {
-		sort.Slice(tracks, func(i, j int) bool {
-			if tracks[i].Disc != tracks[j].Disc {
-				return tracks[i].Disc < tracks[j].Disc
-			}
-			if tracks[i].Track != tracks[j].Track {
-				return tracks[i].Track < tracks[j].Track
-			}
-			return tracks[i].Rel < tracks[j].Rel
-		})
-		for _, track := range tracks {
-			path, err := safePath(s.Source, track.Rel)
-			if err != nil {
-				return err
-			}
-			p, err := a.probe(ctx, path)
-			if err != nil {
-				return err
-			}
-			for _, stream := range p.Streams {
-				if stream.Type == "video" && stream.Disposition.Attached == 1 {
-					input = path
-					signature = "embedded:" + track.Hash
-					embedded = true
-					break
-				}
-			}
-			if input != "" {
-				break
-			}
-		}
+		var err error
+		input,signature,err=a.embeddedArtwork(ctx,s,dir,tracks);if err!=nil{return err};embedded=input!=""
 	}
 	target := filepath.Join(dir, "cover.jpg")
 	var kind, oldSig string

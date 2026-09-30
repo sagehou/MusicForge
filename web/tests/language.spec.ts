@@ -1,6 +1,6 @@
 import { test, expect } from "@playwright/test";
-import en from "../src/locales/en.json";
-import zh from "../src/locales/zh-CN.json";
+import en from "../src/locales/en.json" with { type: "json" };
+import zh from "../src/locales/zh-CN.json" with { type: "json" };
 
 test.use({ locale: "en-US" });
 

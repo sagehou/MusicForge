@@ -20,8 +20,12 @@ COPY --from=frontend /src/web/dist web/dist
 RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -mod=readonly -trimpath -ldflags="-s -w -X main.version=$VERSION" -o /musicforge ./cmd/musicforge
 
 FROM debian:bookworm-slim
+LABEL org.opencontainers.image.source="https://github.com/sagehou/MusicForge" \
+      org.opencontainers.image.title="MusicForge" \
+      org.opencontainers.image.description="Incremental builds for a self-hosted streaming music library"
 RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg ca-certificates && rm -rf /var/lib/apt/lists/* && groupadd -g 10001 musicforge && useradd -u 10001 -g musicforge -M -s /usr/sbin/nologin musicforge && mkdir -p /config /music/source /music/output && chown -R musicforge:musicforge /config /music/output
 COPY --from=backend /musicforge /usr/local/bin/musicforge
+COPY THIRD_PARTY_NOTICES.md /usr/share/doc/musicforge/THIRD_PARTY_NOTICES.md
 USER 10001:10001
 EXPOSE 8787
 VOLUME ["/config"]

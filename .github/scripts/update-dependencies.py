@@ -39,6 +39,22 @@ docker_path = Path("Dockerfile")
 docker = re.sub(r"node:[\d.]+-[a-z]+-slim", "node:" + node + "-" + debian + "-slim", docker_path.read_text())
 docker = re.sub(r"golang:[\d.]+-[a-z]+", "golang:" + go + "-" + debian, docker)
 docker = re.sub(r"debian:[a-z]+-slim", "debian:" + debian + "-slim", docker)
+# Pin multi-architecture manifest digests so base-image security updates create
+# reviewable changes even when the human-readable stable tag stays the same.
+def pin_image(match):
+    image = match[2]
+    name, tag = image.split(":", 1)
+    repo = "library/" + name
+    token_url = "https://auth.docker.io/token?" + urllib.parse.urlencode({"service": "registry.docker.io", "scope": "repository:" + repo + ":pull"})
+    token = metadata(token_url)["token"]
+    request = urllib.request.Request("https://registry-1.docker.io/v2/" + repo + "/manifests/" + tag, method="HEAD", headers={"Authorization": "Bearer " + token, "Accept": "application/vnd.oci.image.index.v1+json, application/vnd.docker.distribution.manifest.list.v2+json"})
+    with urllib.request.urlopen(request, timeout=60) as response:
+        digest = response.headers["Docker-Content-Digest"]
+    if not re.fullmatch(r"sha256:[0-9a-f]{64}", digest):
+        raise RuntimeError("Invalid base-image manifest digest")
+    return match[1] + image + "@" + digest + match[3]
+
+docker = re.sub(r"(?m)^(FROM(?: --platform=\S+)? )((?:node|golang|debian):[^\s@]+)(?:@sha256:[0-9a-f]+)?([^\n]*)$", pin_image, docker)
 docker_path.write_text(docker)
 
 media_path = Path("build/media-versions.env")

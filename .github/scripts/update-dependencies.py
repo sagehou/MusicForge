@@ -33,9 +33,12 @@ for name in ("github.com/coreos/go-oidc/v3", "golang.org/x/crypto", "golang.org/
     version = metadata("https://proxy.golang.org/" + name + "/@latest")["Version"]
     module = re.sub(r"(?m)^(\s*" + re.escape(name) + r" )\S+", lambda match: match[1] + version, module)
 module_path.write_text(module)
+debian_page = fetch("https://www.debian.org/releases/").decode()
+debian = re.search(r"distribution of Debian is version\s+\d+, codenamed <em>([a-z]+)</em>", debian_page)[1]
 docker_path = Path("Dockerfile")
-docker = re.sub(r"node:[\d.]+-trixie-slim", "node:" + node + "-trixie-slim", docker_path.read_text())
-docker = re.sub(r"golang:[\d.]+-trixie", "golang:" + go + "-trixie", docker)
+docker = re.sub(r"node:[\d.]+-[a-z]+-slim", "node:" + node + "-" + debian + "-slim", docker_path.read_text())
+docker = re.sub(r"golang:[\d.]+-[a-z]+", "golang:" + go + "-" + debian, docker)
+docker = re.sub(r"debian:[a-z]+-slim", "debian:" + debian + "-slim", docker)
 docker_path.write_text(docker)
 
 media_path = Path("build/media-versions.env")
@@ -44,6 +47,8 @@ ffmpeg_page = fetch("https://ffmpeg.org/download.html").decode()
 media["FFMPEG_VERSION"] = re.search(r"releases/ffmpeg-([\d.]+)\.tar\.xz", ffmpeg_page)[1]
 opus_page = fetch("https://opus-codec.org/downloads/").decode()
 media["OPUS_VERSION"] = re.search(r"opus-([\d.]+)\.tar\.gz", opus_page.split('id="source-code-stable-release"')[1])[1]
+lame_page = fetch("https://lame.sourceforge.io/download.php").decode()
+media["LAME_VERSION"] = re.search(r"current release version of LAME is ([\d.]+)", lame_page)[1].rstrip(".")
 urls = {
     "FFMPEG": "https://ffmpeg.org/releases/ffmpeg-{FFMPEG_VERSION}.tar.xz",
     "OPUS": "https://downloads.xiph.org/releases/opus/opus-{OPUS_VERSION}.tar.gz",

@@ -126,3 +126,22 @@ func TestNavidromeAsynchronousRefreshKeepsJournalUntilSuccess(t *testing.T) {
  var count int
  if err = restored.db.QueryRow("SELECT count(*) FROM dirty_dirs").Scan(&count); err != nil || count != 0 { t.Fatal("completion did not acknowledge changes",count,err) }
 }
+
+func TestJobsFilterAppliesBeforePagination(t *testing.T) {
+ a,_:=testApp(t)
+ failed,err:=a.enqueue("scan","older-failure",ScanRequest{},true)
+ if err!=nil { t.Fatal(err) }
+ if _,err=a.db.Exec("UPDATE jobs SET state='failed' WHERE id=?",failed); err!=nil { t.Fatal(err) }
+ for i:=0;i<105;i++ {
+  if _,err=a.db.Exec("INSERT INTO jobs(kind,dedup,args,state,created,updated) VALUES('scan',?,'{}','success',0,0)",i); err!=nil { t.Fatal(err) }
+ }
+ session:=httptest.NewRecorder()
+ if err=a.newSession(session,"local"); err!=nil { t.Fatal(err) }
+ req:=httptest.NewRequest("GET","/api/jobs?state=failed&limit=1",nil)
+ req.AddCookie(session.Result().Cookies()[0])
+ w:=httptest.NewRecorder()
+ a.Handler().ServeHTTP(w,req)
+ var result struct{ Jobs []Job `json:"jobs"`; Total int `json:"total"` }
+ if err=json.Unmarshal(w.Body.Bytes(),&result); err!=nil { t.Fatal(err) }
+ if w.Code!=200 || result.Total!=1 || len(result.Jobs)!=1 || result.Jobs[0].ID!=failed { t.Fatal("pagination hid older failure",w.Code,w.Body.String()) }
+}

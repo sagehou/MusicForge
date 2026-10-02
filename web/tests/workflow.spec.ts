@@ -1,10 +1,11 @@
 import { test, expect } from "@playwright/test";
-import { readFileSync } from "node:fs";
+import { readFileSync, unlinkSync, writeFileSync, utimesSync } from "node:fs";
 import { join } from "node:path";
 
 test.use({ locale: "zh-CN" });
 
 test("bilingual setup, real incremental build, state preservation and login", async ({ page }) => {
+  test.setTimeout(120000);
   const root = process.env.MUSICFORGE_TEST_ROOT!;
   await expect.poll(async () => {
     try { return (await page.request.get("/healthz")).status(); } catch { return 0; }
@@ -52,6 +53,14 @@ test("bilingual setup, real incremental build, state preservation and login", as
   await expect(page.getByText("Selected: 1", { exact: true })).toBeVisible();
   await expect(page.getByRole("table").getByText("Ready", { exact: true })).toBeVisible();
   await expect(page.getByText("1 indexed track · Source and artifact status at a glance", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Delete selected expired artifacts", exact: true })).toBeDisabled();
+  const sourcePath = join(root, "source/Artist/Album/01.flac");
+  const sourceBytes = readFileSync(sourcePath);
+  unlinkSync(sourcePath);
+  await page.getByRole("button", { name: "Scan", exact: true }).click();
+  await page.getByLabel("Filter by status", { exact: true }).selectOption("expired");
+  await expect(page.getByText("Source deleted", { exact: true })).toBeVisible({ timeout: 30000 });
+  await page.getByLabel("Select CI Track", { exact: true }).check();
   let confirmation = page.waitForEvent("dialog");
   let clicking = page.getByRole("button", { name: "Delete selected expired artifacts", exact: true }).click();
   let dialog = await confirmation;
@@ -65,6 +74,12 @@ test("bilingual setup, real incremental build, state preservation and login", as
   expect(dialog.message()).toBe("永久删除所选歌曲中的过期产物？");
   await dialog.dismiss();
   await clicking;
+  writeFileSync(sourcePath, sourceBytes);
+  const stable = new Date(Date.now() - 120000);
+  utimesSync(sourcePath, stable, stable);
+  await page.getByRole("button", { name: "扫描", exact: true }).click();
+  await page.getByLabel("状态筛选", { exact: true }).selectOption("ready");
+  await expect(page.getByRole("table").getByText("已就绪", { exact: true })).toBeVisible({ timeout: 30000 });
   await page.getByRole("link", { name: "概览", exact: true }).click();
   await expect(page.getByText("100%", { exact: true })).toBeVisible();
   await page.screenshot({ path: "test-results/dashboard-zh-CN.png", fullPage: true });
@@ -97,4 +112,25 @@ test("bilingual setup, real incremental build, state preservation and login", as
   await page.getByRole("combobox", { name: "Language", exact: true }).selectOption("zh-CN");
   await page.getByRole("button", { name: "登录", exact: true }).click();
   await expect(page.getByRole("heading", { name: "后台任务" })).toBeVisible();
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(page.getByRole("button", { name: "退出登录", exact: true })).toBeVisible();
+  await page.getByRole("link", { name: "概览", exact: true }).click();
+  await expect(page.getByRole("progressbar")).toHaveAttribute("aria-valuenow", "100");
+  await page.screenshot({ path: "test-results/mobile-dashboard-zh-CN.png", fullPage: true });
+  await page.route("**/api/dashboard", route => route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ error: "database unavailable" }) }));
+  await expect(page.getByRole("alert")).toContainText("暂时无法获取更新", { timeout: 15000 });
+  await expect(page.getByText("100%", { exact: true })).toBeVisible();
+  await page.unroute("**/api/dashboard");
+  await page.getByRole("button", { name: "重试", exact: true }).click();
+  await expect(page.getByRole("alert")).not.toBeVisible();
+  await page.getByRole("link", { name: "设置", exact: true }).click();
+  await expect(page.getByRole("button", { name: "保存设置", exact: true })).toBeDisabled();
+  await page.getByLabel("同时转换数量", { exact: true }).fill("2");
+  await expect(page.getByText("有未保存的更改", { exact: true })).toBeVisible();
+  await page.getByRole("combobox", { name: "语言", exact: true }).selectOption("en");
+  await expect(page.getByLabel("Concurrent conversions", { exact: true })).toHaveValue("2");
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
+  await page.screenshot({ path: "test-results/mobile-settings-en.png", fullPage: true });
+  await page.getByRole("button", { name: "Log out", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Welcome back" })).toBeVisible();
 });

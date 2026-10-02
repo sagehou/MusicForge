@@ -163,7 +163,7 @@
   "settings.bind": "绑定当前 OIDC 身份",
   "settings.unbind": "解除现有绑定",
   "settings.bindHint": "先保存 OIDC 设置，再用本地管理员会话完成绑定。",
-  "settings.savedIn": "设置保存在 /config 的 SQLite 数据库中",
+  "settings.savedIn": "所有更改已保存",
   "settings.save": "保存设置",
   "password.title": "本地管理员密码",
   "password.description": "修改密码会撤销其他登录会话。",
@@ -185,9 +185,9 @@
   "kind.delete": "删除过期产物",
   "kind.upgrade": "升级替换清理",
   "kind.refresh": "刷新 Navidrome",
-  "overview.outputLibrary": "{codec} 输出库",
+  "overview.outputLibrary": "目标格式：{codec}",
   "overview.readyCount": "{count} 首符合当前配置",
-  "overview.attentionCounts": "{rebuild} 待重建 · {expired} 过期",
+  "overview.attentionCounts": "{rebuild} 待重建 · {expired} 过期 · {failed} 失败",
   "overview.rebuildCount": "{count} 首歌曲等待按新配置重建",
   "overview.job": "任务 #{id} · {date}",
   "library.description": "{count} 首索引歌曲 · 源与产物状态一目了然",
@@ -275,5 +275,11 @@
   "error.sourceOfflinePrefix": "源存储离线：",
   "error.outputOfflinePrefix": "输出存储离线：",
   "error.outputWritablePrefix": "输出存储不可写：",
-  "error.invalidJsonPrefix": "请求 JSON 无效："
+  "error.invalidJsonPrefix": "请求 JSON 无效：",
+  "app.stale": "暂时无法获取更新，当前显示上次收到的数据",
+  "app.retry": "重试",
+  "app.skipContent": "跳到主要内容",
+  "settings.unsaved": "有未保存的更改",
+  "error.oidcLocalChange": "请使用本地管理员登录修改 OIDC 设置",
+  "error.jobState": "无效的任务状态筛选"
 }

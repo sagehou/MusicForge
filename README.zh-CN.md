@@ -40,7 +40,7 @@ MVP 不包含云同步、分布式 worker、多组音乐库、多用户或插件
    curl -fsSL https://raw.githubusercontent.com/sagehou/MusicForge/main/.env.example -o .env
    ```
 
-2. 编辑 `.env`，设置宿主机目录、`PUID`/`PGID` 和公开访问地址。可将 `MUSICFORGE_VERSION` 固定为已发布版本，例如 `v0.1.1`；`latest` 跟随稳定版本。默认路径：
+2. 编辑 `.env`，设置宿主机目录、`PUID`/`PGID` 和公开访问地址。可将 `MUSICFORGE_VERSION` 固定为已发布版本，例如 `v0.2.0`；`latest` 跟随稳定版本。默认路径：
 
    | 宿主机路径 | 容器内路径 | 访问方式 |
    | --- | --- | --- |
@@ -184,3 +184,5 @@ PR 和 `main` 提交仅验证，不发布。版本标签（如 `v0.1.0`）验证
 当前工具链为 Go 1.27.1、Node 26.10.0、React 19.3、Vite 8.3、TypeScript 7 和 Tailwind 4.3。运行镜像使用 Debian 13 稳定版，以及固定源码校验值的 FFmpeg 9.0.2、Opus 1.6.1 和 LAME 4.0。镜像内 `/usr/share/doc/musicforge/media` 保留对应源码压缩包和构建说明。所有安装、编译及可执行验证仍仅在 GitHub Actions 中进行。
 
 CI 使用真实 Navidrome 容器和只读输出挂载，验证转换后的歌曲能被发现、普通源文件删除后仍可播放、手动删除后从播放库移除。刷新请求被接受后，还要等待 Navidrome 报告扫描完成，才清除本地变更记录；重启后继续处理未完成刷新。
+
+0.2 版本使用数据库 schema 2。升级前请停止 MusicForge 并备份整个 `/config`；回退到 0.1 需要恢复对应的升级前备份。验收范围与证据参见[中文验收报告](docs/acceptance.zh-CN.md)。

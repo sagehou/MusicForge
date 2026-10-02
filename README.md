@@ -40,7 +40,7 @@ You need Docker Engine with Compose v2, an existing FLAC library and an empty, d
    curl -fsSL https://raw.githubusercontent.com/sagehou/MusicForge/main/.env.example -o .env
    ```
 
-2. Edit `.env` to set host directories, `PUID`/`PGID` and the public origin. Pin `MUSICFORGE_VERSION` to a published version such as `v0.1.1`, or use `latest` to follow stable releases. Default paths:
+2. Edit `.env` to set host directories, `PUID`/`PGID` and the public origin. Pin `MUSICFORGE_VERSION` to a published version such as `v0.2.0`, or use `latest` to follow stable releases. Default paths:
 
    | Host path | Container path | Access |
    | --- | --- | --- |
@@ -108,7 +108,7 @@ Jobs allow three failed attempts: the initial attempt and two automatic retries 
 
 Offline storage pauses affected jobs. Incomplete scans never expire unseen files. Mount identity and the output `.musicforge` ownership marker protect against missing mounts appearing as empty libraries. After an intentional source mount change, verify paths and save Settings to acknowledge it. Keep the ownership marker intact.
 
-Container root paths cannot change after indexing. Relocate storage through host mounts while retaining container paths. Back up all of `/config`, including its database, with MusicForge stopped; keep an independent FLAC backup. Upgrade by selecting an image version in `.env`, then running `docker compose pull` and `docker compose up -d`.
+Container root paths cannot change after indexing. Relocate storage through host mounts while retaining container paths. Back up all of `/config`, including its database, with MusicForge stopped before upgrading; keep an independent FLAC backup. Upgrade by selecting an image version in `.env`, then running `docker compose pull` and `docker compose up -d`.
 
 ## Lidarr integration
 
@@ -169,7 +169,7 @@ Library, encoding and integration settings live only in SQLite. Logs are JSON. P
 
 ## Development and releases
 
-Follow [AGENTS.md](AGENTS.md): local work is source/document/workflow editing and static inspection only. Dependency installation, compilation, executable tests and image builds run exclusively in GitHub Actions. Keep dependency directories, compiler caches and build outputs out of the local workspace. Generate or update lockfiles through Actions.
+Follow [AGENTS.md](AGENTS.md): local work is source/document/workflow editing and static inspection only. Dependency installation, compilation, executable tests and image builds run exclusively in GitHub Actions. Keep dependency directories, compiler caches and build outputs out of the local workspace. Generate or update lockfiles through Actions. Version 0.2 uses database schema 2; rollback to 0.1 requires restoring the matching pre-upgrade `/config` backup.
 
 [CI](.github/workflows/ci.yml) builds frontend/backend, runs race-enabled Go tests with real ffmpeg, exercises the actual app in Chromium and smoke-tests native containers on both architectures. The `canonical-source` artifact supplies CI-generated lockfiles and formatted Go source when needed. CI also verifies playback retention after source deletion and removal after manual deletion against a real Navidrome container with a read-only music mount.
 
@@ -178,5 +178,7 @@ Follow [AGENTS.md](AGENTS.md): local work is source/document/workflow editing an
 The current toolchain is Go 1.27.1 / Node 26.10.0 with React 19.3, Vite 8.3, TypeScript 7 and Tailwind 4.3. Runtime images use Debian 13 stable and checksum-pinned FFmpeg 9.0.2, Opus 1.6.1 and LAME 4.0. Build/test tools and media executables are upgraded together. Corresponding media source archives and build instructions ship in the container for maintenance and relinking.
 
 Pull requests and `main` pushes validate without publishing. Version tags such as `v0.1.0` publish the matching GHCR image after validation. Stable releases update `latest`; prereleases do not.
+
+Acceptance evidence and deployment limits are recorded in the [acceptance report](docs/acceptance.md).
 
 Translations live in [web/src/locales](web/src/locales); keep keys and interpolation placeholders aligned. Browser tests cover language detection, selection/persistence and bilingual workflows. License information is in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

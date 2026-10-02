@@ -164,7 +164,7 @@ func (a *App) dashboard(w http.ResponseWriter, r *http.Request) {
 		apiError(w, 500, err)
 		return
 	}
-	sourceCount, outputCount, ready, expired, rebuild := 0, 0, 0, 0, 0
+	sourceCount, outputCount, ready, expired, rebuild, failed := 0, 0, 0, 0, 0, 0
 	for _, source := range list {
 		if source.Present {
 			sourceCount++
@@ -181,6 +181,7 @@ func (a *App) dashboard(w http.ResponseWriter, r *http.Request) {
 		if source.Status == "needs_rebuild" {
 			rebuild++
 		}
+  if source.Status == "failed" { failed++ }
 	}
 	s, err := a.settings()
 	if err != nil {
@@ -197,7 +198,7 @@ func (a *App) dashboard(w http.ResponseWriter, r *http.Request) {
 			reason = err.Error()
 		}
 	}
-	respond(w, 200, map[string]any{"source_count": sourceCount, "output_count": outputCount, "ready_count": ready, "expired_count": expired, "rebuild_count": rebuild, "online": online, "storage_message": reason, "codec": s.Encoding.Codec, "enabled": s.Enabled, "version": a.version})
+	respond(w, 200, map[string]any{"source_count": sourceCount, "output_count": outputCount, "ready_count": ready, "expired_count": expired, "rebuild_count": rebuild, "failed_count": failed, "online": online, "storage_message": reason, "codec": s.Encoding.Codec, "enabled": s.Enabled, "version": a.version})
 }
 
 func (a *App) jobs(w http.ResponseWriter, r *http.Request) {
@@ -209,7 +210,20 @@ func (a *App) jobs(w http.ResponseWriter, r *http.Request) {
 	if n, err := strconv.Atoi(r.URL.Query().Get("limit")); err == nil && n > 0 && n <= 500 {
 		limit = n
 	}
-	rows, err := a.db.Query("SELECT "+jobCols+" FROM jobs ORDER BY id DESC LIMIT ? OFFSET ?", limit, offset)
+ where := ""
+ args := []any{}
+ state := r.URL.Query().Get("state")
+ if state != "" && state != "all" {
+  switch state { case "pending", "running", "success", "failed":
+   where = " WHERE state=?"
+   args = append(args, state)
+  default:
+   apiError(w, 400, errors.New("invalid job state filter"))
+   return
+  }
+ }
+ queryArgs := append(append([]any{}, args...), limit, offset)
+ rows, err := a.db.Query("SELECT "+jobCols+" FROM jobs"+where+" ORDER BY id DESC LIMIT ? OFFSET ?", queryArgs...)
 	if err != nil {
 		apiError(w, 500, err)
 		return
@@ -231,7 +245,7 @@ func (a *App) jobs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var total int
-	if err = a.db.QueryRow("SELECT count(*) FROM jobs").Scan(&total); err != nil {
+	if err = a.db.QueryRow("SELECT count(*) FROM jobs"+where, args...).Scan(&total); err != nil {
 		apiError(w, 500, err)
 		return
 	}

@@ -7,5 +7,5 @@ export type Settings = {
 };
 export type Source = { id: number; path: string; artist: string; album: string; title: string; track: number; disc: number; present: boolean; output: string; output_present: boolean; status: string; error: string; size: number; metadata: Record<string, string> };
 export type Job = { id: number; kind: string; state: string; attempts: number; progress: number; log?: string; created: number; updated: number; args: { id?: number; dirs?: string[] } };
-export type Dashboard = { source_count: number; output_count: number; ready_count: number; expired_count: number; rebuild_count: number; online: boolean; storage_message: string; codec: string; enabled: boolean; version: string };
+export type Dashboard = { source_count: number; output_count: number; ready_count: number; expired_count: number; rebuild_count: number; failed_count: number; online: boolean; storage_message: string; codec: string; enabled: boolean; version: string };
 export type Me = { initialized: boolean; authenticated: boolean; username?: string; method?: string; csrf?: string; oidc: boolean; version: string };

@@ -163,7 +163,7 @@
   "settings.bind": "Bind your OIDC identity",
   "settings.unbind": "Unbind the existing identity",
   "settings.bindHint": "Save OIDC settings first, then bind while signed in as the local administrator.",
-  "settings.savedIn": "Settings are stored in SQLite under /config",
+  "settings.savedIn": "All changes saved",
   "settings.save": "Save settings",
   "password.title": "Local administrator password",
   "password.description": "Changing your password revokes other login sessions.",
@@ -185,12 +185,12 @@
   "kind.delete": "Delete expired artifacts",
   "kind.upgrade": "Clean up replaced artifacts",
   "kind.refresh": "Refresh Navidrome",
-  "overview.outputLibrary": "{codec} output library",
+  "overview.outputLibrary": "Target format: {codec}",
   "overview.readyCount": {
     "one": "{count} track matches the current profile",
     "other": "{count} tracks match the current profile"
   },
-  "overview.attentionCounts": "{rebuild} need rebuild · {expired} expired",
+  "overview.attentionCounts": "{rebuild} need rebuild · {expired} expired · {failed} failed",
   "overview.rebuildCount": {
     "one": "{count} track needs rebuilding with the new profile",
     "other": "{count} tracks need rebuilding with the new profile"
@@ -293,5 +293,11 @@
   "error.sourceOfflinePrefix": "Source storage offline: ",
   "error.outputOfflinePrefix": "Output storage offline: ",
   "error.outputWritablePrefix": "Output storage is not writable: ",
-  "error.invalidJsonPrefix": "invalid JSON request: "
+  "error.invalidJsonPrefix": "invalid JSON request: ",
+  "app.stale": "Updates are unavailable; showing the last received data",
+  "app.retry": "Try again",
+  "app.skipContent": "Skip to content",
+  "settings.unsaved": "Unsaved changes",
+  "error.oidcLocalChange": "local login required to change OIDC settings",
+  "error.jobState": "invalid job state filter"
 }

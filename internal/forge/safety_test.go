@@ -2,9 +2,11 @@ package forge
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
+	"strconv"
 	"testing"
 	"time"
 )
@@ -200,5 +202,83 @@ func TestCorruptSourceDoesNotBlockHealthyTracks(t *testing.T) {
 				t.Fatalf("repair failed to recover: %+v / %v", repaired, err)
 			}
 		})
+	}
+}
+
+func TestDamagedFLACFramePreservesPlayableArtifact(t *testing.T) {
+	a, s := testApp(t)
+	ctx := context.Background()
+	path := makeFLAC(t, a, s, "Album/01.flac", "Original", false)
+	if err := a.scan(ctx, ScanRequest{}); err != nil {
+		t.Fatal(err)
+	}
+	drain(t, a, true)
+	original, err := a.sourceRel("Album/01.flac")
+	if err != nil {
+		t.Fatal(err)
+	}
+	artifact := filepath.Join(s.Output, original.Output)
+	before, err := fileHash(ctx, artifact)
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, err := runTool(ctx, a.cfg.FFprobe, "-v", "error", "-select_streams", "a:0", "-show_packets", "-show_entries", "packet=pos,size", "-of", "json", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var packets struct {
+		Packets []struct {
+			Pos  string `json:"pos"`
+			Size string `json:"size"`
+		} `json:"packets"`
+	}
+	if err = json.Unmarshal(raw, &packets); err != nil || len(packets.Packets) < 3 {
+		t.Fatalf("fixture needs multiple FLAC frames: %v", err)
+	}
+	packet := packets.Packets[len(packets.Packets)/2]
+	pos, err := strconv.Atoi(packet.Pos)
+	if err != nil {
+		t.Fatal(err)
+	}
+	size, err := strconv.Atoi(packet.Size)
+	if err != nil || size < 2 {
+		t.Fatalf("invalid frame size: %v", err)
+	}
+	content, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if pos < 0 || pos+size > len(content) {
+		t.Fatal("frame outside fixture")
+	}
+	// Keep valid metadata and duration, but damage one frame's trailing CRC.
+	content[pos+size-1] ^= 1
+	if err = os.WriteFile(path, content, 0600); err != nil {
+		t.Fatal(err)
+	}
+	quiet := time.Now().Add(-time.Minute)
+	if err = os.Chtimes(path, quiet, quiet); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = runTool(ctx, a.cfg.FFmpeg, "-nostdin", "-v", "error", "-i", path, "-map", "0:a:0", "-f", "null", "-"); err != nil {
+		t.Fatalf("fixture should expose permissive decoding's success exit: %v", err)
+	}
+	if err = a.scan(ctx, ScanRequest{Verify: true}); err != nil {
+		t.Fatal(err)
+	}
+	j, err := a.claim(true)
+	if err != nil || j.Kind != "convert" {
+		t.Fatalf("damaged source should require replacement: %v / %+v", err, j)
+	}
+	if err = a.execute(ctx, j); err == nil {
+		t.Fatal("damaged audio frame was published as a successful replacement")
+	}
+	after, err := fileHash(ctx, artifact)
+	if err != nil || after != before {
+		t.Fatalf("damaged replacement changed playable artifact: %v", err)
+	}
+	current, err := a.source(original.ID)
+	if err != nil || current.BuiltHash != original.BuiltHash || current.Output != original.Output || current.Error == "" {
+		t.Fatalf("failed replacement lost state or actionable error: %+v / %v", current, err)
 	}
 }

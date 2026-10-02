@@ -684,7 +684,7 @@ func (a *App) build(ctx context.Context, j Job, r BuildRequest) error {
 		_ = os.Remove(temp)
 		_, _ = a.db.Exec("DELETE FROM managed WHERE path=? AND kind='temp'", tempRel)
 	}()
-	args := []string{"-nostdin", "-hide_banner", "-loglevel", "error", "-n", "-i", in, "-map", "0:a:0", "-map_metadata", "0", "-vn", "-sn", "-dn"}
+	args := []string{"-nostdin", "-hide_banner", "-loglevel", "error", "-n", "-xerror", "-err_detect", "crccheck+explode", "-i", in, "-map", "0:a:0", "-map_metadata", "0", "-vn", "-sn", "-dn"}
 	keys := make([]string, 0, len(source.Metadata))
 	for key := range source.Metadata {
 		keys = append(keys, key)
@@ -794,7 +794,7 @@ func (a *App) validateArtifact(ctx context.Context, path string, e Encoding, dur
 	if audio != 1 || p.duration() <= 0 || math.Abs(p.duration()-duration) > math.Max(.5, duration*.02) {
 		return errors.New("artifact duration or audio stream validation failed")
 	}
-	_, err = runTool(ctx, a.cfg.FFmpeg, "-nostdin", "-v", "error", "-i", path, "-map", "0:a:0", "-f", "null", "-")
+	_, err = runTool(ctx, a.cfg.FFmpeg, "-nostdin", "-v", "error", "-xerror", "-err_detect", "crccheck+explode", "-i", path, "-map", "0:a:0", "-f", "null", "-")
 	return err
 }
 

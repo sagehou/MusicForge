@@ -175,7 +175,7 @@ Follow [AGENTS.md](AGENTS.md): local work is source/document/workflow editing an
 
 [Stable dependency refresh](.github/workflows/dependencies.yml) runs weekly and can be started manually. It updates stable npm/Go versions and compatible transitive modules, toolchains, pinned Actions and media release checksums, generates lockfiles in Actions and opens a reviewable PR. It explicitly starts CI for the update branch. Review major-version compatibility and merge only after validation; it never merges or publishes automatically. If repository settings prevent bot PR creation, the `dependency-source` artifact still contains the generated files. Bootstrap with the `artifact_only` option when lockfiles need manual review.
 
-The current toolchain is Go 1.27.1 / Node 26.10.0 with React 19.3, Vite 8.3, TypeScript 7 and Tailwind 4.3. Runtime images use Debian 13 stable and checksum-pinned FFmpeg 9.0.2, Opus 1.6.1 and LAME 3.100. Build/test tools and media executables are upgraded together. Corresponding media source archives and build instructions ship in the container for maintenance and relinking.
+The current toolchain is Go 1.27.1 / Node 26.10.0 with React 19.3, Vite 8.3, TypeScript 7 and Tailwind 4.3. Runtime images use Debian 13 stable and checksum-pinned FFmpeg 9.0.2, Opus 1.6.1 and LAME 4.0. Build/test tools and media executables are upgraded together. Corresponding media source archives and build instructions ship in the container for maintenance and relinking.
 
 Pull requests and `main` pushes validate without publishing. Version tags such as `v0.1.0` publish the matching GHCR image after validation. Stable releases update `latest`; prereleases do not.
 

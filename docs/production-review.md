@@ -7,8 +7,8 @@ All executable checks, dependency resolution and builds run in GitHub Actions. L
 | Round | Scope | Status | Evidence |
 | --- | --- | --- | --- |
 | 1 | Upgrade cleanup, scoped moves/copies, damaged source isolation | Passed | [CI](https://github.com/sagehou/MusicForge/actions/runs/37011006737), `internal/forge/safety_test.go` |
-| 2 | Queue, retries, interruption, atomic publication and deletion recovery | Validation in progress | `internal/forge/deletion_test.go`, existing recovery/retry tests |
-| 3 | Native Lidarr/Navidrome integration behavior and concurrency | Pending | — |
+| 2 | Queue, retries, interruption, atomic publication and deletion recovery | Passed | [CI](https://github.com/sagehou/MusicForge/actions/runs/37011732986), deletion/recovery/retry tests |
+| 3 | Native Lidarr/Navidrome integration behavior and concurrency | Validation in progress | `internal/forge/integration_queue_test.go` |
 | 4 | Administrator/OIDC security, settings and deployment boundaries | Pending | — |
 | 5 | Latest stable dependencies/toolchains/images/actions, upgrade automation and operational validation | Pending | — |
 | 6 | Full acceptance audit and focused UI/accessibility/responsive improvements | Pending | — |
@@ -23,7 +23,7 @@ Implemented: destructive cleanup checks current source bytes, stat stability, so
 
 Review found unlink/registry/source-update crash windows in expired deletion, shared artwork cleanup incorrectly treating the output root as empty, and recovery discarding promotion journals on unreadable/cancelled files. Added durable deletion intent before unlink, directory synchronization, atomic registry/source/refresh/journal completion, replay that preserves unregistered replacement files, correct root artwork reference counting, and retention of interrupted/unreadable promotion journals. Claims continue to serialize builds of the same source across profiles.
 
-New regression cases simulate restart after unlink and unregister, verify idempotent cleanup and refresh retention, refuse foreign replacement deletion, preserve root-level shared artwork and check per-source claim serialization. Existing tests cover encoder failures retaining playback, promotion replay and three-attempt retry exhaustion. Await round-two CI.
+New regression cases simulate restart after unlink and unregister, verify idempotent cleanup and refresh retention, refuse foreign replacement deletion, preserve root-level shared artwork and check per-source claim serialization. Existing tests cover encoder failures retaining playback, promotion replay and three-attempt retry exhaustion. Round-two CI passed backend race tests, browser checks and both native image smoke tests.
 
 Durability design reference: [SQLite atomic commit](https://www.sqlite.org/atomiccommit.html) describes flush ordering and filesystem assumptions; [WAL documentation](https://www.sqlite.org/wal.html) requires host-local shared state. Audio file promotion also needs directory synchronization and a recoverable journal, since filesystem and SQLite commits are separate operations.
 
@@ -32,3 +32,7 @@ Durability design reference: [SQLite atomic commit](https://www.sqlite.org/atomi
 Record upstream release metadata, source references and resulting decisions here as each relevant round progresses. Check stable releases rather than assuming pinned historical versions are current. Fetching metadata is read-only; installing/resolving dependencies and generating lockfiles is CI-only. Preserve a reproducible dependency graph and add ongoing upgrade checks before final delivery.
 
 2026-10-02 metadata snapshot: Go 1.27.1; Node 26.10.0 stable / 24.21.0 LTS; React 19.3.0; Vite 8.3.2; TypeScript 7.0.2; Tailwind 4.3.3; Playwright 1.63.0; go-oidc 3.21.0, x/crypto 0.57.0, x/oauth2 0.37.0 and modernc SQLite 1.60.1. Upgrade and compatibility validation are pending round 5. Sources: npm's published `latest` metadata, Go module proxy `@latest`, `go.dev/dl/?mode=json`, and `nodejs.org/dist/index.json`.
+
+## Round 3
+
+Coalescing previously dropped new scan requests while the matching job was running and discarded scopes of pending manual scans. Pending requests now merge scopes and verification flags; running jobs keep a durable trailing request, atomically consumed when the worker completes. Full scans dominate scoped requests. Restart retains the trailing request. Dirty-directory stamps are monotonic nanoseconds, preventing a concurrent mutation from being cleared by a refresh snapshot within the same second. Schema migration upgrades existing second-based stamps. Lidarr accepts unknown native fields but rejects trailing JSON. Tests cover native Download/Upgrade requests with Basic/Bearer authentication, mapping, safe cleanup gating, coalescing/restart and concurrent refresh retention. Integration HTTP tests use mock remote services; a real Navidrome service acceptance check remains pending.

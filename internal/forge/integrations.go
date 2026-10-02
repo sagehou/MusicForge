@@ -73,10 +73,15 @@ func (a *App) webhook(w http.ResponseWriter, r *http.Request) {
 		} `json:"deletedFiles"`
 	}
 	r.Body = http.MaxBytesReader(w, r.Body, 1024*1024)
-	if err = json.NewDecoder(r.Body).Decode(&body); err != nil {
+	decoder := json.NewDecoder(r.Body)
+ if err = decoder.Decode(&body); err != nil {
 		apiError(w, 400, errors.New("invalid Lidarr payload"))
 		return
 	}
+ if err = decoder.Decode(new(any)); err != io.EOF {
+  apiError(w, 400, errors.New("invalid Lidarr payload"))
+  return
+ }
 	if body.Event == "Test" {
 		respond(w, 200, map[string]bool{"ok": true})
 		return

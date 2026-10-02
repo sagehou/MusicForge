@@ -834,7 +834,7 @@ func (a *App) removeOwned(s Settings, rel string, id int64) error {
 	defer tx.Rollback()
 	if _, err = tx.Exec("DELETE FROM managed WHERE path=? AND source_id=? AND kind='audio'", rel, id); err != nil { return err }
 	if _, err = tx.Exec("UPDATE sources SET output='',output_present=0,built_hash='',built_profile='' WHERE id=? AND output=?", id, rel); err != nil { return err }
-	if _, err = tx.Exec("INSERT INTO dirty_dirs(path,updated) VALUES(?,?) ON CONFLICT(path) DO UPDATE SET updated=excluded.updated", filepath.ToSlash(filepath.Dir(rel)), time.Now().Unix()); err != nil { return err }
+	if _, err = tx.Exec(markDirtySQL, filepath.ToSlash(filepath.Dir(rel)), time.Now().UnixNano()); err != nil { return err }
 	if _, err = tx.Exec("DELETE FROM meta WHERE key=?", key); err != nil { return err }
 	if err = tx.Commit(); err != nil { return err }
 	a.cleanAlbum(s, filepath.Dir(rel))

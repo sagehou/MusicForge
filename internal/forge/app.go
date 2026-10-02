@@ -144,7 +144,7 @@ func (a *App) scheduler(ctx context.Context) {
 			}
 			var dirty, active int
 			var latest int64
-			if err = a.db.QueryRow("SELECT count(*),coalesce(max(updated),0) FROM dirty_dirs").Scan(&dirty, &latest); err == nil && dirty > 0 && time.Now().Unix()-latest >= 5 {
+			if err = a.db.QueryRow("SELECT count(*),coalesce(max(updated),0) FROM dirty_dirs").Scan(&dirty, &latest); err == nil && dirty > 0 && time.Since(time.Unix(0, latest)) >= 5*time.Second {
 				_ = a.db.QueryRow("SELECT count(*) FROM jobs WHERE state IN ('pending','running') AND kind IN ('scan','convert','move','delete')").Scan(&active)
 				if active == 0 && s.NavURL != "" {
 					_, _ = a.enqueue("refresh", "nav:refresh", map[string]bool{"manual": false}, false)
@@ -209,7 +209,7 @@ func (a *App) worker(ctx context.Context, conversion bool, slot int) {
 		if state != "success" {
 			progress = 0
 		}
-		if _, updateErr := a.db.Exec("UPDATE jobs SET state=?,attempts=?,progress=?,log=?,not_before=?,updated=? WHERE id=?", state, attempts, progress, message, time.Now().Unix()+int64(wait), time.Now().Unix(), j.ID); updateErr != nil {
+		if updateErr := a.completeJob(j, state, attempts, progress, message, wait); updateErr != nil {
 			a.logger.Error("job state persistence failed", "job", j.ID, "error", updateErr)
 		}
 		a.logger.Info("job finished", "job", j.ID, "kind", j.Kind, "state", state, "attempts", attempts, "detail", message)
@@ -262,7 +262,7 @@ func (a *App) setMeta(key, value string) error {
 }
 func (a *App) dirty(rel string) error {
 	dir := filepath.ToSlash(filepath.Dir(rel))
-	_, err := a.db.Exec("INSERT INTO dirty_dirs(path,updated) VALUES(?,?) ON CONFLICT(path) DO UPDATE SET updated=excluded.updated", dir, time.Now().Unix())
+	_, err := a.db.Exec(markDirtySQL, dir, time.Now().UnixNano())
 	return err
 }
 

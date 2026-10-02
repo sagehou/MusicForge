@@ -4,6 +4,8 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+ "sort"
+ "strconv"
 	"time"
 
 	_ "modernc.org/sqlite"
@@ -35,7 +37,9 @@ CREATE INDEX IF NOT EXISTS job_queue ON jobs(state,not_before);
 CREATE INDEX IF NOT EXISTS job_history ON jobs(dedup,id DESC);
 CREATE TABLE IF NOT EXISTS dirty_dirs(path TEXT PRIMARY KEY, updated INTEGER NOT NULL);
 INSERT OR IGNORE INTO migrations(version,applied_at) VALUES(1,unixepoch());
-PRAGMA user_version=1;
+UPDATE dirty_dirs SET updated=updated*1000000000 WHERE updated<1000000000000;
+INSERT OR IGNORE INTO migrations(version,applied_at) VALUES(2,unixepoch());
+PRAGMA user_version=2;
 `
 
 func openDB(path string) (*sql.DB, error) {
@@ -55,7 +59,7 @@ func openDB(path string) (*sql.DB, error) {
 		db.Close()
 		return nil, err
 	}
-	if version > 1 {
+	if version > 2 {
 		db.Close()
 		return nil, fmt.Errorf("database schema %d is newer than this application", version)
 	}
@@ -127,7 +131,27 @@ func (a *App) enqueue(kind, key string, args any, manual bool) (int64, error) {
 	var state string
 	err = tx.QueryRow("SELECT id,state FROM jobs WHERE dedup=? ORDER BY id DESC LIMIT 1", key).Scan(&id, &state)
 	if err == nil && (state == "pending" || state == "running" || (state == "failed" && !manual && (kind == "convert" || kind == "move"))) {
-		return id, nil
+		if kind == "scan" && (state == "pending" || state == "running") {
+   var current string
+   followup := "scan-followup:"+strconv.FormatInt(id, 10)
+   if state == "pending" {
+    err = tx.QueryRow("SELECT args FROM jobs WHERE id=?", id).Scan(&current)
+   } else {
+    err = tx.QueryRow("SELECT value FROM meta WHERE key=?", followup).Scan(&current)
+    if err == sql.ErrNoRows { current = string(b); err = nil }
+   }
+   if err != nil { return 0, err }
+   merged, err := mergeScan([]byte(current), b)
+   if err != nil { return 0, err }
+   if state == "pending" {
+    _, err = tx.Exec("UPDATE jobs SET args=? WHERE id=?", merged, id)
+   } else {
+    _, err = tx.Exec("INSERT INTO meta(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", followup, merged)
+   }
+   if err != nil { return 0, err }
+   return id, tx.Commit()
+  }
+  return id, nil
 	}
 	if err != nil && err != sql.ErrNoRows {
 		return 0, err
@@ -194,3 +218,48 @@ func (a *App) saveSettings(s Settings) error {
 	_, err = a.db.Exec("INSERT INTO settings(id,data) VALUES(1,?) ON CONFLICT(id) DO UPDATE SET data=excluded.data", string(b))
 	return err
 }
+
+// Full scans dominate scoped scans; verification cannot be lost while coalescing requests.
+func mergeScan(first, second []byte) (string, error) {
+ var a, b ScanRequest
+ if err := json.Unmarshal(first, &a); err != nil { return "", err }
+ if err := json.Unmarshal(second, &b); err != nil { return "", err }
+ a.Verify = a.Verify || b.Verify
+ if len(a.Dirs) == 0 || len(b.Dirs) == 0 { a.Dirs = nil } else {
+  unique := map[string]bool{}
+  for _, dir := range append(a.Dirs, b.Dirs...) { unique[dir] = true }
+  a.Dirs = nil
+  for dir := range unique { a.Dirs = append(a.Dirs, dir) }
+  sort.Strings(a.Dirs)
+ }
+ raw, err := json.Marshal(a)
+ return string(raw), err
+}
+
+func (a *App) completeJob(j Job, state string, attempts int, progress float64, message string, wait int) error {
+ tx, err := a.db.Begin()
+ if err != nil { return err }
+ defer tx.Rollback()
+ args := string(j.Args)
+ if j.Kind == "scan" {
+  key := "scan-followup:"+strconv.FormatInt(j.ID, 10)
+  var raw string
+  err = tx.QueryRow("SELECT value FROM meta WHERE key=?", key).Scan(&raw)
+  if err != nil && err != sql.ErrNoRows { return err }
+  if err == nil {
+   if state == "success" { args = raw; attempts = 0 } else {
+    args, err = mergeScan(j.Args, []byte(raw))
+    if err != nil { return err }
+   }
+   state = "pending"
+   progress = 0
+   wait = 0
+   if _, err = tx.Exec("DELETE FROM meta WHERE key=?", key); err != nil { return err }
+  }
+ }
+ _, err = tx.Exec("UPDATE jobs SET args=?,state=?,attempts=?,progress=?,log=?,not_before=?,updated=? WHERE id=?", args, state, attempts, progress, message, time.Now().Unix()+int64(wait), time.Now().Unix(), j.ID)
+ if err != nil { return err }
+ return tx.Commit()
+}
+
+const markDirtySQL = "INSERT INTO dirty_dirs(path,updated) VALUES(?,?) ON CONFLICT(path) DO UPDATE SET updated=max(dirty_dirs.updated+1,excluded.updated)"

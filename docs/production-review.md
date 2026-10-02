@@ -64,3 +64,5 @@ Upgrade acceptance now explicitly recreates schema-1 state and verifies artifact
 Final persistence audit found the worker logged completion-update failures and then abandoned a still-running database row. It now retries persisting the same result until storage recovers or shutdown, preserving the source claim and counting the execution failure once. Fault injection rejects completion writes through a SQLite trigger, then removes it and verifies the running job recovers without another execution/attempt.
 
 Queue-history audit also covers bulk retry activating an older row while newer failed history exists for the same target. Enqueue now prioritizes the active row over historical records, returning its ID instead of reporting a uniqueness conflict. A regression verifies both manual and automatic duplicate requests reuse that target.
+
+SQLite WAL now explicitly uses FULL synchronization, making deletion/promotion intent durability independent of driver compile-time defaults. This matches the journal ordering and directory/file synchronization guarantees reviewed in round 2.

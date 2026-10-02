@@ -15,7 +15,9 @@ All executable checks, dependency resolution and builds run in GitHub Actions. L
 
 ## Round 1
 
-Initial audit findings: upgrade cleanup trusts stale index state during the source quiet period; a scoped scan only detects moves whose old paths are inside its scope; a corrupt source stops processing healthy tracks. Regression cases cover stable replacement gating, byte-identical cross-directory moves versus copies, corrupt-file reporting, healthy-track progress and recovery after repair. Await CI reproduction, implementation and revalidation.
+Initial audit findings: upgrade cleanup trusts stale index state during the source quiet period; a scoped scan only detects moves whose old paths are inside its scope; a corrupt source can stop processing healthy tracks. [Regression-only CI](https://github.com/sagehou/MusicForge/actions/runs/37010589260) confirmed stale-index cleanup and redundant move indexing, and revealed that ffprobe can identify invalid bytes as FLAC with no valid duration. Source validation must check duration as well as codec.
+
+Implemented: destructive cleanup checks current source bytes, stat stability, source errors and output ownership; scoped rename detection checks actual old-path absence and preserves copies; invalid sources are indexed with per-file errors and invalid hashes while healthy files continue. Incomplete scans preserve unseen sources. Ordinary scans cache unchanged invalid-source failures until changes or full verification. Regression cases cover stable replacement gating, moves versus copies, empty/invalid input, healthy-track progress and recovery after repair. Fix validation pending.
 
 ## Upstream comparison and dependencies
 

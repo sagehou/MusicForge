@@ -359,14 +359,14 @@ func TestUpgradePreservesOldUntilAllNewValidate(t *testing.T) {
 		t.Fatal(err)
 	}
 	r := UpgradeRequest{New: []string{"Album/new.flac"}, Old: []string{"Album/old.flac"}}
-	if err := a.finishUpgrade(r); err == nil {
+	if err := a.finishUpgrade(context.Background(), r); err == nil {
 		t.Fatal("upgrade cleaned before replacement validated")
 	}
 	if _, err := os.Stat(filepath.Join(s.Output, source.Output)); err != nil {
 		t.Fatal("old playable output removed early")
 	}
 	drain(t, a, true)
-	if err := a.finishUpgrade(r); err != nil {
+	if err := a.finishUpgrade(context.Background(), r); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := os.Stat(filepath.Join(s.Output, source.Output)); !os.IsNotExist(err) {

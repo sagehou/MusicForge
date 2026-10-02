@@ -134,7 +134,7 @@ func (a *App) webhook(w http.ResponseWriter, r *http.Request) {
 	respond(w, 202, map[string]int64{"job_id": id})
 }
 
-func (a *App) finishUpgrade(r UpgradeRequest) error {
+func (a *App) finishUpgrade(ctx context.Context, r UpgradeRequest) error {
 	a.files.Lock()
 	defer a.files.Unlock()
 	s, err := a.settings()
@@ -153,16 +153,30 @@ func (a *App) finishUpgrade(r UpgradeRequest) error {
 		if err != nil {
 			return later("Waiting for upgraded tracks to be indexed", 10)
 		}
-		if !source.Present || !source.OutputPresent || source.Hash == "" || source.BuiltHash != source.Hash || source.BuiltProfile != s.Encoding.Fingerprint() {
+		if !source.Present || !source.OutputPresent || source.Error != "" || source.Hash == "" || source.BuiltHash != source.Hash || source.BuiltProfile != s.Encoding.Fingerprint() {
 			return later("Waiting for all upgraded tracks to validate; failed tracks require manual retry", 10)
+		}
+		path, err := safePath(s.Source, rel)
+		if err != nil { return err }
+		info, err := os.Stat(path)
+		if err != nil || !sameStat(info, source) || time.Since(info.ModTime()) < 30*time.Second {
+			return later("Waiting for upgraded sources to be stable and indexed", 10)
+		}
+		// Cleanup is destructive and infrequent: verify current bytes, not just cached state.
+		hash, err := fileHash(ctx, path)
+		if err != nil { return err }
+		after, err := os.Stat(path)
+		if err != nil || !sameStat(after, source) || hash != source.Hash {
+			return later("Waiting for the current upgraded source content to validate", 10)
 		}
 		out, err := safePath(s.Output, source.Output)
 		if err != nil {
 			return err
 		}
-		if _, err = os.Stat(out); err != nil {
+		if info, err := os.Stat(out); err != nil || !info.Mode().IsRegular() {
 			return later("Waiting for missing upgraded artifacts", 10)
 		}
+		if err = a.owned(source.Output, source.ID); err != nil { return err }
 		newPaths[rel] = true
 	}
 	for _, rel := range r.Old {

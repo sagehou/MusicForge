@@ -243,7 +243,7 @@ func (a *App) execute(ctx context.Context, j Job) error {
 		if err := json.Unmarshal(j.Args, &r); err != nil {
 			return err
 		}
-		return a.finishUpgrade(r)
+		return a.finishUpgrade(ctx, r)
 	case "refresh":
 		return a.refresh(ctx)
 	default:

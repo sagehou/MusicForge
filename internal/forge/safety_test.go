@@ -26,7 +26,7 @@ func TestUpgradeRejectsStaleIndexDuringQuietPeriod(t *testing.T) {
   t.Fatalf("scan must wait for stable input: %v", err)
  }
  event := UpgradeRequest{New: []string{"Album/reused.flac"}, Old: []string{"Album/replaced.flac"}}
- if err = a.finishUpgrade(event); !errors.As(err, &waiting) {
+ if err = a.finishUpgrade(context.Background(), event); !errors.As(err, &waiting) {
   t.Fatalf("stale ready index permitted upgrade cleanup: %v", err)
  }
  if _, err = os.Stat(filepath.Join(s.Output, old.Output)); err != nil {
@@ -35,11 +35,11 @@ func TestUpgradeRejectsStaleIndexDuringQuietPeriod(t *testing.T) {
  quiet := time.Now().Add(-time.Minute)
  if err = os.Chtimes(replacement, quiet, quiet); err != nil { t.Fatal(err) }
  if err = a.scan(context.Background(), ScanRequest{}); err != nil { t.Fatal(err) }
- if err = a.finishUpgrade(event); !errors.As(err, &waiting) {
+ if err = a.finishUpgrade(context.Background(), event); !errors.As(err, &waiting) {
   t.Fatalf("cleanup must still wait for conversion: %v", err)
  }
  drain(t, a, true)
- if err = a.finishUpgrade(event); err != nil { t.Fatal(err) }
+ if err = a.finishUpgrade(context.Background(), event); err != nil { t.Fatal(err) }
  if _, err = os.Stat(filepath.Join(s.Output, old.Output)); !os.IsNotExist(err) {
   t.Fatalf("validated upgrade did not clean replaced artifact: %v", err)
  }
@@ -94,6 +94,8 @@ func TestScopedScanDistinguishesCrossDirectoryMoveFromCopy(t *testing.T) {
 }
 
 func TestCorruptSourceDoesNotBlockHealthyTracks(t *testing.T) {
+ for _, content := range []string{"", "not FLAC"} {
+  t.Run("content="+content, func(t *testing.T) {
  a, s := testApp(t)
  expiredPath := makeFLAC(t, a, s, "Removed/01.flac", "Retained", false)
  if err := a.scan(context.Background(), ScanRequest{}); err != nil { t.Fatal(err) }
@@ -102,7 +104,7 @@ func TestCorruptSourceDoesNotBlockHealthyTracks(t *testing.T) {
  if err != nil { t.Fatal(err) }
  if err = os.Remove(expiredPath); err != nil { t.Fatal(err) }
  corrupt := filepath.Join(s.Source, "00-corrupt.flac")
- if err = os.WriteFile(corrupt, []byte("not FLAC"), 0600); err != nil { t.Fatal(err) }
+ if err = os.WriteFile(corrupt, []byte(content), 0600); err != nil { t.Fatal(err) }
  quiet := time.Now().Add(-time.Minute)
  if err = os.Chtimes(corrupt, quiet, quiet); err != nil { t.Fatal(err) }
  makeFLAC(t, a, s, "Healthy/01.flac", "Healthy", false)
@@ -123,4 +125,6 @@ func TestCorruptSourceDoesNotBlockHealthyTracks(t *testing.T) {
  drain(t, a, true)
  repaired, err := a.source(damaged.ID)
  if err != nil || repaired.Error != "" || !repaired.OutputPresent { t.Fatalf("repair failed to recover: %+v / %v", repaired, err) }
+  })
+ }
 }

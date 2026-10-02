@@ -220,6 +220,7 @@ func (a *App) scan(ctx context.Context, r ScanRequest) error {
 	}
 	sort.Strings(paths)
 	quiet := false
+	invalid := 0
 	for _, rel := range paths {
 		info := files[rel]
 		source, found := byRel[rel]
@@ -238,17 +239,22 @@ func (a *App) scan(ctx context.Context, r ScanRequest) error {
 				return later("Scan incomplete: "+err.Error(), 30)
 			}
 			p, err := a.probe(ctx, path)
-			if err != nil {
-				return err
-			}
 			audio := false
 			for _, stream := range p.Streams {
 				if stream.Type == "audio" && stream.Codec == "flac" {
 					audio = true
 				}
 			}
-			if !audio {
-				return fmt.Errorf("not FLAC audio: %s", rel)
+			duration := p.duration()
+			if err == nil && (!audio || duration <= 0 || math.IsNaN(duration) || math.IsInf(duration, 0)) {
+				err = fmt.Errorf("not FLAC audio: %s", rel)
+			}
+			if err != nil {
+				if ctx.Err() != nil { return ctx.Err() }
+				if storageErr := a.storage(s); storageErr != nil { return storageErr }
+				if err = a.indexSourceError(rel, info, err); err != nil { return err }
+				invalid++
+				continue
 			}
 			after, err := os.Stat(path)
 			if err != nil || after.Size() != info.Size() || !after.ModTime().Equal(info.ModTime()) {
@@ -260,9 +266,13 @@ func (a *App) scan(ctx context.Context, r ScanRequest) error {
 			if !found {
 				// A missing byte-identical source is a rename. Existing duplicates keep their own IDs.
 				for _, old := range existing {
-					if old.Hash == hash && old.Hash != "" && files[old.Rel] == nil && scoped(old.Rel, r.Dirs) {
+					if old.Hash == hash && old.Hash != "" && files[old.Rel] == nil {
+						// A scoped scan must confirm absence outside its enumerated directories.
+						oldPath, err := safePath(s.Source, old.Rel)
+						if err != nil { return err }
+						if _, err = os.Stat(oldPath); err == nil { continue } else if !os.IsNotExist(err) { return err }
 						var taken int
-						_ = a.db.QueryRow("SELECT count(*) FROM sources WHERE id=? AND rel=?", old.ID, old.Rel).Scan(&taken)
+						if err = a.db.QueryRow("SELECT count(*) FROM sources WHERE id=? AND rel=?", old.ID, old.Rel).Scan(&taken); err != nil { return err }
 						if taken == 1 {
 							source = old
 							found = true
@@ -309,6 +319,7 @@ func (a *App) scan(ctx context.Context, r ScanRequest) error {
 		}
 		source.OutputPresent = present
 		if source.Hash == "" {
+			if source.Error != "" { invalid++ }
 			continue
 		}
 		moved := present && source.BuiltHash == source.Hash && source.Output != outputRel(source.Rel, strings.TrimPrefix(filepath.Ext(source.Output), "."))
@@ -334,7 +345,7 @@ func (a *App) scan(ctx context.Context, r ScanRequest) error {
 		return err
 	}
 	for _, source := range all {
-		if scoped(source.Rel, r.Dirs) && files[source.Rel] == nil {
+		if invalid == 0 && scoped(source.Rel, r.Dirs) && files[source.Rel] == nil {
 			if _, err = a.db.Exec("UPDATE sources SET present=0 WHERE id=?", source.ID); err != nil {
 				return err
 			}
@@ -352,7 +363,14 @@ func (a *App) scan(ctx context.Context, r ScanRequest) error {
 			return err
 		}
 	}
+	if invalid > 0 { return fmt.Errorf("scan found %d invalid FLAC files; healthy tracks processed, no deletions applied; see Library errors", invalid) }
 	return nil
+}
+
+func (a *App) indexSourceError(rel string, info fs.FileInfo, cause error) error {
+	// Keep playable output and display metadata, but invalidate the current build target.
+	_, err := a.db.Exec("INSERT INTO sources(rel,size,mtime,present,error) VALUES(?,?,?,1,?) ON CONFLICT(rel) DO UPDATE SET hash='',size=excluded.size,mtime=excluded.mtime,present=1,error=excluded.error", rel, info.Size(), info.ModTime().UnixNano(), cause.Error())
+	return err
 }
 
 func (a *App) queueBuild(source Source, profile Encoding, move, manual bool) (int64, error) {

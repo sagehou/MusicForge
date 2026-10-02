@@ -222,6 +222,10 @@ type subsonicResponse struct {
 		Status        string `json:"status"`
 		Type          string `json:"type"`
 		ServerVersion string `json:"serverVersion"`
+  ScanStatus struct {
+   Scanning bool `json:"scanning"`
+   Error string `json:"error"`
+  } `json:"scanStatus"`
 		Error         struct {
 			Code    int    `json:"code"`
 			Message string `json:"message"`
@@ -279,6 +283,13 @@ func (a *App) refresh(ctx context.Context) error {
 	if err = a.storage(s); err != nil {
 		return err
 	}
+ signature := digest(fmt.Sprintf("%s:%s:%s:%d", s.NavURL, s.NavUser, s.NavPassword, s.NavLibrary))
+ var previous struct { Signature string; Dirty map[string]int64 }
+ if raw, journalErr := a.meta("nav-refresh"); journalErr == nil {
+  if err = json.Unmarshal([]byte(raw), &previous); err != nil { return err }
+  if previous.Signature == signature { return a.finishRefresh(ctx, s, previous.Dirty) }
+  if _, err = a.db.Exec("DELETE FROM meta WHERE key='nav-refresh'"); err != nil { return err }
+ } else if journalErr != sql.ErrNoRows { return journalErr }
 	rows, err := a.db.Query("SELECT path,updated FROM dirty_dirs")
 	if err != nil {
 		return err
@@ -326,13 +337,34 @@ func (a *App) refresh(ctx context.Context) error {
 		}
 		sort.Strings(targets)
 	}
-	if _, err = a.navRequest(ctx, s, "startScan", targets); err != nil {
+ status, err := a.navRequest(ctx, s, "getScanStatus", nil)
+ if err != nil { return err }
+ if status.Response.ScanStatus.Scanning { return later("Waiting for Navidrome's current scan to finish", 10) }
+ if _, err = a.navRequest(ctx, s, "startScan", targets); err != nil {
 		return err
 	}
-	for dir, stamp := range dirty {
-		if _, err = a.db.Exec("DELETE FROM dirty_dirs WHERE path=? AND updated=?", dir, stamp); err != nil {
-			return err
-		}
-	}
-	return nil
+ previous.Signature = signature
+ previous.Dirty = dirty
+ raw, err := json.Marshal(previous)
+ if err != nil { return err }
+ if err = a.setMeta("nav-refresh", string(raw)); err != nil { return err }
+ return a.finishRefresh(ctx, s, dirty)
+}
+
+func (a *App) finishRefresh(ctx context.Context, s Settings, dirty map[string]int64) error {
+ status, err := a.navRequest(ctx, s, "getScanStatus", nil)
+ if err != nil { return err }
+ if status.Response.ScanStatus.Scanning { return later("Waiting for Navidrome scan completion", 10) }
+ if status.Response.ScanStatus.Error != "" {
+  if _, err = a.db.Exec("DELETE FROM meta WHERE key='nav-refresh'"); err != nil { return err }
+  return errors.New("Navidrome scan failed; directory changes are retained for retry")
+ }
+ tx, err := a.db.Begin()
+ if err != nil { return err }
+ defer tx.Rollback()
+ for dir, stamp := range dirty {
+  if _, err = tx.Exec("DELETE FROM dirty_dirs WHERE path=? AND updated=?", dir, stamp); err != nil { return err }
+ }
+ if _, err = tx.Exec("DELETE FROM meta WHERE key='nav-refresh'"); err != nil { return err }
+ return tx.Commit()
 }

@@ -9,6 +9,7 @@ import (
  "path/filepath"
  "reflect"
  "strings"
+ "sync/atomic"
  "testing"
 )
 
@@ -96,4 +97,32 @@ func TestNativeLidarrDownloadUpgradeAndStrictPayload(t *testing.T) {
  drain(t, a, true)
  if err = a.execute(context.Background(), upgrade); err != nil { t.Fatal(err) }
  if _, err = os.Stat(filepath.Join(s.Output, previous.Output)); !os.IsNotExist(err) { t.Fatal("explicit upgrade did not remove old output", err) }
+}
+
+func TestNavidromeAsynchronousRefreshKeepsJournalUntilSuccess(t *testing.T) {
+ a, s := testApp(t)
+ var scanning atomic.Bool
+ scanning.Store(true)
+ var starts atomic.Int32
+ server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+  if strings.Contains(r.URL.Path, "startScan") { starts.Add(1); scanning.Store(true) }
+  running := scanning.Load() && starts.Load() > 0
+  respond(w, 200, map[string]any{"subsonic-response":map[string]any{"status":"ok","type":"navidrome","serverVersion":"0.64.2","scanStatus":map[string]any{"scanning":running}}})
+ }))
+ defer server.Close()
+ s.NavURL = server.URL
+ if err := a.saveSettings(s); err != nil { t.Fatal(err) }
+ if err := a.dirty("Album/track.opus"); err != nil { t.Fatal(err) }
+ if err := a.refresh(context.Background()); err == nil { t.Fatal("accepted asynchronous scan as complete") }
+ cfg, logger, assets := a.cfg,a.logger,a.assets
+ a.Close()
+ restored, err := New(cfg,logger,"test",assets)
+ if err != nil { t.Fatal(err) }
+ defer restored.Close()
+ if err = restored.refresh(context.Background()); err == nil { t.Fatal("lost asynchronous journal after restart") }
+ if starts.Load() != 1 { t.Fatal("restarted an in-flight remote scan",starts.Load()) }
+ scanning.Store(false)
+ if err = restored.refresh(context.Background()); err != nil { t.Fatal(err) }
+ var count int
+ if err = restored.db.QueryRow("SELECT count(*) FROM dirty_dirs").Scan(&count); err != nil || count != 0 { t.Fatal("completion did not acknowledge changes",count,err) }
 }

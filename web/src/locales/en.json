@@ -299,5 +299,6 @@
   "app.skipContent": "Skip to content",
   "settings.unsaved": "Unsaved changes",
   "error.oidcLocalChange": "local login required to change OIDC settings",
-  "error.jobState": "invalid job state filter"
+  "error.jobState": "invalid job state filter",
+  "error.settingsBusy": "library file operation in progress; try saving Settings again shortly"
 }

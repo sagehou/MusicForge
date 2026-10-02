@@ -131,9 +131,19 @@ func TestOIDCBindingAndSingleSubject(t *testing.T) {
 		t.Fatal("binding was not persisted")
 	}
 	u, cookie = start(false)
-	if w := callback(u, cookie, false); w.Code != 303 {
-		t.Fatal(w.Body.String())
-	}
+ // Authentication must stay responsive while a full library scan owns the file lock.
+ a.files.Lock()
+ response := make(chan *httptest.ResponseRecorder, 1)
+ go func() { response <- callback(u, cookie, false) }()
+ var login *httptest.ResponseRecorder
+ select {
+ case login = <-response: a.files.Unlock()
+ case <-time.After(5*time.Second):
+  a.files.Unlock()
+  <-response
+  t.Fatal("OIDC login blocked behind a library operation")
+ }
+ if login.Code != 303 { t.Fatal(login.Body.String()) }
 	if w := callback(u, cookie, false); w.Code != 403 {
 		t.Fatal("replayed callback accepted")
 	}

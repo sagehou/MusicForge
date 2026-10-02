@@ -281,5 +281,6 @@
   "app.skipContent": "跳到主要内容",
   "settings.unsaved": "有未保存的更改",
   "error.oidcLocalChange": "请使用本地管理员登录修改 OIDC 设置",
-  "error.jobState": "无效的任务状态筛选"
+  "error.jobState": "无效的任务状态筛选",
+  "error.settingsBusy": "音乐库正在处理文件，请稍后再次保存设置"
 }

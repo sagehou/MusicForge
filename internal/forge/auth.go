@@ -307,7 +307,7 @@ func (a *App) oidcCallback(w http.ResponseWriter, r *http.Request) {
 			apiError(w, 403, errors.New("local administrator session expired"))
 			return
 		}
-		a.files.Lock()
+		a.authMu.Lock()
 		latest, err := a.settings()
 		if err == nil && (latest.OIDCIssuer != s.OIDCIssuer || latest.OIDCClientID != s.OIDCClientID || latest.OIDCSecret != s.OIDCSecret) {
 			err = errors.New("OIDC settings changed during binding")
@@ -319,7 +319,7 @@ func (a *App) oidcCallback(w http.ResponseWriter, r *http.Request) {
 			latest.BoundEmail = claims.Email
 			err = a.saveSettings(latest)
 		}
-		a.files.Unlock()
+		a.authMu.Unlock()
 		if err != nil {
 			apiError(w, 400, err)
 			return
@@ -328,8 +328,8 @@ func (a *App) oidcCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// Serialize binding/configuration changes with session issuance.
- a.files.Lock()
- defer a.files.Unlock()
+ a.authMu.Lock()
+ defer a.authMu.Unlock()
  latest, err := a.settings()
  if err != nil || latest.OIDCIssuer != s.OIDCIssuer || latest.OIDCClientID != s.OIDCClientID || latest.OIDCSecret != s.OIDCSecret || id.Issuer != latest.BoundIssuer || id.Subject != latest.BoundSubject {
 		apiError(w, 403, errors.New("this OIDC identity is not the administrator"))

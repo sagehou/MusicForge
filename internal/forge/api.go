@@ -311,8 +311,13 @@ func (a *App) putSettings(w http.ResponseWriter, r *http.Request) {
 	if !decode(w, r, &body) {
 		return
 	}
-	a.files.Lock()
-	defer a.files.Unlock()
+	if !a.files.TryLock() {
+  apiError(w, 409, errors.New("library file operation in progress; try saving Settings again shortly"))
+  return
+ }
+ defer a.files.Unlock()
+ a.authMu.Lock()
+ defer a.authMu.Unlock()
 	old, err := a.settings()
 	if err != nil {
 		apiError(w, 500, err)

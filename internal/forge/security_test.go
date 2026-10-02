@@ -7,6 +7,7 @@ import (
  "os"
  "path/filepath"
  "testing"
+ "time"
 )
 
 func TestOIDCReconfigurationRequiresLocalLoginAndRevokesSessions(t *testing.T) {
@@ -59,4 +60,28 @@ func TestResolvedConfigurationOverlapAndURLBoundaries(t *testing.T) {
   normal.OIDCSecret="secret"
   if err := normal.Validate(); err == nil { t.Fatal("accepted unsafe integration URL",value) }
  }
+}
+
+func TestBusyLibraryDoesNotTrapSettingsRequest(t *testing.T) {
+ a,s:=testApp(t)
+ local:=httptest.NewRecorder()
+ if err:=a.newSession(local,"local"); err!=nil { t.Fatal(err) }
+ body,err:=json.Marshal(s)
+ if err!=nil { t.Fatal(err) }
+ req:=httptest.NewRequest("PUT","/api/settings",bytes.NewReader(body))
+ cookie:=local.Result().Cookies()[0]
+ req.AddCookie(cookie)
+ req.Header.Set("X-CSRF-Token",digest(cookie.Value+":csrf"))
+ w:=httptest.NewRecorder()
+ done:=make(chan struct{})
+ a.files.Lock()
+ go func(){a.Handler().ServeHTTP(w,req);close(done)}()
+ select {
+ case <-done: a.files.Unlock()
+ case <-time.After(time.Second):
+  a.files.Unlock()
+  <-done
+  t.Fatal("Settings waited indefinitely behind a library operation")
+ }
+ if w.Code!=409 { t.Fatal("busy Settings request did not preserve unsaved form",w.Code,w.Body.String()) }
 }

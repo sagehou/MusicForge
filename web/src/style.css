@@ -110,7 +110,8 @@ code { font-family: "SFMono-Regular", Consolas, monospace; }
 .input-action .field-label { flex: 1; min-width: 0; }
 .input-action > button { align-self: flex-end; flex-shrink: 0; }
 .settings-title > div { min-width: 0; }
-.settings-save > span { color: #c5d2e5; }
+.settings-save > span { display: block; color: #c5d2e5; margin-right: auto; }
+.settings-save { gap: 12px; }
 .badge-expired { border-style: dashed; }
 @media(max-width:800px) { .mobile-logout { display: inline-flex; }.task-description { min-width: 140px; }.settings-title { flex-wrap: wrap; }.filter-tabs { flex-wrap: wrap; } }
 @media(max-width:600px) {

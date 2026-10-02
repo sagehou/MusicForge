@@ -209,8 +209,15 @@ func (a *App) worker(ctx context.Context, conversion bool, slot int) {
 		if state != "success" {
 			progress = 0
 		}
-		if updateErr := a.completeJob(j, state, attempts, progress, message, wait); updateErr != nil {
+		for {
+			updateErr := a.completeJob(j, state, attempts, progress, message, wait)
+			if updateErr == nil {
+				break
+			}
 			a.logger.Error("job state persistence failed", "job", j.ID, "error", updateErr)
+			if !pause(ctx, time.Second) {
+				return
+			}
 		}
 		a.logger.Info("job finished", "job", j.ID, "kind", j.Kind, "state", state, "attempts", attempts, "detail", message)
 	}

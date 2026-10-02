@@ -69,3 +69,21 @@ func TestWorkerRecoversCompletionWriteFailureWithoutConsumingExtraAttempts(t *te
 		time.Sleep(20 * time.Millisecond)
 	}
 }
+
+func TestEnqueueUsesActiveTargetAheadOfNewerFailedHistory(t *testing.T) {
+	a, _ := testApp(t)
+	args := BuildRequest{ID: 7}
+	active, err := a.enqueue("convert", "same-build-target", args, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = a.db.Exec("INSERT INTO jobs(kind,dedup,args,state,attempts,created,updated) VALUES('convert','same-build-target','{\"id\":7}','failed',3,0,0)"); err != nil {
+		t.Fatal(err)
+	}
+	for _, manual := range []bool{true, false} {
+		id, err := a.enqueue("convert", "same-build-target", args, manual)
+		if err != nil || id != active {
+			t.Fatal("newer history hid the active target", id, err)
+		}
+	}
+}

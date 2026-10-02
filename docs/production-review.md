@@ -62,3 +62,5 @@ Visual inspection of passing mobile artifacts identified a cramped English encod
 Upgrade acceptance now explicitly recreates schema-1 state and verifies artifact ownership/playback records, exhausted retry budgets and dirty-directory timestamp migration survive startup. A separate regression rejects a newer schema. This closes the remaining migration scenario gap before publishing a schema-2 release.
 
 Final persistence audit found the worker logged completion-update failures and then abandoned a still-running database row. It now retries persisting the same result until storage recovers or shutdown, preserving the source claim and counting the execution failure once. Fault injection rejects completion writes through a SQLite trigger, then removes it and verifies the running job recovers without another execution/attempt.
+
+Queue-history audit also covers bulk retry activating an older row while newer failed history exists for the same target. Enqueue now prioritizes the active row over historical records, returning its ID instead of reporting a uniqueness conflict. A regression verifies both manual and automatic duplicate requests reuse that target.

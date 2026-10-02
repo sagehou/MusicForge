@@ -129,7 +129,7 @@ func (a *App) enqueue(kind, key string, args any, manual bool) (int64, error) {
 	defer tx.Rollback()
 	var id int64
 	var state string
-	err = tx.QueryRow("SELECT id,state FROM jobs WHERE dedup=? ORDER BY id DESC LIMIT 1", key).Scan(&id, &state)
+	err = tx.QueryRow("SELECT id,state FROM jobs WHERE dedup=? ORDER BY (state IN ('pending','running')) DESC,id DESC LIMIT 1", key).Scan(&id, &state)
 	if err == nil && (state == "pending" || state == "running" || (state == "failed" && !manual && (kind == "convert" || kind == "move"))) {
 		if kind == "scan" && (state == "pending" || state == "running") {
 			var current string

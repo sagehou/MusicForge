@@ -26,9 +26,11 @@ func (a *App) ResetPassword(password string) error {
 		return err
 	}
 	tx, err := a.db.Begin()
- if err != nil { return err }
- defer tx.Rollback()
- result, err := tx.Exec("UPDATE admin SET password=? WHERE id=1", hash)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	result, err := tx.Exec("UPDATE admin SET password=? WHERE id=1", hash)
 	if err != nil {
 		return err
 	}
@@ -39,8 +41,10 @@ func (a *App) ResetPassword(password string) error {
 	if n == 0 {
 		return errors.New("no administrator exists; use web setup")
 	}
-	if _, err = tx.Exec("DELETE FROM sessions"); err != nil { return err }
- return tx.Commit()
+	if _, err = tx.Exec("DELETE FROM sessions"); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 type session struct {
@@ -328,10 +332,10 @@ func (a *App) oidcCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// Serialize binding/configuration changes with session issuance.
- a.authMu.Lock()
- defer a.authMu.Unlock()
- latest, err := a.settings()
- if err != nil || latest.OIDCIssuer != s.OIDCIssuer || latest.OIDCClientID != s.OIDCClientID || latest.OIDCSecret != s.OIDCSecret || id.Issuer != latest.BoundIssuer || id.Subject != latest.BoundSubject {
+	a.authMu.Lock()
+	defer a.authMu.Unlock()
+	latest, err := a.settings()
+	if err != nil || latest.OIDCIssuer != s.OIDCIssuer || latest.OIDCClientID != s.OIDCClientID || latest.OIDCSecret != s.OIDCSecret || id.Issuer != latest.BoundIssuer || id.Subject != latest.BoundSubject {
 		apiError(w, 403, errors.New("this OIDC identity is not the administrator"))
 		return
 	}

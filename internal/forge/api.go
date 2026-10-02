@@ -181,7 +181,9 @@ func (a *App) dashboard(w http.ResponseWriter, r *http.Request) {
 		if source.Status == "needs_rebuild" {
 			rebuild++
 		}
-  if source.Status == "failed" { failed++ }
+		if source.Status == "failed" {
+			failed++
+		}
 	}
 	s, err := a.settings()
 	if err != nil {
@@ -210,20 +212,21 @@ func (a *App) jobs(w http.ResponseWriter, r *http.Request) {
 	if n, err := strconv.Atoi(r.URL.Query().Get("limit")); err == nil && n > 0 && n <= 500 {
 		limit = n
 	}
- where := ""
- args := []any{}
- state := r.URL.Query().Get("state")
- if state != "" && state != "all" {
-  switch state { case "pending", "running", "success", "failed":
-   where = " WHERE state=?"
-   args = append(args, state)
-  default:
-   apiError(w, 400, errors.New("invalid job state filter"))
-   return
-  }
- }
- queryArgs := append(append([]any{}, args...), limit, offset)
- rows, err := a.db.Query("SELECT "+jobCols+" FROM jobs"+where+" ORDER BY id DESC LIMIT ? OFFSET ?", queryArgs...)
+	where := ""
+	args := []any{}
+	state := r.URL.Query().Get("state")
+	if state != "" && state != "all" {
+		switch state {
+		case "pending", "running", "success", "failed":
+			where = " WHERE state=?"
+			args = append(args, state)
+		default:
+			apiError(w, 400, errors.New("invalid job state filter"))
+			return
+		}
+	}
+	queryArgs := append(append([]any{}, args...), limit, offset)
+	rows, err := a.db.Query("SELECT "+jobCols+" FROM jobs"+where+" ORDER BY id DESC LIMIT ? OFFSET ?", queryArgs...)
 	if err != nil {
 		apiError(w, 500, err)
 		return
@@ -312,12 +315,12 @@ func (a *App) putSettings(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !a.files.TryLock() {
-  apiError(w, 409, errors.New("library file operation in progress; try saving Settings again shortly"))
-  return
- }
- defer a.files.Unlock()
- a.authMu.Lock()
- defer a.authMu.Unlock()
+		apiError(w, 409, errors.New("library file operation in progress; try saving Settings again shortly"))
+		return
+	}
+	defer a.files.Unlock()
+	a.authMu.Lock()
+	defer a.authMu.Unlock()
 	old, err := a.settings()
 	if err != nil {
 		apiError(w, 500, err)
@@ -349,12 +352,12 @@ func (a *App) putSettings(w http.ResponseWriter, r *http.Request) {
 	s.BoundUsername = old.BoundUsername
 	s.BoundEmail = old.BoundEmail
 	oidcChanged := body.UnbindOIDC || s.OIDCIssuer != old.OIDCIssuer || s.OIDCClientID != old.OIDCClientID || s.OIDCSecret != old.OIDCSecret
- if oidcChanged {
-  current, sessionErr := a.session(r)
-  if sessionErr != nil || current.Method != "local" {
-   apiError(w, 403, errors.New("local login required to change OIDC settings"))
-   return
-  }
+	if oidcChanged {
+		current, sessionErr := a.session(r)
+		if sessionErr != nil || current.Method != "local" {
+			apiError(w, 403, errors.New("local login required to change OIDC settings"))
+			return
+		}
 		s.BoundIssuer = ""
 		s.BoundSubject = ""
 		s.BoundUsername = ""
@@ -386,14 +389,28 @@ func (a *App) putSettings(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	tx, err := a.db.Begin()
- if err != nil { apiError(w, 500, err); return }
- defer tx.Rollback()
- raw, err := json.Marshal(s)
- if err == nil { _, err = tx.Exec("UPDATE settings SET data=? WHERE id=1", string(raw)) }
- if err == nil && oidcChanged { _, err = tx.Exec("DELETE FROM sessions WHERE method='oidc'") }
- if err == nil && oidcChanged { _, err = tx.Exec("DELETE FROM oidc_flows") }
- if err == nil { err = tx.Commit() }
- if err != nil { apiError(w, 500, err); return }
+	if err != nil {
+		apiError(w, 500, err)
+		return
+	}
+	defer tx.Rollback()
+	raw, err := json.Marshal(s)
+	if err == nil {
+		_, err = tx.Exec("UPDATE settings SET data=? WHERE id=1", string(raw))
+	}
+	if err == nil && oidcChanged {
+		_, err = tx.Exec("DELETE FROM sessions WHERE method='oidc'")
+	}
+	if err == nil && oidcChanged {
+		_, err = tx.Exec("DELETE FROM oidc_flows")
+	}
+	if err == nil {
+		err = tx.Commit()
+	}
+	if err != nil {
+		apiError(w, 500, err)
+		return
+	}
 	if s.Enabled && !old.Enabled {
 		_, _ = a.enqueue("scan", "scan:periodic", ScanRequest{}, false)
 	}

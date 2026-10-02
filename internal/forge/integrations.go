@@ -74,14 +74,14 @@ func (a *App) webhook(w http.ResponseWriter, r *http.Request) {
 	}
 	r.Body = http.MaxBytesReader(w, r.Body, 1024*1024)
 	decoder := json.NewDecoder(r.Body)
- if err = decoder.Decode(&body); err != nil {
+	if err = decoder.Decode(&body); err != nil {
 		apiError(w, 400, errors.New("invalid Lidarr payload"))
 		return
 	}
- if err = decoder.Decode(new(any)); err != io.EOF {
-  apiError(w, 400, errors.New("invalid Lidarr payload"))
-  return
- }
+	if err = decoder.Decode(new(any)); err != io.EOF {
+		apiError(w, 400, errors.New("invalid Lidarr payload"))
+		return
+	}
 	if body.Event == "Test" {
 		respond(w, 200, map[string]bool{"ok": true})
 		return
@@ -162,14 +162,18 @@ func (a *App) finishUpgrade(ctx context.Context, r UpgradeRequest) error {
 			return later("Waiting for all upgraded tracks to validate; failed tracks require manual retry", 10)
 		}
 		path, err := safePath(s.Source, rel)
-		if err != nil { return err }
+		if err != nil {
+			return err
+		}
 		info, err := os.Stat(path)
 		if err != nil || !sameStat(info, source) || time.Since(info.ModTime()) < 30*time.Second {
 			return later("Waiting for upgraded sources to be stable and indexed", 10)
 		}
 		// Cleanup is destructive and infrequent: verify current bytes, not just cached state.
 		hash, err := fileHash(ctx, path)
-		if err != nil { return err }
+		if err != nil {
+			return err
+		}
 		after, err := os.Stat(path)
 		if err != nil || !sameStat(after, source) || hash != source.Hash {
 			return later("Waiting for the current upgraded source content to validate", 10)
@@ -181,7 +185,9 @@ func (a *App) finishUpgrade(ctx context.Context, r UpgradeRequest) error {
 		if info, err := os.Stat(out); err != nil || !info.Mode().IsRegular() {
 			return later("Waiting for missing upgraded artifacts", 10)
 		}
-		if err = a.owned(source.Output, source.ID); err != nil { return err }
+		if err = a.owned(source.Output, source.ID); err != nil {
+			return err
+		}
 		newPaths[rel] = true
 	}
 	for _, rel := range r.Old {
@@ -222,11 +228,11 @@ type subsonicResponse struct {
 		Status        string `json:"status"`
 		Type          string `json:"type"`
 		ServerVersion string `json:"serverVersion"`
-  ScanStatus struct {
-   Scanning bool `json:"scanning"`
-   Error string `json:"error"`
-  } `json:"scanStatus"`
-		Error         struct {
+		ScanStatus    struct {
+			Scanning bool   `json:"scanning"`
+			Error    string `json:"error"`
+		} `json:"scanStatus"`
+		Error struct {
 			Code    int    `json:"code"`
 			Message string `json:"message"`
 		} `json:"error"`
@@ -283,13 +289,24 @@ func (a *App) refresh(ctx context.Context) error {
 	if err = a.storage(s); err != nil {
 		return err
 	}
- signature := digest(fmt.Sprintf("%s:%s:%s:%d", s.NavURL, s.NavUser, s.NavPassword, s.NavLibrary))
- var previous struct { Signature string; Dirty map[string]int64 }
- if raw, journalErr := a.meta("nav-refresh"); journalErr == nil {
-  if err = json.Unmarshal([]byte(raw), &previous); err != nil { return err }
-  if previous.Signature == signature { return a.finishRefresh(ctx, s, previous.Dirty) }
-  if _, err = a.db.Exec("DELETE FROM meta WHERE key='nav-refresh'"); err != nil { return err }
- } else if journalErr != sql.ErrNoRows { return journalErr }
+	signature := digest(fmt.Sprintf("%s:%s:%s:%d", s.NavURL, s.NavUser, s.NavPassword, s.NavLibrary))
+	var previous struct {
+		Signature string
+		Dirty     map[string]int64
+	}
+	if raw, journalErr := a.meta("nav-refresh"); journalErr == nil {
+		if err = json.Unmarshal([]byte(raw), &previous); err != nil {
+			return err
+		}
+		if previous.Signature == signature {
+			return a.finishRefresh(ctx, s, previous.Dirty)
+		}
+		if _, err = a.db.Exec("DELETE FROM meta WHERE key='nav-refresh'"); err != nil {
+			return err
+		}
+	} else if journalErr != sql.ErrNoRows {
+		return journalErr
+	}
 	rows, err := a.db.Query("SELECT path,updated FROM dirty_dirs")
 	if err != nil {
 		return err
@@ -337,34 +354,54 @@ func (a *App) refresh(ctx context.Context) error {
 		}
 		sort.Strings(targets)
 	}
- status, err := a.navRequest(ctx, s, "getScanStatus", nil)
- if err != nil { return err }
- if status.Response.ScanStatus.Scanning { return later("Waiting for Navidrome's current scan to finish", 10) }
- if _, err = a.navRequest(ctx, s, "startScan", targets); err != nil {
+	status, err := a.navRequest(ctx, s, "getScanStatus", nil)
+	if err != nil {
 		return err
 	}
- previous.Signature = signature
- previous.Dirty = dirty
- raw, err := json.Marshal(previous)
- if err != nil { return err }
- if err = a.setMeta("nav-refresh", string(raw)); err != nil { return err }
- return a.finishRefresh(ctx, s, dirty)
+	if status.Response.ScanStatus.Scanning {
+		return later("Waiting for Navidrome's current scan to finish", 10)
+	}
+	if _, err = a.navRequest(ctx, s, "startScan", targets); err != nil {
+		return err
+	}
+	previous.Signature = signature
+	previous.Dirty = dirty
+	raw, err := json.Marshal(previous)
+	if err != nil {
+		return err
+	}
+	if err = a.setMeta("nav-refresh", string(raw)); err != nil {
+		return err
+	}
+	return a.finishRefresh(ctx, s, dirty)
 }
 
 func (a *App) finishRefresh(ctx context.Context, s Settings, dirty map[string]int64) error {
- status, err := a.navRequest(ctx, s, "getScanStatus", nil)
- if err != nil { return err }
- if status.Response.ScanStatus.Scanning { return later("Waiting for Navidrome scan completion", 10) }
- if status.Response.ScanStatus.Error != "" {
-  if _, err = a.db.Exec("DELETE FROM meta WHERE key='nav-refresh'"); err != nil { return err }
-  return errors.New("Navidrome scan failed; directory changes are retained for retry")
- }
- tx, err := a.db.Begin()
- if err != nil { return err }
- defer tx.Rollback()
- for dir, stamp := range dirty {
-  if _, err = tx.Exec("DELETE FROM dirty_dirs WHERE path=? AND updated=?", dir, stamp); err != nil { return err }
- }
- if _, err = tx.Exec("DELETE FROM meta WHERE key='nav-refresh'"); err != nil { return err }
- return tx.Commit()
+	status, err := a.navRequest(ctx, s, "getScanStatus", nil)
+	if err != nil {
+		return err
+	}
+	if status.Response.ScanStatus.Scanning {
+		return later("Waiting for Navidrome scan completion", 10)
+	}
+	if status.Response.ScanStatus.Error != "" {
+		if _, err = a.db.Exec("DELETE FROM meta WHERE key='nav-refresh'"); err != nil {
+			return err
+		}
+		return errors.New("Navidrome scan failed; directory changes are retained for retry")
+	}
+	tx, err := a.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	for dir, stamp := range dirty {
+		if _, err = tx.Exec("DELETE FROM dirty_dirs WHERE path=? AND updated=?", dir, stamp); err != nil {
+			return err
+		}
+	}
+	if _, err = tx.Exec("DELETE FROM meta WHERE key='nav-refresh'"); err != nil {
+		return err
+	}
+	return tx.Commit()
 }

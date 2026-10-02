@@ -130,7 +130,10 @@ test("bilingual setup, real incremental build, state preservation and login", as
   await page.getByRole("combobox", { name: "语言", exact: true }).selectOption("en");
   await expect(page.getByLabel("Concurrent conversions", { exact: true })).toHaveValue("2");
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
+  const encodingTitle = await page.getByRole("heading", { name: "Encoding profile", exact: true }).boundingBox();
+  expect(encodingTitle?.width).toBeGreaterThan(120);
   await page.screenshot({ path: "test-results/mobile-settings-en.png", fullPage: true });
+  await page.screenshot({ path: "test-results/mobile-settings-viewport-en.png" });
   await page.getByRole("button", { name: "Log out", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Welcome back" })).toBeVisible();
 });

@@ -250,9 +250,15 @@ func (a *App) scan(ctx context.Context, r ScanRequest) error {
 				err = fmt.Errorf("not FLAC audio: %s", rel)
 			}
 			if err != nil {
-				if ctx.Err() != nil { return ctx.Err() }
-				if storageErr := a.storage(s); storageErr != nil { return storageErr }
-				if err = a.indexSourceError(rel, info, err); err != nil { return err }
+				if ctx.Err() != nil {
+					return ctx.Err()
+				}
+				if storageErr := a.storage(s); storageErr != nil {
+					return storageErr
+				}
+				if err = a.indexSourceError(rel, info, err); err != nil {
+					return err
+				}
 				invalid++
 				continue
 			}
@@ -269,10 +275,18 @@ func (a *App) scan(ctx context.Context, r ScanRequest) error {
 					if old.Hash == hash && old.Hash != "" && files[old.Rel] == nil {
 						// A scoped scan must confirm absence outside its enumerated directories.
 						oldPath, err := safePath(s.Source, old.Rel)
-						if err != nil { return err }
-						if _, err = os.Stat(oldPath); err == nil { continue } else if !os.IsNotExist(err) { return err }
+						if err != nil {
+							return err
+						}
+						if _, err = os.Stat(oldPath); err == nil {
+							continue
+						} else if !os.IsNotExist(err) {
+							return err
+						}
 						var taken int
-						if err = a.db.QueryRow("SELECT count(*) FROM sources WHERE id=? AND rel=?", old.ID, old.Rel).Scan(&taken); err != nil { return err }
+						if err = a.db.QueryRow("SELECT count(*) FROM sources WHERE id=? AND rel=?", old.ID, old.Rel).Scan(&taken); err != nil {
+							return err
+						}
 						if taken == 1 {
 							source = old
 							found = true
@@ -319,7 +333,9 @@ func (a *App) scan(ctx context.Context, r ScanRequest) error {
 		}
 		source.OutputPresent = present
 		if source.Hash == "" {
-			if source.Error != "" { invalid++ }
+			if source.Error != "" {
+				invalid++
+			}
 			continue
 		}
 		moved := present && source.BuiltHash == source.Hash && source.Output != outputRel(source.Rel, strings.TrimPrefix(filepath.Ext(source.Output), "."))
@@ -363,7 +379,9 @@ func (a *App) scan(ctx context.Context, r ScanRequest) error {
 			return err
 		}
 	}
-	if invalid > 0 { return fmt.Errorf("scan found %d invalid FLAC files; healthy tracks processed, no deletions applied; see Library errors", invalid) }
+	if invalid > 0 {
+		return fmt.Errorf("scan found %d invalid FLAC files; healthy tracks processed, no deletions applied; see Library errors", invalid)
+	}
 	return nil
 }
 
@@ -491,7 +509,9 @@ func (a *App) recoverPromotions(ctx context.Context, s Settings) error {
 			return err
 		}
 		hash, err := fileHash(ctx, path)
-		if err != nil && !os.IsNotExist(err) { return err }
+		if err != nil && !os.IsNotExist(err) {
+			return err
+		}
 		if err == nil && hash == p.ArtifactHash {
 			if err = a.finalize(s, p); err != nil {
 				return err
@@ -510,7 +530,9 @@ func (a *App) recoverFiles(ctx context.Context, s Settings) error {
 	if err := a.recoverPromotions(ctx, s); err != nil {
 		return err
 	}
-	if err := a.recoverDeletions(s); err != nil { return err }
+	if err := a.recoverDeletions(s); err != nil {
+		return err
+	}
 	rows, err := a.db.Query("SELECT path FROM managed WHERE kind='temp'")
 	if err != nil {
 		return err
@@ -632,8 +654,12 @@ func (a *App) build(ctx context.Context, j Job, r BuildRequest) error {
 		if err = a.setMeta("promotion:"+strconv.FormatInt(source.ID, 10), string(b)); err == nil {
 			err = os.Rename(old, out)
 		}
-		if err == nil { err = syncDirectory(filepath.Dir(out)) }
-		if err == nil && filepath.Dir(old) != filepath.Dir(out) { err = syncDirectory(filepath.Dir(old)) }
+		if err == nil {
+			err = syncDirectory(filepath.Dir(out))
+		}
+		if err == nil && filepath.Dir(old) != filepath.Dir(out) {
+			err = syncDirectory(filepath.Dir(old))
+		}
 		if err == nil {
 			err = a.finalize(s, p)
 		}
@@ -720,7 +746,9 @@ func (a *App) build(ctx context.Context, j Job, r BuildRequest) error {
 	if err = os.Rename(temp, out); err != nil {
 		return err
 	}
-	if err = syncDirectory(filepath.Dir(out)); err != nil { return err }
+	if err = syncDirectory(filepath.Dir(out)); err != nil {
+		return err
+	}
 	if err = a.finalize(s, p); err != nil {
 		return err
 	}
@@ -771,72 +799,115 @@ func (a *App) validateArtifact(ctx context.Context, path string, e Encoding, dur
 }
 
 type deletion struct {
-	ID int64 `json:"id"`
+	ID  int64  `json:"id"`
 	Rel string `json:"rel"`
 }
 
 func syncDirectory(path string) error {
 	f, err := os.Open(path)
-	if err != nil { return err }
+	if err != nil {
+		return err
+	}
 	defer f.Close()
 	return f.Sync()
 }
 
 func (a *App) recoverDeletions(s Settings) error {
 	rows, err := a.db.Query("SELECT value FROM meta WHERE key LIKE 'deletion:%'")
-	if err != nil { return err }
+	if err != nil {
+		return err
+	}
 	var pending []deletion
 	for rows.Next() {
 		var raw string
 		var entry deletion
-		if err = rows.Scan(&raw); err == nil { err = json.Unmarshal([]byte(raw), &entry) }
-		if err != nil { rows.Close(); return err }
+		if err = rows.Scan(&raw); err == nil {
+			err = json.Unmarshal([]byte(raw), &entry)
+		}
+		if err != nil {
+			rows.Close()
+			return err
+		}
 		pending = append(pending, entry)
 	}
 	err = rows.Err()
 	rows.Close()
-	if err != nil { return err }
+	if err != nil {
+		return err
+	}
 	for _, entry := range pending {
-		if err = a.removeOwned(s, entry.Rel, entry.ID); err != nil { return err }
+		if err = a.removeOwned(s, entry.Rel, entry.ID); err != nil {
+			return err
+		}
 	}
 	return nil
 }
 
 func (a *App) removeOwned(s Settings, rel string, id int64) error {
-	key := "deletion:"+strconv.FormatInt(id, 10)+":"+digest(rel)
+	key := "deletion:" + strconv.FormatInt(id, 10) + ":" + digest(rel)
 	raw, err := a.meta(key)
 	journaled := err == nil
-	if err != nil && err != sql.ErrNoRows { return err }
+	if err != nil && err != sql.ErrNoRows {
+		return err
+	}
 	if journaled {
 		var entry deletion
-		if err = json.Unmarshal([]byte(raw), &entry); err != nil { return err }
-		if entry.ID != id || entry.Rel != rel { return errors.New("deletion journal identity mismatch") }
+		if err = json.Unmarshal([]byte(raw), &entry); err != nil {
+			return err
+		}
+		if entry.ID != id || entry.Rel != rel {
+			return errors.New("deletion journal identity mismatch")
+		}
 	}
 	ownershipErr := a.owned(rel, id)
-	if ownershipErr != nil && !(journaled && errors.Is(ownershipErr, sql.ErrNoRows)) { return ownershipErr }
+	if ownershipErr != nil && !(journaled && errors.Is(ownershipErr, sql.ErrNoRows)) {
+		return ownershipErr
+	}
 	path, err := safePath(s.Output, rel)
 	if err != nil {
 		return err
 	}
 	if !journaled {
 		b, err := json.Marshal(deletion{id, rel})
-		if err != nil { return err }
-		if err = a.setMeta(key, string(b)); err != nil { return err }
+		if err != nil {
+			return err
+		}
+		if err = a.setMeta(key, string(b)); err != nil {
+			return err
+		}
 	}
 	if ownershipErr != nil {
 		// A completed registry removal only authorizes recovery of an absent file.
-		if _, err = os.Lstat(path); !os.IsNotExist(err) { return errors.New("deletion recovery found an unregistered replacement") }
+		if _, err = os.Lstat(path); !os.IsNotExist(err) {
+			return errors.New("deletion recovery found an unregistered replacement")
+		}
 	} else if err = os.Remove(path); err == nil {
-		if err = syncDirectory(filepath.Dir(path)); err != nil { return err }
-	} else if !os.IsNotExist(err) { return err }
+		if err = syncDirectory(filepath.Dir(path)); err != nil {
+			return err
+		}
+	} else if !os.IsNotExist(err) {
+		return err
+	}
 	tx, err := a.db.Begin()
-	if err != nil { return err }
+	if err != nil {
+		return err
+	}
 	defer tx.Rollback()
-	if _, err = tx.Exec("DELETE FROM managed WHERE path=? AND source_id=? AND kind='audio'", rel, id); err != nil { return err }
-	if _, err = tx.Exec("UPDATE sources SET output='',output_present=0,built_hash='',built_profile='' WHERE id=? AND output=?", id, rel); err != nil { return err }
-	if _, err = tx.Exec(markDirtySQL, filepath.ToSlash(filepath.Dir(rel)), time.Now().UnixNano()); err != nil { return err }
-	if _, err = tx.Exec("DELETE FROM meta WHERE key=?", key); err != nil { return err }
-	if err = tx.Commit(); err != nil { return err }
+	if _, err = tx.Exec("DELETE FROM managed WHERE path=? AND source_id=? AND kind='audio'", rel, id); err != nil {
+		return err
+	}
+	if _, err = tx.Exec("UPDATE sources SET output='',output_present=0,built_hash='',built_profile='' WHERE id=? AND output=?", id, rel); err != nil {
+		return err
+	}
+	if _, err = tx.Exec(markDirtySQL, filepath.ToSlash(filepath.Dir(rel)), time.Now().UnixNano()); err != nil {
+		return err
+	}
+	if _, err = tx.Exec("DELETE FROM meta WHERE key=?", key); err != nil {
+		return err
+	}
+	if err = tx.Commit(); err != nil {
+		return err
+	}
 	a.cleanAlbum(s, filepath.Dir(rel))
 	return nil
 }
@@ -844,7 +915,7 @@ func (a *App) removeOwned(s Settings, rel string, id int64) error {
 func (a *App) cleanAlbum(s Settings, dir string) {
 	var count int
 	query := "SELECT count(*) FROM managed WHERE kind='audio' AND substr(path,1,?)=?"
-	args := []any{len(dir)+1, dir+string(filepath.Separator)}
+	args := []any{len(dir) + 1, dir + string(filepath.Separator)}
 	if dir == "." {
 		query = "SELECT count(*) FROM managed WHERE kind='audio' AND instr(path,'/')=0"
 		args = nil
@@ -879,7 +950,9 @@ func (a *App) deleteExpired(ids []int64) error {
 	if err = a.storage(s); err != nil {
 		return err
 	}
-	if err = a.ensureRecovery(context.Background(), s); err != nil { return err }
+	if err = a.ensureRecovery(context.Background(), s); err != nil {
+		return err
+	}
 	for _, id := range ids {
 		source, err := a.source(id)
 		if err != nil {
@@ -1057,12 +1130,18 @@ func (a *App) artwork(ctx context.Context, s Settings, dir string, tracks []Sour
 	if _, err = runTool(ctx, a.cfg.FFmpeg, args...); err != nil {
 		return err
 	}
- file, err := os.OpenFile(temp, os.O_RDWR, 0)
- if err != nil { return err }
- syncErr := file.Sync()
- closeErr := file.Close()
- if syncErr != nil { return syncErr }
- if closeErr != nil { return closeErr }
+	file, err := os.OpenFile(temp, os.O_RDWR, 0)
+	if err != nil {
+		return err
+	}
+	syncErr := file.Sync()
+	closeErr := file.Close()
+	if syncErr != nil {
+		return syncErr
+	}
+	if closeErr != nil {
+		return closeErr
+	}
 	// Record ownership before promotion so a crash can safely regenerate the cover.
 	if _, err = a.db.Exec("INSERT INTO managed(path,kind,signature) VALUES(?,'cover','') ON CONFLICT(path) DO UPDATE SET signature=''", target); err != nil {
 		return err
@@ -1070,7 +1149,9 @@ func (a *App) artwork(ctx context.Context, s Settings, dir string, tracks []Sour
 	if err = os.Rename(temp, out); err != nil {
 		return err
 	}
-	if err = syncDirectory(filepath.Dir(out)); err != nil { return err }
+	if err = syncDirectory(filepath.Dir(out)); err != nil {
+		return err
+	}
 	if _, err = a.db.Exec("UPDATE managed SET signature=? WHERE path=?", signature, target); err != nil {
 		return err
 	}

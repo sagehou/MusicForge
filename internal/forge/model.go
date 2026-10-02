@@ -39,7 +39,7 @@ func LoadRuntime(dir string) (Runtime, error) {
 	c.PublicURL = strings.TrimRight(c.PublicURL, "/")
 	if c.PublicURL != "" {
 		u, err := url.Parse(c.PublicURL)
-		if err != nil || u.Host == "" || (u.Scheme != "https" && u.Scheme != "http") || u.Path != "" || u.RawQuery != "" || u.Fragment != "" {
+		if err != nil || u.Host == "" || (u.Scheme != "https" && u.Scheme != "http") || u.User != nil || u.Path != "" || u.RawQuery != "" || u.Fragment != "" {
 			return c, errors.New("public_url must be an HTTP(S) origin without a path")
 		}
 	}
@@ -152,7 +152,7 @@ func (s Settings) Validate() error {
 			continue
 		}
 		u, err := url.Parse(raw)
-		if err != nil || u.Host == "" || u.User != nil || (u.Scheme != "http" && u.Scheme != "https") {
+		if err != nil || u.Host == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" || (u.Scheme != "http" && u.Scheme != "https") {
 			return errors.New("integration URLs must be HTTP(S) URLs without embedded credentials")
 		}
 	}

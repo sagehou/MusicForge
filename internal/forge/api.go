@@ -329,7 +329,13 @@ func (a *App) putSettings(w http.ResponseWriter, r *http.Request) {
 	s.BoundSubject = old.BoundSubject
 	s.BoundUsername = old.BoundUsername
 	s.BoundEmail = old.BoundEmail
-	if body.UnbindOIDC || s.OIDCIssuer != old.OIDCIssuer || s.OIDCClientID != old.OIDCClientID {
+	oidcChanged := body.UnbindOIDC || s.OIDCIssuer != old.OIDCIssuer || s.OIDCClientID != old.OIDCClientID || s.OIDCSecret != old.OIDCSecret
+ if oidcChanged {
+  current, sessionErr := a.session(r)
+  if sessionErr != nil || current.Method != "local" {
+   apiError(w, 403, errors.New("local login required to change OIDC settings"))
+   return
+  }
 		s.BoundIssuer = ""
 		s.BoundSubject = ""
 		s.BoundUsername = ""
@@ -360,10 +366,15 @@ func (a *App) putSettings(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	if err = a.saveSettings(s); err != nil {
-		apiError(w, 500, err)
-		return
-	}
+	tx, err := a.db.Begin()
+ if err != nil { apiError(w, 500, err); return }
+ defer tx.Rollback()
+ raw, err := json.Marshal(s)
+ if err == nil { _, err = tx.Exec("UPDATE settings SET data=? WHERE id=1", string(raw)) }
+ if err == nil && oidcChanged { _, err = tx.Exec("DELETE FROM sessions WHERE method='oidc'") }
+ if err == nil && oidcChanged { _, err = tx.Exec("DELETE FROM oidc_flows") }
+ if err == nil { err = tx.Commit() }
+ if err != nil { apiError(w, 500, err); return }
 	if s.Enabled && !old.Enabled {
 		_, _ = a.enqueue("scan", "scan:periodic", ScanRequest{}, false)
 	}

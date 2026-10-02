@@ -8,8 +8,8 @@ All executable checks, dependency resolution and builds run in GitHub Actions. L
 | --- | --- | --- | --- |
 | 1 | Upgrade cleanup, scoped moves/copies, damaged source isolation | Passed | [CI](https://github.com/sagehou/MusicForge/actions/runs/37011006737), `internal/forge/safety_test.go` |
 | 2 | Queue, retries, interruption, atomic publication and deletion recovery | Passed | [CI](https://github.com/sagehou/MusicForge/actions/runs/37011732986), deletion/recovery/retry tests |
-| 3 | Native Lidarr/Navidrome integration behavior and concurrency | Validation in progress | `internal/forge/integration_queue_test.go` |
-| 4 | Administrator/OIDC security, settings and deployment boundaries | Pending | — |
+| 3 | Native Lidarr/Navidrome integration behavior and concurrency | Passed | [CI](https://github.com/sagehou/MusicForge/actions/runs/37012740241), integration queue regressions |
+| 4 | Administrator/OIDC security, settings and deployment boundaries | Validation in progress | `internal/forge/security_test.go` |
 | 5 | Latest stable dependencies/toolchains/images/actions, upgrade automation and operational validation | Pending | — |
 | 6 | Full acceptance audit and focused UI/accessibility/responsive improvements | Pending | — |
 
@@ -36,3 +36,7 @@ Record upstream release metadata, source references and resulting decisions here
 ## Round 3
 
 Coalescing previously dropped new scan requests while the matching job was running and discarded scopes of pending manual scans. Pending requests now merge scopes and verification flags; running jobs keep a durable trailing request, atomically consumed when the worker completes. Full scans dominate scoped requests. Restart retains the trailing request. Dirty-directory stamps are monotonic nanoseconds, preventing a concurrent mutation from being cleared by a refresh snapshot within the same second. Schema migration upgrades existing second-based stamps. Lidarr accepts unknown native fields but rejects trailing JSON. Tests cover native Download/Upgrade requests with Basic/Bearer authentication, mapping, safe cleanup gating, coalescing/restart and concurrent refresh retention. Integration HTTP tests use mock remote services; a real Navidrome service acceptance check remains pending.
+
+## Round 4
+
+OIDC unbinding/configuration changes previously preserved already-issued identity sessions. Changes now require local login and transactionally revoke OIDC sessions and flows together with persisted settings. Session issuance checks current binding/configuration under the same mutation lock, including client-secret changes. Password reset and session revocation now commit atomically. Public origins reject embedded credentials; integration URLs reject queries/fragments. Storage validation resolves configuration symlinks before overlap checks. HTTP request body/write timeouts bound stalled clients. Regression tests cover local-only changes, revoked identity access, resolved overlap and unsafe URL inputs.

@@ -327,7 +327,9 @@ func (a *App) initializeStorage(s Settings) error {
 	if containsPath(sourceReal, outputReal) || containsPath(outputReal, sourceReal) {
 		return errors.New("resolved library roots overlap")
 	}
-	if containsPath(sourceReal, a.cfg.ConfigDir) || containsPath(outputReal, a.cfg.ConfigDir) || containsPath(a.cfg.ConfigDir, outputReal) || containsPath(a.cfg.ConfigDir, sourceReal) {
+	configReal, err := filepath.EvalSymlinks(a.cfg.ConfigDir)
+ if err != nil { return err }
+ if containsPath(sourceReal, configReal) || containsPath(outputReal, configReal) || containsPath(configReal, outputReal) || containsPath(configReal, sourceReal) {
 		return errors.New("library and configuration paths must not overlap")
 	}
 	id, err := a.meta("instance")

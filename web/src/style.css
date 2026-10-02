@@ -1,6 +1,11 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
+@theme {
+  --color-background: #0c1017;
+  --color-foreground: #e8eef7;
+  --color-primary: #70e0b3;
+  --color-muted: #8a98ad;
+  --color-border: #263143;
+}
 
 .field-label { display: flex; flex-direction: column; gap: 8px; }
 .field-label > span { color: #b9c6da; font-size: 12px; }

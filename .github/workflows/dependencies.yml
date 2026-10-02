@@ -1,0 +1,71 @@
+name: Stable dependency refresh
+
+on:
+  schedule:
+    - cron: '23 6 * * 1'
+  workflow_dispatch:
+    inputs:
+      artifact_only:
+        description: Return reviewed source lockfiles without opening a PR (bootstrap)
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+  pull-requests: write
+  actions: write
+
+concurrency:
+  group: dependency-refresh
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .node-version
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: false
+      - name: Resolve current stable versions and source hashes
+        run: python3 .github/scripts/update-dependencies.py
+      - name: Resolve dependency graphs only in Actions
+        run: |
+          go get -u ./internal/forge
+          go mod tidy
+          (cd web && npm install --package-lock-only --ignore-scripts)
+          gofmt -w cmd internal web/embed.go
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: dependency-source
+          path: |
+            .node-version
+            Dockerfile
+            build/media-versions.env
+            go.mod
+            go.sum
+            web/package.json
+            web/package-lock.json
+            .github/workflows
+          include-hidden-files: true
+          retention-days: 14
+      - name: Open update PR and explicitly dispatch CI
+        if: ${{ !inputs.artifact_only }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if git diff --quiet; then exit 0; fi
+          branch="maintenance/dependencies-${GITHUB_RUN_ID}"
+          git checkout -b "$branch"
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add .node-version Dockerfile build/media-versions.env go.mod go.sum web/package.json web/package-lock.json .github/workflows
+          git commit -m 'Refresh stable dependencies and runtime source hashes'
+          git push origin "$branch"
+          gh api -X POST "repos/$GITHUB_REPOSITORY/pulls" -f title='Refresh stable dependencies' -f head="$branch" -f base=main -f body='Updates stable application, toolchain and media dependencies. CI must pass before manual merge. Major upgrades may need source migrations. No images are published by this PR.'
+          gh workflow run ci.yml --ref "$branch"

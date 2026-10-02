@@ -24,7 +24,14 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
-Runtime images include ffmpeg from Debian. Its source and license details are
-available at [ffmpeg.org](https://ffmpeg.org/legal.html) and through the Debian
-ffmpeg package documentation. Go and JavaScript dependencies retain their
-respective upstream licenses.
+Runtime images include a pinned FFmpeg stable release built with Opus and LAME.
+FFmpeg and LAME use LGPL licenses; Opus uses its upstream BSD license. The image
+ships corresponding compressed source releases, FFmpeg's LGPL text, pinned source
+checksums and the exact build script in `/usr/share/doc/musicforge/media`. Rebuild
+with the `media-builder` stage in the repository Dockerfile to modify/relink the
+media executables. FFmpeg is executed as a separate process. See
+[FFmpeg legal information](https://ffmpeg.org/legal.html),
+[Opus licensing](https://opus-codec.org/license/) and
+[LAME](https://lame.sourceforge.io/).
+
+Go and JavaScript dependencies retain their respective upstream licenses.

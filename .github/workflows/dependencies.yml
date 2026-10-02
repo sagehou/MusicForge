@@ -67,5 +67,9 @@ jobs:
           if git diff --cached --quiet; then exit 0; fi
           git commit -m 'Refresh stable dependencies and runtime source hashes'
           git push origin "$branch"
-          gh api -X POST "repos/$GITHUB_REPOSITORY/pulls" -f title='Refresh stable dependencies' -f head="$branch" -f base=main -f body='Updates stable application, toolchain and media dependencies. CI must pass before manual merge. Major upgrades may need source migrations. No images are published by this PR.'
           gh workflow run ci.yml --ref "$branch"
+          if gh api -X POST "repos/$GITHUB_REPOSITORY/pulls" -f title='Refresh stable dependencies' -f head="$branch" -f base=main -f body='Updates stable application, toolchain and media dependencies. CI must pass before manual merge. Major upgrades may need source migrations. No images are published by this PR.'; then
+            echo 'Dependency PR created and CI dispatched.' >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "Bot PR creation is unavailable. CI was dispatched for $branch. Review: https://github.com/$GITHUB_REPOSITORY/compare/main...$branch" >> "$GITHUB_STEP_SUMMARY"
+          fi

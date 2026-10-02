@@ -18,7 +18,7 @@ make install
 cd /build
 fetch "lame-$LAME_VERSION.tar.gz" "$LAME_SHA256" "https://downloads.sourceforge.net/project/lame/lame/$LAME_VERSION/lame-$LAME_VERSION.tar.gz"
 cd "lame-$LAME_VERSION"
-./configure --disable-shared --enable-static --disable-frontend
+./configure --disable-shared --enable-static --disable-frontend --disable-decoder
 make -j"$(nproc)"
 make install
 cd /build

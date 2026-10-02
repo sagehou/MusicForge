@@ -179,7 +179,7 @@ PR 和 `main` 提交仅验证，不发布。版本标签（如 `v0.1.0`）验证
 
 ## 依赖升级与持续维护
 
-[稳定依赖更新工作流](.github/workflows/dependencies.yml)每周执行，也可以手动启动。它读取官方稳定版本，更新 npm、Go 及兼容的间接依赖、工具链、固定提交的 Actions 和媒体源码校验值，在 Actions 内生成锁文件，并创建供审查的 PR。更新分支会显式启动 CI；不会自动合并或发布镜像。重大版本升级需要检查兼容性。如果仓库设置禁止机器人创建 PR，仍可从 `dependency-source` 下载生成的源码文件；首次生成锁文件可使用 `artifact_only` 选项。
+[稳定依赖更新工作流](.github/workflows/dependencies.yml)每周执行，也可以手动启动。它读取官方稳定版本，更新 npm、Go 及兼容的间接依赖、工具链、固定提交的 Actions 和媒体源码校验值，在 Actions 内生成锁文件，并创建供审查的 PR。更新分支会显式启动 CI；不会自动合并或发布镜像。重大版本升级需要检查兼容性。如果仓库设置禁止机器人创建 PR，工作流仍推送更新分支并启动 CI，提供比较链接和 `dependency-source` 文件。当前仓库禁止机器人创建 PR，可通过比较链接手动创建 PR，或由仓库管理员开启该选项；首次生成锁文件可使用 `artifact_only` 选项。
 
 当前工具链为 Go 1.27.1、Node 26.10.0、React 19.3、Vite 8.3、TypeScript 7 和 Tailwind 4.3。运行镜像使用 Debian 13 稳定版，以及固定源码校验值的 FFmpeg 9.0.2、Opus 1.6.1 和 LAME 4.0。镜像内 `/usr/share/doc/musicforge/media` 保留对应源码压缩包和构建说明。所有安装、编译及可执行验证仍仅在 GitHub Actions 中进行。
 

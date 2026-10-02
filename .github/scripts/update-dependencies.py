@@ -56,15 +56,19 @@ for name, template in urls.items():
 media_path.write_text("".join(key + "=" + value + "\n" for key, value in media.items()))
 print(json.dumps({"node": node, "go": go, "media": media}, indent=2))
 
+action_cache = {}
 for path in Path(".github/workflows").glob("*.yml"):
     workflow = path.read_text()
     def update_action(match):
         repo = match[1]
+        if repo in action_cache:
+            return action_cache[repo]
         release = metadata("https://api.github.com/repos/" + repo + "/releases/latest")
         tag = release["tag_name"]
         obj = metadata("https://api.github.com/repos/" + repo + "/git/ref/tags/" + tag)["object"]
         while obj["type"] == "tag":
             obj = metadata("https://api.github.com/repos/" + repo + "/git/tags/" + obj["sha"])["object"]
-        return "uses: " + repo + "@" + obj["sha"] + " # " + tag
+        action_cache[repo] = "uses: " + repo + "@" + obj["sha"] + " # " + tag
+        return action_cache[repo]
     workflow = re.sub(r"uses: ([\w.-]+/[\w.-]+)@[^\s]+[^\n]*", update_action, workflow)
     path.write_text(workflow)

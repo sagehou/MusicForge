@@ -53,8 +53,24 @@ jobs:
           fi
       - name: Frontend typecheck and build
         working-directory: web
-        run: npm ci && npm run build
+        run: npm ci && npm audit --audit-level=high && npm run build
+      - name: Start the real Navidrome integration service
+        run: |
+          mkdir -p .ci/nav-output
+          chmod 755 .ci/nav-output
+          docker run -d --name musicforge-nav-validation -p 127.0.0.1:4533:4533 \
+            -e ND_PORT=4533 -e ND_SCANSCHEDULE=0 -e ND_ENABLEEXTERNALSERVICES=false \
+            -e ND_DEVAUTOCREATEADMINPASSWORD=ci-only-musicforge-password \
+            -v "$PWD/.ci/nav-output:/music:ro" deluan/navidrome:0.64.2
+          for i in $(seq 1 60); do
+            if curl -fsS http://127.0.0.1:4533/ping; then exit 0; fi
+            sleep 1
+          done
+          exit 1
       - name: Backend race, integration tests and vet
+        env:
+          MUSICFORGE_TEST_NAV_URL: http://127.0.0.1:4533
+          MUSICFORGE_TEST_NAV_OUTPUT: ${{ github.workspace }}/.ci/nav-output
         run: |
           go test -mod=readonly -race -count=1 -timeout=5m ./...
           go vet -mod=readonly ./...
@@ -70,6 +86,9 @@ jobs:
           cd web
           npx playwright install --with-deps chromium
           MUSICFORGE_TEST_ROOT="$(dirname "$PWD")/.ci" npm test
+      - name: Stop the Navidrome validation service
+        if: always()
+        run: docker rm -f musicforge-nav-validation || true
       - name: CI-generated source snapshot
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -147,6 +166,11 @@ jobs:
             sleep 1
           done
           docker exec musicforge-validation musicforge -healthcheck
+          docker exec musicforge-validation ffmpeg -v error -f lavfi -i sine=duration=1 -c:a libopus -b:a 192k /tmp/smoke.opus
+          docker exec musicforge-validation ffmpeg -v error -f lavfi -i sine=duration=1 -c:a libmp3lame -q:a 2 /tmp/smoke.mp3
+          docker exec musicforge-validation ffprobe -v error -show_entries stream=codec_name /tmp/smoke.opus
+          docker exec musicforge-validation ffprobe -v error -show_entries stream=codec_name /tmp/smoke.mp3
+          docker exec musicforge-validation test -f /usr/share/doc/musicforge/media/media-versions.env
           curl --fail http://localhost:8787/api/auth/me
           docker stop musicforge-validation
       - name: Push validated architecture on version tags

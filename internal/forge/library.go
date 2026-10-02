@@ -1057,6 +1057,12 @@ func (a *App) artwork(ctx context.Context, s Settings, dir string, tracks []Sour
 	if _, err = runTool(ctx, a.cfg.FFmpeg, args...); err != nil {
 		return err
 	}
+ file, err := os.OpenFile(temp, os.O_RDWR, 0)
+ if err != nil { return err }
+ syncErr := file.Sync()
+ closeErr := file.Close()
+ if syncErr != nil { return syncErr }
+ if closeErr != nil { return closeErr }
 	// Record ownership before promotion so a crash can safely regenerate the cover.
 	if _, err = a.db.Exec("INSERT INTO managed(path,kind,signature) VALUES(?,'cover','') ON CONFLICT(path) DO UPDATE SET signature=''", target); err != nil {
 		return err

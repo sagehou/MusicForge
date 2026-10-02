@@ -125,7 +125,7 @@ The connection test creates no conversion work. Native `Download` events use `tr
 
 ## Navidrome integration
 
-Save the URL, username, password and library ID in Settings. Automatic refresh combines changed album directories after conversion/deletion batches. Navidrome 0.59.0+ receives targeted `startScan` requests; older versions receive regular scans. Removed directories use the nearest surviving parent. **Refresh Navidrome manually** uses saved settings.
+Save the URL, username, password and library ID in Settings. Automatic refresh combines changed album directories after conversion/deletion batches. Changes remain queued until Navidrome reports scan completion; interrupted refreshes resume after restart. Navidrome 0.59.0+ receives targeted `startScan` requests; older versions receive regular scans. Removed directories use the nearest surviving parent. **Refresh Navidrome manually** uses saved settings.
 
 Authentication uses the Subsonic salted-token API; plaintext passwords are not sent in query parameters. Use HTTPS across untrusted networks.
 
@@ -171,7 +171,11 @@ Library, encoding and integration settings live only in SQLite. Logs are JSON. P
 
 Follow [AGENTS.md](AGENTS.md): local work is source/document/workflow editing and static inspection only. Dependency installation, compilation, executable tests and image builds run exclusively in GitHub Actions. Keep dependency directories, compiler caches and build outputs out of the local workspace. Generate or update lockfiles through Actions.
 
-[CI](.github/workflows/ci.yml) builds frontend/backend, runs race-enabled Go tests with real ffmpeg, exercises the actual app in Chromium and smoke-tests native containers on both architectures. The `canonical-source` artifact supplies CI-generated lockfiles and formatted Go source when needed.
+[CI](.github/workflows/ci.yml) builds frontend/backend, runs race-enabled Go tests with real ffmpeg, exercises the actual app in Chromium and smoke-tests native containers on both architectures. The `canonical-source` artifact supplies CI-generated lockfiles and formatted Go source when needed. CI also verifies playback retention after source deletion and removal after manual deletion against a real Navidrome container with a read-only music mount.
+
+[Stable dependency refresh](.github/workflows/dependencies.yml) runs weekly and can be started manually. It updates stable npm/Go versions and compatible transitive modules, toolchains, pinned Actions and media release checksums, generates lockfiles in Actions and opens a reviewable PR. It explicitly starts CI for the update branch. Review major-version compatibility and merge only after validation; it never merges or publishes automatically. If repository settings prevent bot PR creation, the `dependency-source` artifact still contains the generated files. Bootstrap with the `artifact_only` option when lockfiles need manual review.
+
+The current toolchain is Go 1.27.1 / Node 26.10.0 with React 19.3, Vite 8.3, TypeScript 7 and Tailwind 4.3. Runtime images use Debian 13 stable and checksum-pinned FFmpeg 9.0.2, Opus 1.6.1 and LAME 3.100. Build/test tools and media executables are upgraded together. Corresponding media source archives and build instructions ship in the container for maintenance and relinking.
 
 Pull requests and `main` pushes validate without publishing. Version tags such as `v0.1.0` publish the matching GHCR image after validation. Stable releases update `latest`; prereleases do not.
 

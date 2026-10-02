@@ -176,3 +176,11 @@ docker compose up -d
 PR 和 `main` 提交仅验证，不发布。版本标签（如 `v0.1.0`）验证成功后发布对应 GHCR 镜像。稳定版本更新 `latest`，预发布版本不更新。
 
 翻译位于 [web/src/locales](web/src/locales)，各语言保持一致的键和插值占位符。浏览器测试覆盖语言识别、切换记忆和双语流程。许可信息见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
+
+## 依赖升级与持续维护
+
+[稳定依赖更新工作流](.github/workflows/dependencies.yml)每周执行，也可以手动启动。它读取官方稳定版本，更新 npm、Go 及兼容的间接依赖、工具链、固定提交的 Actions 和媒体源码校验值，在 Actions 内生成锁文件，并创建供审查的 PR。更新分支会显式启动 CI；不会自动合并或发布镜像。重大版本升级需要检查兼容性。如果仓库设置禁止机器人创建 PR，仍可从 `dependency-source` 下载生成的源码文件；首次生成锁文件可使用 `artifact_only` 选项。
+
+当前工具链为 Go 1.27.1、Node 26.10.0、React 19.3、Vite 8.3、TypeScript 7 和 Tailwind 4.3。运行镜像使用 Debian 13 稳定版，以及固定源码校验值的 FFmpeg 9.0.2、Opus 1.6.1 和 LAME 3.100。镜像内 `/usr/share/doc/musicforge/media` 保留对应源码压缩包和构建说明。所有安装、编译及可执行验证仍仅在 GitHub Actions 中进行。
+
+CI 使用真实 Navidrome 容器和只读输出挂载，验证转换后的歌曲能被发现、普通源文件删除后仍可播放、手动删除后从播放库移除。刷新请求被接受后，还要等待 Navidrome 报告扫描完成，才清除本地变更记录；重启后继续处理未完成刷新。

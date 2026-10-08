@@ -134,3 +134,22 @@ code { font-family: "SFMono-Regular", Consolas, monospace; }
   .auth-card { padding: 26px; }.auth-layout { padding-top: 88px; }.auth-layout > .language-selector { top: 16px; right: 16px; }
   .banner { padding: 16px; }.banner p { font-size: 12px; }.page-heading .actions { width: 100%; }
 }
+
+.library-breadcrumbs { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: -6px 0 20px; color: #8fa4bc; font-size: 13px; }
+.library-breadcrumbs button { color: #70e0b3; padding: 8px 0; }.library-breadcrumbs [aria-current=page] { color: #dce6f5; }
+.library-groups { display: grid; grid-template-columns: repeat(auto-fill,minmax(280px,1fr)); gap: 16px; padding: 22px; }
+.library-group { display: flex; gap: 12px; align-items: flex-start; flex-wrap: wrap; border: 1px solid #2b3b50; border-radius: 10px; padding: 18px; background: #141f2d; }
+.library-group > input { margin-top: 8px; }.library-open { display: flex; flex: 1; min-width: 0; align-items: center; gap: 14px; text-align: left; }
+.library-open > svg { color: #70e0b3; flex-shrink: 0; }.library-open > span { flex: 1; min-width: 0; }.library-open strong { font-size: 15px; overflow-wrap: anywhere; }.library-open small { font-size: 11px; margin-top: 7px; overflow-wrap: anywhere; }
+.library-group-status { display: flex; gap: 6px; flex-wrap: wrap; margin-left: 26px; }
+.task-actions { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }.task-description { min-width: 130px; }
+.task-progress { padding: 0 22px 20px 78px; }.task-progress-label { display: flex; justify-content: space-between; gap: 14px; color: #a4b4ca; font-size: 12px; margin-bottom: 10px; }.task-progress-label > span:last-child { font-variant-numeric: tabular-nums; }
+.task-meter { background: #26364c; height: 5px; border-radius: 5px; overflow: hidden; }.task-meter > span { display: block; height: 100%; background: #70e0b3; transition: width .3s; }
+.task-progress > p { margin-top: 12px; color: #a4b4ca; font-size: 12px; }.task-activity { padding: 12px 0 0; }.task-activity > span { display: inline-block; color: #93c5fd; font-size: 11px; margin-right: 10px; }.task-activity strong { font-size: 13px; font-weight: 500; }.task-activity small { font-size: 11px; margin-top: 5px; }.task-path { overflow-wrap: anywhere; }
+.task-facts { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 14px; margin: 0 0 14px; }.task-facts dt { color: #8fa4bc; font-size: 11px; margin-bottom: 5px; }.task-facts dd { margin: 0; font-size: 12px; overflow-wrap: anywhere; }
+.task-scan-result,.task-outcome { font-size: 12px; color: #b5c6dc; overflow-wrap: anywhere; white-space: pre-wrap; max-height: 140px; overflow-y: auto; }
+.task-result-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 16px 0 0; }.task-result-heading h3 { font-size: 13px; }.task-result-heading .check-field { font-size: 11px; }
+.task-result { padding: 14px 0; border-top: 1px solid #263143; display: flex; align-items: flex-start; gap: 14px; flex-wrap: wrap; }.task-result > div { flex: 1; min-width: 160px; }.task-result strong { font-size: 13px; font-weight: 500; }.task-result small { font-size: 11px; margin-top: 5px; }.task-diagnostic { width: 100%; }.task-diagnostic summary { margin: 0; }
+.badge-paused { color: #e9b96a; border-color: #e9b96a30; }.badge-stopped { color: #a6adba; border-style: dashed; }
+@media(max-width:800px) { .task-progress { padding-left: 22px; }.task-actions { width: 100%; }.library-groups { grid-template-columns: 1fr; }.task-facts { grid-template-columns: 1fr; } }
+@media(max-width:600px) { .task-progress { padding: 0 16px 16px; }.library-groups { padding: 16px; }.task-progress-label { flex-wrap: wrap; }.task-result-heading { align-items: flex-start; flex-wrap: wrap; } }

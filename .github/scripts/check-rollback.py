@@ -20,6 +20,7 @@ NAME = "musicforge-rollback"
 CANDIDATE = "musicforge:validation"
 PASSWORD = "ci-rollback-password"
 LEGACY = {
+    "v0.2.3": "sha256:94afc5a3b0db22fbd563623b193376677bde460b4561e68afee7f00c372d70a4",
     "v0.2.2": "sha256:fd7f6045a7f31dfe2c1a853cf3004377ebef3cebba4cb3a0b488b925fae28d8d",
     "v0.2.1": "sha256:39a12fbd9db368d4dc688cb929ae74b731ba10ae863b03aec915be3a77d35240",
     "v0.2.0": "sha256:3a176c2fa79dd3e2a47c53803e3d5ac055e9c406061ec69402b63fe4523a2e7c",
@@ -104,8 +105,8 @@ def verify(api, expected_track, pending):
     settings = api("/api/settings")
     assert settings["configured"] == {"webhook": True, "nav_password": True, "oidc_secret": True}, "saved credentials lost"
     assert not settings["settings"]["enabled"], "rollback must keep background work paused"
-    jobs = api("/api/jobs?state=pending")["jobs"]
-    assert any(job["id"] == pending and job["args"] == {"manual": True} for job in jobs), "pending task lost"
+    jobs = api("/api/jobs?state=all")["jobs"]
+    assert any(job["id"] == pending and job["args"] == {"manual": True} and job["state"] in ("paused", "pending") for job in jobs), "paused task lost"
     # Exercise an older writer, including its handling of redacted secret fields.
     values = settings["settings"]
     interval = values["scan_minutes"]
@@ -143,9 +144,12 @@ def main():
                       oidc_issuer="https://issuer.example.test", oidc_client_id="client", oidc_secret="ci-oidc-secret")
         api("/api/settings", "PUT", values)
         pending = api("/api/navidrome/refresh", "POST", {})["job_id"]
+        api("/api/jobs/control", "POST", {"action": "pause", "ids": [pending]})
         verify(api, track, pending)
         stop()
         expected = snapshot()
+        held = next(row for row in expected["jobs"] if row[0] == pending)
+        assert held[4] == "pending" and held[8] == 253402300799, "paused task changed schema-2 job semantics"
         assert "Album/01.opus" in expected["output"] and "Album/cover.jpg" in expected["output"], "audio/cover fixture missing"
         evidence = []
         for version, digest in LEGACY.items():

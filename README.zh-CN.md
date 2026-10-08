@@ -18,6 +18,8 @@ Navidrome（只读）
 
 ## 主要功能
 
+- 按歌手 → 专辑 → 歌曲浏览音乐库，整次扫描／构建归为一个任务，并显示实时曲目进度。
+- 支持任务暂停、继续、停止和完成记录清理，保留已生成的音频。
 - 扫描 FLAC，在 SQLite 中索引文件和标签，转换新增或变化的歌曲。
 - 内容完全相同的重命名或搬迁直接移动产物，无需重新编码。
 - 保留标签与 ReplayGain，每个专辑只保存一份 `cover.jpg`。
@@ -40,7 +42,7 @@ MVP 不包含云同步、分布式 worker、多组音乐库、多用户或插件
    curl -fsSL https://raw.githubusercontent.com/sagehou/MusicForge/main/.env.example -o .env
    ```
 
-2. 编辑 `.env`，设置宿主机目录、`PUID`/`PGID` 和公开访问地址。可将 `MUSICFORGE_VERSION` 固定为已发布版本，例如 `v0.2.2`；`latest` 跟随稳定版本。默认路径：
+2. 编辑 `.env`，设置宿主机目录、`PUID`/`PGID` 和公开访问地址。可将 `MUSICFORGE_VERSION` 固定为已发布版本，例如 `v0.2.4`；`latest` 跟随稳定版本。默认路径：
 
    | 宿主机路径 | 容器内路径 | 访问方式 |
    | --- | --- | --- |

@@ -2,11 +2,11 @@
 
 **English** · [Simplified Chinese](deployment.zh-CN.md)
 
-This guide targets v0.2.3. Installation, builds and automated validation run in GitHub Actions; the production host pulls published images. See the [acceptance report](acceptance.md) for verified behavior.
+This guide targets v0.2.4. Installation, builds and automated validation run in GitHub Actions; the production host pulls published images. See the [acceptance report](acceptance.md) for verified behavior.
 
 ## Before deployment
 
-- Pin `MUSICFORGE_VERSION=v0.2.3` in `.env` so a trial does not change with `latest`.
+- Pin `MUSICFORGE_VERSION=v0.2.4` in `.env` so a trial does not change with `latest`.
 - Keep `/config` on local host storage, owned by `PUID`, with mode `0700`. It contains accounts, OIDC/Navidrome secrets, the index and jobs. Do not share it publicly. Startup enforces private directory permissions.
 - `FLAC_DIR` must exist and is mounted read-only; `OUTPUT_DIR` must exist, be writable and initially empty. Use a dedicated output directory. None of the three roots may contain another. Compose refuses missing host paths.
 - Verify source read access and output write access for the configured UID/GID. Give Navidrome read-only access to the same output. Reserve disk space for both output and temporary files.
@@ -51,13 +51,23 @@ For a small album trial, use a separate temporary `/config`, dedicated output an
 
 Automation exercises real ffmpeg, Navidrome, Chromium and both native image architectures. Lidarr tests use native payloads and OIDC tests use a signed test provider. Your deployed Lidarr, Authentik/other OIDC provider, reverse proxy and storage combination still needs the acceptance above. The library API currently returns the complete index and the UI polls every five seconds; large-library capacity has not been load-tested, so observe memory and response time during initial import. Symlinks within the source tree pause scanning; use real directories or mount paths.
 
+## Task controls and progress
+
+A scan and its track queue occupy one Jobs entry. Open Details for scope, scan counts, profiles, individual results and diagnostics. The Library starts at artists, then albums, then tracks; search/status filters narrow these groups, and selecting a group selects its matching tracks. Output paths keep the source-relative hierarchy.
+
+Pause stops active encoders and holds unfinished work across restarts. Resume starts unfinished tracks from the beginning. Stop leaves completed audio in place and requires explicit retry; retry-all skips deliberately stopped tasks. Delete history requires the queue to be finished or stopped and its workers to have exited. It removes task records only. Deleting failed/stopped history removes that target’s scan-retry suppression, so a later scan may create it again.
+
+Jobs refresh every two seconds and show the current path, artist/album/title, track encoding percentage and queue counts. Container logs emit `job progress` records with `task`, `job`, `phase`, `path`, `title`, `processed`, `total` and `percent`. Encoding reports at most once per second. Discovery has an unknown total until enumeration finishes; artwork/validation are separate phases. Retries may return a track’s percentage to zero.
+
+Schema 2 remains unchanged. Task grouping/control/progress use optional metadata keys, retaining the original executable jobs and arguments. Older images retain held `pending` jobs through their future `not_before` timestamp and show stopped work as `failed` with a cancellation message; their UI has individual jobs and lacks Resume. Resume through v0.2.4 when reopening. Snapshot comparison includes task annotations and the held timestamp.
+
 ## Upgrade and rollback
 
 Stop MusicForge and back up all of `/config`. For complete library-state rollback, also snapshot the corresponding output directory and record the previous image version while MusicForge remains stopped. Keep an independent FLAC backup.
 
-Schema 2 is the stable MVP baseline. The `0.2.x` series preserves the database structure and persisted Settings, jobs and recovery formats. v0.2.0/v0.2.1/v0.2.2 → v0.2.3 does not migrate the schema. A same-series software rollback can reuse the current `/config`: pause background work, stop the application, pin the earlier image, then verify accounts, library and jobs before resuming. Do not change database version numbers to perform a rollback.
+Schema 2 is the stable MVP baseline. The `0.2.x` series preserves the database structure and persisted Settings, jobs and recovery formats. v0.2.0/v0.2.1/v0.2.2/v0.2.3 → v0.2.4 does not migrate the schema. A same-series software rollback can reuse the current `/config`: pause background work, stop the application, pin the earlier image, then verify accounts, library and jobs before resuming. Do not change database version numbers to perform a rollback.
 
-The CI step `Same-schema rollback with published releases` uses digest-pinned v0.2.2/v0.2.1/v0.2.0 images on AMD64 and ARM64. They read the candidate's real audio, cover, credentials and pending task, save settings, then return to the candidate; database and artifact state are compared. Successful runs produce `rollback-amd64` / `rollback-arm64` evidence artifacts. Equal schema numbers are only one condition; older readers and writers must also remain compatible.
+The CI step `Same-schema rollback with published releases` uses digest-pinned v0.2.3/v0.2.2/v0.2.1/v0.2.0 images on AMD64 and ARM64. They read the candidate's real audio, cover, credentials and pending task, save settings, then return to the candidate; database and artifact state are compared. Successful runs produce `rollback-amd64` / `rollback-arm64` evidence artifacts. Equal schema numbers are only one condition; older readers and writers must also remain compatible.
 
 Software rollback retains the current library state. Restoring the full pre-upgrade state requires matching `/config` and output snapshots. Switching images cannot undo completed replacements, moves or deletions.
 

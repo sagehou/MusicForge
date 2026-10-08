@@ -131,7 +131,7 @@ func (a *App) webhook(w http.ResponseWriter, r *http.Request) {
 	}
 	if body.Upgrade && len(upgrade.Old) > 0 {
 		b, _ := json.Marshal(upgrade)
-		if _, err = a.enqueue("upgrade", "lidarr:upgrade:"+digest(string(b)), upgrade, true); err != nil {
+		if _, err = a.enqueueTask("upgrade", "lidarr:upgrade:"+digest(string(b)), upgrade, true, id); err != nil {
 			apiError(w, 500, err)
 			return
 		}
@@ -191,6 +191,7 @@ func (a *App) finishUpgrade(ctx context.Context, r UpgradeRequest) error {
 		newPaths[rel] = true
 	}
 	for _, rel := range r.Old {
+		if err := ctx.Err(); err != nil { return err }
 		if newPaths[rel] {
 			continue
 		}

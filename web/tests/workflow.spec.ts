@@ -1,6 +1,8 @@
 import { test, expect } from "@playwright/test";
-import { readFileSync, unlinkSync, writeFileSync, utimesSync } from "node:fs";
+import { readFileSync, unlinkSync, writeFileSync, utimesSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
+import { execFileSync } from "node:child_process";
+import type { Job, Source, TaskItem } from "../src/types";
 
 test.use({ locale: "zh-CN" });
 
@@ -41,6 +43,8 @@ test("bilingual setup, real incremental build, state preservation and login", as
   await page.getByRole("combobox", { name: "Language", exact: true }).selectOption("zh-CN");
   await expect(page.getByRole("status")).toContainText("设置已保存");
   await page.getByRole("link", { name: "音乐库", exact: true }).click();
+  await page.getByRole("button", { name: "浏览歌手 CI Artist", exact: true }).click({ timeout: 30000 });
+  await page.getByRole("button", { name: "浏览专辑 CI Album", exact: true }).click();
   await expect(page.getByText("CI Track", { exact: true })).toBeVisible({ timeout: 30000 });
   await expect(page.getByRole("table").getByText("已就绪", { exact: true })).toBeVisible({ timeout: 30000 });
   await page.getByLabel("搜索音乐库", { exact: true }).fill("CI Track");
@@ -91,10 +95,13 @@ test("bilingual setup, real incremental build, state preservation and login", as
   await expect(page.getByRole("heading", { name: "后台任务" })).toBeVisible();
   await page.getByRole("button", { name: "详情", exact: true }).first().click();
   await expect(page.getByText("任务日志", { exact: true })).toBeVisible();
-  const rawLog = await page.locator(".task-details pre").last().textContent();
+  const rawLog = await page.locator(".task-outcome").textContent();
+  await expect(page.getByText("曲目结果与处理记录", { exact: true })).toBeVisible();
+  await expect(page.locator(".task-details")).not.toContainText('"dirs"');
   await page.getByRole("combobox", { name: "语言", exact: true }).selectOption("en");
   await expect(page.getByText("Job logs", { exact: true })).toBeVisible();
-  await expect(page.locator(".task-details pre").last()).toHaveText(rawLog === "任务成功完成。" ? "Job completed successfully." : rawLog!);
+  await expect(page.locator(".task-outcome")).toHaveText(rawLog === "任务成功完成。" ? "Job completed successfully." : rawLog!);
+  await exerciseTaskQueue(page, root);
   await page.reload();
   await expect(page.locator("html")).toHaveAttribute("lang", "en");
   await expect(page.getByRole("heading", { name: "Background jobs" })).toBeVisible();
@@ -211,3 +218,70 @@ test("bilingual setup, real incremental build, state preservation and login", as
   await page.getByRole("button", { name: "Log out", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Welcome back" })).toBeVisible();
 });
+
+
+async function exerciseTaskQueue(page: import("@playwright/test").Page, root: string) {
+  const slow = join(root, "slow-encode");
+  const album = join(root, "source/Queue Artist/Queue Album");
+  mkdirSync(album, { recursive: true });
+  for (let index = 1; index <= 3; index++) {
+    const track = join(album, `0${index}.flac`);
+    execFileSync("ffmpeg", ["-nostdin", "-v", "error", "-f", "lavfi", "-i", "sine=duration=12", "-c:a", "flac", "-metadata", "artist=Queue Artist", "-metadata", "album=Queue Album", "-metadata", `title=Queue Track ${index}`, "-metadata", `track=${index}`, track]);
+    const old = new Date(Date.now() - 120000); utimesSync(track, old, old);
+  }
+  writeFileSync(slow, "observe real ffmpeg progress");
+  try {
+    await page.getByRole("link", { name: "Library", exact: true }).click();
+    const scanning = page.waitForResponse(response => response.url().endsWith("/api/library/scan") && response.request().method() === "POST");
+    await page.getByRole("button", { name: "Scan", exact: true }).click();
+    const id = (await (await scanning).json()).job_id as number;
+    const read = async () => (await (await page.request.get("/api/jobs")).json()).jobs as Job[];
+    await expect.poll(async () => (await read()).find(job => job.id === id)?.counts.total).toBe(3);
+    await page.getByRole("button", { name: "Browse artist Queue Artist", exact: true }).click();
+    await page.getByRole("button", { name: "Browse album Queue Album", exact: true }).click();
+    await expect(page.getByRole("table").getByText("Queue Track 1", { exact: true })).toBeVisible();
+    await page.screenshot({ path: "test-results/library-album-en.png", fullPage: true });
+    await page.getByRole("link", { name: "Jobs", exact: true }).click();
+    const task = page.locator(`[data-task-id="${id}"]`);
+    await expect(task).toHaveCount(1);
+    await expect(task.locator(".task-activity")).toContainText("Queue Track 1");
+    await expect.poll(async () => (await read()).find(job => job.id === id)?.current.some(activity => activity.phase === "convert" && activity.percent > 0)).toBe(true);
+    await task.getByRole("button", { name: "Pause", exact: true }).click();
+    await expect(task.locator(".task-main .badge")).toHaveText("Paused");
+    await expect.poll(async () => {
+      const items = (await (await page.request.get(`/api/jobs/${id}/items`)).json()).items as TaskItem[];
+      return items.some(item => item.kind === "convert" && item.log === "Paused by administrator");
+    }).toBe(true);
+    await task.getByRole("button", { name: "Details", exact: true }).click();
+    await expect(task.getByRole("heading", { name: "Track results and operations", exact: true })).toBeVisible();
+    await page.screenshot({ path: "test-results/jobs-paused-en.png", fullPage: true });
+    await task.getByRole("button", { name: "Resume", exact: true }).click();
+    await expect.poll(async () => (await read()).find(job => job.id === id)?.counts.done, { timeout: 30000 }).toBeGreaterThanOrEqual(1);
+    page.once("dialog", dialog => dialog.accept());
+    await task.getByRole("button", { name: "Stop", exact: true }).click();
+    await expect(task.locator(".task-main .badge")).toHaveText("Stopped");
+    await expect.poll(async () => (await read()).find(job => job.id === id)?.can_delete).toBe(true);
+    const playablePath = join(root, "output/Queue Artist/Queue Album/01.opus");
+    const playable = readFileSync(playablePath);
+    await page.screenshot({ path: "test-results/jobs-stopped-en.png", fullPage: true });
+    unlinkSync(slow);
+    await task.getByRole("button", { name: "Retry", exact: true }).click();
+    await expect.poll(async () => (await read()).find(job => job.id === id)?.counts.done, { timeout: 30000 }).toBe(3);
+    expect(readFileSync(playablePath)).toEqual(playable);
+    const outputs = [1, 2, 3].map(index => readFileSync(join(root, `output/Queue Artist/Queue Album/0${index}.opus`)));
+    await page.getByRole("combobox", { name: "Language", exact: true }).selectOption("zh-CN");
+    await expect(task.getByRole("heading", { name: "曲目结果与处理记录", exact: true })).toBeVisible();
+    await page.screenshot({ path: "test-results/jobs-complete-zh-CN.png", fullPage: true });
+    await page.getByRole("combobox", { name: "语言", exact: true }).selectOption("en");
+    page.once("dialog", dialog => dialog.accept());
+    await task.getByRole("button", { name: "Delete history", exact: true }).click();
+    await expect(task).toHaveCount(0);
+    for (let index = 1; index <= 3; index++) expect(readFileSync(join(root, `output/Queue Artist/Queue Album/0${index}.opus`))).toEqual(outputs[index - 1]);
+    const sources = (await (await page.request.get("/api/library")).json()) as Source[];
+    expect(sources.filter(source => source.artist === "Queue Artist")).toHaveLength(3);
+    expect(sources.filter(source => source.artist === "Queue Artist").every(source => source.status === "ready")).toBe(true);
+    const logs = readFileSync(join(root, "server.log"), "utf8");
+    expect(logs).toContain('"phase":"convert"'); expect(logs).toContain('"title":"Queue Track 1"');
+    await page.getByRole("button", { name: "Details", exact: true }).first().click();
+  } finally { try { unlinkSync(slow); } catch { /* Already removed after stopping. */ } }
+}

@@ -18,6 +18,8 @@ One container, one administrator, one source library and one output library. Ima
 
 ## Features
 
+- Browse Artist → Album → Track; control entire scan/build queues with live track progress.
+- Pause/resume or stop tasks and delete completed history while keeping generated audio.
 - Index FLAC files and metadata in SQLite; convert new or changed tracks.
 - Move byte-identical renamed files without re-encoding.
 - Preserve tags and ReplayGain; store album artwork once as `cover.jpg`.
@@ -40,7 +42,7 @@ You need Docker Engine with Compose v2, an existing FLAC library and an empty, d
    curl -fsSL https://raw.githubusercontent.com/sagehou/MusicForge/main/.env.example -o .env
    ```
 
-2. Edit `.env` to set host directories, `PUID`/`PGID` and the public origin. Pin `MUSICFORGE_VERSION` to a published version such as `v0.2.2`, or use `latest` to follow stable releases. Default paths:
+2. Edit `.env` to set host directories, `PUID`/`PGID` and the public origin. Pin `MUSICFORGE_VERSION` to a published version such as `v0.2.4`, or use `latest` to follow stable releases. Default paths:
 
    | Host path | Container path | Access |
    | --- | --- | --- |

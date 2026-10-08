@@ -32,6 +32,8 @@ type App struct {
 	recovered     bool
 	authMu        sync.Mutex
 	loginFailures map[string]loginLimit
+	jobsMu        sync.Mutex
+	activeJobs    map[int64]context.CancelFunc
 }
 
 type loginLimit struct {
@@ -76,7 +78,7 @@ func New(cfg Runtime, logger *slog.Logger, version string, assets fs.FS) (*App, 
 		lock.Close()
 		return nil, err
 	}
-	a := &App{cfg: cfg, db: db, logger: logger, version: version, assets: assets, lock: lock, loginFailures: map[string]loginLimit{}}
+	a := &App{cfg: cfg, db: db, logger: logger, version: version, assets: assets, lock: lock, loginFailures: map[string]loginLimit{}, activeJobs: map[int64]context.CancelFunc{}}
 	fail := func(err error) (*App, error) { a.Close(); return nil, err }
 	if _, err = a.settings(); err == sql.ErrNoRows {
 		err = a.saveSettings(DefaultSettings())
@@ -172,29 +174,43 @@ func (a *App) worker(ctx context.Context, conversion bool, slot int) {
 			}
 			continue
 		}
+		a.jobsMu.Lock()
 		j, err := a.claim(conversion)
+		jobCtx, cancel := context.WithCancel(ctx)
+		if err == nil {
+			a.activeJobs[j.ID] = cancel
+		}
+		a.jobsMu.Unlock()
 		if err == sql.ErrNoRows {
+			cancel()
 			if !pause(ctx, time.Second) {
 				return
 			}
 			continue
 		}
 		if err != nil {
+			cancel()
 			a.logger.Error("job claim failed", "error", err)
 			if !pause(ctx, time.Second) {
 				return
 			}
 			continue
 		}
-		err = a.execute(ctx, j)
+		a.logger.Info("job started", "task", a.taskID(j.ID), "job", j.ID, "kind", j.Kind)
+		err = a.execute(jobCtx, j)
+		interrupted := jobCtx.Err() != nil
+		cancel()
 		state := "success"
 		attempts := j.Attempts
 		wait := 0
 		message := ""
+		if interrupted && err == nil {
+			err = context.Canceled
+		}
 		if err != nil {
 			message = err.Error()
 			var d *deferred
-			if ctx.Err() != nil {
+			if interrupted {
 				state = "pending"
 				message = "Interrupted; resumed from the beginning without consuming an attempt"
 			} else if errors.As(err, &d) {
@@ -214,7 +230,12 @@ func (a *App) worker(ctx context.Context, conversion bool, slot int) {
 			progress = 0
 		}
 		for {
+			a.jobsMu.Lock()
 			updateErr := a.completeJob(j, state, attempts, progress, message, wait)
+			if updateErr == nil {
+				delete(a.activeJobs, j.ID)
+			}
+			a.jobsMu.Unlock()
 			if updateErr == nil {
 				break
 			}
@@ -223,18 +244,21 @@ func (a *App) worker(ctx context.Context, conversion bool, slot int) {
 				return
 			}
 		}
-		a.logger.Info("job finished", "job", j.ID, "kind", j.Kind, "state", state, "attempts", attempts, "detail", message)
+		if actual, readErr := readJob(a.db.QueryRow("SELECT "+jobCols+" FROM jobs WHERE id=?", j.ID)); readErr == nil {
+			state, attempts, message = actual.State, actual.Attempts, actual.Log
+		}
+		a.logger.Info("job finished", "task", a.taskID(j.ID), "job", j.ID, "kind", j.Kind, "state", state, "attempts", attempts, "detail", message)
 	}
 }
 
 func (a *App) execute(ctx context.Context, j Job) error {
 	switch j.Kind {
-	case "scan":
+		case "scan":
 		var r ScanRequest
 		if err := json.Unmarshal(j.Args, &r); err != nil {
 			return err
 		}
-		return a.scan(ctx, r)
+		return a.scan(context.WithValue(ctx, taskJobKey{}, j.ID), r)
 	case "convert", "move":
 		var r BuildRequest
 		if err := json.Unmarshal(j.Args, &r); err != nil {
@@ -248,7 +272,7 @@ func (a *App) execute(ctx context.Context, j Job) error {
 		if err := json.Unmarshal(j.Args, &r); err != nil {
 			return err
 		}
-		return a.deleteExpired(r.IDs)
+		return a.deleteExpiredContext(ctx, r.IDs)
 	case "upgrade":
 		var r UpgradeRequest
 		if err := json.Unmarshal(j.Args, &r); err != nil {

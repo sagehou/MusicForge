@@ -1,6 +1,7 @@
 package forge
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"crypto/sha256"
@@ -146,6 +147,7 @@ func scoped(rel string, dirs []string) bool {
 }
 
 func (a *App) scan(ctx context.Context, r ScanRequest) error {
+	jobID, _ := ctx.Value(taskJobKey{}).(int64)
 	a.files.Lock()
 	defer a.files.Unlock()
 	s, err := a.settings()
@@ -163,6 +165,7 @@ func (a *App) scan(ctx context.Context, r ScanRequest) error {
 		return err
 	}
 	files := map[string]fs.FileInfo{}
+	lastReport := time.Time{}
 	dirs := r.Dirs
 	if len(dirs) == 0 {
 		dirs = []string{"."}
@@ -197,6 +200,10 @@ func (a *App) scan(ctx context.Context, r ScanRequest) error {
 				return fmt.Errorf("not a regular file: %s", path)
 			}
 			files[rel] = info
+			if time.Since(lastReport) >= time.Second {
+				a.reportProgress(jobID, Activity{Phase: "discover", Path: rel, Processed: len(files)}, 0)
+				lastReport = time.Now()
+			}
 			return nil
 		})
 		if err != nil {
@@ -221,9 +228,13 @@ func (a *App) scan(ctx context.Context, r ScanRequest) error {
 	sort.Strings(paths)
 	quiet := false
 	invalid := 0
-	for _, rel := range paths {
+	for index, rel := range paths {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		info := files[rel]
 		source, found := byRel[rel]
+		a.reportProgress(jobID, Activity{Phase: "scan", Path: rel, Artist: source.Artist, Album: source.Album, Title: source.Title, Processed: index, Total: len(paths)}, float64(index)/float64(len(paths)))
 		changed := !found || !sameStat(info, source) || r.Verify
 		if changed && time.Since(info.ModTime()) < 30*time.Second {
 			quiet = true
@@ -316,6 +327,9 @@ func (a *App) scan(ctx context.Context, r ScanRequest) error {
 		if err != nil {
 			return err
 		}
+		if changed {
+			a.reportProgress(jobID, Activity{Phase: "scan", Path: rel, Artist: source.Artist, Album: source.Album, Title: source.Title, Processed: index, Total: len(paths)}, float64(index)/float64(len(paths)))
+		}
 		present := false
 		if source.Output != "" {
 			out, err := safePath(s.Output, source.Output)
@@ -340,11 +354,11 @@ func (a *App) scan(ctx context.Context, r ScanRequest) error {
 		}
 		moved := present && source.BuiltHash == source.Hash && source.Output != outputRel(source.Rel, strings.TrimPrefix(filepath.Ext(source.Output), "."))
 		if moved {
-			if _, err = a.queueBuild(source, s.Encoding, true, false); err != nil {
+			if _, err = a.queueBuildTask(source, s.Encoding, true, false, jobID); err != nil {
 				return err
 			}
 		} else if !present || source.BuiltHash != source.Hash {
-			if _, err = a.queueBuild(source, s.Encoding, false, false); err != nil {
+			if _, err = a.queueBuildTask(source, s.Encoding, false, false, jobID); err != nil {
 				return err
 			}
 		}
@@ -352,6 +366,7 @@ func (a *App) scan(ctx context.Context, r ScanRequest) error {
 	if quiet {
 		return later("Waiting for source files to be unchanged for 30 seconds", 10)
 	}
+	if err := ctx.Err(); err != nil { return err }
 	// Only a complete scan of accessible storage may expire sources.
 	if err = a.storage(s); err != nil {
 		return err
@@ -375,10 +390,13 @@ func (a *App) scan(ctx context.Context, r ScanRequest) error {
 		}
 	}
 	for dir, tracks := range albums {
+		if err := ctx.Err(); err != nil { return err }
+		a.reportProgress(jobID, Activity{Phase: "artwork", Path: dir, Processed: len(paths), Total: len(paths)}, .99)
 		if err = a.artwork(ctx, s, dir, tracks); err != nil {
 			return err
 		}
 	}
+	a.reportProgress(jobID, Activity{Phase: "indexed", Processed: len(paths), Total: len(paths), Percent: 100}, 1)
 	if invalid > 0 {
 		return fmt.Errorf("scan found %d invalid FLAC files; healthy tracks processed, no deletions applied; see Library errors", invalid)
 	}
@@ -392,12 +410,16 @@ func (a *App) indexSourceError(rel string, info fs.FileInfo, cause error) error 
 }
 
 func (a *App) queueBuild(source Source, profile Encoding, move, manual bool) (int64, error) {
+	return a.queueBuildTask(source, profile, move, manual, 0)
+}
+
+func (a *App) queueBuildTask(source Source, profile Encoding, move, manual bool, task int64) (int64, error) {
 	kind := "convert"
 	if move {
 		kind = "move"
 	}
 	key := fmt.Sprintf("%s:%d:%s:%s:%s", kind, source.ID, source.Hash, profile.Fingerprint(), digest(source.Rel))
-	return a.enqueue(kind, key, BuildRequest{source.ID, source.Hash, profile, move}, manual)
+	return a.enqueueTask(kind, key, BuildRequest{source.ID, source.Hash, profile, move}, manual, task)
 }
 
 func (a *App) owned(rel string, id int64) error {
@@ -568,6 +590,7 @@ func (a *App) recoverFiles(ctx context.Context, s Settings) error {
 
 func (a *App) build(ctx context.Context, j Job, r BuildRequest) error {
 	a.files.Lock()
+	if err := ctx.Err(); err != nil { a.files.Unlock(); return err }
 	s, err := a.settings()
 	if err != nil {
 		a.files.Unlock()
@@ -617,6 +640,19 @@ func (a *App) build(ctx context.Context, j Job, r BuildRequest) error {
 	if r.Move {
 		target = outputRel(source.Rel, strings.TrimPrefix(filepath.Ext(source.Output), "."))
 	}
+	if !r.Move && source.OutputPresent && source.Output == target && source.BuiltHash == r.Hash && source.BuiltProfile == r.Profile.Fingerprint() {
+		path, pathErr := safePath(s.Output, target)
+		if pathErr != nil { a.files.Unlock(); return pathErr }
+		if info, statErr := os.Stat(path); statErr == nil && info.Mode().IsRegular() {
+			a.files.Unlock()
+			return nil
+		} else if statErr != nil && !os.IsNotExist(statErr) {
+			a.files.Unlock()
+			return later("Output storage unavailable: "+statErr.Error(), 30)
+		}
+	}
+	activity := Activity{Phase: j.Kind, Path: source.Rel, Artist: source.Artist, Album: source.Album, Title: source.Title}
+	a.reportProgress(j.ID, activity, 0)
 	if err = a.targetAvailable(s, target, source.ID); err != nil {
 		a.files.Unlock()
 		return err
@@ -631,6 +667,7 @@ func (a *App) build(ctx context.Context, j Job, r BuildRequest) error {
 		return err
 	}
 	if r.Move {
+		if err := ctx.Err(); err != nil { a.files.Unlock(); return err }
 		if source.Output == target {
 			a.files.Unlock()
 			return nil
@@ -695,10 +732,14 @@ func (a *App) build(ctx context.Context, j Job, r BuildRequest) error {
 	}
 	args = append(args, r.Profile.Args()...)
 	args = append(args, temp)
-	if _, err = runTool(ctx, a.cfg.FFmpeg, args...); err != nil {
+	if err = a.encode(ctx, j.ID, source.Duration, activity, args); err != nil {
+		if ctx.Err() != nil { return ctx.Err() }
 		return a.buildError(s, source, err)
 	}
+	activity.Phase, activity.Percent = "validate", 100
+	a.reportProgress(j.ID, activity, .9)
 	if err = a.validateArtifact(ctx, temp, r.Profile, source.Duration); err != nil {
+		if ctx.Err() != nil { return ctx.Err() }
 		return a.buildError(s, source, err)
 	}
 	file, err := os.Open(temp)
@@ -716,6 +757,7 @@ func (a *App) build(ctx context.Context, j Job, r BuildRequest) error {
 	}
 	a.files.Lock()
 	defer a.files.Unlock()
+	if err := ctx.Err(); err != nil { return err }
 	if err = a.storage(s); err != nil {
 		return err
 	}
@@ -754,6 +796,32 @@ func (a *App) build(ctx context.Context, j Job, r BuildRequest) error {
 	}
 	_, _ = a.db.Exec("UPDATE jobs SET progress=.95 WHERE id=?", j.ID)
 	return nil
+}
+
+func (a *App) encode(ctx context.Context, id int64, duration float64, activity Activity, args []string) error {
+	args = append([]string{"-progress", "pipe:1", "-nostats"}, args...)
+	cmd := exec.CommandContext(ctx, a.cfg.FFmpeg, args...)
+	var stderr boundedLog
+	cmd.Stderr = &stderr
+	stdout, err := cmd.StdoutPipe()
+	if err != nil { return err }
+	if err = cmd.Start(); err != nil { return err }
+	scanner := bufio.NewScanner(stdout)
+	last := time.Time{}
+	for scanner.Scan() {
+		key, value, found := strings.Cut(scanner.Text(), "=")
+		if !found || key != "out_time_us" || duration <= 0 { continue }
+		microseconds, err := strconv.ParseFloat(value, 64)
+		if err != nil { continue }
+		if time.Since(last) < time.Second { continue }
+		activity.Percent = math.Max(0, math.Min(100, microseconds/duration/10000))
+		a.reportProgress(id, activity, activity.Percent/100*.85)
+		last = time.Now()
+	}
+	if err = cmd.Wait(); err != nil {
+		return fmt.Errorf("%s failed: %w\n%s", filepath.Base(a.cfg.FFmpeg), err, stderr.String())
+	}
+	return scanner.Err()
 }
 
 func (a *App) recordSourceError(id int64, err error) {
@@ -941,6 +1009,9 @@ func (a *App) cleanAlbum(s Settings, dir string) {
 	}
 }
 func (a *App) deleteExpired(ids []int64) error {
+	return a.deleteExpiredContext(context.Background(), ids)
+}
+func (a *App) deleteExpiredContext(ctx context.Context, ids []int64) error {
 	a.files.Lock()
 	defer a.files.Unlock()
 	s, err := a.settings()
@@ -950,10 +1021,11 @@ func (a *App) deleteExpired(ids []int64) error {
 	if err = a.storage(s); err != nil {
 		return err
 	}
-	if err = a.ensureRecovery(context.Background(), s); err != nil {
+	if err = a.ensureRecovery(ctx, s); err != nil {
 		return err
 	}
 	for _, id := range ids {
+		if err := ctx.Err(); err != nil { return err }
 		source, err := a.source(id)
 		if err != nil {
 			return err

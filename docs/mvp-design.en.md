@@ -115,7 +115,13 @@ Generate a temporary file and validate before replacement. Failed conversion pre
 
 ## Queue and recovery
 
-- Show Pending, Running, Success and Failed jobs with error logs.
+- Treat a scan and its conversion, move and upgrade-cleanup queue as one controllable task. Execute the track queue after indexing finishes. Group a manual rebuild into one task as well, reusing existing active targets.
+- Show Pending, Running, Paused, Success, Failed and Stopped tasks. Keep per-track states and retry budgets internally and aggregate the queue into one task-list entry.
+- Pause, resume, stop, retry and delete selected task histories. Pause/stop terminate active encoding subprocesses and clean registered temporary files; published results remain. Resume restarts unfinished tracks without consuming a failure attempt.
+- Pauses survive container restarts. Stopped unfinished targets require explicit retry; retry-all does not restart deliberately stopped tasks. Periodic scanning is an independent trigger and may discover new targets.
+- Delete history only when no work remains queued and workers have exited; retain library records and audio. Deleting failed/stopped history also removes its target's automatic-retry suppression record.
+- Show discovered/inspected file counts, the current path, artist/album/title, track encoding percentage, validation phase and completed/pending/failed queue counts. Refresh the task view every two seconds and emit the same progress in structured Docker logs.
+- Details show scan scope, timestamps, profiles, track results and expandable diagnostics, with 50 results per page.
 - Default to one concurrent ffmpeg conversion; allow adjustment in Settings.
 - Retry twice after the initial failure, allowing three failed attempts total with increasing delays.
 - Exhausted jobs wait for individual or bulk manual retry.
@@ -185,8 +191,8 @@ Endpoint: `POST /api/webhook/lidarr`.
 Use React, TypeScript, TailwindCSS and shadcn/ui.
 
 - Overview: FLAC/output counts, build completion and recent jobs.
-- Library: artist, album, source/artifact status, clear expired/rebuild distinction and bulk actions.
-- Jobs: states, error logs and individual/bulk retries.
+- Library: browse Artist → Album → Track using source-relative directories, breadcrumbs, disc/track ordering, search and status filters. Select artists, albums or tracks for bulk actions with clear expired/rebuild status. Output keeps the source library’s relative hierarchy.
+- Jobs: whole scan/build queue states, live track progress, human-readable details, queue controls and bulk history cleanup.
 - Settings: paths, encoding/mode/parameters, concurrency, scan interval, OIDC and integrations.
 - Login and first-run setup.
 - English and Simplified Chinese; initially use browser preference, falling back to English. Provide a selector and persist manual selection in the browser.
@@ -207,6 +213,8 @@ Use React, TypeScript, TailwindCSS and shadcn/ui.
 - Same-series releases must support older compatible readers and writers. On both architectures, CI opens the candidate's same volumes with published older images, checks library, credentials, jobs and artifacts, then returns to the candidate.
 - Incompatible changes require a clearly identified breaking release with an upgrade backup procedure and a verified restore-and-rollback path. Preserve historical migrations; do not force a lower database version.
 - Complete state rollback requires matching stopped `/config` and output snapshots. Switching images cannot undo completed replacements, moves or deletions. Published version tags and images are immutable.
+
+Task presentation is additive metadata: `task-member:<job ID>` contains the decimal root job ID, `task-control:<root ID>` contains `paused` or `stopped`, and `task-progress:<job ID>` contains a JSON phase/path/tag/counter snapshot (`processed`/`total` are file counts, `percent` is 0–100). Older releases ignore and retain these optional keys. Primitive job kinds/arguments and table/column definitions remain unchanged. A pause keeps a job `pending` with `not_before=253402300799` (Unix seconds); stopping uses the existing terminal `failed` state and an explicit log message without incrementing actual failed attempts. Older UIs show these as deferred/failed individual jobs; the new UI restores grouping when reopened. Progress annotations are diagnostic snapshots, never file-recovery journals.
 
 ## Development and publication
 

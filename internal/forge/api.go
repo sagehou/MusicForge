@@ -67,6 +67,8 @@ func (a *App) Handler() http.Handler {
 	mux.HandleFunc("GET /api/library", a.auth(a.library))
 	mux.HandleFunc("GET /api/jobs", a.auth(a.jobs))
 	mux.HandleFunc("POST /api/jobs/retry", a.auth(a.retry))
+	mux.HandleFunc("POST /api/jobs/control", a.auth(a.controlJobs))
+	mux.HandleFunc("GET /api/jobs/{id}/items", a.auth(a.jobItems))
 	mux.HandleFunc("GET /api/settings", a.auth(a.getSettings))
 	mux.HandleFunc("PUT /api/settings", a.auth(a.putSettings))
 	mux.HandleFunc("POST /api/library/scan", a.auth(a.requestScan))
@@ -212,43 +214,15 @@ func (a *App) jobs(w http.ResponseWriter, r *http.Request) {
 	if n, err := strconv.Atoi(r.URL.Query().Get("limit")); err == nil && n > 0 && n <= 500 {
 		limit = n
 	}
-	where := ""
-	args := []any{}
 	state := r.URL.Query().Get("state")
-	if state != "" && state != "all" {
-		switch state {
-		case "pending", "running", "success", "failed":
-			where = " WHERE state=?"
-			args = append(args, state)
-		default:
-			apiError(w, 400, errors.New("invalid job state filter"))
-			return
-		}
-	}
-	queryArgs := append(append([]any{}, args...), limit, offset)
-	rows, err := a.db.Query("SELECT "+jobCols+" FROM jobs"+where+" ORDER BY id DESC LIMIT ? OFFSET ?", queryArgs...)
-	if err != nil {
-		apiError(w, 500, err)
+	switch state {
+	case "", "all", "pending", "running", "success", "failed", "paused", "stopped":
+	default:
+		apiError(w, 400, errors.New("invalid job state filter"))
 		return
 	}
-	list := []Job{}
-	for rows.Next() {
-		j, err := readJob(rows)
-		if err != nil {
-			rows.Close()
-			apiError(w, 500, err)
-			return
-		}
-		list = append(list, j)
-	}
-	err = rows.Err()
-	rows.Close()
+	list, total, err := a.taskList(state, limit, offset)
 	if err != nil {
-		apiError(w, 500, err)
-		return
-	}
-	var total int
-	if err = a.db.QueryRow("SELECT count(*) FROM jobs"+where, args...).Scan(&total); err != nil {
 		apiError(w, 500, err)
 		return
 	}
@@ -273,23 +247,12 @@ func (a *App) retry(w http.ResponseWriter, r *http.Request) {
 		apiError(w, 400, errors.New("too many selected jobs"))
 		return
 	}
-	where := ""
-	args := []any{time.Now().Unix()}
-	if !body.All {
-		placeholders := make([]string, len(body.IDs))
-		for i, id := range body.IDs {
-			placeholders[i] = "?"
-			args = append(args, id)
-		}
-		where = " AND id IN (" + strings.Join(placeholders, ",") + ")"
-	}
-	result, err := a.db.Exec("UPDATE jobs SET state='pending',attempts=0,not_before=0,log='',updated=? WHERE state='failed'"+where+" AND NOT EXISTS(SELECT 1 FROM jobs active WHERE active.dedup=jobs.dedup AND active.state IN ('pending','running'))", args...)
+	n, err := a.changeTasks("retry", body)
 	if err != nil {
-		apiError(w, 500, err)
+		apiError(w, 409, err)
 		return
 	}
-	n, _ := result.RowsAffected()
-	respond(w, 202, map[string]int64{"retried": n})
+	respond(w, 202, map[string]int{"retried": n})
 }
 
 func (a *App) getSettings(w http.ResponseWriter, r *http.Request) {
@@ -464,6 +427,9 @@ func (a *App) rebuild(w http.ResponseWriter, r *http.Request) {
 		selected[id] = true
 	}
 	count := 0
+	task := int64(0)
+	a.jobsMu.Lock()
+	defer a.jobsMu.Unlock()
 	for _, source := range list {
 		if !source.Present || source.Hash == "" || (!body.All && !selected[source.ID]) {
 			continue
@@ -471,13 +437,21 @@ func (a *App) rebuild(w http.ResponseWriter, r *http.Request) {
 		if source.BuiltHash == source.Hash && source.BuiltProfile == s.Encoding.Fingerprint() && source.OutputPresent && source.Output == outputRel(source.Rel, s.Encoding.Codec) {
 			continue
 		}
-		if _, err = a.queueBuild(source, s.Encoding, false, true); err != nil {
+		var id int64
+		if id, err = a.queueBuildTask(source, s.Encoding, false, true, task); err != nil {
 			apiError(w, 500, err)
 			return
 		}
+		if task == 0 {
+			task = a.taskID(id)
+			if err = a.setMeta(taskMemberKey(id), strconv.FormatInt(task, 10)); err != nil {
+				apiError(w, 500, err)
+				return
+			}
+		}
 		count++
 	}
-	respond(w, 202, map[string]int{"queued": count})
+	respond(w, 202, map[string]any{"queued": count, "job_id": task})
 }
 func (a *App) requestDelete(w http.ResponseWriter, r *http.Request) {
 	var body selection

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"sort"
 	"strconv"
+	"strings"
 	"time"
 
 	_ "modernc.org/sqlite"
@@ -118,6 +119,10 @@ func (a *App) allSources() ([]Source, error) {
 }
 
 func (a *App) enqueue(kind, key string, args any, manual bool) (int64, error) {
+	return a.enqueueTask(kind, key, args, manual, 0)
+}
+
+func (a *App) enqueueTask(kind, key string, args any, manual bool, task int64) (int64, error) {
 	b, err := json.Marshal(args)
 	if err != nil {
 		return 0, err
@@ -174,6 +179,28 @@ func (a *App) enqueue(kind, key string, args any, manual bool) (int64, error) {
 	if err != nil {
 		return 0, err
 	}
+	if kind == "scan" && task == 0 {
+		task = id
+	}
+	if task != 0 {
+		if _, err = tx.Exec("INSERT INTO meta(key,value) VALUES(?,?)", taskMemberKey(id), strconv.FormatInt(task, 10)); err != nil {
+			return 0, err
+		}
+		var control string
+		if err = tx.QueryRow("SELECT value FROM meta WHERE key=?", taskControlKey(task)).Scan(&control); err != nil && err != sql.ErrNoRows {
+			return 0, err
+		}
+		if control == "paused" {
+			_, err = tx.Exec("UPDATE jobs SET not_before=? WHERE id=?", heldUntil, id)
+		} else if control == "stopped" {
+			_, err = tx.Exec("UPDATE jobs SET state='failed',log='Stopped by administrator' WHERE id=?", id)
+		} else {
+			err = nil
+		}
+		if err != nil {
+			return 0, err
+		}
+	}
 	return id, tx.Commit()
 }
 
@@ -197,7 +224,13 @@ func (a *App) claim(conversion bool) (Job, error) {
 		return Job{}, err
 	}
 	defer tx.Rollback()
-	j, err := readJob(tx.QueryRow("SELECT "+jobCols+" FROM jobs candidate WHERE state='pending' AND kind "+operator+" 'convert' AND not_before<=? AND (kind NOT IN ('convert','move') OR NOT EXISTS(SELECT 1 FROM jobs active WHERE active.state='running' AND active.kind IN ('convert','move') AND json_extract(active.args,'$.id')=json_extract(candidate.args,'$.id'))) ORDER BY CASE kind WHEN 'scan' THEN 0 WHEN 'move' THEN 1 WHEN 'delete' THEN 2 ELSE 3 END,id LIMIT 1", time.Now().Unix()))
+	// A scan fills one queue. Its conversions become eligible after indexing finishes.
+	activeIDs := []string{"-1"}
+	for id := range a.activeJobs {
+		activeIDs = append(activeIDs, strconv.FormatInt(id, 10))
+	}
+	busy := strings.Join(activeIDs, ",")
+	j, err := readJob(tx.QueryRow("SELECT "+jobCols+" FROM jobs candidate WHERE state='pending' AND id NOT IN ("+busy+") AND kind "+operator+" 'convert' AND not_before<=? AND NOT EXISTS(SELECT 1 FROM meta member JOIN jobs parent ON parent.id=CAST(member.value AS INTEGER) WHERE member.key='task-member:'||candidate.id AND parent.id<>candidate.id AND parent.kind='scan' AND parent.state IN ('pending','running')) AND (kind NOT IN ('convert','move') OR NOT EXISTS(SELECT 1 FROM jobs active WHERE (active.state='running' OR active.id IN ("+busy+")) AND active.kind IN ('convert','move') AND json_extract(active.args,'$.id')=json_extract(candidate.args,'$.id'))) ORDER BY CASE kind WHEN 'scan' THEN 0 WHEN 'move' THEN 1 WHEN 'delete' THEN 2 ELSE 3 END,id LIMIT 1", time.Now().Unix()))
 	if err != nil {
 		return j, err
 	}
@@ -262,6 +295,11 @@ func (a *App) completeJob(j Job, state string, attempts int, progress float64, m
 	}
 	defer tx.Rollback()
 	args := string(j.Args)
+	var control string
+	controlErr := tx.QueryRow("SELECT value FROM meta WHERE key='task-control:'||coalesce((SELECT value FROM meta WHERE key=?),?)", taskMemberKey(j.ID), strconv.FormatInt(j.ID, 10)).Scan(&control)
+	if controlErr != nil && controlErr != sql.ErrNoRows {
+		return controlErr
+	}
 	if j.Kind == "scan" {
 		key := "scan-followup:" + strconv.FormatInt(j.ID, 10)
 		var raw string
@@ -269,7 +307,7 @@ func (a *App) completeJob(j Job, state string, attempts int, progress float64, m
 		if err != nil && err != sql.ErrNoRows {
 			return err
 		}
-		if err == nil {
+		if err == nil && control != "stopped" {
 			if state == "success" {
 				args = raw
 				attempts = 0
@@ -286,8 +324,19 @@ func (a *App) completeJob(j Job, state string, attempts int, progress float64, m
 				return err
 			}
 		}
+		if control == "stopped" {
+			if _, err = tx.Exec("DELETE FROM meta WHERE key=?", key); err != nil {
+				return err
+			}
+		}
 	}
-	_, err = tx.Exec("UPDATE jobs SET args=?,state=?,attempts=?,progress=?,log=?,not_before=?,updated=? WHERE id=?", args, state, attempts, progress, message, time.Now().Unix()+int64(wait), time.Now().Unix(), j.ID)
+	notBefore := time.Now().Unix() + int64(wait)
+	if control == "paused" {
+		state, attempts, progress, message, notBefore = "pending", j.Attempts, 0, "Paused by administrator", heldUntil
+	} else if control == "stopped" {
+		state, attempts, progress, message = "failed", j.Attempts, 0, "Stopped by administrator"
+	}
+	_, err = tx.Exec("UPDATE jobs SET args=?,state=?,attempts=?,progress=?,log=?,not_before=?,updated=? WHERE id=?", args, state, attempts, progress, message, notBefore, time.Now().Unix(), j.ID)
 	if err != nil {
 		return err
 	}

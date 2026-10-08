@@ -16,7 +16,7 @@ MusicForge is a self-hosted streaming-library build tool. Lidarr manages FLAC so
 
 ## Single-container architecture
 
-- One `musicforge` container runs one Go application process; ffmpeg handles encoding in child processes.
+- One `musicforge` container runs one long-lived Go application process. Disposable child processes read mounted sources, and ffmpeg handles encoding.
 - The application serves Web/API requests and executes scanning, conversion, file management and integrations in the background.
 - APIs create durable jobs; request handlers do not execute ffmpeg directly.
 - SQLite stores the index, artifact state, queue, account and Web settings.

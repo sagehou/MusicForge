@@ -47,8 +47,8 @@ function useLanguage() {
   // Known user-facing API diagnostics share their English wording with the catalog.
   // Unknown system/ffmpeg diagnostics retain the original detail for troubleshooting.
   function errorMessage(raw: string) {
-	const http = raw.match(/^Server returned(?: an unreadable response \(HTTP (\d+)\)| HTTP (\d+)); please retry$/);
-	if (http) return t("error.http", { status: http[1] || http[2] });
+    const http = raw.match(/^Server returned(?: an unreadable response \(HTTP (\d+)\)| HTTP (\d+)); please retry$/);
+    if (http) return t("error.http", { status: http[1] || http[2] });
     const key = Object.keys(en).find(key => key.startsWith("error.") && en[key as MessageKey] === raw) as MessageKey | undefined;
     if (key) return t(key);
     const prefix = Object.keys(en).find(key => key.startsWith("error.") && key.endsWith("Prefix") &&

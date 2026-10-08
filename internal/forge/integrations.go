@@ -141,7 +141,9 @@ func (a *App) webhook(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *App) finishUpgrade(ctx context.Context, r UpgradeRequest) error {
-	if err := a.lockFiles(ctx); err != nil { return err }
+	if err := a.lockFiles(ctx); err != nil {
+		return err
+	}
 	defer a.files.Unlock()
 	s, err := a.settings()
 	if err != nil {

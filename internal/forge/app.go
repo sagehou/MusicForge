@@ -159,7 +159,9 @@ func pause(ctx context.Context, d time.Duration) bool {
 
 func (a *App) lockFiles(ctx context.Context) error {
 	for !a.files.TryLock() {
-		if !pause(ctx, 50*time.Millisecond) { return ctx.Err() }
+		if !pause(ctx, 50*time.Millisecond) {
+			return ctx.Err()
+		}
 	}
 	if err := ctx.Err(); err != nil {
 		a.files.Unlock()

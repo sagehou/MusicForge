@@ -24,16 +24,20 @@ import (
 
 type boundedLog struct {
 	bytes.Buffer
-	limit int
+	limit     int
 	truncated bool
 }
 
 func (b *boundedLog) Write(p []byte) (int, error) {
 	n := len(p)
 	limit := b.limit
-	if limit == 0 { limit = 65536 }
+	if limit == 0 {
+		limit = 65536
+	}
 	remaining := limit - b.Len()
-	if len(p) > remaining { b.truncated = true }
+	if len(p) > remaining {
+		b.truncated = true
+	}
 	if remaining > 0 {
 		if len(p) > remaining {
 			p = p[:remaining]
@@ -55,7 +59,9 @@ func runToolLimited(ctx context.Context, slots chan struct{}, tool string, args 
 	cmd.Stderr = &out
 	err := waitTool(ctx, cmd, slots)
 	if err != nil {
-		if ctx.Err() != nil { return nil, ctx.Err() }
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
 		return nil, fmt.Errorf("%s failed: %w\n%s", filepath.Base(tool), err, out.String())
 	}
 	return out.Bytes(), nil
@@ -65,18 +71,23 @@ func waitTool(ctx context.Context, cmd *exec.Cmd, slots chan struct{}) error {
 	if slots != nil {
 		select {
 		case slots <- struct{}{}:
-		case <-ctx.Done(): return ctx.Err()
+		case <-ctx.Done():
+			return ctx.Err()
 		}
 	}
 	cmd.WaitDelay = 2 * time.Second
 	if err := cmd.Start(); err != nil {
-		if slots != nil { <-slots }
+		if slots != nil {
+			<-slots
+		}
 		return err
 	}
 	done := make(chan error, 1)
 	go func() {
 		done <- cmd.Wait()
-		if slots != nil { <-slots }
+		if slots != nil {
+			<-slots
+		}
 	}()
 	select {
 	case err := <-done:
@@ -110,12 +121,14 @@ func (a *App) probe(ctx context.Context, path string) (probeData, error) {
 	defer cancel()
 	// Request only used fields; artwork stream diagnostics can otherwise truncate JSON.
 	cmd := exec.CommandContext(probeCtx, a.cfg.FFprobe, "-v", "error", "-show_entries", "stream=codec_name,codec_type,duration:stream_tags:stream_disposition=attached_pic:format=duration:format_tags", "-of", "json", path)
-	out := boundedLog{limit: 4*1024*1024}
+	out := boundedLog{limit: 4 * 1024 * 1024}
 	var stderr boundedLog
 	cmd.Stdout, cmd.Stderr = &out, &stderr
 	err := waitTool(probeCtx, cmd, a.sourceSlots)
 	if err != nil {
-		if probeCtx.Err() != nil { return p, probeCtx.Err() }
+		if probeCtx.Err() != nil {
+			return p, probeCtx.Err()
+		}
 		return p, fmt.Errorf("ffprobe failed: %w\n%s", err, stderr.String())
 	}
 	if out.truncated {
@@ -203,7 +216,9 @@ func scoped(rel string, dirs []string) bool {
 
 func (a *App) scan(ctx context.Context, r ScanRequest) error {
 	jobID, _ := ctx.Value(taskJobKey{}).(int64)
-	if err := a.lockFiles(ctx); err != nil { return err }
+	if err := a.lockFiles(ctx); err != nil {
+		return err
+	}
 	defer a.files.Unlock()
 	s, err := a.settings()
 	if err != nil {
@@ -278,7 +293,9 @@ func (a *App) scan(ctx context.Context, r ScanRequest) error {
 				}
 				activity.ReadBytes, activity.ReadTotalBytes = read, total
 				a.reportProgress(jobID, activity, float64(index)/float64(len(paths)))
-				if read > 0 { lastRead = time.Now() }
+				if read > 0 {
+					lastRead = time.Now()
+				}
 			})
 			if err != nil {
 				if ctx.Err() != nil {
@@ -292,8 +309,12 @@ func (a *App) scan(ctx context.Context, r ScanRequest) error {
 			}
 			current, err := a.sourceStat(ctx, s.Source, rel)
 			if err != nil {
-				if ctx.Err() != nil { return ctx.Err() }
-				if err = a.indexSourceReadError(rel, info, err); err != nil { return err }
+				if ctx.Err() != nil {
+					return ctx.Err()
+				}
+				if err = a.indexSourceReadError(rel, info, err); err != nil {
+					return err
+				}
 				unavailable++
 				continue
 			}
@@ -315,7 +336,9 @@ func (a *App) scan(ctx context.Context, r ScanRequest) error {
 					return ctx.Err()
 				}
 				if errors.Is(err, context.DeadlineExceeded) {
-					if err = a.indexSourceReadError(rel, info, err); err != nil { return err }
+					if err = a.indexSourceReadError(rel, info, err); err != nil {
+						return err
+					}
 					unavailable++
 					continue
 				}
@@ -327,8 +350,12 @@ func (a *App) scan(ctx context.Context, r ScanRequest) error {
 			}
 			after, err := a.sourceStat(ctx, s.Source, rel)
 			if err != nil {
-				if ctx.Err() != nil { return ctx.Err() }
-				if err = a.indexSourceReadError(rel, info, err); err != nil { return err }
+				if ctx.Err() != nil {
+					return ctx.Err()
+				}
+				if err = a.indexSourceReadError(rel, info, err); err != nil {
+					return err
+				}
 				unavailable++
 				continue
 			}
@@ -660,7 +687,9 @@ func (a *App) recoverFiles(ctx context.Context, s Settings) error {
 }
 
 func (a *App) build(ctx context.Context, j Job, r BuildRequest) error {
-	if err := a.lockFiles(ctx); err != nil { return err }
+	if err := a.lockFiles(ctx); err != nil {
+		return err
+	}
 	s, err := a.settings()
 	if err != nil {
 		a.files.Unlock()
@@ -695,7 +724,9 @@ func (a *App) build(ctx context.Context, j Job, r BuildRequest) error {
 			_, _ = a.enqueue("scan", "scan:periodic", ScanRequest{}, false)
 			return nil
 		}
-		if ctx.Err() != nil { return ctx.Err() }
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
 		return a.buildError(ctx, s, source, err)
 	}
 	if !sameStat(info, source) || time.Since(info.ModTime()) < 30*time.Second {
@@ -832,7 +863,9 @@ func (a *App) build(ctx context.Context, j Job, r BuildRequest) error {
 	if err != nil {
 		return err
 	}
-	if err := a.lockFiles(ctx); err != nil { return err }
+	if err := a.lockFiles(ctx); err != nil {
+		return err
+	}
 	defer a.files.Unlock()
 	if err := ctx.Err(); err != nil {
 		return err
@@ -885,7 +918,9 @@ func (a *App) encode(ctx context.Context, id int64, duration float64, activity A
 	select {
 	case a.sourceSlots <- struct{}{}:
 	case <-encodeCtx.Done():
-		if ctx.Err() != nil { return ctx.Err() }
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
 		return fmt.Errorf("media workers are still blocked: %w", context.DeadlineExceeded)
 	}
 	args = append([]string{"-progress", "pipe:1", "-nostats"}, args...)
@@ -894,8 +929,13 @@ func (a *App) encode(ctx context.Context, id int64, duration float64, activity A
 	var stderr boundedLog
 	cmd.Stderr = &stderr
 	stdout, err := cmd.StdoutPipe()
-	if err == nil { err = cmd.Start() }
-	if err != nil { <-a.sourceSlots; return err }
+	if err == nil {
+		err = cmd.Start()
+	}
+	if err != nil {
+		<-a.sourceSlots
+		return err
+	}
 	defer stdout.Close()
 	values := make(chan float64)
 	done := make(chan error, 1)
@@ -904,17 +944,25 @@ func (a *App) encode(ctx context.Context, id int64, duration float64, activity A
 		scanner := bufio.NewScanner(stdout)
 		for scanner.Scan() {
 			key, value, found := strings.Cut(scanner.Text(), "=")
-			if !found || key != "out_time_us" { continue }
+			if !found || key != "out_time_us" {
+				continue
+			}
 			microseconds, err := strconv.ParseFloat(value, 64)
-			if err != nil || math.IsNaN(microseconds) || math.IsInf(microseconds, 0) { continue }
+			if err != nil || math.IsNaN(microseconds) || math.IsInf(microseconds, 0) {
+				continue
+			}
 			select {
 			case values <- microseconds:
 			case <-encodeCtx.Done():
 			}
-			if encodeCtx.Err() != nil { break }
+			if encodeCtx.Err() != nil {
+				break
+			}
 		}
 		close(values)
-		if scanner.Err() != nil { cancel() }
+		if scanner.Err() != nil {
+			cancel()
+		}
 		if err := cmd.Wait(); err != nil {
 			done <- fmt.Errorf("%s failed: %w\n%s", filepath.Base(a.cfg.FFmpeg), err, stderr.String())
 			return
@@ -926,22 +974,33 @@ func (a *App) encode(ctx context.Context, id int64, duration float64, activity A
 	for {
 		select {
 		case microseconds, ok := <-values:
-			if !ok { values = nil; continue }
+			if !ok {
+				values = nil
+				continue
+			}
 			if microseconds > advanced {
 				advanced = microseconds
 				stalled.Reset(a.sourceTimeout())
 			}
-			if duration <= 0 || time.Since(last) < time.Second { continue }
+			if duration <= 0 || time.Since(last) < time.Second {
+				continue
+			}
 			activity.Percent = math.Max(0, math.Min(100, microseconds/duration/10000))
 			a.reportProgress(id, activity, activity.Percent/100*.85)
 			last = time.Now()
 		case err := <-done:
-			if ctx.Err() != nil { return ctx.Err() }
-			if encodeCtx.Err() != nil { return fmt.Errorf("encoding stalled at %s: %w", activity.Path, context.DeadlineExceeded) }
+			if ctx.Err() != nil {
+				return ctx.Err()
+			}
+			if encodeCtx.Err() != nil {
+				return fmt.Errorf("encoding stalled at %s: %w", activity.Path, context.DeadlineExceeded)
+			}
 			return err
 		case <-encodeCtx.Done():
 			_ = cmd.Process.Kill()
-			if ctx.Err() != nil { return ctx.Err() }
+			if ctx.Err() != nil {
+				return ctx.Err()
+			}
 			return fmt.Errorf("encoding stalled at %s (no progress for %s): %w", activity.Path, a.sourceTimeout(), context.DeadlineExceeded)
 		}
 	}
@@ -951,7 +1010,9 @@ func (a *App) recordSourceError(id int64, err error) {
 	_, _ = a.db.Exec("UPDATE sources SET error=? WHERE id=?", err.Error(), id)
 }
 func (a *App) buildError(ctx context.Context, s Settings, source Source, err error) error {
-	if ctx.Err() != nil { return ctx.Err() }
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
 	if storageErr := a.storageContext(ctx, s); storageErr != nil {
 		return storageErr
 	}
@@ -1133,7 +1194,9 @@ func (a *App) deleteExpired(ids []int64) error {
 	return a.deleteExpiredContext(context.Background(), ids)
 }
 func (a *App) deleteExpiredContext(ctx context.Context, ids []int64) error {
-	if err := a.lockFiles(ctx); err != nil { return err }
+	if err := a.lockFiles(ctx); err != nil {
+		return err
+	}
 	defer a.files.Unlock()
 	s, err := a.settings()
 	if err != nil {
@@ -1204,7 +1267,9 @@ func (a *App) embeddedArtwork(ctx context.Context, s Settings, dir string, track
 		memo = artworkMemo{Album: album}
 		for _, track := range tracks {
 			info, err := a.sourceStat(ctx, s.Source, track.Rel)
-			if err != nil { return "", "", err }
+			if err != nil {
+				return "", "", err
+			}
 			p, err := a.probe(ctx, info.Path)
 			if err != nil {
 				return "", "", err
@@ -1248,7 +1313,9 @@ func (a *App) artwork(ctx context.Context, s Settings, dir string, tracks []Sour
 			return errors.New("artwork is not a regular file")
 		}
 		hash, err := a.sourceHash(ctx, s.Source, rel, nil)
-		if err != nil { return err }
+		if err != nil {
+			return err
+		}
 		input = info.Path
 		signature = "external:" + hash
 		break
@@ -1313,7 +1380,9 @@ func (a *App) artwork(ctx context.Context, s Settings, dir string, tracks []Sour
 	args = append(args, "-frames:v", "1", "-c:v", "mjpeg", "-f", "image2", temp)
 	artCtx, cancel := context.WithTimeout(ctx, a.sourceTimeout())
 	defer cancel()
-	if _, err = a.mediaTool(artCtx, a.cfg.FFmpeg, args...); err != nil { return err }
+	if _, err = a.mediaTool(artCtx, a.cfg.FFmpeg, args...); err != nil {
+		return err
+	}
 	file, err := os.OpenFile(temp, os.O_RDWR, 0)
 	if err != nil {
 		return err

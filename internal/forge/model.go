@@ -15,15 +15,15 @@ import (
 )
 
 type Runtime struct {
-	ConfigDir      string         `json:"-"`
-	Listen         string         `json:"listen"`
-	PublicURL      string         `json:"public_url"`
-	AllowedOrigins []string       `json:"allowed_origins,omitempty"`
-	LogLevel       string         `json:"log_level"`
-	FFmpeg         string         `json:"ffmpeg"`
-	FFprobe        string         `json:"ffprobe"`
-	TrustedProxies []netip.Prefix `json:"trusted_proxies,omitempty"`
-	SourceTimeoutSeconds int `json:"source_timeout_seconds,omitempty"`
+	ConfigDir            string         `json:"-"`
+	Listen               string         `json:"listen"`
+	PublicURL            string         `json:"public_url"`
+	AllowedOrigins       []string       `json:"allowed_origins,omitempty"`
+	LogLevel             string         `json:"log_level"`
+	FFmpeg               string         `json:"ffmpeg"`
+	FFprobe              string         `json:"ffprobe"`
+	TrustedProxies       []netip.Prefix `json:"trusted_proxies,omitempty"`
+	SourceTimeoutSeconds int            `json:"source_timeout_seconds,omitempty"`
 }
 
 func LoadRuntime(dir string) (Runtime, error) {
@@ -293,15 +293,23 @@ func safePath(root, rel string) (string, error) {
 	for {
 		resolved, err := filepath.EvalSymlinks(ancestor)
 		if err == nil {
-			if !containsPath(base, resolved) { return "", errors.New("symlink escapes library root") }
+			if !containsPath(base, resolved) {
+				return "", errors.New("symlink escapes library root")
+			}
 			break
 		}
-		if !os.IsNotExist(err) { return "", err }
+		if !os.IsNotExist(err) {
+			return "", err
+		}
 		parent := filepath.Dir(ancestor)
-		if parent == ancestor { return "", err }
+		if parent == ancestor {
+			return "", err
+		}
 		ancestor = parent
 	}
-	if !containsPath(base, path) { return "", errors.New("path escapes library root") }
+	if !containsPath(base, path) {
+		return "", errors.New("path escapes library root")
+	}
 	return path, nil
 }
 

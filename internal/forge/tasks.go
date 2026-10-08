@@ -31,16 +31,16 @@ func (a *App) taskID(id int64) int64 {
 }
 
 type Activity struct {
-	Phase     string  `json:"phase"`
-	Path      string  `json:"path"`
-	Artist    string  `json:"artist"`
-	Album     string  `json:"album"`
-	Title     string  `json:"title"`
-	Processed int     `json:"processed"`
-	Total     int     `json:"total"`
-	Percent   float64 `json:"percent"`
-	ReadBytes int64 `json:"read_bytes,omitempty"`
-	ReadTotalBytes int64 `json:"read_total_bytes,omitempty"`
+	Phase          string  `json:"phase"`
+	Path           string  `json:"path"`
+	Artist         string  `json:"artist"`
+	Album          string  `json:"album"`
+	Title          string  `json:"title"`
+	Processed      int     `json:"processed"`
+	Total          int     `json:"total"`
+	Percent        float64 `json:"percent"`
+	ReadBytes      int64   `json:"read_bytes,omitempty"`
+	ReadTotalBytes int64   `json:"read_total_bytes,omitempty"`
 }
 
 func (a *App) reportProgress(id int64, activity Activity, progress float64) {
@@ -192,13 +192,19 @@ func (a *App) taskList(state string, limit, offset int) ([]Task, int, error) {
 		}
 		if task.State == "running" {
 			items, _, err := a.taskItems(task.ID, "running", 16, 0)
-			if err != nil { return nil, 0, err }
-			for _, item := range items { task.Current = append(task.Current, item.Activity) }
+			if err != nil {
+				return nil, 0, err
+			}
+			for _, item := range items {
+				task.Current = append(task.Current, item.Activity)
+			}
 		}
 	}
 	a.jobsMu.Lock()
 	active := make([]int64, 0, len(a.activeJobs))
-	for id := range a.activeJobs { active = append(active, id) }
+	for id := range a.activeJobs {
+		active = append(active, id)
+	}
 	a.jobsMu.Unlock()
 	for _, id := range active {
 		root := a.taskID(id)

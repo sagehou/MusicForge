@@ -21,23 +21,29 @@ func respond(w http.ResponseWriter, status int, value any) {
 	_ = json.NewEncoder(w).Encode(value)
 }
 func apiError(w http.ResponseWriter, status int, err error) {
-	if response, ok := w.(*apiResponse); ok { response.err = err }
+	if response, ok := w.(*apiResponse); ok {
+		response.err = err
+	}
 	respond(w, status, map[string]string{"error": err.Error()})
 }
 
 type apiResponse struct {
 	http.ResponseWriter
 	status int
-	err error
+	err    error
 }
 
 func (w *apiResponse) WriteHeader(status int) {
-	if w.status != 0 { return }
+	if w.status != 0 {
+		return
+	}
 	w.status = status
 	w.ResponseWriter.WriteHeader(status)
 }
 func (w *apiResponse) Write(p []byte) (int, error) {
-	if w.status == 0 { w.WriteHeader(http.StatusOK) }
+	if w.status == 0 {
+		w.WriteHeader(http.StatusOK)
+	}
 	return w.ResponseWriter.Write(p)
 }
 func decode(w http.ResponseWriter, r *http.Request, value any) bool {

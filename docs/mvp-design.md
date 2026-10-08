@@ -13,7 +13,7 @@ MusicForge 是自托管的音乐流媒体版本构建工具：Lidarr 管理 FLAC
 - FLAC 源库是音乐内容和标签的事实来源；输出歌曲和封面由程序生成。
 - 单机优先、Docker 部署、简单可靠、长期可维护。
 - MVP 只维护一组源库与输出库，一个输出库使用一套当前编码配置。
-- 第一阶段不实现云同步、rclone、多节点 worker、多用户权限、多租户或插件系统。
+- 第一阶段不实现云同步、rclone 挂载管理、多节点 worker、多用户权限、多租户或插件系统；允许将已有 rclone／FUSE 挂载作为只读源库。
 - 数据库使用 SQLite；不引入 Kubernetes、Redis 或 PostgreSQL。
 
 ## 单容器架构
@@ -131,6 +131,7 @@ output/Artist/Album/01 - Title.opus
 - 首次失败后自动重试两次，总共最多尝试三次，并逐次延长等待时间。
 - 三次都失败后标记 Failed，等待单曲或批量手动重试。
 - 同一未变化的失败构建目标不会因下一次普通扫描而无限重试。
+- 源库操作使用可取消、带时限的读取子进程，展示哈希读取字节，API 请求不等待远程存储检查。个别歌曲读取失败保留已知签名及产物，继续检查健康歌曲，本轮不判定过期；扫描重试两次后等待手动介入。
 
 源库或输出目录暂时不可访问时：
 
@@ -238,3 +239,5 @@ output/Artist/Album/01 - Title.opus
 - [Lidarr webhook 发送与认证](https://github.com/Lidarr/Lidarr/blob/develop/src/NzbDrone.Core/Notifications/Webhook/WebhookProxy.cs)
 - [Navidrome 0.59.0 发布说明](https://github.com/navidrome/navidrome/releases/tag/v0.59.0)
 - [Navidrome 目录扫描实现 #4674](https://github.com/navidrome/navidrome/pull/4674)
+
+进度的可选附加字段 `read_bytes`／`read_total_bytes` 单位为字节，原文件计数及百分比单位不变。启动配置 `source_timeout_seconds` 被旧版忽略；不改变 Settings JSON、任务参数、恢复日志或 schema 2。

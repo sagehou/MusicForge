@@ -21,6 +21,9 @@ import (
 var version = "development"
 
 func main() {
+	if forge.RunSourceIO(os.Args[1:]) {
+		return
+	}
 	configDir := flag.String("config-dir", "/config", "local application data directory")
 	health := flag.Bool("healthcheck", false, "check the running server")
 	reset := flag.Bool("reset-password-stdin", false, "reset the administrator password from stdin; stop the server first")

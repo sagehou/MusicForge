@@ -374,5 +374,13 @@
   "jobs.cancelled": "Cancelled by administrator; no failure attempt consumed",
   "jobs.discovered": "{count} FLAC files discovered; counting the remaining directories",
   "jobs.failedHint": "Some work failed. Check track errors below and retry when the cause is fixed.",
-  "jobs.cancelledCount": "{count} cancelled"
+  "jobs.cancelledCount": "{count} cancelled",
+  "phase.read": "Reading source and checking its hash",
+  "phase.probe": "Reading FLAC metadata",
+  "jobs.readBytes": "Read {read} / {total} MiB",
+  "overview.checking": "Checking music storage in the background",
+  "error.checking": "Checking library storage",
+  "error.requestTimeout": "Request timed out; please retry",
+  "error.http": "Server returned HTTP {status}; please retry",
+  "error.sourceReadPrefix": "Source read unavailable: "
 }

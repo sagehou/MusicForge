@@ -42,7 +42,7 @@ You need Docker Engine with Compose v2, an existing FLAC library and an empty, d
    curl -fsSL https://raw.githubusercontent.com/sagehou/MusicForge/main/.env.example -o .env
    ```
 
-2. Edit `.env` to set host directories, `PUID`/`PGID` and the public origin. Pin `MUSICFORGE_VERSION` to a published version such as `v0.2.4`, or use `latest` to follow stable releases. Default paths:
+2. Edit `.env` to set host directories, `PUID`/`PGID` and the public origin. Pin `MUSICFORGE_VERSION` to a published version such as `v0.2.5`, or use `latest` to follow stable releases. Default paths:
 
    | Host path | Container path | Access |
    | --- | --- | --- |
@@ -72,6 +72,16 @@ You need Docker Engine with Compose v2, an existing FLAC library and an empty, d
 MusicForge enforces mode `0700` on `/config` at startup, including pre-existing host directories, to protect database journals and stored secrets. The configured UID must own this directory. Compose refuses missing host paths and rotates container logs. See the [production trial guide](docs/deployment.md) for proxy networking, acceptance steps and rollback.
 
 Give Navidrome a read-only mount of the same physical output directory. Its container path may differ; its corresponding library root must be this output directory.
+
+## Mounted remote source libraries
+
+An existing rclone/FUSE mount can be the read-only FLAC source. MusicForge does not manage rclone or synchronize cloud storage. Keep `/config` and the output on local reliable storage. Mount rclone before starting the container and give its UID/GID read access; `--allow-other` may be needed when the mount owner differs.
+
+For repeated hashing, metadata and encoding reads, use rclone `--vfs-cache-mode full` with a sufficiently sized local `--cache-dir`. First import still reads each complete new FLAC to preserve content hashes and rename detection; ordinary unchanged scans skip audio reads. Jobs and logs show the source path, read stage and bytes read. Background storage checks keep Web requests independent of mount latency.
+
+A source read with no progress for 120 seconds times out. Adjust `MUSICFORGE_SOURCE_TIMEOUT_SECONDS` for your remote if necessary. Hash/enumeration timers reset on progress; ffprobe and cover extraction have an operation deadline, and encoding must keep advancing. A single unreadable track preserves existing audio and hashes, allows healthy tracks to be queued, and prevents deletion detection for that incomplete scan. The scan retries twice, then waits for manual retry. Whole-root outages defer work without spending track retry budgets.
+
+After remounting, verify what the container sees. Docker's default private bind does not automatically follow every host remount; recreate the container if needed. A changed-root warning requires verifying the live mount before saving Settings to acknowledge it. See the [deployment guide](docs/deployment.md) for acceptance and diagnostics.
 
 ## Interface and language
 
@@ -175,6 +185,7 @@ Optional `/config/config.json` follows [config.example.json](config.example.json
 | `MUSICFORGE_LOG_LEVEL` | `INFO` |
 | `MUSICFORGE_FFMPEG` | `ffmpeg` |
 | `MUSICFORGE_FFPROBE` | `ffprobe` |
+| `MUSICFORGE_SOURCE_TIMEOUT_SECONDS` | `120`; mounted-source no-progress timeout, 1–3600 seconds |
 
 Library, encoding and integration settings live only in SQLite. Logs are JSON. Public `/healthz` checks database liveness; the authenticated Overview reports library availability separately. Migrations run transactionally at startup; unknown newer schemas are rejected.
 

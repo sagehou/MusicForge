@@ -39,7 +39,8 @@ func mapLidarr(s Settings, path string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if _, err = safePath(s.Source, rel); err != nil {
+	// The worker resolves symlinks on the mount; webhook handling only queues paths.
+	if err = validRelativePath(rel); err != nil {
 		return "", err
 	}
 	if !strings.EqualFold(filepath.Ext(rel), ".flac") {
@@ -146,7 +147,7 @@ func (a *App) finishUpgrade(ctx context.Context, r UpgradeRequest) error {
 	if err != nil {
 		return err
 	}
-	if err = a.storage(s); err != nil {
+	if err = a.storageContext(ctx, s); err != nil {
 		return err
 	}
 	if len(r.New) == 0 {
@@ -161,20 +162,16 @@ func (a *App) finishUpgrade(ctx context.Context, r UpgradeRequest) error {
 		if !source.Present || !source.OutputPresent || source.Error != "" || source.Hash == "" || source.BuiltHash != source.Hash || source.BuiltProfile != s.Encoding.Fingerprint() {
 			return later("Waiting for all upgraded tracks to validate; failed tracks require manual retry", 10)
 		}
-		path, err := safePath(s.Source, rel)
-		if err != nil {
-			return err
-		}
-		info, err := os.Stat(path)
+		info, err := a.sourceStat(ctx, s.Source, rel)
 		if err != nil || !sameStat(info, source) || time.Since(info.ModTime()) < 30*time.Second {
 			return later("Waiting for upgraded sources to be stable and indexed", 10)
 		}
 		// Cleanup is destructive and infrequent: verify current bytes, not just cached state.
-		hash, err := fileHash(ctx, path)
+		hash, err := a.sourceHash(ctx, s.Source, rel, nil)
 		if err != nil {
 			return err
 		}
-		after, err := os.Stat(path)
+		after, err := a.sourceStat(ctx, s.Source, rel)
 		if err != nil || !sameStat(after, source) || hash != source.Hash {
 			return later("Waiting for the current upgraded source content to validate", 10)
 		}
@@ -207,11 +204,7 @@ func (a *App) finishUpgrade(ctx context.Context, r UpgradeRequest) error {
 		if source.Output == "" {
 			continue
 		}
-		path, err := safePath(s.Source, rel)
-		if err != nil {
-			return err
-		}
-		if _, err = os.Stat(path); err == nil {
+		if _, err = a.sourceStat(ctx, s.Source, rel); err == nil {
 			continue
 		} else if !os.IsNotExist(err) {
 			return err
@@ -289,7 +282,7 @@ func (a *App) refresh(ctx context.Context) error {
 	if s.NavURL == "" {
 		return errors.New("Navidrome is not configured")
 	}
-	if err = a.storage(s); err != nil {
+	if err = a.storageContext(ctx, s); err != nil {
 		return err
 	}
 	signature := digest(fmt.Sprintf("%s:%s:%s:%d", s.NavURL, s.NavUser, s.NavPassword, s.NavLibrary))

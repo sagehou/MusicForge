@@ -356,5 +356,13 @@
   "jobs.cancelled": "管理员已取消，未消耗失败尝试次数",
   "jobs.discovered": "已发现 {count} 个 FLAC 文件，正在枚举其余目录",
   "jobs.failedHint": "部分处理失败。查看下方曲目错误，修复原因后手动重试。",
-  "jobs.cancelledCount": "{count} 首已取消"
+  "jobs.cancelledCount": "{count} 首已取消",
+  "phase.read": "读取源文件并校验哈希",
+  "phase.probe": "读取 FLAC 标签",
+  "jobs.readBytes": "已读取 {read} / {total} MiB",
+  "overview.checking": "正在后台检查音乐存储",
+  "error.checking": "正在检查媒体目录，网页和任务控制仍可使用",
+  "error.requestTimeout": "请求超时，请重试",
+  "error.http": "服务器返回 HTTP {status}，请重试",
+  "error.sourceReadPrefix": "暂时无法读取源文件："
 }

@@ -75,6 +75,20 @@ jobs:
           go test -mod=readonly -race -count=1 -timeout=5m ./...
           go vet -mod=readonly ./...
           go build -mod=readonly -trimpath -o .ci/musicforge ./cmd/musicforge
+      - name: Real rclone mount, stalled reads and responsive queue controls
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends rclone fuse3
+          python3 .github/scripts/check-rclone.py
+      - name: Rclone acceptance evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: rclone-acceptance
+          path: |
+            .ci/rclone/evidence.json
+            .ci/rclone/*.log
+          retention-days: 14
       - name: Browser validation against the actual application
         run: |
           mkdir -p .ci/config .ci/source/Artist/Album .ci/output

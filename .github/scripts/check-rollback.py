@@ -20,6 +20,7 @@ NAME = "musicforge-rollback"
 CANDIDATE = "musicforge:validation"
 PASSWORD = "ci-rollback-password"
 LEGACY = {
+    "v0.2.4": "sha256:3af1f8f70fcc208fe8ae293da2a78e3e92288edddd8b4c3807a01b5a47903241",
     "v0.2.3": "sha256:94afc5a3b0db22fbd563623b193376677bde460b4561e68afee7f00c372d70a4",
     "v0.2.2": "sha256:fd7f6045a7f31dfe2c1a853cf3004377ebef3cebba4cb3a0b488b925fae28d8d",
     "v0.2.1": "sha256:39a12fbd9db368d4dc688cb929ae74b731ba10ae863b03aec915be3a77d35240",
@@ -120,7 +121,7 @@ def verify(api, expected_track, pending, stopped):
 def main():
     for directory in ("config", "source/Album", "output"):
         (ROOT / directory).mkdir(parents=True, exist_ok=True)
-    (ROOT / "config/config.json").write_text(json.dumps({"public_url": ORIGIN, "allowed_origins": ["http://localhost:18788"]}) + "\n")
+    (ROOT / "config/config.json").write_text(json.dumps({"public_url": ORIGIN, "allowed_origins": ["http://localhost:18788"], "source_timeout_seconds": 120}) + "\n")
     media = ("run", "--rm", "--user", f"{os.getuid()}:{os.getgid()}", "-v", f"{ROOT / 'source'}:/fixture", "--entrypoint", "ffmpeg", CANDIDATE, "-nostdin", "-v", "error", "-y")
     docker(*media, "-f", "lavfi", "-i", "sine=duration=1", "-c:a", "flac", "-metadata", "artist=Rollback Artist", "-metadata", "album=Rollback Album", "-metadata", "title=Rollback Track", "/fixture/Album/01.flac")
     # The release media tools omit the color filter; a standard-library PNG is sufficient.

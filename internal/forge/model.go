@@ -23,6 +23,7 @@ type Runtime struct {
 	FFmpeg         string         `json:"ffmpeg"`
 	FFprobe        string         `json:"ffprobe"`
 	TrustedProxies []netip.Prefix `json:"trusted_proxies,omitempty"`
+	SourceTimeoutSeconds int `json:"source_timeout_seconds,omitempty"`
 }
 
 func LoadRuntime(dir string) (Runtime, error) {
@@ -39,6 +40,15 @@ func LoadRuntime(dir string) (Runtime, error) {
 		if value := os.Getenv("MUSICFORGE_" + key); value != "" {
 			*target = value
 		}
+	}
+	if value, ok := os.LookupEnv("MUSICFORGE_SOURCE_TIMEOUT_SECONDS"); ok {
+		c.SourceTimeoutSeconds, err = strconv.Atoi(value)
+		if err != nil || c.SourceTimeoutSeconds < 1 || c.SourceTimeoutSeconds > 3600 {
+			return c, errors.New("source_timeout_seconds must be 1–3600")
+		}
+	}
+	if c.SourceTimeoutSeconds < 0 || c.SourceTimeoutSeconds > 3600 {
+		return c, errors.New("source_timeout_seconds must be 1–3600 (or omitted for 120)")
 	}
 	if value, ok := os.LookupEnv("MUSICFORGE_ALLOWED_ORIGINS"); ok {
 		c.AllowedOrigins = nil
@@ -271,8 +281,8 @@ func safePath(root, rel string) (string, error) {
 	if rel == "" {
 		rel = "."
 	}
-	if filepath.IsAbs(rel) || !containsPath("/", filepath.Join("/", rel)) || rel == ".." || strings.HasPrefix(filepath.Clean(rel), ".."+string(filepath.Separator)) {
-		return "", errors.New("path escapes library root")
+	if err := validRelativePath(rel); err != nil {
+		return "", err
 	}
 	base, err := filepath.EvalSymlinks(root)
 	if err != nil {
@@ -283,24 +293,23 @@ func safePath(root, rel string) (string, error) {
 	for {
 		resolved, err := filepath.EvalSymlinks(ancestor)
 		if err == nil {
-			if !containsPath(base, resolved) {
-				return "", errors.New("symlink escapes library root")
-			}
+			if !containsPath(base, resolved) { return "", errors.New("symlink escapes library root") }
 			break
 		}
-		if !os.IsNotExist(err) {
-			return "", err
-		}
+		if !os.IsNotExist(err) { return "", err }
 		parent := filepath.Dir(ancestor)
-		if parent == ancestor {
-			return "", err
-		}
+		if parent == ancestor { return "", err }
 		ancestor = parent
 	}
-	if !containsPath(base, path) {
-		return "", errors.New("path escapes library root")
-	}
+	if !containsPath(base, path) { return "", errors.New("path escapes library root") }
 	return path, nil
+}
+
+func validRelativePath(rel string) error {
+	if filepath.IsAbs(rel) || !containsPath("/", filepath.Join("/", rel)) || rel == ".." || strings.HasPrefix(filepath.Clean(rel), ".."+string(filepath.Separator)) {
+		return errors.New("path escapes library root")
+	}
+	return nil
 }
 
 type Source struct {

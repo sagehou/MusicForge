@@ -11,7 +11,7 @@ MusicForge is a self-hosted streaming-library build tool. Lidarr manages FLAC so
 - FLAC is the source of truth for music and tags; the application generates output audio and covers.
 - Prioritize a single machine, Docker deployment, reliability and long-term maintainability.
 - Maintain one source/output pair and one current encoding profile.
-- Exclude cloud sync, rclone, distributed workers, user permissions, multitenancy and plugins from the MVP.
+- Exclude cloud sync, rclone mount management, distributed workers, user permissions, multitenancy and plugins from the MVP. Existing rclone/FUSE mounts are supported as read-only sources.
 - Use SQLite; do not introduce Kubernetes, Redis or PostgreSQL.
 
 ## Single-container architecture
@@ -126,6 +126,7 @@ Generate a temporary file and validate before replacement. Failed conversion pre
 - Retry twice after the initial failure, allowing three failed attempts total with increasing delays.
 - Exhausted jobs wait for individual or bulk manual retry.
 - Ordinary scans do not restart an unchanged failed target indefinitely.
+- Bound source-mount calls in cancellable child processes, show hash-read bytes, and keep API requests independent of remote storage checks. Individual source-read failures preserve known signatures/output, continue indexing healthy tracks and prevent expiration for that incomplete scan; retry the scan twice before manual intervention.
 
 When source or output storage is unavailable:
 
@@ -232,3 +233,5 @@ Task presentation is additive metadata: `task-member:<job ID>` contains the deci
 - [Lidarr webhook sending and authentication](https://github.com/Lidarr/Lidarr/blob/develop/src/NzbDrone.Core/Notifications/Webhook/WebhookProxy.cs)
 - [Navidrome 0.59.0 release](https://github.com/navidrome/navidrome/releases/tag/v0.59.0)
 - [Navidrome targeted scans #4674](https://github.com/navidrome/navidrome/pull/4674)
+
+Optional progress fields `read_bytes` and `read_total_bytes` use bytes; existing file-count and percentage units are unchanged. Startup `source_timeout_seconds` is ignored by older releases. Neither addition changes Settings JSON, job arguments, recovery journals or schema 2.

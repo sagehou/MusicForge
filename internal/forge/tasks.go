@@ -39,6 +39,8 @@ type Activity struct {
 	Processed int     `json:"processed"`
 	Total     int     `json:"total"`
 	Percent   float64 `json:"percent"`
+	ReadBytes int64 `json:"read_bytes,omitempty"`
+	ReadTotalBytes int64 `json:"read_total_bytes,omitempty"`
 }
 
 func (a *App) reportProgress(id int64, activity Activity, progress float64) {
@@ -55,7 +57,8 @@ func (a *App) reportProgress(id int64, activity Activity, progress float64) {
 	_, _ = a.db.Exec("UPDATE jobs SET progress=?,updated=? WHERE id=? AND state='running'", progress, time.Now().Unix(), id)
 	a.logger.Info("job progress", "task", a.taskID(id), "job", id, "phase", activity.Phase,
 		"path", activity.Path, "artist", activity.Artist, "album", activity.Album, "title", activity.Title,
-		"processed", activity.Processed, "total", activity.Total, "percent", activity.Percent)
+		"processed", activity.Processed, "total", activity.Total, "percent", activity.Percent,
+		"read_bytes", activity.ReadBytes, "read_total_bytes", activity.ReadTotalBytes)
 }
 
 type TaskCounts struct {
@@ -187,20 +190,24 @@ func (a *App) taskList(state string, limit, offset int) ([]Task, int, error) {
 				}
 			}
 		}
-		items, _, err := a.taskItems(task.ID, "running", 16, 0)
-		if err != nil {
-			return nil, 0, err
+		if task.State == "running" {
+			items, _, err := a.taskItems(task.ID, "running", 16, 0)
+			if err != nil { return nil, 0, err }
+			for _, item := range items { task.Current = append(task.Current, item.Activity) }
 		}
-		for _, item := range items {
-			task.Current = append(task.Current, item.Activity)
-		}
-		a.jobsMu.Lock()
-		for id := range a.activeJobs {
-			if a.taskID(id) == task.ID {
+	}
+	a.jobsMu.Lock()
+	active := make([]int64, 0, len(a.activeJobs))
+	for id := range a.activeJobs { active = append(active, id) }
+	a.jobsMu.Unlock()
+	for _, id := range active {
+		root := a.taskID(id)
+		for i := range list {
+			task := &list[i]
+			if root == task.ID {
 				task.CanDelete = false
 			}
 		}
-		a.jobsMu.Unlock()
 	}
 	return list, total, nil
 }

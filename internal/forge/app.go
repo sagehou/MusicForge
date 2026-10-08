@@ -34,6 +34,15 @@ type App struct {
 	loginFailures map[string]loginLimit
 	jobsMu        sync.Mutex
 	activeJobs    map[int64]context.CancelFunc
+	sourceSlots   chan struct{}
+	storageMu     sync.Mutex
+	storageCheck  bool
+	storageSource string
+	storageOutput string
+	storageAt     time.Time
+	storageError  error
+	ioContext     context.Context
+	ioCancel      context.CancelFunc
 }
 
 type loginLimit struct {
@@ -78,7 +87,8 @@ func New(cfg Runtime, logger *slog.Logger, version string, assets fs.FS) (*App, 
 		lock.Close()
 		return nil, err
 	}
-	a := &App{cfg: cfg, db: db, logger: logger, version: version, assets: assets, lock: lock, loginFailures: map[string]loginLimit{}, activeJobs: map[int64]context.CancelFunc{}}
+	a := &App{cfg: cfg, db: db, logger: logger, version: version, assets: assets, lock: lock, loginFailures: map[string]loginLimit{}, activeJobs: map[int64]context.CancelFunc{}, sourceSlots: make(chan struct{}, 20)}
+	a.ioContext, a.ioCancel = context.WithCancel(context.Background())
 	fail := func(err error) (*App, error) { a.Close(); return nil, err }
 	if _, err = a.settings(); err == sql.ErrNoRows {
 		err = a.saveSettings(DefaultSettings())
@@ -114,6 +124,9 @@ func New(cfg Runtime, logger *slog.Logger, version string, assets fs.FS) (*App, 
 	return a, nil
 }
 func (a *App) Close() {
+	if a.ioCancel != nil {
+		a.ioCancel()
+	}
 	if a.db != nil {
 		a.db.Close()
 	}
@@ -309,27 +322,19 @@ func (a *App) dirty(rel string) error {
 	return err
 }
 
-func rootIdentity(path string) (string, error) {
-	info, err := os.Stat(path)
+func (a *App) storageContext(ctx context.Context, s Settings) error {
+	source, err := a.sourceStat(ctx, s.Source, ".")
 	if err != nil {
-		return "", err
-	}
-	if !info.IsDir() {
-		return "", errors.New("library root is not a directory")
-	}
-	stat, ok := info.Sys().(*syscall.Stat_t)
-	if !ok {
-		return "", errors.New("cannot identify library mount")
-	}
-	return fmt.Sprintf("%d:%d", stat.Dev, stat.Ino), nil
-}
-func (a *App) storage(s Settings) error {
-	source, err := rootIdentity(s.Source)
-	if err != nil {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
 		return later("Source storage offline: "+err.Error(), 30)
 	}
+	if !source.IsDir() || source.Identity == "" {
+		return later("Source storage offline: library root is not an identifiable directory", 30)
+	}
 	expected, err := a.meta("source_root")
-	if err != nil || source != expected {
+	if err != nil || source.Identity != expected {
 		return later("Source mount changed; verify the mount and save Settings to acknowledge it", 30)
 	}
 	id, err := a.meta("instance")
@@ -354,15 +359,44 @@ func (a *App) storage(s Settings) error {
 	return nil
 }
 
+// Dashboard polling reads the last background check, never the remote mount.
+func (a *App) storageStatus(s Settings) (bool, string, bool) {
+	a.storageMu.Lock()
+	defer a.storageMu.Unlock()
+	if a.storageSource != s.Source || a.storageOutput != s.Output {
+		a.storageAt = time.Time{}
+	}
+	if !a.storageCheck && (a.storageAt.IsZero() || time.Since(a.storageAt) >= 5*time.Second) {
+		a.storageCheck = true
+		go func() {
+			err := a.storageContext(a.ioContext, s)
+			a.storageMu.Lock()
+			defer a.storageMu.Unlock()
+			a.storageSource, a.storageOutput = s.Source, s.Output
+			a.storageAt, a.storageError, a.storageCheck = time.Now(), err, false
+		}()
+	}
+	if a.storageAt.IsZero() || a.storageCheck && time.Since(a.storageAt) > 15*time.Second {
+		return false, "Checking library storage", true
+	}
+	if a.storageError != nil {
+		return false, a.storageError.Error(), false
+	}
+	return true, "", false
+}
+
 func (a *App) initializeStorage(s Settings) error {
-	source, err := rootIdentity(s.Source)
+	return a.initializeStorageContext(context.Background(), s)
+}
+func (a *App) initializeStorageContext(ctx context.Context, s Settings) error {
+	source, err := a.sourceStat(ctx, s.Source, ".")
 	if err != nil {
 		return err
 	}
-	sourceReal, err := filepath.EvalSymlinks(s.Source)
-	if err != nil {
-		return err
+	if !source.IsDir() || source.Identity == "" {
+		return errors.New("library root is not an identifiable directory")
 	}
+	sourceReal := source.Path
 	outputReal, err := filepath.EvalSymlinks(s.Output)
 	if err != nil {
 		return err
@@ -399,7 +433,7 @@ func (a *App) initializeStorage(s Settings) error {
 	} else if string(b) != id {
 		return errors.New("output directory belongs to another MusicForge instance")
 	}
-	return a.setMeta("source_root", source)
+	return a.setMeta("source_root", source.Identity)
 }
 
 func (a *App) ensureRecovery(ctx context.Context, s Settings) error {

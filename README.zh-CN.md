@@ -42,7 +42,7 @@ MVP 不包含云同步、分布式 worker、多组音乐库、多用户或插件
    curl -fsSL https://raw.githubusercontent.com/sagehou/MusicForge/main/.env.example -o .env
    ```
 
-2. 编辑 `.env`，设置宿主机目录、`PUID`/`PGID` 和公开访问地址。可将 `MUSICFORGE_VERSION` 固定为已发布版本，例如 `v0.2.4`；`latest` 跟随稳定版本。默认路径：
+2. 编辑 `.env`，设置宿主机目录、`PUID`/`PGID` 和公开访问地址。可将 `MUSICFORGE_VERSION` 固定为已发布版本，例如 `v0.2.5`；`latest` 跟随稳定版本。默认路径：
 
    | 宿主机路径 | 容器内路径 | 访问方式 |
    | --- | --- | --- |
@@ -85,6 +85,16 @@ Navidrome 只读挂载同一个宿主机输出目录。容器内路径可以不�
 | 音乐库 | 搜索筛选、扫描、完整校验、重建和过期产物删除 |
 | 任务 | 队列状态、日志、单项或批量重试失败任务 |
 | 设置 | 路径、编码、扫描间隔、并发、集成、OIDC 和密码 |
+
+## 远程挂载的源库
+
+已有的 rclone／FUSE 挂载可以作为只读 FLAC 源库。MusicForge 不管理 rclone，也不负责云同步；`/config` 和输出目录仍应使用可靠的本地存储。先挂载 rclone，再启动容器，并确认配置的 UID/GID 可以读取；挂载用户不同时可能需要 `--allow-other`。
+
+建议 rclone 使用 `--vfs-cache-mode full`，并配置容量足够的本地 `--cache-dir`，让哈希、标签检查和编码复用下载内容。首次导入仍完整读取新增 FLAC，保留原有哈希和搬迁识别；普通扫描跳过未变化歌曲的内容读取。任务页和日志展示读取阶段、歌曲路径及字节进度；存储检查在后台执行，不让网页请求等待挂载。
+
+默认连续 120 秒没有进展时终止源库读取，可通过 `MUSICFORGE_SOURCE_TIMEOUT_SECONDS` 调整。哈希和枚举有进展会重置计时；ffprobe、封面提取使用单次操作时限，编码须持续推进。个别歌曲读不出来时保留旧音频与已知哈希，继续为健康歌曲排队，且本轮不判定源文件过期。扫描自动重试两次，之后等待手动重试；整个根目录离线的等待不消耗单曲重试额度。
+
+重新挂载后要核对容器中实际可见的目录。Docker 默认私有 bind 不会自动跟随所有宿主机重新挂载，必要时重建容器。出现根目录变化提示时，先确认真实挂载可用，再保存设置确认。验收及诊断见[部署指南](docs/deployment.zh-CN.md)。
 
 ## 增量构建与文件生命周期
 
@@ -175,6 +185,7 @@ docker compose up -d
 | `MUSICFORGE_LOG_LEVEL` | `INFO` |
 | `MUSICFORGE_FFMPEG` | `ffmpeg` |
 | `MUSICFORGE_FFPROBE` | `ffprobe` |
+| `MUSICFORGE_SOURCE_TIMEOUT_SECONDS` | `120`；源库读取无进展超时，范围 1–3600 秒 |
 
 库、编码与集成设置以 SQLite 为唯一来源。日志为 JSON。公开的 `/healthz` 检查数据库存活状态，登录后的概览单独展示音乐存储可用性。启动时在事务中迁移数据库，拒绝未知的较新结构。
 

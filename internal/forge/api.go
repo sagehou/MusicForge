@@ -1,6 +1,7 @@
 package forge
 
 import (
+	"context"
 	"crypto/subtle"
 	"encoding/json"
 	"errors"
@@ -11,6 +12,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 )
 
 func respond(w http.ResponseWriter, status int, value any) {
@@ -19,7 +21,24 @@ func respond(w http.ResponseWriter, status int, value any) {
 	_ = json.NewEncoder(w).Encode(value)
 }
 func apiError(w http.ResponseWriter, status int, err error) {
+	if response, ok := w.(*apiResponse); ok { response.err = err }
 	respond(w, status, map[string]string{"error": err.Error()})
+}
+
+type apiResponse struct {
+	http.ResponseWriter
+	status int
+	err error
+}
+
+func (w *apiResponse) WriteHeader(status int) {
+	if w.status != 0 { return }
+	w.status = status
+	w.ResponseWriter.WriteHeader(status)
+}
+func (w *apiResponse) Write(p []byte) (int, error) {
+	if w.status == 0 { w.WriteHeader(http.StatusOK) }
+	return w.ResponseWriter.Write(p)
 }
 func decode(w http.ResponseWriter, r *http.Request, value any) bool {
 	r.Body = http.MaxBytesReader(w, r.Body, 1024*1024)
@@ -110,6 +129,17 @@ func (a *App) Handler() http.Handler {
 		w.Header().Set("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'")
 		if strings.HasPrefix(r.URL.Path, "/api/") {
 			w.Header().Set("Cache-Control", "no-store")
+			response := &apiResponse{ResponseWriter: w}
+			started := time.Now()
+			defer func() {
+				if response.status >= 500 {
+					a.logger.Error("API request failed", "method", r.Method, "path", r.URL.Path, "status", response.status, "duration_ms", time.Since(started).Milliseconds(), "error", response.err)
+				} else if time.Since(started) >= 2*time.Second {
+					a.logger.Warn("slow API request", "method", r.Method, "path", r.URL.Path, "status", response.status, "duration_ms", time.Since(started).Milliseconds())
+				}
+			}()
+			mux.ServeHTTP(response, r)
+			return
 		}
 		mux.ServeHTTP(w, r)
 	})
@@ -192,16 +222,12 @@ func (a *App) dashboard(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	online := s.Enabled
+	checking := false
 	reason := "Library is not enabled"
 	if s.Enabled {
-		err = a.storage(s)
-		online = err == nil
-		reason = ""
-		if err != nil {
-			reason = err.Error()
-		}
+		online, reason, checking = a.storageStatus(s)
 	}
-	respond(w, 200, map[string]any{"source_count": sourceCount, "output_count": outputCount, "ready_count": ready, "expired_count": expired, "rebuild_count": rebuild, "failed_count": failed, "online": online, "storage_message": reason, "codec": s.Encoding.Codec, "enabled": s.Enabled, "version": a.version})
+	respond(w, 200, map[string]any{"source_count": sourceCount, "output_count": outputCount, "ready_count": ready, "expired_count": expired, "rebuild_count": rebuild, "failed_count": failed, "online": online, "storage_checking": checking, "storage_message": reason, "codec": s.Encoding.Codec, "enabled": s.Enabled, "version": a.version})
 }
 
 func (a *App) jobs(w http.ResponseWriter, r *http.Request) {
@@ -359,7 +385,9 @@ func (a *App) putSettings(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if s.Enabled {
-		if err = a.initializeStorage(s); err != nil {
+		storageCtx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+		defer cancel()
+		if err = a.initializeStorageContext(storageCtx, s); err != nil {
 			apiError(w, 400, err)
 			return
 		}
@@ -393,7 +421,7 @@ func (a *App) requestScan(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	for _, dir := range body.Dirs {
-		if _, err = safePath(s.Source, dir); err != nil {
+		if err = validRelativePath(dir); err != nil {
 			apiError(w, 400, err)
 			return
 		}

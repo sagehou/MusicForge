@@ -151,6 +151,13 @@ def main():
         api("/api/jobs/control", "POST", {"action": "pause", "ids": [pending]})
         verify(api, track, pending, stopped)
         stop()
+        # Optional read counters must survive older readers and Settings writers too.
+        with sqlite3.connect(ROOT / "config/musicforge.db") as db:
+            key, raw = db.execute("SELECT m.key,m.value FROM meta m JOIN jobs j ON m.key='task-progress:'||j.id WHERE j.kind='scan' ORDER BY j.id LIMIT 1").fetchone()
+            activity = json.loads(raw)
+            activity.update(read_bytes=(ROOT / "source/Album/01.flac").stat().st_size,
+                            read_total_bytes=(ROOT / "source/Album/01.flac").stat().st_size)
+            db.execute("UPDATE meta SET value=? WHERE key=?", (json.dumps(activity), key))
         expected = snapshot()
         held = next(row for row in expected["jobs"] if row[0] == pending)
         assert held[4] == "pending" and held[8] == 253402300799, "paused task changed schema-2 job semantics"

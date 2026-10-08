@@ -474,7 +474,7 @@ const sourceReadErrorPrefix = "Source read unavailable: "
 func (a *App) indexSourceReadError(rel string, info fs.FileInfo, cause error) error {
 	// A remote-read failure does not invalidate the last known hash or playable audio.
 	message := sourceReadErrorPrefix + cause.Error()
-	_, err := a.db.Exec("INSERT INTO sources(rel,size,mtime,present,error) VALUES(?,?,?,1,?) ON CONFLICT(rel) DO UPDATE SET error=excluded.error", rel, info.Size(), info.ModTime().UnixNano(), message)
+	_, err := a.db.Exec("INSERT INTO sources(rel,size,mtime,present,error) VALUES(?,?,?,1,?) ON CONFLICT(rel) DO UPDATE SET present=1,error=excluded.error", rel, info.Size(), info.ModTime().UnixNano(), message)
 	a.logger.Warn("source read failed", "path", rel, "error", cause)
 	return err
 }

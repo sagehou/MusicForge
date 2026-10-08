@@ -253,7 +253,7 @@ func (a *App) sourceIO(ctx context.Context, operation, root, rel string, receive
 			timer.Reset(a.sourceTimeout())
 			if event.Error != "" {
 				if event.Missing {
-					return fmt.Errorf("%s: %s: %w", rel, event.Error, os.ErrNotExist)
+					return &os.PathError{Op: operation, Path: filepath.Join(root, rel), Err: os.ErrNotExist}
 				}
 				return errors.New(event.Error)
 			}

@@ -65,6 +65,9 @@ func TestSourceHashKeepsWholeFileSignatureAndUsesIdleTimeout(t *testing.T) {
 	if _, err = a.sourceStat(context.Background(), s.Source, "../escape"); err == nil {
 		t.Fatal("helper accepted path traversal")
 	}
+	if _, err = a.sourceStat(context.Background(), s.Source, "missing.flac"); !os.IsNotExist(err) || !errors.Is(err, os.ErrNotExist) {
+		t.Fatal("missing files lost filesystem error compatibility", err)
+	}
 }
 
 func TestRemoteReadFailurePastThirtyTracksKeepsHealthyQueueAndStopsAfterThreeAttempts(t *testing.T) {

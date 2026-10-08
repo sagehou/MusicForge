@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/netip"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -19,6 +20,7 @@ type Runtime struct {
 	LogLevel  string `json:"log_level"`
 	FFmpeg    string `json:"ffmpeg"`
 	FFprobe   string `json:"ffprobe"`
+	TrustedProxies []netip.Prefix `json:"trusted_proxies,omitempty"`
 }
 
 func LoadRuntime(dir string) (Runtime, error) {
@@ -34,6 +36,23 @@ func LoadRuntime(dir string) (Runtime, error) {
 	for key, target := range map[string]*string{"LISTEN": &c.Listen, "PUBLIC_URL": &c.PublicURL, "LOG_LEVEL": &c.LogLevel, "FFMPEG": &c.FFmpeg, "FFPROBE": &c.FFprobe} {
 		if value := os.Getenv("MUSICFORGE_" + key); value != "" {
 			*target = value
+		}
+	}
+	if value, ok := os.LookupEnv("MUSICFORGE_TRUSTED_PROXIES"); ok {
+		c.TrustedProxies = nil
+		if strings.TrimSpace(value) != "" {
+			for _, raw := range strings.Split(value, ",") {
+				prefix, err := netip.ParsePrefix(strings.TrimSpace(raw))
+				if err != nil {
+					return c, errors.New("trusted_proxies must contain IP CIDRs separated by commas")
+				}
+				c.TrustedProxies = append(c.TrustedProxies, prefix)
+			}
+		}
+	}
+	for _, prefix := range c.TrustedProxies {
+		if !prefix.IsValid() {
+			return c, errors.New("trusted_proxies must contain valid IP CIDRs")
 		}
 	}
 	c.PublicURL = strings.TrimRight(c.PublicURL, "/")
@@ -143,6 +162,9 @@ func (s Settings) Validate() error {
 	}
 	if !filepath.IsAbs(s.Source) || !filepath.IsAbs(s.Output) {
 		return errors.New("library paths must be absolute container paths")
+	}
+	if s.LidarrPrefix != "" && !filepath.IsAbs(s.LidarrPrefix) {
+		return errors.New("Lidarr path prefix must be an absolute container path")
 	}
 	if containsPath(s.Source, s.Output) || containsPath(s.Output, s.Source) {
 		return errors.New("source and output roots must not overlap")

@@ -32,6 +32,10 @@ networks:
 
 确认代理也连接到该网络，然后使用 `docker compose -f docker-compose.yml -f compose.proxy.yml up -d`。网络名称按现有部署调整。保留应用自身的本地登录/OIDC，代理只负责 HTTPS 和转发。配置 Navidrome URL 时同样使用容器可达的地址；`localhost` 指 MusicForge 容器自身。
 
+将 `MUSICFORGE_TRUSTED_PROXIES` 配置为 MusicForge 实际看到的代理 IP CIDR，例如 `172.20.0.2/32`；多个 IPv4/IPv6 CIDR 用逗号分隔。宿主机进程代理的地址可能表现为 Docker 网桥网关，而非 `127.0.0.1`。固定代理地址，或将信任范围限制在代理专用网络。代理必须用真实客户端 IP 覆盖 `X-Forwarded-For`，或在链尾追加真实连接 IP（Nginx：`proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;`）。不要原样转发客户端传来的值，也不要信任 `0.0.0.0/0` / `::/0`。MusicForge 从可信连接地址开始，从右向左取第一个不受信任的地址。未配置时忽略头部，同一代理后的客户端仍共享失败额度。此配置只用于按 IP 限流，不提供 Forward Auth 或头部身份认证。
+
+本地登录和初始化仅计凭据失败，成功清零，每个 15 分钟固定窗口允许 10 次失败；二者及 OIDC 发起的额度独立。OIDC 回调成功后清零发起额度；已发起的回调和已认证的绑定不因公开发起接口耗尽而被阻止。通过代理验收时，验证重复成功登录不会被限流，且一个测试客户端的失败不会阻止另一个客户端登录。
+
 ## 首次验收
 
 若要先验证少量专辑，请建立独立的临时 `/config` 和输出目录，挂载一份测试源库。索引后不能在网页改根路径；完整库部署使用其自己的配置及专用输出，不复用临时实例的所有权标记。

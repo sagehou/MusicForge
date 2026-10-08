@@ -124,7 +124,7 @@ Create a native **Webhook** connection in Lidarr:
 | Password | The independent webhook secret saved in MusicForge Settings |
 | Events | Release import and upgrade notifications |
 
-The connection test creates no conversion work. Native `Download` events use `trackFiles[].path`, `isUpgrade` and `deletedFiles[].path`. Set **Lidarr source path prefix** if Lidarr sees a different source root. Mapped paths must remain within MusicForge's FLAC root. Custom clients may use Bearer authentication with the same secret.
+The connection test creates no conversion work. Native `Download` events use `trackFiles[].path`, `isUpgrade` and `deletedFiles[].path`. Set **Lidarr source path prefix** to an absolute container path if Lidarr sees a different source root. Mapped paths must remain within MusicForge's FLAC root. Custom clients may use Bearer authentication with the same secret.
 
 ## Navidrome integration
 
@@ -142,6 +142,10 @@ The local administrator has access to all operations. You may additionally bind 
 4. While signed in locally, select **Bind your OIDC identity** and complete the provider flow.
 
 Only the bound `issuer + sub` can use OIDC. State, nonce, PKCE and server-side sessions are checked. UI mutations require CSRF tokens; API reads omit secret settings. Keep the local password for recovery.
+
+Local login and setup allow ten credential failures per client in a fifteen-minute window; successful authentication clears that budget. OIDC starts use a separate budget, cleared on successful OIDC login; they cannot exhaust local recovery or authenticated binding. Behind a reverse proxy, configure `MUSICFORGE_TRUSTED_PROXIES` and its `X-Forwarded-For` handling as described in the [deployment guide](docs/deployment.md). Untrusted peers cannot choose their client IP through headers.
+
+Leaving a secret field blank preserves its saved value. To erase the Navidrome password or OIDC client secret, clear the corresponding URL, select its explicit deletion option and save. Clearing the OIDC secret requires local login and revokes OIDC sessions, flows and the identity binding.
 
 To reset a forgotten password, stop MusicForge, then supply the new password through stdin using the same image and `/config` volume. Run in Bash:
 
@@ -164,6 +168,7 @@ Optional `/config/config.json` follows [config.example.json](config.example.json
 | `MUSICFORGE_CONFIG_DIR` | `/config` |
 | `MUSICFORGE_LISTEN` | `:8787` |
 | `MUSICFORGE_PUBLIC_URL` | Empty; set for OIDC and HTTPS cookies |
+| `MUSICFORGE_TRUSTED_PROXIES` | Empty; comma-separated reverse proxy IP CIDRs for client-IP rate limiting |
 | `MUSICFORGE_LOG_LEVEL` | `INFO` |
 | `MUSICFORGE_FFMPEG` | `ffmpeg` |
 | `MUSICFORGE_FFPROBE` | `ffprobe` |

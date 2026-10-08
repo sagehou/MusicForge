@@ -9,6 +9,7 @@ services:
     environment:
       MUSICFORGE_PUBLIC_URL: ${MUSICFORGE_PUBLIC_URL:-http://localhost:8787}
       MUSICFORGE_LOG_LEVEL: INFO
+      MUSICFORGE_TRUSTED_PROXIES: ${MUSICFORGE_TRUSTED_PROXIES:-}
     volumes:
       - type: bind
         source: ${CONFIG_DIR:-./config}

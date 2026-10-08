@@ -282,5 +282,12 @@
   "settings.unsaved": "有未保存的更改",
   "error.oidcLocalChange": "请使用本地管理员登录修改 OIDC 设置",
   "error.jobState": "无效的任务状态筛选",
-  "error.settingsBusy": "音乐库正在处理文件，请稍后再次保存设置"
+  "error.settingsBusy": "音乐库正在处理文件，请稍后再次保存设置",
+  "settings.clearNavPassword": "删除已保存的 Navidrome 密码",
+  "settings.clearNavPasswordHint": "先清空 Navidrome URL，再勾选此项并保存，即可删除密码。",
+  "settings.clearOIDCSecret": "删除已保存的 OIDC 客户端密钥",
+  "settings.clearOIDCSecretHint": "本地登录后先清空签发者 URL，再勾选此项并保存。同时解除身份绑定并撤销 OIDC 会话。",
+  "error.lidarrPrefix": "Lidarr 路径前缀必须是容器内的绝对路径",
+  "error.clearNavPassword": "请先禁用 Navidrome，再清除密码",
+  "error.clearOIDCSecret": "请先禁用 OIDC，再清除客户端密钥"
 }

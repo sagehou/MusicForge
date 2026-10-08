@@ -153,7 +153,7 @@ output/Artist/Album/01 - Title.opus
 - 接收 Lidarr 原生导入/升级载荷：`eventType=Download`，通过 `isUpgrade` 区分升级。
 - 从 `trackFiles[].path` 和升级的 `deletedFiles[].path` 定位受影响目录，不依赖额外的专辑路径字段。
 - 支持 Lidarr 的连接测试事件，测试成功不创建真实转换任务。
-- 支持一组源路径前缀映射，兼容不同的容器挂载路径。
+- 支持一组源路径前缀映射，兼容不同的容器挂载路径；非空前缀必须是容器内的绝对路径，保存时校验。
 - 映射后的路径仍必须限制在 MusicForge 配置的源根目录内。
 - Lidarr 原生 Username/Password 字段支持 HTTP Basic Auth，可用于传递独立 webhook 凭据。
 
@@ -164,7 +164,7 @@ output/Artist/Album/01 - Title.opus
 - 转换或批量删除完成后自动刷新，合并同一批次涉及的目录，避免每首歌触发一次扫描。
 - Navidrome 0.59.0 起支持 `startScan` 的 `target` 参数，形式为 `音乐库ID:相对目录`。
 - 支持时优先扫描对应专辑目录。
-- 整个专辑目录被删除时，扫描最近仍存在的父目录，让 Navidrome 识别删除。
+- 整个专辑目录被删除时，扫描最近仍存在的父目录，让 Navidrome 识别删除；根目录目标使用 `音乐库ID:.`，例如 `1:.`。
 - 旧版本不支持目录目标时，退回批次结束后的普通扫描。
 
 ## 认证
@@ -178,6 +178,10 @@ output/Artist/Album/01 - Title.opus
 - 普通 UI/API 要求管理员登录，没有匿名内网运行模式。
 - 不使用 Forward Auth 或 OIDC Proxy 头部认证；Authentik 可作为原生 OIDC 提供方。
 - 反向代理负责 HTTPS 和请求转发。
+
+- 本地登录与初始化每个客户端 15 分钟最多允许 10 次凭据失败，成功后清零；OIDC 发起使用独立额度，成功登录后清零，不影响本地恢复和已认证的身份绑定。
+- 默认仅按连接地址限流。反向代理部署通过显式可信代理 CIDR 配置读取 `X-Forwarded-For`，从右向左寻找第一个不受信任的地址；不使用该头部提供身份。
+- Secret 留空表示保留已有值；提供显式清除 Navidrome 密码和 OIDC 客户端密钥的操作，清除前禁用对应集成。清除 OIDC 密钥须本地登录，并撤销 OIDC 会话、流程和绑定。
 
 ## Web UI
 

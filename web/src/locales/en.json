@@ -300,5 +300,12 @@
   "settings.unsaved": "Unsaved changes",
   "error.oidcLocalChange": "local login required to change OIDC settings",
   "error.jobState": "invalid job state filter",
-  "error.settingsBusy": "library file operation in progress; try saving Settings again shortly"
+  "error.settingsBusy": "library file operation in progress; try saving Settings again shortly",
+  "settings.clearNavPassword": "Delete the saved Navidrome password",
+  "settings.clearNavPasswordHint": "Clear the Navidrome URL first, then select this option and save to delete the password.",
+  "settings.clearOIDCSecret": "Delete the saved OIDC client secret",
+  "settings.clearOIDCSecretHint": "Sign in locally and clear the issuer URL first, then select this option and save. This also unbinds the identity and revokes OIDC sessions.",
+  "error.lidarrPrefix": "Lidarr path prefix must be an absolute container path",
+  "error.clearNavPassword": "disable Navidrome before clearing its password",
+  "error.clearOIDCSecret": "disable OIDC before clearing its client secret"
 }

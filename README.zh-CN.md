@@ -124,7 +124,7 @@ FLAC 是唯一事实来源。生成的音频和封面由 MusicForge 管理，输
 | Password | 在 MusicForge 设置中保存的独立 webhook 密钥 |
 | 事件 | 导入和升级通知 |
 
-连接测试不创建真实转换任务。原生 `Download` 事件使用 `trackFiles[].path`、`isUpgrade` 和 `deletedFiles[].path`。Lidarr 看到不同的源根目录时，填写 **Lidarr 源路径前缀**。映射后的路径仍限制在 FLAC 根目录内。自定义客户端也可通过同一密钥使用 Bearer 认证。
+连接测试不创建真实转换任务。原生 `Download` 事件使用 `trackFiles[].path`、`isUpgrade` 和 `deletedFiles[].path`。Lidarr 看到不同的源根目录时，填写容器内的绝对路径作为 **Lidarr 源路径前缀**。映射后的路径仍限制在 FLAC 根目录内。自定义客户端也可通过同一密钥使用 Bearer 认证。
 
 ## Navidrome 集成
 
@@ -142,6 +142,10 @@ FLAC 是唯一事实来源。生成的音频和封面由 MusicForge 管理，输
 4. 本地管理员登录后点击**绑定当前 OIDC 身份**，完成提供方认证。
 
 只有绑定的 `issuer + sub` 可使用 OIDC。应用校验 state、nonce、PKCE 和服务端会话。网页修改操作需要 CSRF 令牌，API 读取设置时不返回密钥。保留本地密码用于恢复。
+
+本地登录和初始化按客户端限制：15 分钟内最多允许 10 次凭据失败，成功后清零。OIDC 发起使用独立额度，成功登录后清零，不占用本地恢复或已认证绑定的额度。反向代理部署需配置 `MUSICFORGE_TRUSTED_PROXIES` 及 `X-Forwarded-For`，详见[部署指南](docs/deployment.zh-CN.md)；不受信任的连接不能通过头部指定客户端 IP。
+
+Secret 输入留空保留已有值。要删除 Navidrome 密码或 OIDC 客户端密钥，先清空对应 URL，再勾选明确的删除选项并保存。清除 OIDC 密钥须本地登录，同时撤销 OIDC 会话、流程和身份绑定。
 
 忘记密码时，先停止应用，再通过标准输入向相同镜像与 `/config` 卷传入新密码。在 Bash 中执行：
 
@@ -164,6 +168,7 @@ docker compose up -d
 | `MUSICFORGE_CONFIG_DIR` | `/config` |
 | `MUSICFORGE_LISTEN` | `:8787` |
 | `MUSICFORGE_PUBLIC_URL` | 空；用于 OIDC 和 HTTPS Cookie |
+| `MUSICFORGE_TRUSTED_PROXIES` | 空；逗号分隔的可信反向代理 IP CIDR，用于按客户端 IP 限流 |
 | `MUSICFORGE_LOG_LEVEL` | `INFO` |
 | `MUSICFORGE_FFMPEG` | `ffmpeg` |
 | `MUSICFORGE_FFPROBE` | `ffprobe` |

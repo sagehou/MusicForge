@@ -32,6 +32,10 @@ networks:
 
 Join the proxy to that network too, then run `docker compose -f docker-compose.yml -f compose.proxy.yml up -d`. Adjust the network name to your deployment. Retain MusicForge local/OIDC authentication; the proxy terminates HTTPS and forwards requests. Navidrome URLs must also be reachable from the container; `localhost` means MusicForge itself.
 
+Configure `MUSICFORGE_TRUSTED_PROXIES` with the proxy IP CIDR(s) as seen by MusicForge, for example `172.20.0.2/32`; separate multiple IPv4/IPv6 CIDRs with commas. A host-process proxy may appear as the Docker bridge gateway rather than `127.0.0.1`. Pin the proxy address or restrict the trusted range to its isolated network. The proxy must overwrite `X-Forwarded-For` with the actual client IP or append the actual connecting IP to the existing chain (Nginx: `proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;`). Never forward a client-supplied value unchanged or trust `0.0.0.0/0` / `::/0`. MusicForge walks the chain from the trusted connection peer to the first untrusted hop. Without this setting, headers are ignored and clients behind the same proxy share a failure budget. This setting identifies an IP for rate limiting; it does not enable Forward Auth or header-based identity.
+
+Local login/setup count credential failures only, reset on success and allow ten failures per fifteen-minute fixed window. Their budgets and the OIDC start budget are separate. OIDC callback success resets its start budget; existing callbacks and authenticated binding are not blocked by public start exhaustion. Verify that repeated successful logins work and one test client's failures do not block another client through your proxy.
+
 ## Initial acceptance
 
 For a small album trial, use a separate temporary `/config`, dedicated output and test source library. Root paths cannot change through the UI after indexing. Deploy the full library with its own configuration/output, without reusing a temporary instance's ownership marker.

@@ -309,6 +309,8 @@ func (a *App) putSettings(w http.ResponseWriter, r *http.Request) {
 		Settings
 		WebhookSecret string `json:"webhook_secret"`
 		ClearWebhook  bool   `json:"clear_webhook"`
+		ClearNavPassword bool `json:"clear_nav_password"`
+		ClearOIDCSecret bool `json:"clear_oidc_secret"`
 		UnbindOIDC    bool   `json:"unbind_oidc"`
 	}
 	if !decode(w, r, &body) {
@@ -341,17 +343,21 @@ func (a *App) putSettings(w http.ResponseWriter, r *http.Request) {
 		}
 		s.WebhookHash = digest(body.WebhookSecret)
 	}
-	if s.NavPassword == "" {
+	if body.ClearNavPassword {
+		s.NavPassword = ""
+	} else if s.NavPassword == "" {
 		s.NavPassword = old.NavPassword
 	}
-	if s.OIDCSecret == "" {
+	if body.ClearOIDCSecret {
+		s.OIDCSecret = ""
+	} else if s.OIDCSecret == "" {
 		s.OIDCSecret = old.OIDCSecret
 	}
 	s.BoundIssuer = old.BoundIssuer
 	s.BoundSubject = old.BoundSubject
 	s.BoundUsername = old.BoundUsername
 	s.BoundEmail = old.BoundEmail
-	oidcChanged := body.UnbindOIDC || s.OIDCIssuer != old.OIDCIssuer || s.OIDCClientID != old.OIDCClientID || s.OIDCSecret != old.OIDCSecret
+	oidcChanged := body.UnbindOIDC || body.ClearOIDCSecret || s.OIDCIssuer != old.OIDCIssuer || s.OIDCClientID != old.OIDCClientID || s.OIDCSecret != old.OIDCSecret
 	if oidcChanged {
 		current, sessionErr := a.session(r)
 		if sessionErr != nil || current.Method != "local" {
@@ -362,6 +368,14 @@ func (a *App) putSettings(w http.ResponseWriter, r *http.Request) {
 		s.BoundSubject = ""
 		s.BoundUsername = ""
 		s.BoundEmail = ""
+	}
+	if body.ClearNavPassword && s.NavURL != "" {
+		apiError(w, 400, errors.New("disable Navidrome before clearing its password"))
+		return
+	}
+	if body.ClearOIDCSecret && s.OIDCIssuer != "" {
+		apiError(w, 400, errors.New("disable OIDC before clearing its client secret"))
+		return
 	}
 	if err = s.Validate(); err != nil {
 		apiError(w, 400, err)

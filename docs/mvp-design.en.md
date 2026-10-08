@@ -148,7 +148,7 @@ Endpoint: `POST /api/webhook/lidarr`.
 - Accept native import/upgrade payloads: `eventType=Download`, with `isUpgrade` identifying upgrades.
 - Use `trackFiles[].path` and upgrade `deletedFiles[].path` to locate directories; no extra album-path field is required.
 - Accept connection-test events without creating real conversion work.
-- Support one source-prefix mapping for different container mount paths.
+- Support one source-prefix mapping for different container mount paths; nonempty prefixes must be absolute container paths, checked when saving.
 - Confine mapped paths to MusicForge's configured source root.
 - Use Lidarr's native Username/Password fields for HTTP Basic webhook credentials.
 
@@ -159,7 +159,7 @@ Endpoint: `POST /api/webhook/lidarr`.
 - Automatically refresh after conversion or bulk deletion, coalescing directories within a batch.
 - Navidrome 0.59.0+ supports `startScan` with `target` as `libraryID:relativeDirectory`.
 - Prefer targeted album scans when supported.
-- When a whole album directory is deleted, scan the nearest surviving parent to detect removal.
+- When a whole album directory is deleted, scan the nearest surviving parent to detect removal; the root target is `libraryID:.`, for example `1:.`.
 - Fall back to a regular scan after the batch for older versions.
 
 ## Authentication
@@ -172,6 +172,10 @@ Endpoint: `POST /api/webhook/lidarr`.
 - Ordinary UI/API access requires administrator login; no anonymous LAN mode.
 - Do not use Forward Auth or OIDC Proxy identity headers. Authentik can be a native OIDC provider.
 - The reverse proxy provides HTTPS and request forwarding.
+
+- Local login/setup allow ten credential failures per client in fifteen minutes and reset on success. OIDC starts have a separate budget, reset on successful OIDC login; local recovery and authenticated binding remain independent.
+- By default, rate limiting uses the connection peer. Explicit trusted proxy CIDRs enable `X-Forwarded-For`, walking right to left to the first untrusted address; this header never supplies identity.
+- Blank secret fields retain saved values. Explicit actions delete the Navidrome password or OIDC client secret after disabling the relevant integration. OIDC deletion requires local login and revokes OIDC sessions, flows and binding.
 
 ## Web UI
 

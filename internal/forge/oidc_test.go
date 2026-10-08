@@ -130,6 +130,17 @@ func TestOIDCBindingAndSingleSubject(t *testing.T) {
 	if err != nil || bound.BoundIssuer != issuer || bound.BoundSubject != subject {
 		t.Fatal("binding was not persisted")
 	}
+	// Public OIDC starts cannot exhaust an authenticated administrator's bind budget.
+	a.authMu.Lock()
+	a.loginFailures["oidc:192.0.2.1"] = loginLimit{Count: 10, Since: time.Now()}
+	a.authMu.Unlock()
+	u, cookie = start(true)
+	if w := callback(u, cookie, true); w.Code != 303 {
+		t.Fatal("public starts prevented authenticated binding", w.Body.String())
+	}
+	a.authMu.Lock()
+	delete(a.loginFailures, "oidc:192.0.2.1")
+	a.authMu.Unlock()
 	u, cookie = start(false)
 	// Authentication must stay responsive while a full library scan owns the file lock.
 	a.files.Lock()
@@ -147,6 +158,10 @@ func TestOIDCBindingAndSingleSubject(t *testing.T) {
 	if login.Code != 303 {
 		t.Fatal(login.Body.String())
 	}
+	a.authMu.Lock()
+	_, counted := a.loginFailures["oidc:192.0.2.1"]
+	a.authMu.Unlock()
+	if counted { t.Fatal("successful OIDC login did not reset its start budget") }
 	if w := callback(u, cookie, false); w.Code != 403 {
 		t.Fatal("replayed callback accepted")
 	}

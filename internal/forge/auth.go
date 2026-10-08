@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net"
+	"net/netip"
 	"net/http"
 	"strings"
 	"time"
@@ -86,26 +87,70 @@ func (a *App) sameOrigin(r *http.Request) bool {
 	origin := r.Header.Get("Origin")
 	return origin == "" || origin == a.origin(r)
 }
-func (a *App) limited(r *http.Request) bool {
+func (a *App) clientIP(r *http.Request) string {
 	ip, _, err := net.SplitHostPort(r.RemoteAddr)
 	if err != nil {
 		ip = r.RemoteAddr
 	}
-	a.authMu.Lock()
-	defer a.authMu.Unlock()
+	peer, err := netip.ParseAddr(ip)
+	if err != nil {
+		return ip
+	}
+	peer = peer.Unmap()
+	trusted := func(ip netip.Addr) bool {
+		for _, prefix := range a.cfg.TrustedProxies {
+			if prefix.Contains(ip) {
+				return true
+			}
+		}
+		return false
+	}
+	if !trusted(peer) {
+		return peer.String()
+	}
+	forwarded := strings.Join(r.Header.Values("X-Forwarded-For"), ",")
+	if forwarded == "" || len(forwarded) > 4096 {
+		return peer.String()
+	}
+	chain := []netip.Addr{}
+	for _, raw := range strings.Split(forwarded, ",") {
+		address, err := netip.ParseAddr(strings.TrimSpace(raw))
+		if err != nil {
+			return peer.String()
+		}
+		chain = append(chain, address.Unmap())
+	}
+	// Walk from the connection peer; a client's invented leftmost entry is untrusted.
+	for i := len(chain) - 1; i >= 0 && trusted(peer); i-- {
+		peer = chain[i]
+	}
+	return peer.String()
+}
+
+func (a *App) authKey(r *http.Request, scope string) string {
+	return scope + ":" + a.clientIP(r)
+}
+
+// Caller holds authMu. Failed credentials and OIDC starts have separate budgets.
+func (a *App) limited(key string, record bool) bool {
 	now := time.Now()
 	for key, v := range a.loginFailures {
 		if now.Sub(v.Since) > 15*time.Minute {
 			delete(a.loginFailures, key)
 		}
 	}
-	v := a.loginFailures[ip]
-	if v.Since.IsZero() {
-		v.Since = now
+	v := a.loginFailures[key]
+	if v.Count >= 10 {
+		return true
 	}
-	v.Count++
-	a.loginFailures[ip] = v
-	return v.Count > 10
+	if record {
+		if v.Since.IsZero() {
+			v.Since = now
+		}
+		v.Count++
+		a.loginFailures[key] = v
+	}
+	return false
 }
 
 func (a *App) me(w http.ResponseWriter, r *http.Request) {
@@ -134,10 +179,6 @@ func (a *App) me(w http.ResponseWriter, r *http.Request) {
 	respond(w, 200, result)
 }
 func (a *App) setup(w http.ResponseWriter, r *http.Request) {
-	if a.limited(r) {
-		apiError(w, 429, errors.New("too many attempts; wait 15 minutes"))
-		return
-	}
 	var body struct {
 		Code     string `json:"code"`
 		Username string `json:"username"`
@@ -148,7 +189,13 @@ func (a *App) setup(w http.ResponseWriter, r *http.Request) {
 	}
 	a.authMu.Lock()
 	defer a.authMu.Unlock()
+	key := a.authKey(r, "setup")
+	if a.limited(key, false) {
+		apiError(w, 429, errors.New("too many attempts; wait 15 minutes"))
+		return
+	}
 	if a.bootstrap == "" || subtle.ConstantTimeCompare([]byte(body.Code), []byte(a.bootstrap)) != 1 {
+		a.limited(key, true)
 		apiError(w, 403, errors.New("invalid or expired setup code"))
 		return
 	}
@@ -171,13 +218,10 @@ func (a *App) setup(w http.ResponseWriter, r *http.Request) {
 		apiError(w, 500, err)
 		return
 	}
+	delete(a.loginFailures, key)
 	respond(w, 201, map[string]bool{"ok": true})
 }
 func (a *App) login(w http.ResponseWriter, r *http.Request) {
-	if a.limited(r) {
-		apiError(w, 429, errors.New("too many attempts; wait 15 minutes"))
-		return
-	}
 	var body struct {
 		Username string `json:"username"`
 		Password string `json:"password"`
@@ -188,10 +232,16 @@ func (a *App) login(w http.ResponseWriter, r *http.Request) {
 	// Password verification and session issuance must serialize with password changes.
 	a.authMu.Lock()
 	defer a.authMu.Unlock()
+	key := a.authKey(r, "login")
+	if a.limited(key, false) {
+		apiError(w, 429, errors.New("too many attempts; wait 15 minutes"))
+		return
+	}
 	var username string
 	var hash []byte
 	err := a.db.QueryRow("SELECT username,password FROM admin WHERE id=1").Scan(&username, &hash)
 	if err != nil || bcrypt.CompareHashAndPassword(hash, []byte(body.Password)) != nil || subtle.ConstantTimeCompare([]byte(username), []byte(body.Username)) != 1 {
+		a.limited(key, true)
 		apiError(w, 401, errors.New("invalid username or password"))
 		return
 	}
@@ -199,6 +249,7 @@ func (a *App) login(w http.ResponseWriter, r *http.Request) {
 		apiError(w, 500, err)
 		return
 	}
+	delete(a.loginFailures, key)
 	respond(w, 200, map[string]bool{"ok": true})
 }
 func (a *App) logout(w http.ResponseWriter, r *http.Request) {
@@ -225,9 +276,14 @@ func (a *App) oidcConfig(ctx context.Context) (*oidc.Provider, oauth2.Config, Se
 	return provider, config, s, nil
 }
 func (a *App) oidcStart(w http.ResponseWriter, r *http.Request, bind bool) {
-	if a.limited(r) {
-		apiError(w, 429, errors.New("too many login attempts"))
-		return
+	if !bind {
+		a.authMu.Lock()
+		limited := a.limited(a.authKey(r, "oidc"), true)
+		a.authMu.Unlock()
+		if limited {
+			apiError(w, 429, errors.New("too many login attempts"))
+			return
+		}
 	}
 	sessionToken := ""
 	action := "login"
@@ -347,6 +403,7 @@ func (a *App) oidcCallback(w http.ResponseWriter, r *http.Request) {
 		apiError(w, 500, err)
 		return
 	}
+	delete(a.loginFailures, a.authKey(r, "oidc"))
 	http.Redirect(w, r, "/", http.StatusSeeOther)
 }
 

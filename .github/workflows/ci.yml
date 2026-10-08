@@ -186,7 +186,8 @@ jobs:
           docker tag musicforge:validation "ghcr.io/${GITHUB_REPOSITORY,,}:$MUSICFORGE_VERSION"
           mkdir -p "$CONFIG_DIR" "$FLAC_DIR" "$OUTPUT_DIR"
           sudo chown 12001:12001 "$CONFIG_DIR" "$OUTPUT_DIR"
-          chmod 755 "$FLAC_DIR"
+          # Writable host permissions ensure the read-only mount itself is tested.
+          chmod 777 "$FLAC_DIR"
           docker compose config --quiet
           trap 'docker compose down' EXIT
           if FLAC_DIR="$PWD/.ci/missing-source" docker compose up -d --no-build --pull never; then

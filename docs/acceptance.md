@@ -4,6 +4,8 @@
 
 The accepted behavior is defined in the [MVP baseline](mvp-design.en.md). The [six-round review ledger](production-review.md) records findings, corrections and validation links. All six review rounds passed executable validation. The final full-suite [CI](https://github.com/sagehou/MusicForge/actions/runs/37025923050) includes backend race/integration/vet checks, eight Chromium browser checks and native amd64/arm64 image smoke tests. The matrix records verified behavior and its limits; container publication is a separate version-tag gate.
 
+The 2026-10-08 production re-review fixed OIDC rebind revocation, password-change concurrency, existing `/config` directory permissions and a build dependency security advisory. [Re-review CI](https://github.com/sagehou/MusicForge/actions/runs/37717242429) passed, including real Compose checks on both architectures. Use v0.2.1 for the production trial and follow the [deployment guide](deployment.md) for proxy networking, ownership and rollback snapshots. Image digest and publication evidence are recorded in the [v0.2.1 release](https://github.com/sagehou/MusicForge/releases/tag/v0.2.1).
+
 | Contract | Evidence in GitHub Actions |
 | --- | --- |
 | Opus/MP3, VBR/CBR, tags, ReplayGain and one external cover | Real ffmpeg lifecycle tests; both native images encode and probe Opus/MP3 |

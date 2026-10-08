@@ -40,7 +40,7 @@ jobs:
           go mod tidy
           (cd web && npm install --package-lock-only --ignore-scripts && npm update --package-lock-only --ignore-scripts && npm audit --audit-level=high)
           gofmt -w cmd internal web/embed.go
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: dependency-source
           path: |

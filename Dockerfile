@@ -1,12 +1,12 @@
 # syntax=docker/dockerfile:1
-FROM --platform=$BUILDPLATFORM node:26.10.0-trixie-slim@sha256:ec7758ee051e457b468b32bde57b0879010b325bb9862718e9615225ce4aaae1 AS frontend
+FROM --platform=$BUILDPLATFORM node:26.10.0-trixie-slim@sha256:930557a230abacbc3f4fd9b8648abf8f4bee1e17cb72195dcdfb2f709bc85b33 AS frontend
 WORKDIR /src/web
 COPY web/package*.json ./
 RUN npm ci
 COPY web/ ./
 RUN npm run build
 
-FROM --platform=$BUILDPLATFORM golang:1.27.1-trixie@sha256:3b77fc618ec235a1ab412de7737f120dd507c57e8d87de4cbb7994fb94275ed5 AS backend
+FROM --platform=$BUILDPLATFORM golang:1.27.1-trixie@sha256:8f58fd67ea075142d947a60e0caa4317746a55118d312f027793d382c7741734 AS backend
 ARG TARGETOS
 ARG TARGETARCH
 ARG VERSION=development
@@ -19,7 +19,7 @@ COPY web/embed.go web/embed.go
 COPY --from=frontend /src/web/dist web/dist
 RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -mod=readonly -trimpath -ldflags="-s -w -X main.version=$VERSION" -o /musicforge ./cmd/musicforge
 
-FROM --platform=$BUILDPLATFORM debian:trixie-slim@sha256:a99cfc517144bc59b1978475ec53b46ecabec7e43635402ee5b77cc54cd1b20a AS media-builder
+FROM --platform=$BUILDPLATFORM debian:trixie-slim@sha256:a29215f6a35e51e22adffa17f89e9d2ef06214e64a2bad10d765c46aea49f11f AS media-builder
 RUN apt-get update && apt-get install -y --no-install-recommends build-essential curl ca-certificates pkg-config nasm zlib1g-dev xz-utils && rm -rf /var/lib/apt/lists/*
 COPY build/ /src/build/
 RUN sh /src/build/media.sh
@@ -27,7 +27,7 @@ RUN sh /src/build/media.sh
 FROM scratch AS media
 COPY --from=media-builder /usr/local/bin/ffmpeg /usr/local/bin/ffprobe /bin/
 
-FROM debian:trixie-slim@sha256:a99cfc517144bc59b1978475ec53b46ecabec7e43635402ee5b77cc54cd1b20a
+FROM debian:trixie-slim@sha256:a29215f6a35e51e22adffa17f89e9d2ef06214e64a2bad10d765c46aea49f11f
 LABEL org.opencontainers.image.source="https://github.com/sagehou/MusicForge" \
       org.opencontainers.image.title="MusicForge" \
       org.opencontainers.image.description="Incremental builds for a self-hosted streaming music library"

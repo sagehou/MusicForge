@@ -2,6 +2,14 @@
 
 The agreed MVP baseline is recorded in [docs/mvp-design.md](docs/mvp-design.md).
 
+## Persistence compatibility and rollback
+
+- Schema 2 is the stable MVP persistence baseline. The `0.2.x` series must keep this schema and preserve the published table/column definitions and meanings.
+- Compatibility includes SQLite data, Settings JSON, job kinds/arguments, metadata and recovery journals, ownership markers, and artifact paths/signatures. Do not silently change formats or units while keeping the same schema number.
+- Same-series releases must allow the previous compatible application to read and write their data. CI exercises published schema-2 images on the candidate's same configuration/source/output volumes, then reopens them with the candidate, on both architectures.
+- An incompatible persistence change belongs to a separately documented breaking release, with an upgrade backup procedure and a tested restore-and-rollback path. Preserve historical migration definitions and reject unsupported schemas rather than lowering their version number.
+- Complete state rollback requires a matching stopped `/config` backup and output snapshot; database compatibility does not undo completed artifact operations. Never overwrite a published version tag or its image to implement a rollback.
+
 ## Keep the local environment clean
 
 - Do not compile, build, or install dependencies locally.

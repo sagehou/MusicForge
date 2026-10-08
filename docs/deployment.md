@@ -53,6 +53,12 @@ Automation exercises real ffmpeg, Navidrome, Chromium and both native image arch
 
 Stop MusicForge and back up all of `/config`. For complete library-state rollback, also snapshot the corresponding output directory and record the previous image version while MusicForge remains stopped. Keep an independent FLAC backup.
 
-v0.2.0/v0.2.1 → v0.2.2 keeps database schema 2. Version 0.1 cannot read schema 2 and requires its matching pre-upgrade `/config` backup. Restoring only the database cannot undo artifact moves/deletions; use an output snapshot from the same point in time.
+Schema 2 is the stable MVP baseline. The `0.2.x` series preserves the database structure and persisted Settings, jobs and recovery formats. v0.2.0/v0.2.1 → v0.2.2 does not migrate the schema. A same-series software rollback can reuse the current `/config`: pause background work, stop the application, pin the earlier image, then verify accounts, library and jobs before resuming. Do not change database version numbers to perform a rollback.
+
+The CI step `Same-schema rollback with published releases` uses digest-pinned v0.2.1/v0.2.0 images on AMD64 and ARM64. They read the candidate's real audio, cover, credentials and pending task, save settings, then return to the candidate; database and artifact state are compared. Successful runs produce `rollback-amd64` / `rollback-arm64` evidence artifacts. Equal schema numbers are only one condition; older readers and writers must also remain compatible.
+
+Software rollback retains the current library state. Restoring the full pre-upgrade state requires matching `/config` and output snapshots. Switching images cannot undo completed replacements, moves or deletions.
+
+Version 0.1 cannot read schema 2 and requires its matching pre-upgrade backup. Future incompatible persistence changes require a clearly marked breaking release with upgrade backups and a CI-verified restore-and-rollback path. Do not manually lower `user_version`; this does not convert data structures or recover deleted data.
 
 If a problem occurs, disable background work in Settings and retain logs/mount state. Do not delete `.musicforge`, the database or old playable artifacts as a repair attempt. A changed-source-mount notice requires checking the real mount before acknowledging it by saving Settings. See the README for password recovery.

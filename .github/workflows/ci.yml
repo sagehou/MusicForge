@@ -204,6 +204,16 @@ jobs:
           docker compose exec -T musicforge sh -c 'test "$(id -u)" = 12001 && test "$(stat -c %a /config)" = 700 && test -w /music/output && test ! -w /music/source'
           docker compose exec -T musicforge sh -c 'if touch /music/source/should-not-exist; then exit 1; fi'
           test ! -e "$FLAC_DIR/should-not-exist"
+      - name: Same-schema rollback with published releases
+        env:
+          ARCH: ${{ matrix.arch }}
+        run: python3 .github/scripts/check-rollback.py
+      - name: Rollback evidence
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: rollback-${{ matrix.arch }}
+          path: .ci/rollback-evidence.json
+          retention-days: 14
       - name: Push validated architecture on version tags
         if: startsWith(github.ref, 'refs/tags/v')
         env:

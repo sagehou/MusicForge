@@ -197,6 +197,14 @@ Use React, TypeScript, TailwindCSS and shadcn/ui.
 - Provide structured logging, health endpoint, migrations, README and single-service Compose example.
 - Support `linux/amd64` and `linux/arm64` images.
 
+## Persistence compatibility and rollback
+
+- Schema 2 is the stable MVP baseline. The `0.2.x` series keeps this structure and the published table/column meanings.
+- Compatibility includes Settings JSON, job kinds/arguments, metadata/recovery journals, ownership markers and artifact paths/signatures. Keeping the schema number while changing formats or units is incompatible.
+- Same-series releases must support older compatible readers and writers. On both architectures, CI opens the candidate's same volumes with published older images, checks library, credentials, jobs and artifacts, then returns to the candidate.
+- Incompatible changes require a clearly identified breaking release with an upgrade backup procedure and a verified restore-and-rollback path. Preserve historical migrations; do not force a lower database version.
+- Complete state rollback requires matching stopped `/config` and output snapshots. Switching images cannot undo completed replacements, moves or deletions. Published version tags and images are immutable.
+
 ## Development and publication
 
 - Local work is editing, reading and static inspection without compilation or dependency downloads.

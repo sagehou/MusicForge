@@ -3,6 +3,7 @@ package forge
 import (
 	"context"
 	"crypto/subtle"
+	"encoding/json"
 	"errors"
 	"net"
 	"net/http"
@@ -184,6 +185,9 @@ func (a *App) login(w http.ResponseWriter, r *http.Request) {
 	if !decode(w, r, &body) {
 		return
 	}
+	// Password verification and session issuance must serialize with password changes.
+	a.authMu.Lock()
+	defer a.authMu.Unlock()
 	var username string
 	var hash []byte
 	err := a.db.QueryRow("SELECT username,password FROM admin WHERE id=1").Scan(&username, &hash)
@@ -306,12 +310,13 @@ func (a *App) oidcCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if action == "bind" {
+		a.authMu.Lock()
+		defer a.authMu.Unlock()
 		session, err := a.session(r)
 		if err != nil || session.Method != "local" || digest(session.Token) != sessionHash {
 			apiError(w, 403, errors.New("local administrator session expired"))
 			return
 		}
-		a.authMu.Lock()
 		latest, err := a.settings()
 		if err == nil && (latest.OIDCIssuer != s.OIDCIssuer || latest.OIDCClientID != s.OIDCClientID || latest.OIDCSecret != s.OIDCSecret) {
 			err = errors.New("OIDC settings changed during binding")
@@ -321,9 +326,8 @@ func (a *App) oidcCallback(w http.ResponseWriter, r *http.Request) {
 			latest.BoundSubject = id.Subject
 			latest.BoundUsername = claims.Username
 			latest.BoundEmail = claims.Email
-			err = a.saveSettings(latest)
+			err = a.saveOIDCSettings(latest)
 		}
-		a.authMu.Unlock()
 		if err != nil {
 			apiError(w, 400, err)
 			return
@@ -371,4 +375,27 @@ func (a *App) verifyPassword(password string) bool {
 		return false
 	}
 	return bcrypt.CompareHashAndPassword(hash, []byte(password)) == nil
+}
+
+// Caller holds authMu so a callback cannot issue a session for the previous binding.
+func (a *App) saveOIDCSettings(s Settings) error {
+	raw, err := json.Marshal(s)
+	if err != nil {
+		return err
+	}
+	tx, err := a.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if _, err = tx.Exec("UPDATE settings SET data=? WHERE id=1", string(raw)); err != nil {
+		return err
+	}
+	if _, err = tx.Exec("DELETE FROM sessions WHERE method='oidc'"); err != nil {
+		return err
+	}
+	if _, err = tx.Exec("DELETE FROM oidc_flows"); err != nil {
+		return err
+	}
+	return tx.Commit()
 }

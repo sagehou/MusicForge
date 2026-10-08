@@ -1,0 +1,54 @@
+# 生产试部署指南
+
+[English](deployment.md) · **简体中文**
+
+本指南对应 v0.2.1。安装、构建和自动验证均在 GitHub Actions 执行；生产主机只拉取已发布镜像。完整功能范围见[验收报告](acceptance.zh-CN.md)。
+
+## 部署前
+
+- 将 `.env` 的 `MUSICFORGE_VERSION` 固定为 `v0.2.1`，避免试部署期间随 `latest` 变化。
+- `/config` 必须位于宿主机本地磁盘，归 `PUID` 所有，权限 `0700`。它包含账号、OIDC/Navidrome 密钥、库索引和任务，不能公开共享。应用启动时会收紧目录权限。
+- `FLAC_DIR` 必须是已存在的源库，MusicForge 只读访问；`OUTPUT_DIR` 必须是已存在、可写、首次为空的专用目录。三个目录互不包含。Compose 不会自动创建缺失路径。
+- 使用同一 UID/GID 验证源库可读、输出可写。Navidrome 只读访问同一个输出库。为输出与临时文件留出足够磁盘空间。
+- `MUSICFORGE_PUBLIC_URL` 填浏览器实际访问的 HTTPS 源地址，不带子路径；代理转发该站点全部路径，并保留 Host。
+
+创建目录与启动命令见 [README](../README.zh-CN.md)。检查配置后执行 `docker compose config --quiet`、`docker compose pull`、`docker compose up -d`。容器日志默认最多保留 3 个 10 MB 文件；首次启动日志中的初始化码只用于创建管理员，不要公开分享日志。
+
+## 反向代理网络
+
+宿主机进程中的 Nginx/Caddy 使用 `http://127.0.0.1:8787` 作为上游。Compose 默认只绑定宿主机回环地址。
+
+容器中的反向代理应与 MusicForge 加入同一个 Docker 网络，上游使用 `http://musicforge:8787`；代理容器里的 `127.0.0.1` 指向代理自身。若已有外部网络 `proxy`，新建 `compose.proxy.yml`：
+
+```yaml
+services:
+  musicforge:
+    networks:
+      - proxy
+networks:
+  proxy:
+    external: true
+```
+
+确认代理也连接到该网络，然后使用 `docker compose -f docker-compose.yml -f compose.proxy.yml up -d`。网络名称按现有部署调整。保留应用自身的本地登录/OIDC，代理只负责 HTTPS 和转发。配置 Navidrome URL 时同样使用容器可达的地址；`localhost` 指 MusicForge 容器自身。
+
+## 首次验收
+
+若要先验证少量专辑，请建立独立的临时 `/config` 和输出目录，挂载一份测试源库。索引后不能在网页改根路径；完整库部署使用其自己的配置及专用输出，不复用临时实例的所有权标记。
+
+1. `docker compose ps` 显示 healthy；通过公开 HTTPS 地址完成初始化，再退出并登录。健康接口只检查数据库，另在概览确认源/输出存储在线。
+2. 保持并发为 1、默认 Opus VBR 192 kbps；确认一张专辑转换成功，标签和单份 `cover.jpg` 正确。再扫描一次，应没有新增转换任务。
+3. 在 Navidrome 中确认歌曲实际可播放。保存集成配置后手动刷新，确认任务成功及曲目出现。
+4. 只在测试源库中删除一首 FLAC：扫描后应显示过期，输出和 Navidrome 条目仍保留。通过 MusicForge 手动删除过期产物并刷新后，条目才移除。
+5. 修改编码参数，应显示待重建；手动启动后新文件验证成功才替换旧文件。重启容器，确认已完成曲目不重复转换、待处理任务继续。
+6. 如使用 OIDC，先保留本地恢复密码，再绑定并从另一个浏览器会话测试登录。重新绑定身份会撤销此前的 OIDC 会话；本地会话保留。测试 Lidarr 的连接测试、一次导入和一次升级。
+
+自动测试使用真实 ffmpeg、Navidrome、Chromium 和双架构镜像；Lidarr 使用原生载荷，OIDC 使用签名测试提供方。因此你实际使用的 Lidarr、Authentik/其他 OIDC 提供方、反向代理和挂载组合仍需要上述现场验收。
+
+## 升级与回滚
+
+停止 MusicForge 后，备份整个 `/config`。需要完整回滚库状态时，同时保存对应时点的输出目录快照和原镜像版本；备份期间保持 MusicForge 停止。保留独立 FLAC 备份。
+
+v0.2.0 → v0.2.1 不改变数据库 schema，仍为 2。v0.1 无法读取 schema 2，回退到 v0.1 必须恢复匹配的升级前 `/config` 备份。已经发生的产物搬迁/删除不能仅靠恢复数据库撤销，应使用同一时点的输出快照。
+
+异常时先在设置关闭后台任务，保留日志和挂载状态。不要删除 `.musicforge`、数据库或旧播放文件来尝试修复；“源挂载已改变”需要先核对真实挂载，再保存设置确认。密码恢复命令见 README。

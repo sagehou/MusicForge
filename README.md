@@ -40,7 +40,7 @@ You need Docker Engine with Compose v2, an existing FLAC library and an empty, d
    curl -fsSL https://raw.githubusercontent.com/sagehou/MusicForge/main/.env.example -o .env
    ```
 
-2. Edit `.env` to set host directories, `PUID`/`PGID` and the public origin. Pin `MUSICFORGE_VERSION` to a published version such as `v0.2.0`, or use `latest` to follow stable releases. Default paths:
+2. Edit `.env` to set host directories, `PUID`/`PGID` and the public origin. Pin `MUSICFORGE_VERSION` to a published version such as `v0.2.1`, or use `latest` to follow stable releases. Default paths:
 
    | Host path | Container path | Access |
    | --- | --- | --- |
@@ -53,6 +53,7 @@ You need Docker Engine with Compose v2, an existing FLAC library and an empty, d
    ```sh
    mkdir -p /srv/musicforge/config /srv/music/streaming
    chown -R 10001:10001 /srv/musicforge/config /srv/music/streaming
+   chmod 700 /srv/musicforge/config
    docker compose pull
    docker compose up -d
    docker compose logs musicforge
@@ -65,6 +66,8 @@ You need Docker Engine with Compose v2, an existing FLAC library and an empty, d
 5. Open the Web UI. Enter `setup_code` from the first-start container logs and create the sole administrator. Passwords must contain 12–72 bytes. Setup closes permanently once the account exists.
 
 6. In **Settings**, use container paths `/music/source` and `/music/output`, enable scanning and save. Initial encoding is **Opus VBR at 192 kbps**. MP3 VBR recommends **V2**; both codecs also support CBR, with 192 kbps recommended.
+
+MusicForge enforces mode `0700` on `/config` at startup, including pre-existing host directories, to protect database journals and stored secrets. The configured UID must own this directory. Compose refuses missing host paths and rotates container logs. See the [production trial guide](docs/deployment.md) for proxy networking, acceptance steps and rollback.
 
 Give Navidrome a read-only mount of the same physical output directory. Its container path may differ; its corresponding library root must be this output directory.
 

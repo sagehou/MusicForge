@@ -157,4 +157,52 @@ func TestOIDCBindingAndSingleSubject(t *testing.T) {
 	if w := callback(u, cookie, false); w.Code != 403 {
 		t.Fatal("unbound OIDC subject accepted", w.Body.String())
 	}
+	oldCookie := login.Result().Cookies()[len(login.Result().Cookies())-1]
+	access := func(cookie *http.Cookie) int {
+		r := httptest.NewRequest("GET", "/api/library", nil)
+		r.AddCookie(cookie)
+		w := httptest.NewRecorder()
+		a.Handler().ServeHTTP(w, r)
+		return w.Code
+	}
+	if access(oldCookie) != 200 {
+		t.Fatal("fixture needs an active session for the previous identity")
+	}
+	// A revocation failure must roll back the new binding as well.
+	if _, err = a.db.Exec(`CREATE TRIGGER reject_oidc_revoke BEFORE DELETE ON sessions WHEN OLD.method='oidc' BEGIN SELECT RAISE(ABORT,'injected revocation failure'); END`); err != nil {
+		t.Fatal(err)
+	}
+	u, cookie = start(true)
+	if w := callback(u, cookie, true); w.Code != 400 {
+		t.Fatal("binding committed despite failed session revocation", w.Code)
+	}
+	bound, err = a.settings()
+	if err != nil || bound.BoundSubject != "allowed-subject" || access(oldCookie) != 200 {
+		t.Fatal("failed rebind changed the previous identity", err)
+	}
+	if _, err = a.db.Exec("DROP TRIGGER reject_oidc_revoke"); err != nil {
+		t.Fatal(err)
+	}
+	u, cookie = start(true)
+	if _, err = a.db.Exec("INSERT INTO oidc_flows(state,nonce,verifier,action,session,expires) VALUES('other-flow','nonce','verifier','login','',?)", time.Now().Add(time.Minute).Unix()); err != nil {
+		t.Fatal(err)
+	}
+	if w := callback(u, cookie, true); w.Code != 303 {
+		t.Fatal("replacement identity did not bind", w.Body.String())
+	}
+	bound, err = a.settings()
+	if err != nil || bound.BoundSubject != "another-user" {
+		t.Fatal("replacement binding not persisted", err)
+	}
+	if access(oldCookie) != 401 || access(localCookie) != 200 {
+		t.Fatal("rebind must revoke previous OIDC sessions and retain local recovery access")
+	}
+	var flows int
+	if err = a.db.QueryRow("SELECT count(*) FROM oidc_flows").Scan(&flows); err != nil || flows != 0 {
+		t.Fatal("old authorization flows survived rebind", flows, err)
+	}
+	u, cookie = start(false)
+	if w := callback(u, cookie, false); w.Code != 303 {
+		t.Fatal("new bound identity cannot log in", w.Body.String())
+	}
 }

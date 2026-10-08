@@ -173,6 +173,36 @@ jobs:
           docker exec musicforge-validation test -f /usr/share/doc/musicforge/media/media-versions.env
           curl --fail http://localhost:8787/api/auth/me
           docker stop musicforge-validation
+      - name: Compose deployment with host mounts and custom UID
+        env:
+          ARCH: ${{ matrix.arch }}
+        run: |
+          export MUSICFORGE_VERSION="ci-$ARCH"
+          export CONFIG_DIR="$PWD/.ci/compose-config"
+          export FLAC_DIR="$PWD/.ci/compose-source"
+          export OUTPUT_DIR="$PWD/.ci/compose-output"
+          export MUSICFORGE_PUBLIC_URL=http://localhost:8787
+          export PUID=12001 PGID=12001
+          docker tag musicforge:validation "ghcr.io/${GITHUB_REPOSITORY,,}:$MUSICFORGE_VERSION"
+          mkdir -p "$CONFIG_DIR" "$FLAC_DIR" "$OUTPUT_DIR"
+          sudo chown 12001:12001 "$CONFIG_DIR" "$OUTPUT_DIR"
+          chmod 755 "$FLAC_DIR"
+          docker compose config --quiet
+          trap 'docker compose down' EXIT
+          if FLAC_DIR="$PWD/.ci/missing-source" docker compose up -d --no-build --pull never; then
+            echo 'Compose incorrectly accepted a missing source mount'
+            exit 1
+          fi
+          test ! -e "$PWD/.ci/missing-source"
+          docker compose up -d --no-build --pull never
+          for i in $(seq 1 30); do
+            if docker compose exec -T musicforge musicforge -healthcheck; then break; fi
+            sleep 1
+          done
+          docker compose exec -T musicforge musicforge -healthcheck
+          docker compose exec -T musicforge sh -c 'test "$(id -u)" = 12001 && test "$(stat -c %a /config)" = 700 && test -w /music/output && test ! -w /music/source'
+          docker compose exec -T musicforge sh -c 'if touch /music/source/should-not-exist; then exit 1; fi'
+          test ! -e "$FLAC_DIR/should-not-exist"
       - name: Push validated architecture on version tags
         if: startsWith(github.ref, 'refs/tags/v')
         env:

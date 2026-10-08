@@ -59,6 +59,10 @@ func New(cfg Runtime, logger *slog.Logger, version string, assets fs.FS) (*App, 
 	if err := os.MkdirAll(cfg.ConfigDir, 0700); err != nil {
 		return nil, err
 	}
+	// Existing host bind mounts may be 0755; protect SQLite WAL and stored secrets too.
+	if err := os.Chmod(cfg.ConfigDir, 0700); err != nil {
+		return nil, fmt.Errorf("secure configuration directory: %w", err)
+	}
 	lock, err := os.OpenFile(filepath.Join(cfg.ConfigDir, "instance.lock"), os.O_CREATE|os.O_RDWR, 0600)
 	if err != nil {
 		return nil, err

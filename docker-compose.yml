@@ -10,11 +10,29 @@ services:
       MUSICFORGE_PUBLIC_URL: ${MUSICFORGE_PUBLIC_URL:-http://localhost:8787}
       MUSICFORGE_LOG_LEVEL: INFO
     volumes:
-      - ${CONFIG_DIR:-./config}:/config
-      - ${FLAC_DIR:-./flac}:/music/source:ro
-      - ${OUTPUT_DIR:-./streaming}:/music/output
+      - type: bind
+        source: ${CONFIG_DIR:-./config}
+        target: /config
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${FLAC_DIR:-./flac}
+        target: /music/source
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${OUTPUT_DIR:-./streaming}
+        target: /music/output
+        bind:
+          create_host_path: false
     security_opt:
       - no-new-privileges:true
     cap_drop:
       - ALL
     stop_grace_period: 30s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"

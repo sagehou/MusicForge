@@ -388,24 +388,10 @@ func (a *App) putSettings(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	tx, err := a.db.Begin()
-	if err != nil {
-		apiError(w, 500, err)
-		return
-	}
-	defer tx.Rollback()
-	raw, err := json.Marshal(s)
-	if err == nil {
-		_, err = tx.Exec("UPDATE settings SET data=? WHERE id=1", string(raw))
-	}
-	if err == nil && oidcChanged {
-		_, err = tx.Exec("DELETE FROM sessions WHERE method='oidc'")
-	}
-	if err == nil && oidcChanged {
-		_, err = tx.Exec("DELETE FROM oidc_flows")
-	}
-	if err == nil {
-		err = tx.Commit()
+	if oidcChanged {
+		err = a.saveOIDCSettings(s)
+	} else {
+		err = a.saveSettings(s)
 	}
 	if err != nil {
 		apiError(w, 500, err)
@@ -515,6 +501,8 @@ func (a *App) changePassword(w http.ResponseWriter, r *http.Request) {
 	if !decode(w, r, &body) {
 		return
 	}
+	a.authMu.Lock()
+	defer a.authMu.Unlock()
 	session, err := a.session(r)
 	if err != nil || session.Method != "local" {
 		apiError(w, 403, errors.New("local login required"))

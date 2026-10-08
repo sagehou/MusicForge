@@ -40,7 +40,7 @@ MVP 不包含云同步、分布式 worker、多组音乐库、多用户或插件
    curl -fsSL https://raw.githubusercontent.com/sagehou/MusicForge/main/.env.example -o .env
    ```
 
-2. 编辑 `.env`，设置宿主机目录、`PUID`/`PGID` 和公开访问地址。可将 `MUSICFORGE_VERSION` 固定为已发布版本，例如 `v0.2.0`；`latest` 跟随稳定版本。默认路径：
+2. 编辑 `.env`，设置宿主机目录、`PUID`/`PGID` 和公开访问地址。可将 `MUSICFORGE_VERSION` 固定为已发布版本，例如 `v0.2.1`；`latest` 跟随稳定版本。默认路径：
 
    | 宿主机路径 | 容器内路径 | 访问方式 |
    | --- | --- | --- |
@@ -53,6 +53,7 @@ MVP 不包含云同步、分布式 worker、多组音乐库、多用户或插件
    ```sh
    mkdir -p /srv/musicforge/config /srv/music/streaming
    chown -R 10001:10001 /srv/musicforge/config /srv/music/streaming
+   chmod 700 /srv/musicforge/config
    docker compose pull
    docker compose up -d
    docker compose logs musicforge
@@ -65,6 +66,8 @@ MVP 不包含云同步、分布式 worker、多组音乐库、多用户或插件
 5. 打开网页，填写容器首次启动日志中的 `setup_code`，创建唯一管理员。密码长度为 12–72 字节。创建后初始化向导永久关闭。
 
 6. 在**设置**中使用容器内路径 `/music/source` 和 `/music/output`，启用扫描并保存。初始编码为 **Opus VBR 192kbps**。MP3 VBR 推荐 **V2**；两种编码也支持 CBR，推荐 192kbps。
+
+MusicForge 启动时将 `/config`（含宿主机预建目录）权限设置为 `0700`，保护数据库日志和保存的密钥，因此该目录必须归配置的 UID 所有。Compose 会拒绝不存在的宿主机路径，并轮转容器日志。反向代理网络、试部署验收和回滚步骤见[生产试部署指南](docs/deployment.zh-CN.md)。
 
 Navidrome 只读挂载同一个宿主机输出目录。容器内路径可以不同，但对应音乐库的根目录必须是此输出目录。
 

@@ -8,6 +8,8 @@ import (
 	"net"
 	"net/http"
 	"net/netip"
+	"net/url"
+	"slices"
 	"strings"
 	"time"
 
@@ -63,29 +65,45 @@ func (a *App) session(r *http.Request) (session, error) {
 	err = a.db.QueryRow("SELECT method FROM sessions WHERE token=? AND expires>?", digest(cookie.Value), time.Now().Unix()).Scan(&method)
 	return session{cookie.Value, method}, err
 }
-func (a *App) secureCookie() bool { return strings.HasPrefix(a.cfg.PublicURL, "https://") }
-func (a *App) newSession(w http.ResponseWriter, method string) error {
+func (a *App) secureCookie(r *http.Request) bool {
+	return r.TLS != nil || strings.HasPrefix(a.origin(r), "https://")
+}
+func (a *App) newSession(w http.ResponseWriter, r *http.Request, method string) error {
 	token := randomToken()
 	_, err := a.db.Exec("INSERT INTO sessions(token,method,expires) VALUES(?,?,?)", digest(token), method, time.Now().Add(7*24*time.Hour).Unix())
 	if err != nil {
 		return err
 	}
-	http.SetCookie(w, &http.Cookie{Name: "musicforge_session", Value: token, Path: "/", HttpOnly: true, Secure: a.secureCookie(), SameSite: http.SameSiteLaxMode, MaxAge: 7 * 24 * 3600})
+	http.SetCookie(w, &http.Cookie{Name: "musicforge_session", Value: token, Path: "/", HttpOnly: true, Secure: a.secureCookie(r), SameSite: http.SameSiteLaxMode, MaxAge: 7 * 24 * 3600})
 	return nil
 }
 func (a *App) origin(r *http.Request) string {
-	if a.cfg.PublicURL != "" {
-		return a.cfg.PublicURL
+	// The proxy preserves Host; configured schemes describe its public TLS endpoint.
+	// Forwarded host/proto headers never expand the configured origin allowlist.
+	for _, origin := range a.cfg.origins() {
+		u, _ := url.Parse(origin)
+		if u == nil {
+			continue
+		}
+		candidate, err := normalizeOrigin(u.Scheme + "://" + r.Host)
+		if err == nil && candidate == origin {
+			return origin
+		}
 	}
 	scheme := "http"
 	if r.TLS != nil {
 		scheme = "https"
 	}
-	return scheme + "://" + r.Host
+	origin, _ := normalizeOrigin(scheme + "://" + r.Host)
+	return origin
 }
 func (a *App) sameOrigin(r *http.Request) bool {
 	origin := r.Header.Get("Origin")
-	return origin == "" || origin == a.origin(r)
+	if origin == "" {
+		return true
+	}
+	expected := a.origin(r)
+	return origin == expected && (len(a.cfg.origins()) == 0 || slices.Contains(a.cfg.origins(), expected))
 }
 func (a *App) clientIP(r *http.Request) string {
 	ip, _, err := net.SplitHostPort(r.RemoteAddr)
@@ -214,7 +232,7 @@ func (a *App) setup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	a.bootstrap = ""
-	if err = a.newSession(w, "local"); err != nil {
+	if err = a.newSession(w, r, "local"); err != nil {
 		apiError(w, 500, err)
 		return
 	}
@@ -245,7 +263,7 @@ func (a *App) login(w http.ResponseWriter, r *http.Request) {
 		apiError(w, 401, errors.New("invalid username or password"))
 		return
 	}
-	if err = a.newSession(w, "local"); err != nil {
+	if err = a.newSession(w, r, "local"); err != nil {
 		apiError(w, 500, err)
 		return
 	}
@@ -256,7 +274,7 @@ func (a *App) logout(w http.ResponseWriter, r *http.Request) {
 	if session, err := a.session(r); err == nil {
 		_, _ = a.db.Exec("DELETE FROM sessions WHERE token=?", digest(session.Token))
 	}
-	http.SetCookie(w, &http.Cookie{Name: "musicforge_session", Value: "", Path: "/", HttpOnly: true, Secure: a.secureCookie(), SameSite: http.SameSiteLaxMode, MaxAge: -1})
+	http.SetCookie(w, &http.Cookie{Name: "musicforge_session", Value: "", Path: "/", HttpOnly: true, Secure: a.secureCookie(r), SameSite: http.SameSiteLaxMode, MaxAge: -1})
 	respond(w, 200, map[string]bool{"ok": true})
 }
 
@@ -276,6 +294,17 @@ func (a *App) oidcConfig(ctx context.Context) (*oidc.Provider, oauth2.Config, Se
 	return provider, config, s, nil
 }
 func (a *App) oidcStart(w http.ResponseWriter, r *http.Request, bind bool) {
+	if a.cfg.PublicURL != "" && a.origin(r) != a.cfg.PublicURL {
+		if bind {
+			apiError(w, 400, errors.New("bind OIDC from the primary URL using local administrator login"))
+		} else if !slices.Contains(a.cfg.origins(), a.origin(r)) {
+			apiError(w, 403, errors.New("invalid request origin"))
+		} else {
+			// Create state and its host-only cookie only after reaching the callback host.
+			http.Redirect(w, r, a.cfg.PublicURL+"/api/auth/oidc/login", http.StatusSeeOther)
+		}
+		return
+	}
 	if !bind {
 		a.authMu.Lock()
 		limited := a.limited(a.authKey(r, "oidc"), true)
@@ -313,7 +342,7 @@ func (a *App) oidcStart(w http.ResponseWriter, r *http.Request, bind bool) {
 		apiError(w, 500, err)
 		return
 	}
-	http.SetCookie(w, &http.Cookie{Name: "musicforge_oidc", Value: state, Path: "/api/auth/oidc", HttpOnly: true, Secure: a.secureCookie(), SameSite: http.SameSiteLaxMode, MaxAge: 600})
+	http.SetCookie(w, &http.Cookie{Name: "musicforge_oidc", Value: state, Path: "/api/auth/oidc", HttpOnly: true, Secure: a.secureCookie(r), SameSite: http.SameSiteLaxMode, MaxAge: 600})
 	location := config.AuthCodeURL(state, oidc.Nonce(nonce), oauth2.S256ChallengeOption(verifier))
 	if bind {
 		respond(w, 200, map[string]string{"url": location})
@@ -322,6 +351,10 @@ func (a *App) oidcStart(w http.ResponseWriter, r *http.Request, bind bool) {
 	}
 }
 func (a *App) oidcCallback(w http.ResponseWriter, r *http.Request) {
+	if a.cfg.PublicURL != "" && a.origin(r) != a.cfg.PublicURL {
+		apiError(w, 403, errors.New("OIDC callback requires the primary public URL"))
+		return
+	}
 	cookie, err := r.Cookie("musicforge_oidc")
 	state := r.URL.Query().Get("state")
 	if err != nil || state == "" || subtle.ConstantTimeCompare([]byte(cookie.Value), []byte(state)) != 1 {
@@ -334,7 +367,7 @@ func (a *App) oidcCallback(w http.ResponseWriter, r *http.Request) {
 		apiError(w, 403, errors.New("expired or already used OIDC flow"))
 		return
 	}
-	http.SetCookie(w, &http.Cookie{Name: "musicforge_oidc", Value: "", Path: "/api/auth/oidc", HttpOnly: true, Secure: a.secureCookie(), SameSite: http.SameSiteLaxMode, MaxAge: -1})
+	http.SetCookie(w, &http.Cookie{Name: "musicforge_oidc", Value: "", Path: "/api/auth/oidc", HttpOnly: true, Secure: a.secureCookie(r), SameSite: http.SameSiteLaxMode, MaxAge: -1})
 	ctx, cancel := context.WithTimeout(r.Context(), 20*time.Second)
 	defer cancel()
 	provider, config, s, err := a.oidcConfig(ctx)
@@ -399,7 +432,7 @@ func (a *App) oidcCallback(w http.ResponseWriter, r *http.Request) {
 		apiError(w, 403, errors.New("this OIDC identity is not the administrator"))
 		return
 	}
-	if err = a.newSession(w, "oidc"); err != nil {
+	if err = a.newSession(w, r, "oidc"); err != nil {
 		apiError(w, 500, err)
 		return
 	}

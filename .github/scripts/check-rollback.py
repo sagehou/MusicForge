@@ -20,6 +20,7 @@ NAME = "musicforge-rollback"
 CANDIDATE = "musicforge:validation"
 PASSWORD = "ci-rollback-password"
 LEGACY = {
+    "v0.2.2": "sha256:fd7f6045a7f31dfe2c1a853cf3004377ebef3cebba4cb3a0b488b925fae28d8d",
     "v0.2.1": "sha256:39a12fbd9db368d4dc688cb929ae74b731ba10ae863b03aec915be3a77d35240",
     "v0.2.0": "sha256:3a176c2fa79dd3e2a47c53803e3d5ac055e9c406061ec69402b63fe4523a2e7c",
 }
@@ -48,6 +49,7 @@ def wait_for(read, ready, description):
 def start(image):
     docker("run", "-d", "--name", NAME, "--user", f"{os.getuid()}:{os.getgid()}",
            "-p", "127.0.0.1:18788:8787", "-e", "MUSICFORGE_PUBLIC_URL=" + ORIGIN,
+           "-e", "MUSICFORGE_ALLOWED_ORIGINS=http://localhost:18788",
            "-v", f"{ROOT / 'config'}:/config", "-v", f"{ROOT / 'source'}:/music/source:ro",
            "-v", f"{ROOT / 'output'}:/music/output", image)
     cookies = http.cookiejar.CookieJar()
@@ -89,6 +91,7 @@ def snapshot():
         tables = ("meta", "settings", "admin", "sources", "managed", "jobs", "migrations", "dirty_dirs", "oidc_flows")
         result = {table: db.execute(f"SELECT * FROM {table} ORDER BY 1").fetchall() for table in tables}
         result["schema"] = db.execute("SELECT type,name,sql FROM sqlite_master WHERE name NOT LIKE 'sqlite_%' ORDER BY type,name").fetchall()
+    result["runtime_config"] = (ROOT / "config/config.json").read_text()
     for directory in ("source", "output"):
         result[directory] = {str(path.relative_to(ROOT / directory)): hashlib.sha256(path.read_bytes()).hexdigest()
                              for path in sorted((ROOT / directory).rglob("*")) if path.is_file()}
@@ -115,6 +118,7 @@ def verify(api, expected_track, pending):
 def main():
     for directory in ("config", "source/Album", "output"):
         (ROOT / directory).mkdir(parents=True, exist_ok=True)
+    (ROOT / "config/config.json").write_text(json.dumps({"public_url": ORIGIN, "allowed_origins": ["http://localhost:18788"]}) + "\n")
     media = ("run", "--rm", "--user", f"{os.getuid()}:{os.getgid()}", "-v", f"{ROOT / 'source'}:/fixture", "--entrypoint", "ffmpeg", CANDIDATE, "-nostdin", "-v", "error", "-y")
     docker(*media, "-f", "lavfi", "-i", "sine=duration=1", "-c:a", "flac", "-metadata", "artist=Rollback Artist", "-metadata", "album=Rollback Album", "-metadata", "title=Rollback Track", "/fixture/Album/01.flac")
     # The release media tools omit the color filter; a standard-library PNG is sufficient.

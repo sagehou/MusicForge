@@ -302,7 +302,7 @@ func (a *App) getSettings(w http.ResponseWriter, r *http.Request) {
 	s.WebhookHash = ""
 	s.NavPassword = ""
 	s.OIDCSecret = ""
-	respond(w, 200, map[string]any{"settings": s, "configured": configured, "public_url": a.cfg.PublicURL})
+	respond(w, 200, map[string]any{"settings": s, "configured": configured, "public_url": a.cfg.PublicURL, "allowed_origins": a.cfg.origins()})
 }
 func (a *App) putSettings(w http.ResponseWriter, r *http.Request) {
 	var body struct {
@@ -530,7 +530,7 @@ func (a *App) changePassword(w http.ResponseWriter, r *http.Request) {
 		apiError(w, 400, err)
 		return
 	}
-	if err = a.newSession(w, "local"); err != nil {
+	if err = a.newSession(w, r, "local"); err != nil {
 		apiError(w, 500, err)
 		return
 	}

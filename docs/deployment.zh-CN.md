@@ -2,17 +2,19 @@
 
 [English](deployment.md) · **简体中文**
 
-本指南对应 v0.2.2。安装、构建和自动验证均在 GitHub Actions 执行；生产主机只拉取已发布镜像。完整功能范围见[验收报告](acceptance.zh-CN.md)。
+本指南对应 v0.2.3。安装、构建和自动验证均在 GitHub Actions 执行；生产主机只拉取已发布镜像。完整功能范围见[验收报告](acceptance.zh-CN.md)。
 
 ## 部署前
 
-- 将 `.env` 的 `MUSICFORGE_VERSION` 固定为 `v0.2.2`，避免试部署期间随 `latest` 变化。
+- 将 `.env` 的 `MUSICFORGE_VERSION` 固定为 `v0.2.3`，避免试部署期间随 `latest` 变化。
 - `/config` 必须位于宿主机本地磁盘，归 `PUID` 所有，权限 `0700`。它包含账号、OIDC/Navidrome 密钥、库索引和任务，不能公开共享。应用启动时会收紧目录权限。
 - `FLAC_DIR` 必须是已存在的源库，MusicForge 只读访问；`OUTPUT_DIR` 必须是已存在、可写、首次为空的专用目录。三个目录互不包含。Compose 不会自动创建缺失路径。
 - 使用同一 UID/GID 验证源库可读、输出可写。Navidrome 只读访问同一个输出库。为输出与临时文件留出足够磁盘空间。
-- `MUSICFORGE_PUBLIC_URL` 填浏览器实际访问的 HTTPS 源地址，不带子路径；代理转发该站点全部路径，并保留 Host。
+- `MUSICFORGE_PUBLIC_URL` 填主 HTTPS 源地址，不带子路径；额外地址通过 `MUSICFORGE_ALLOWED_ORIGINS` 配置。代理转发所有域名的全部站点路径，并保留 Host。
 
 创建目录与启动命令见 [README](../README.zh-CN.md)。检查配置后执行 `docker compose config --quiet`、`docker compose pull`、`docker compose up -d`。容器日志默认最多保留 3 个 10 MB 文件；首次启动日志中的初始化码只用于创建管理员，不要公开分享日志。
+
+多域名配置见 [README 启动配置示例](../README.zh-CN.md#启动配置)。逐个地址验收本地登录、保存设置和退出，Cookie 按域名独立保存。从其他地址发起 OIDC 会跳转主地址并在登录后停留于主地址；绑定身份时，必须先在主地址使用本地账号登录。HTTPS Cookie 根据配置的访问地址判断，兼容代理终止 TLS。修改允许列表后需要重建容器。
 
 ## 反向代理网络
 
@@ -53,9 +55,9 @@ networks:
 
 停止 MusicForge 后，备份整个 `/config`。需要完整回滚库状态时，同时保存对应时点的输出目录快照和原镜像版本；备份期间保持 MusicForge 停止。保留独立 FLAC 备份。
 
-schema 2 是当前稳定 MVP 基线，`0.2.x` 保持数据库结构以及 Settings、任务、恢复记录的持久化格式兼容。v0.2.0/v0.2.1 → v0.2.2 没有 schema 迁移。同系列的软件回退可沿用现有 `/config`；先暂停后台任务并停止应用，再将镜像版本固定到对应旧版本，启动后检查账号、库和任务，再决定恢复后台工作。无需通过改数据库版本号来回退。
+schema 2 是当前稳定 MVP 基线，`0.2.x` 保持数据库结构以及 Settings、任务、恢复记录的持久化格式兼容。v0.2.0/v0.2.1/v0.2.2 → v0.2.3 没有 schema 迁移。同系列的软件回退可沿用现有 `/config`；先暂停后台任务并停止应用，再将镜像版本固定到对应旧版本，启动后检查账号、库和任务，再决定恢复后台工作。无需通过改数据库版本号来回退。
 
-CI 的 `Same-schema rollback with published releases` 在 AMD64、ARM64 上使用固定摘要的 v0.2.1、v0.2.0 镜像，读取候选版已经生成的真实歌曲、封面、凭据和待处理任务，保存设置后再切回候选版，检查数据库与产物状态。每次成功运行生成 `rollback-amd64` / `rollback-arm64` 证据文件。同 schema 编号只是一个条件，旧版本读写的行为也必须兼容。
+CI 的 `Same-schema rollback with published releases` 在 AMD64、ARM64 上使用固定摘要的 v0.2.2、v0.2.1、v0.2.0 镜像，读取候选版已经生成的真实歌曲、封面、凭据和待处理任务，保存设置后再切回候选版，检查数据库与产物状态。每次成功运行生成 `rollback-amd64` / `rollback-arm64` 证据文件。同 schema 编号只是一个条件，旧版本读写的行为也必须兼容。
 
 软件回退会使用当前库状态；若要回到升级前的完整状态，必须恢复同一时点的 `/config` 备份和输出快照。切回旧镜像不会撤销已经完成的歌曲替换、搬迁和删除。
 

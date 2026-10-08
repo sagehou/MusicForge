@@ -41,6 +41,9 @@ func TestOIDCBindingAndSingleSubject(t *testing.T) {
 			if err := r.ParseForm(); err != nil {
 				t.Error(err)
 			}
+			if r.Form.Get("redirect_uri") != a.cfg.PublicURL+"/api/auth/oidc/callback" {
+				t.Error("token exchange changed the primary callback URL")
+			}
 			hash := sha256.Sum256([]byte(r.Form.Get("code_verifier")))
 			if base64.RawURLEncoding.EncodeToString(hash[:]) != challenge {
 				t.Error("PKCE verifier mismatch")
@@ -61,6 +64,7 @@ func TestOIDCBindingAndSingleSubject(t *testing.T) {
 	issuer = provider.URL
 	claimsMu.Unlock()
 	a.cfg.PublicURL = "http://musicforge.test"
+	a.cfg.AllowedOrigins = []string{"http://home.test"}
 	s.OIDCIssuer = issuer
 	s.OIDCClientID = "test-client"
 	s.OIDCSecret = "test-secret"
@@ -68,10 +72,34 @@ func TestOIDCBindingAndSingleSubject(t *testing.T) {
 		t.Fatal(err)
 	}
 	localRecorder := httptest.NewRecorder()
-	if err = a.newSession(localRecorder, "local"); err != nil {
+	if err = a.newSession(localRecorder, httptest.NewRequest("GET", a.cfg.PublicURL+"/", nil), "local"); err != nil {
 		t.Fatal(err)
 	}
 	localCookie := localRecorder.Result().Cookies()[0]
+	alias := httptest.NewRequest("GET", "http://home.test/api/auth/oidc/login?return_to=https://evil.test", nil)
+	alias.Header.Set("X-Forwarded-Host", "evil.test")
+	redirect := httptest.NewRecorder()
+	a.Handler().ServeHTTP(redirect, alias)
+	if redirect.Code != 303 || redirect.Header().Get("Location") != a.cfg.PublicURL+"/api/auth/oidc/login" || len(redirect.Result().Cookies()) != 0 {
+		t.Fatal("alias did not redirect before issuing a host-only state cookie", redirect.Code, redirect.Header())
+	}
+	alias = httptest.NewRequest("POST", "http://home.test/api/auth/oidc/bind", strings.NewReader("{}"))
+	alias.Header.Set("Origin", "http://home.test")
+	alias.Header.Set("X-CSRF-Token", digest(localCookie.Value+":csrf"))
+	alias.AddCookie(localCookie)
+	redirect = httptest.NewRecorder()
+	a.Handler().ServeHTTP(redirect, alias)
+	var aliasFlows int
+	if err = a.db.QueryRow("SELECT count(*) FROM oidc_flows").Scan(&aliasFlows); err != nil || aliasFlows != 0 || redirect.Code != 400 {
+		t.Fatal("alias binding created an unusable flow", aliasFlows, err, redirect.Code)
+	}
+	alias = httptest.NewRequest("GET", "http://unconfigured.test/api/auth/oidc/login", nil)
+	alias.Header.Set("X-Forwarded-Host", "musicforge.test")
+	redirect = httptest.NewRecorder()
+	a.Handler().ServeHTTP(redirect, alias)
+	if redirect.Code != 403 || redirect.Header().Get("Location") != "" {
+		t.Fatal("unconfigured host entered OIDC", redirect.Code, redirect.Header())
+	}
 	start := func(bind bool) (*url.URL, *http.Cookie) {
 		t.Helper()
 		path := "/api/auth/oidc/login"
@@ -80,9 +108,10 @@ func TestOIDCBindingAndSingleSubject(t *testing.T) {
 			path = "/api/auth/oidc/bind"
 			method = "POST"
 		}
-		r := httptest.NewRequest(method, path, strings.NewReader("{}"))
+		r := httptest.NewRequest(method, a.cfg.PublicURL+path, strings.NewReader("{}"))
 		if bind {
 			r.AddCookie(localCookie)
+			r.Header.Set("Origin", a.cfg.PublicURL)
 			r.Header.Set("X-CSRF-Token", digest(localCookie.Value+":csrf"))
 		}
 		w := httptest.NewRecorder()
@@ -105,6 +134,9 @@ func TestOIDCBindingAndSingleSubject(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+		if u.Query().Get("redirect_uri") != a.cfg.PublicURL+"/api/auth/oidc/callback" {
+			t.Fatal("authorization changed the primary callback URL", u)
+		}
 		claimsMu.Lock()
 		nonce = u.Query().Get("nonce")
 		challenge = u.Query().Get("code_challenge")
@@ -113,7 +145,7 @@ func TestOIDCBindingAndSingleSubject(t *testing.T) {
 	}
 	callback := func(u *url.URL, cookie *http.Cookie, local bool) *httptest.ResponseRecorder {
 		t.Helper()
-		r := httptest.NewRequest("GET", "/api/auth/oidc/callback?code=test-code&state="+url.QueryEscape(u.Query().Get("state")), nil)
+		r := httptest.NewRequest("GET", a.cfg.PublicURL+"/api/auth/oidc/callback?code=test-code&state="+url.QueryEscape(u.Query().Get("state")), nil)
 		r.AddCookie(cookie)
 		if local {
 			r.AddCookie(localCookie)
@@ -123,6 +155,14 @@ func TestOIDCBindingAndSingleSubject(t *testing.T) {
 		return w
 	}
 	u, cookie := start(true)
+	wrongHost := httptest.NewRequest("GET", "http://home.test/api/auth/oidc/callback?code=test-code&state="+url.QueryEscape(u.Query().Get("state")), nil)
+	wrongHost.AddCookie(cookie)
+	wrongHost.AddCookie(localCookie)
+	wrongCallback := httptest.NewRecorder()
+	a.Handler().ServeHTTP(wrongCallback, wrongHost)
+	if wrongCallback.Code != 403 {
+		t.Fatal("additional origin accepted the primary callback", wrongCallback.Code)
+	}
 	if w := callback(u, cookie, true); w.Code != 303 {
 		t.Fatal(w.Body.String())
 	}

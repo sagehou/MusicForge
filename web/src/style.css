@@ -13,7 +13,7 @@
 :root { font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", sans-serif; color: #e8eef7; background: #0c1017; font-synthesis: none; color-scheme: dark; }
 * { box-sizing: border-box; }
 body { margin: 0; }
-button, input, select { font: inherit; }
+button, input, select, textarea { font: inherit; }
 button, a, summary, input[type=checkbox] { -webkit-tap-highlight-color: transparent; }
 button { cursor: pointer; }
 button:disabled { cursor: default; }
@@ -23,8 +23,8 @@ h1 { font-size: 30px; font-weight: 650; letter-spacing: -1px; line-height: 1.4; 
 h2 { font-size: 16px; font-weight: 600; }
 h3 { font-size: 16px; }
 small { display: block; font-size: 12px; color: #8a98ad; line-height: 1.7; }
-input:not([type=checkbox]),select { background: #101722; border: 1px solid #29364a; border-radius: 8px; color: #dce6f5; min-width: 0; width: 100%; padding: 11px 12px; font-size: 13px; outline: none; }
-input:focus,select:focus { border-color: #70e0b3; box-shadow: 0 0 0 2px #70e0b318; }
+input:not([type=checkbox]),select,textarea { background: #101722; border: 1px solid #29364a; border-radius: 8px; color: #dce6f5; min-width: 0; width: 100%; padding: 11px 12px; font-size: 13px; outline: none; }
+input:focus,select:focus,textarea:focus { border-color: #70e0b3; box-shadow: 0 0 0 2px #70e0b318; }
 input::placeholder { color: #627187; }
 input[type=checkbox] { accent-color: #70e0b3; width: 15px; height: 15px; flex-shrink: 0; }
 :focus-visible { outline: 2px solid #70e0b3; outline-offset: 3px; }

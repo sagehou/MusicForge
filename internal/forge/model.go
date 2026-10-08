@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 )
 
@@ -17,6 +18,7 @@ type Runtime struct {
 	ConfigDir      string         `json:"-"`
 	Listen         string         `json:"listen"`
 	PublicURL      string         `json:"public_url"`
+	AllowedOrigins []string       `json:"allowed_origins,omitempty"`
 	LogLevel       string         `json:"log_level"`
 	FFmpeg         string         `json:"ffmpeg"`
 	FFprobe        string         `json:"ffprobe"`
@@ -38,6 +40,12 @@ func LoadRuntime(dir string) (Runtime, error) {
 			*target = value
 		}
 	}
+	if value, ok := os.LookupEnv("MUSICFORGE_ALLOWED_ORIGINS"); ok {
+		c.AllowedOrigins = nil
+		if strings.TrimSpace(value) != "" {
+			c.AllowedOrigins = strings.Split(value, ",")
+		}
+	}
 	if value, ok := os.LookupEnv("MUSICFORGE_TRUSTED_PROXIES"); ok {
 		c.TrustedProxies = nil
 		if strings.TrimSpace(value) != "" {
@@ -55,14 +63,80 @@ func LoadRuntime(dir string) (Runtime, error) {
 			return c, errors.New("trusted_proxies must contain valid IP CIDRs")
 		}
 	}
-	c.PublicURL = strings.TrimRight(c.PublicURL, "/")
 	if c.PublicURL != "" {
-		u, err := url.Parse(c.PublicURL)
-		if err != nil || u.Host == "" || (u.Scheme != "https" && u.Scheme != "http") || u.User != nil || u.Path != "" || u.RawQuery != "" || u.Fragment != "" {
+		c.PublicURL, err = normalizeOrigin(c.PublicURL)
+		if err != nil {
 			return c, errors.New("public_url must be an HTTP(S) origin without a path")
 		}
 	}
+	origins := c.AllowedOrigins
+	c.AllowedOrigins = nil
+	for _, raw := range origins {
+		origin, err := normalizeOrigin(raw)
+		if err != nil {
+			return c, errors.New("allowed_origins must contain HTTP(S) origins without paths or wildcards")
+		}
+		duplicate := false
+		newURL, _ := url.Parse(origin)
+		for _, existing := range c.origins() {
+			if origin == existing {
+				duplicate = true
+			}
+			oldURL, _ := url.Parse(existing)
+			// Cookies are scoped to hostnames, not ports; mixed schemes would collide.
+			if oldURL.Hostname() == newURL.Hostname() && oldURL.Scheme != newURL.Scheme {
+				return c, errors.New("configure only one scheme per origin hostname")
+			}
+		}
+		if !duplicate {
+			c.AllowedOrigins = append(c.AllowedOrigins, origin)
+		}
+	}
 	return c, nil
+}
+
+func normalizeOrigin(raw string) (string, error) {
+	u, err := url.Parse(strings.TrimRight(strings.TrimSpace(raw), "/"))
+	if err != nil || u.Hostname() == "" || (u.Scheme != "https" && u.Scheme != "http") || u.User != nil || u.Path != "" || strings.ContainsAny(raw, "?#") {
+		return "", errors.New("invalid HTTP(S) origin")
+	}
+	host := strings.ToLower(u.Hostname())
+	if strings.HasPrefix(u.Host, "[") {
+		ip, err := netip.ParseAddr(u.Hostname())
+		if err != nil || !ip.Is6() || ip.Zone() != "" {
+			return "", errors.New("invalid origin IP address")
+		}
+		host = "[" + ip.String() + "]"
+	} else if strings.IndexFunc(u.Hostname(), func(c rune) bool {
+		return !(c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || c == '.' || c == '-' || c == '_')
+	}) >= 0 {
+		return "", errors.New("invalid origin hostname")
+	}
+	port := u.Port()
+	if port != "" {
+		n, err := strconv.Atoi(port)
+		if err != nil || n < 1 || n > 65535 {
+			return "", errors.New("invalid origin port")
+		}
+		port = strconv.Itoa(n)
+	} else if strings.HasSuffix(u.Host, ":") {
+		return "", errors.New("empty origin port")
+	}
+	if u.Scheme == "http" && port == "80" || u.Scheme == "https" && port == "443" {
+		port = ""
+	}
+	if port != "" {
+		host += ":" + port
+	}
+	return u.Scheme + "://" + host, nil
+}
+
+func (c Runtime) origins() []string {
+	origins := []string{}
+	if c.PublicURL != "" {
+		origins = append(origins, c.PublicURL)
+	}
+	return append(origins, c.AllowedOrigins...)
 }
 
 type Encoding struct {

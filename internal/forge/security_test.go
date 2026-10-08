@@ -23,11 +23,11 @@ func TestOIDCReconfigurationRequiresLocalLoginAndRevokesSessions(t *testing.T) {
 		t.Fatal(err)
 	}
 	oidc := httptest.NewRecorder()
-	if err := a.newSession(oidc, "oidc"); err != nil {
+	if err := a.newSession(oidc, httptest.NewRequest("GET", a.cfg.PublicURL+"/", nil), "oidc"); err != nil {
 		t.Fatal(err)
 	}
 	local := httptest.NewRecorder()
-	if err := a.newSession(local, "local"); err != nil {
+	if err := a.newSession(local, httptest.NewRequest("GET", a.cfg.PublicURL+"/", nil), "local"); err != nil {
 		t.Fatal(err)
 	}
 	body, err := json.Marshal(map[string]any{"enabled": s.Enabled, "source": s.Source, "output": s.Output, "encoding": s.Encoding, "concurrency": s.Concurrency, "scan_minutes": s.ScanMinutes, "nav_library": s.NavLibrary, "oidc_issuer": s.OIDCIssuer, "oidc_client_id": s.OIDCClientID, "unbind_oidc": true})
@@ -93,7 +93,7 @@ func TestResolvedConfigurationOverlapAndURLBoundaries(t *testing.T) {
 func TestBusyLibraryDoesNotTrapSettingsRequest(t *testing.T) {
 	a, s := testApp(t)
 	local := httptest.NewRecorder()
-	if err := a.newSession(local, "local"); err != nil {
+	if err := a.newSession(local, httptest.NewRequest("GET", a.cfg.PublicURL+"/", nil), "local"); err != nil {
 		t.Fatal(err)
 	}
 	body, err := json.Marshal(s)
@@ -166,7 +166,7 @@ func TestPasswordChangeRevokesExistingSessionsAndRejectsOldPassword(t *testing.T
 	}
 	old := setup.Result().Cookies()[0]
 	oidc := httptest.NewRecorder()
-	if err := a.newSession(oidc, "oidc"); err != nil {
+	if err := a.newSession(oidc, httptest.NewRequest("GET", a.cfg.PublicURL+"/", nil), "oidc"); err != nil {
 		t.Fatal(err)
 	}
 	changed := send("/api/auth/password", map[string]string{"current": "old-test-password", "password": "new-test-password"}, old)

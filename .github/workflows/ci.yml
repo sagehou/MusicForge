@@ -80,7 +80,7 @@ jobs:
           mkdir -p .ci/config .ci/source/Artist/Album .ci/output
           ffmpeg -v error -f lavfi -i sine=frequency=440:duration=2 -c:a flac -metadata artist='CI Artist' -metadata album='CI Album' -metadata title='CI Track' .ci/source/Artist/Album/01.flac
           touch -d '2 minutes ago' .ci/source/Artist/Album/01.flac
-          MUSICFORGE_CONFIG_DIR="$PWD/.ci/config" MUSICFORGE_PUBLIC_URL=http://127.0.0.1:8787 .ci/musicforge >.ci/server.log 2>&1 &
+          MUSICFORGE_CONFIG_DIR="$PWD/.ci/config" MUSICFORGE_PUBLIC_URL=http://127.0.0.1:8787 MUSICFORGE_ALLOWED_ORIGINS=http://localhost:8787 .ci/musicforge >.ci/server.log 2>&1 &
           server_pid=$!
           trap 'kill "$server_pid" 2>/dev/null || true' EXIT
           cd web

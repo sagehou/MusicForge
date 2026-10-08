@@ -169,6 +169,45 @@ test("bilingual setup, real incremental build, state preservation and login", as
   const cleared = await page.request.get("/api/settings");
   expect((await cleared.json()).configured).toMatchObject({ nav_password: false, oidc_secret: false });
   await page.getByRole("combobox", { name: "语言", exact: true }).selectOption("en");
+  // A second host reaches the same instance without sharing the primary host's cookie.
+  const primaryOrigin = new URL(page.url()).origin;
+  const aliasOrigin = "http://localhost:8787";
+  expect((await page.context().cookies(aliasOrigin)).find(cookie => cookie.name === "musicforge_session")).toBeUndefined();
+  const aliasPage = await page.context().newPage();
+  await aliasPage.goto(`${aliasOrigin}/settings`);
+  await expect(aliasPage.getByRole("heading", { name: "欢迎回来" })).toBeVisible();
+  await aliasPage.getByRole("combobox", { name: "语言", exact: true }).selectOption("en");
+  await aliasPage.getByLabel("Username", { exact: true }).fill("admin");
+  await aliasPage.getByLabel("Password", { exact: true }).fill("test-admin-password");
+  await aliasPage.getByRole("button", { name: "Log in", exact: true }).click();
+  await expect(aliasPage.getByLabel("Allowed access URLs", { exact: true })).toHaveValue(`${primaryOrigin}\n${aliasOrigin}`);
+  await expect(aliasPage.getByLabel("Callback URL", { exact: true })).toHaveValue(`${primaryOrigin}/api/auth/oidc/callback`);
+  await expect(aliasPage.getByRole("button", { name: "Bind your OIDC identity", exact: true })).toBeDisabled();
+  await expect(aliasPage.getByRole("link", { name: "Open primary URL", exact: true })).toHaveAttribute("href", `${primaryOrigin}/settings`);
+  const aliasCookie = (await page.context().cookies(aliasOrigin)).find(cookie => cookie.name === "musicforge_session")!;
+  expect(aliasCookie.domain).toBe("localhost");
+  expect(aliasCookie.httpOnly).toBe(true);
+  expect(aliasCookie.secure).toBe(false);
+  await aliasPage.getByLabel("Concurrent conversions", { exact: true }).fill("3");
+  await aliasPage.getByRole("button", { name: "Save settings", exact: true }).click();
+  await expect(aliasPage.getByRole("status")).toContainText("Settings saved");
+  expect((await (await page.request.get("/api/settings")).json()).settings.concurrency).toBe(3);
+  await aliasPage.getByRole("combobox", { name: "Language", exact: true }).selectOption("zh-CN");
+  await expect(aliasPage.getByLabel("允许访问的地址", { exact: true })).toHaveValue(`${primaryOrigin}\n${aliasOrigin}`);
+  await expect(aliasPage.getByText("绑定 OIDC 身份前，请在主地址使用本地管理员账号登录。")).toBeVisible();
+  const oidcRedirect = await aliasPage.request.get(`${aliasOrigin}/api/auth/oidc/login?return_to=https://evil.test`, { maxRedirects: 0 });
+  expect(oidcRedirect.status()).toBe(303);
+  expect(oidcRedirect.headers().location).toBe(`${primaryOrigin}/api/auth/oidc/login`);
+  expect(oidcRedirect.headers()["set-cookie"]).toBeUndefined();
+  const aliasMe = await (await aliasPage.request.get(`${aliasOrigin}/api/auth/me`)).json();
+  const blocked = await aliasPage.request.post(`${aliasOrigin}/api/auth/logout`, {
+    data: {}, headers: { Origin: "http://unconfigured.test", "X-CSRF-Token": aliasMe.csrf },
+  });
+  expect(blocked.status()).toBe(403);
+  await aliasPage.getByRole("button", { name: "退出登录", exact: true }).click();
+  await expect(aliasPage.getByRole("heading", { name: "欢迎回来" })).toBeVisible();
+  expect((await (await page.request.get("/api/auth/me")).json()).authenticated).toBe(true);
+  await aliasPage.close();
   await page.getByRole("button", { name: "Log out", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Welcome back" })).toBeVisible();
 });

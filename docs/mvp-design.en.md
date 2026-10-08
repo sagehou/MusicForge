@@ -172,6 +172,9 @@ Endpoint: `POST /api/webhook/lidarr`.
 - Ordinary UI/API access requires administrator login; no anonymous LAN mode.
 - Do not use Forward Auth or OIDC Proxy identity headers. Authentik can be a native OIDC provider.
 - The reverse proxy provides HTTPS and request forwarding.
+- Support multiple explicit access origins through startup `MUSICFORGE_ALLOWED_ORIGINS`; `MUSICFORGE_PUBLIC_URL` is the automatically allowed primary origin. Reject wildcards and subpaths.
+- Each domain has its own host-only login cookie and supports local login. Browser writes must match the allowed origin and current Host, with CSRF checks preserved.
+- OIDC started elsewhere first redirects to the primary URL; callbacks and completed logins stay there. Identity binding requires a local administrator session on the primary URL. Settings displays the primary and allowed origins read-only without changing persisted authentication formats.
 
 - Local login/setup allow ten credential failures per client in fifteen minutes and reset on success. OIDC starts have a separate budget, reset on successful OIDC login; local recovery and authenticated binding remain independent.
 - By default, rate limiting uses the connection peer. Explicit trusted proxy CIDRs enable `X-Forwarded-For`, walking right to left to the first untrusted address; this header never supplies identity.

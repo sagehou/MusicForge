@@ -19,7 +19,7 @@ func TestSettingsSecretClearingAndLidarrValidation(t *testing.T) {
 		t.Fatal(err)
 	}
 	local := httptest.NewRecorder()
-	if err := a.newSession(local, "local"); err != nil {
+	if err := a.newSession(local, httptest.NewRequest("GET", a.cfg.PublicURL+"/", nil), "local"); err != nil {
 		t.Fatal(err)
 	}
 	localCookie := local.Result().Cookies()[0]
@@ -67,7 +67,7 @@ func TestSettingsSecretClearingAndLidarrValidation(t *testing.T) {
 		t.Fatal(err)
 	}
 	oidc := httptest.NewRecorder()
-	if err = a.newSession(oidc, "oidc"); err != nil {
+	if err = a.newSession(oidc, httptest.NewRequest("GET", a.cfg.PublicURL+"/", nil), "oidc"); err != nil {
 		t.Fatal(err)
 	}
 	oidcCookie := oidc.Result().Cookies()[0]

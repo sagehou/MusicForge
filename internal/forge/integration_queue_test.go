@@ -239,7 +239,7 @@ func TestJobsFilterAppliesBeforePagination(t *testing.T) {
 		}
 	}
 	session := httptest.NewRecorder()
-	if err = a.newSession(session, "local"); err != nil {
+	if err = a.newSession(session, httptest.NewRequest("GET", a.cfg.PublicURL+"/", nil), "local"); err != nil {
 		t.Fatal(err)
 	}
 	req := httptest.NewRequest("GET", "/api/jobs?state=failed&limit=1", nil)

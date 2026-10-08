@@ -61,7 +61,7 @@ You need Docker Engine with Compose v2, an existing FLAC library and an empty, d
 
    Run the ownership command with sufficient host permissions. The selected user also needs read access to FLAC. `/config` must use a local filesystem suitable for SQLite WAL, not NFS/SMB. Mount source and output separately.
 
-4. Forward the public HTTPS origin to `127.0.0.1:8787` through your reverse proxy. Set `MUSICFORGE_PUBLIC_URL` to that exact origin, for example `https://musicforge.example.com`, without a path. MusicForge serves from `/`.
+4. Forward the public HTTPS origin to `127.0.0.1:8787` through your reverse proxy, preserving Host. Set `MUSICFORGE_PUBLIC_URL` to the primary origin, for example `https://musicforge.example.com`, without a path. Add other origins through `MUSICFORGE_ALLOWED_ORIGINS` as described below. MusicForge serves from `/`.
 
 5. Open the Web UI. Enter `setup_code` from the first-start container logs and create the sole administrator. Passwords must contain 12–72 bytes. Setup closes permanently once the account exists.
 
@@ -136,10 +136,10 @@ Authentication uses the Subsonic salted-token API; plaintext passwords are not s
 
 The local administrator has access to all operations. You may additionally bind one native OIDC identity. Authenticating proxy headers are not used.
 
-1. Set `MUSICFORGE_PUBLIC_URL` to the public HTTPS origin.
+1. Set `MUSICFORGE_PUBLIC_URL` to the primary HTTPS origin.
 2. Save the issuer URL, client ID and secret in Settings. Use the provider's exact issuer, including any trailing slash.
 3. Register `https://musicforge.example.com/api/auth/oidc/callback` as the redirect URI.
-4. While signed in locally, select **Bind your OIDC identity** and complete the provider flow.
+4. While signed in locally at the primary URL, select **Bind your OIDC identity** and complete the provider flow.
 
 Only the bound `issuer + sub` can use OIDC. State, nonce, PKCE and server-side sessions are checked. UI mutations require CSRF tokens; API reads omit secret settings. Keep the local password for recovery.
 
@@ -167,13 +167,27 @@ Optional `/config/config.json` follows [config.example.json](config.example.json
 | --- | --- |
 | `MUSICFORGE_CONFIG_DIR` | `/config` |
 | `MUSICFORGE_LISTEN` | `:8787` |
-| `MUSICFORGE_PUBLIC_URL` | Empty; set for OIDC and HTTPS cookies |
+| `MUSICFORGE_PUBLIC_URL` | Empty; primary origin for OIDC; also allowed for browser access |
+| `MUSICFORGE_ALLOWED_ORIGINS` | Empty; comma-separated additional browser origins |
 | `MUSICFORGE_TRUSTED_PROXIES` | Empty; comma-separated reverse proxy IP CIDRs for client-IP rate limiting |
 | `MUSICFORGE_LOG_LEVEL` | `INFO` |
 | `MUSICFORGE_FFMPEG` | `ffmpeg` |
 | `MUSICFORGE_FFPROBE` | `ffprobe` |
 
 Library, encoding and integration settings live only in SQLite. Logs are JSON. Public `/healthz` checks database liveness; the authenticated Overview reports library availability separately. Migrations run transactionally at startup; unknown newer schemas are rejected.
+
+To use multiple domains, set these values in `.env`:
+
+```dotenv
+MUSICFORGE_PUBLIC_URL=https://musicforge.example.com
+MUSICFORGE_ALLOWED_ORIGINS=https://musicforge.home.example.com,https://musicforge-alt.example.com
+```
+
+The primary URL is always allowed. Point every domain's DNS and reverse proxy to the same instance, preserve Host, and provide HTTPS for each HTTPS origin. Entries include the scheme and optional port; paths and wildcards are rejected. Different hosts may use HTTP and HTTPS, but each hostname must use one scheme because cookies are shared across its ports. Cookies use the configured scheme for the accessed host; forwarded host/protocol headers cannot add allowed origins. Browser writes must match both the allowed origin and request Host, and authenticated writes still require a CSRF token.
+
+Each domain supports local login and has its own host-only login cookie. OIDC started on another domain redirects to the primary URL before creating state; login finishes and stays there. Register only the primary `/api/auth/oidc/callback` with your provider. Identity binding requires local login on that primary URL; Settings provides a link from other domains. These are startup settings, displayed read-only in Settings. Recreate the container with `docker compose up -d` after changing `.env`.
+
+In `config.json`, use an `allowed_origins` array. An empty `MUSICFORGE_ALLOWED_ORIGINS` environment variable clears that array; remove the Compose environment entry if you want to use the file value. This feature does not change schema 2 or persisted authentication formats. Older `0.2.x` images ignore the new startup setting and support the primary URL only.
 
 ## Development and releases
 

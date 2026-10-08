@@ -61,7 +61,7 @@ MVP 不包含云同步、分布式 worker、多组音乐库、多用户或插件
 
    修改所有者需要相应宿主机权限。该用户还需要读取 FLAC 的权限。`/config` 使用适合 SQLite WAL 的本地文件系统，不放在 NFS/SMB 上。源库与输出库分别挂载。
 
-4. 配置反向代理，将公开 HTTPS 地址转发到 `127.0.0.1:8787`。`MUSICFORGE_PUBLIC_URL` 填写完整公开源地址，例如 `https://musicforge.example.com`，不带路径。应用部署在 `/`，不支持子路径。
+4. 配置反向代理，将公开 HTTPS 地址转发到 `127.0.0.1:8787`，并保留 Host。`MUSICFORGE_PUBLIC_URL` 填写主地址，例如 `https://musicforge.example.com`，不带路径。其他访问地址通过下文的 `MUSICFORGE_ALLOWED_ORIGINS` 配置。应用部署在 `/`，不支持子路径。
 
 5. 打开网页，填写容器首次启动日志中的 `setup_code`，创建唯一管理员。密码长度为 12–72 字节。创建后初始化向导永久关闭。
 
@@ -136,10 +136,10 @@ FLAC 是唯一事实来源。生成的音频和封面由 MusicForge 管理，输
 
 本地管理员拥有全部操作权限，可额外绑定一个原生 OIDC 身份。不使用认证代理请求头。
 
-1. 将 `MUSICFORGE_PUBLIC_URL` 设置为公开 HTTPS 源地址。
+1. 将 `MUSICFORGE_PUBLIC_URL` 设置为主 HTTPS 源地址。
 2. 在设置中保存签发者地址、客户端 ID 和密钥。签发者地址必须与提供方完全一致，包括末尾斜杠。
 3. 在提供方注册回调地址 `https://musicforge.example.com/api/auth/oidc/callback`。
-4. 本地管理员登录后点击**绑定当前 OIDC 身份**，完成提供方认证。
+4. 在主地址使用本地管理员账号登录后点击**绑定当前 OIDC 身份**，完成提供方认证。
 
 只有绑定的 `issuer + sub` 可使用 OIDC。应用校验 state、nonce、PKCE 和服务端会话。网页修改操作需要 CSRF 令牌，API 读取设置时不返回密钥。保留本地密码用于恢复。
 
@@ -167,13 +167,27 @@ docker compose up -d
 | --- | --- |
 | `MUSICFORGE_CONFIG_DIR` | `/config` |
 | `MUSICFORGE_LISTEN` | `:8787` |
-| `MUSICFORGE_PUBLIC_URL` | 空；用于 OIDC 和 HTTPS Cookie |
+| `MUSICFORGE_PUBLIC_URL` | 空；OIDC 主地址，也自动允许浏览器访问 |
+| `MUSICFORGE_ALLOWED_ORIGINS` | 空；逗号分隔的额外浏览器访问源地址 |
 | `MUSICFORGE_TRUSTED_PROXIES` | 空；逗号分隔的可信反向代理 IP CIDR，用于按客户端 IP 限流 |
 | `MUSICFORGE_LOG_LEVEL` | `INFO` |
 | `MUSICFORGE_FFMPEG` | `ffmpeg` |
 | `MUSICFORGE_FFPROBE` | `ffprobe` |
 
 库、编码与集成设置以 SQLite 为唯一来源。日志为 JSON。公开的 `/healthz` 检查数据库存活状态，登录后的概览单独展示音乐存储可用性。启动时在事务中迁移数据库，拒绝未知的较新结构。
+
+多域名访问时，在 `.env` 中设置：
+
+```dotenv
+MUSICFORGE_PUBLIC_URL=https://musicforge.example.com
+MUSICFORGE_ALLOWED_ORIGINS=https://musicforge.home.example.com,https://musicforge-alt.example.com
+```
+
+主地址始终允许访问。所有域名的 DNS 与反向代理都指向同一个实例，代理保留 Host，并为每个 HTTPS 地址配置 HTTPS。每项包含协议和可选端口，不接受路径和通配符。不同主机可分别使用 HTTP 或 HTTPS，但同一个主机名只能使用一种协议，因为 Cookie 不按端口隔离。Cookie 按实际访问主机配置的协议设置，转发头中的域名或协议不能扩大允许列表。浏览器修改请求的来源必须同时匹配允许地址与请求 Host；登录后的修改操作仍需 CSRF 令牌。
+
+各域名均支持本地账号登录，登录 Cookie 只属于各自域名。从其他域名发起 OIDC 会先跳转到主地址，再创建认证流程；登录完成后留在主地址。OIDC 提供方只需注册主地址的 `/api/auth/oidc/callback`。绑定身份必须在主地址使用本地账号登录，其他域名的 Settings 会提供入口。这些地址属于启动配置，在 Settings 中只读展示；修改 `.env` 后执行 `docker compose up -d` 重建容器。
+
+使用 `config.json` 时，额外地址写入 `allowed_origins` 数组。空的 `MUSICFORGE_ALLOWED_ORIGINS` 环境变量会清空文件中的数组；需要采用文件值时，应移除 Compose 的对应环境变量条目。本功能不改变 schema 2 或认证持久化格式。旧 `0.2.x` 镜像会忽略新增启动配置，回退后仅主地址可正常使用。
 
 ## 开发与发布
 

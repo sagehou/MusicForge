@@ -3,6 +3,7 @@ import hashlib
 import json
 import re
 import urllib.parse
+import urllib.error
 import urllib.request
 from pathlib import Path
 
@@ -36,13 +37,14 @@ module_path.write_text(module)
 debian_page = fetch("https://www.debian.org/releases/").decode()
 debian = re.search(r"distribution of Debian is version\s+\d+, codenamed <em>([a-z]+)</em>", debian_page)[1]
 docker_path = Path("Dockerfile")
+original_docker = docker_path.read_text()
+adopted = {"node": node, "golang": go}
 docker = re.sub(r"node:[\d.]+-[a-z]+-slim", "node:" + node + "-" + debian + "-slim", docker_path.read_text())
 docker = re.sub(r"golang:[\d.]+-[a-z]+", "golang:" + go + "-" + debian, docker)
 docker = re.sub(r"debian:[a-z]+-slim", "debian:" + debian + "-slim", docker)
 # Pin multi-architecture manifest digests so base-image security updates create
 # reviewable changes even when the human-readable stable tag stays the same.
-def pin_image(match):
-    image = match[2]
+def image_digest(image):
     name, tag = image.split(":", 1)
     repo = "library/" + name
     token_url = "https://auth.docker.io/token?" + urllib.parse.urlencode({"service": "registry.docker.io", "scope": "repository:" + repo + ":pull"})
@@ -52,10 +54,33 @@ def pin_image(match):
         digest = response.headers["Docker-Content-Digest"]
     if not re.fullmatch(r"sha256:[0-9a-f]{64}", digest):
         raise RuntimeError("Invalid base-image manifest digest")
+    return digest
+
+
+def pin_image(match):
+    image = match[2]
+    name = image.split(":", 1)[0]
+    try:
+        digest = image_digest(image)
+    except urllib.error.HTTPError as error:
+        if error.code != 404 or name not in adopted:
+            raise
+        previous = re.search(r"(?m)^FROM(?: --platform=\S+)? (" + name + r":[^\s@]+)", original_docker)[1]
+        if previous == image:
+            raise
+        print("::warning::" + image + " is not published; retain " + previous + " and continue dependency security updates")
+        image = previous
+        digest = image_digest(image)
+    if name in adopted:
+        adopted[name] = image.split(":", 1)[1].split("-", 1)[0]
     return match[1] + image + "@" + digest + match[3]
 
 docker = re.sub(r"(?m)^(FROM(?: --platform=\S+)? )((?:node|golang|debian):[^\s@]+)(?:@sha256:[0-9a-f]+)?([^\n]*)$", pin_image, docker)
 docker_path.write_text(docker)
+# A language release can precede its official container. Keep CI and Docker aligned.
+node, go = adopted["node"], adopted["golang"]
+Path(".node-version").write_text(node + "\n")
+module_path.write_text(re.sub(r"(?m)^go .*", "go " + go, module_path.read_text()))
 
 media_path = Path("build/media-versions.env")
 media = dict(line.split("=", 1) for line in media_path.read_text().splitlines() if line and not line.startswith("#"))

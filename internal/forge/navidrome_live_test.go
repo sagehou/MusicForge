@@ -25,7 +25,9 @@ func TestRealNavidromeLibraryLifecycle(t *testing.T) {
 	}
 	a, s := testApp(t)
 	upstream, err := url.Parse(endpoint)
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	proxy := httputil.NewSingleHostReverseProxy(upstream)
 	var targetMu sync.Mutex
 	var targets [][]string
@@ -136,14 +138,22 @@ func TestRealNavidromeLibraryLifecycle(t *testing.T) {
 	}
 	// Root-level songs and external artwork explicitly exercise target=1:.
 	rootSource := makeFLAC(t, a, s, "root.flac", "MusicForge Acceptance Root", false)
-	if err = a.scan(context.Background(), ScanRequest{}); err != nil { t.Fatal(err) }
+	if err = a.scan(context.Background(), ScanRequest{}); err != nil {
+		t.Fatal(err)
+	}
 	drain(t, a, true)
 	refresh()
 	assertTarget("1:.")
-	if count := songs(); count != 1 { t.Fatal("root target did not discover root-level song", count) }
+	if count := songs(); count != 1 {
+		t.Fatal("root target did not discover root-level song", count)
+	}
 	writeCover(t, filepath.Join(s.Source, "cover.jpg"))
-	if err = a.scan(context.Background(), ScanRequest{}); err != nil { t.Fatal(err) }
-	if _, err = os.Stat(filepath.Join(s.Output, "cover.jpg")); err != nil { t.Fatal("root-level artwork was not generated", err) }
+	if err = a.scan(context.Background(), ScanRequest{}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = os.Stat(filepath.Join(s.Output, "cover.jpg")); err != nil {
+		t.Fatal("root-level artwork was not generated", err)
+	}
 	targetMu.Lock()
 	before := len(targets)
 	targetMu.Unlock()
@@ -152,13 +162,25 @@ func TestRealNavidromeLibraryLifecycle(t *testing.T) {
 	targetMu.Lock()
 	after := len(targets)
 	targetMu.Unlock()
-	if after <= before { t.Fatal("root-level artwork change did not start a real scan") }
+	if after <= before {
+		t.Fatal("root-level artwork change did not start a real scan")
+	}
 	root, err := a.sourceRel("root.flac")
-	if err != nil { t.Fatal(err) }
-	if err = os.Remove(rootSource); err != nil { t.Fatal(err) }
-	if err = a.scan(context.Background(), ScanRequest{}); err != nil { t.Fatal(err) }
-	if err = a.deleteExpired([]int64{root.ID}); err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = os.Remove(rootSource); err != nil {
+		t.Fatal(err)
+	}
+	if err = a.scan(context.Background(), ScanRequest{}); err != nil {
+		t.Fatal(err)
+	}
+	if err = a.deleteExpired([]int64{root.ID}); err != nil {
+		t.Fatal(err)
+	}
 	refresh()
 	assertTarget("1:.")
-	if count := songs(); count != 0 { t.Fatal("root target did not remove root-level song", count) }
+	if count := songs(); count != 0 {
+		t.Fatal("root target did not remove root-level song", count)
+	}
 }

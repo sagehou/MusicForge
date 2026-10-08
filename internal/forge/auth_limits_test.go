@@ -13,7 +13,7 @@ func TestClientIPTrustBoundary(t *testing.T) {
 	a, _ := testApp(t)
 	for _, test := range []struct {
 		name, peer, forwarded, want string
-		trusted []netip.Prefix
+		trusted                     []netip.Prefix
 	}{
 		{"direct ignores spoof", "198.51.100.2:4000", "203.0.113.9", "198.51.100.2", nil},
 		{"proxy not configured", "10.0.0.2:4000", "203.0.113.9", "10.0.0.2", nil},
@@ -52,9 +52,13 @@ func TestAuthenticationLimitsCountFailuresAndSeparateClients(t *testing.T) {
 	request := func(path, client string, body any) int {
 		t.Helper()
 		raw, err := json.Marshal(body)
-		if err != nil { t.Fatal(err) }
+		if err != nil {
+			t.Fatal(err)
+		}
 		r := httptest.NewRequest("POST", path, bytes.NewReader(raw))
-		if path == "/api/auth/oidc/login" { r.Method = "GET" }
+		if path == "/api/auth/oidc/login" {
+			r.Method = "GET"
+		}
 		r.RemoteAddr = "10.0.0.2:4000"
 		r.Header.Set("X-Forwarded-For", client)
 		w := httptest.NewRecorder()
@@ -64,37 +68,61 @@ func TestAuthenticationLimitsCountFailuresAndSeparateClients(t *testing.T) {
 	attacker, admin := "198.51.100.2", "203.0.113.9"
 	badSetup := map[string]string{"code": "wrong", "username": "admin", "password": "test-admin-password"}
 	for i := 0; i < 10; i++ {
-		if got := request("/api/auth/setup", attacker, badSetup); got != 403 { t.Fatal("setup attempt", i, got) }
+		if got := request("/api/auth/setup", attacker, badSetup); got != 403 {
+			t.Fatal("setup attempt", i, got)
+		}
 	}
-	if got := request("/api/auth/setup", attacker, badSetup); got != 429 { t.Fatal("setup not limited", got) }
+	if got := request("/api/auth/setup", attacker, badSetup); got != 429 {
+		t.Fatal("setup not limited", got)
+	}
 	goodSetup := map[string]string{"code": a.bootstrap, "username": "admin", "password": "test-admin-password"}
-	if got := request("/api/auth/setup", admin, goodSetup); got != 201 { t.Fatal("attacker locked administrator setup", got) }
+	if got := request("/api/auth/setup", admin, goodSetup); got != 201 {
+		t.Fatal("attacker locked administrator setup", got)
+	}
 	badLogin := map[string]string{"username": "admin", "password": "wrong-password"}
 	goodLogin := map[string]string{"username": "admin", "password": "test-admin-password"}
 	for i := 0; i < 10; i++ {
-		if got := request("/api/auth/login", attacker, badLogin); got != 401 { t.Fatal("login attempt", i, got) }
+		if got := request("/api/auth/login", attacker, badLogin); got != 401 {
+			t.Fatal("login attempt", i, got)
+		}
 	}
-	if got := request("/api/auth/login", "192.0.2.10, "+attacker, goodLogin); got != 429 { t.Fatal("spoofed leftmost address bypassed limit", got) }
+	if got := request("/api/auth/login", "192.0.2.10, "+attacker, goodLogin); got != 429 {
+		t.Fatal("spoofed leftmost address bypassed limit", got)
+	}
 	// Even on one client, successful local logins never exhaust the failure budget.
 	for i := 0; i < 12; i++ {
-		if got := request("/api/auth/login", admin, goodLogin); got != 200 { t.Fatal("successful login counted or attacker locked administrator", i, got) }
+		if got := request("/api/auth/login", admin, goodLogin); got != 200 {
+			t.Fatal("successful login counted or attacker locked administrator", i, got)
+		}
 	}
 	for round := 0; round < 2; round++ {
 		for i := 0; i < 9; i++ {
-			if got := request("/api/auth/login", admin, badLogin); got != 401 { t.Fatal("failure budget was not reset", round, i, got) }
+			if got := request("/api/auth/login", admin, badLogin); got != 401 {
+				t.Fatal("failure budget was not reset", round, i, got)
+			}
 		}
-		if got := request("/api/auth/login", admin, goodLogin); got != 200 { t.Fatal("success did not reset failures", got) }
+		if got := request("/api/auth/login", admin, goodLogin); got != 200 {
+			t.Fatal("success did not reset failures", got)
+		}
 	}
 	for i := 0; i < 10; i++ {
-		if got := request("/api/auth/oidc/login", admin, nil); got != 400 { t.Fatal("OIDC budget shares login failures", i, got) }
+		if got := request("/api/auth/oidc/login", admin, nil); got != 400 {
+			t.Fatal("OIDC budget shares login failures", i, got)
+		}
 	}
-	if got := request("/api/auth/oidc/login", admin, nil); got != 429 { t.Fatal("OIDC start not limited", got) }
-	if got := request("/api/auth/login", admin, goodLogin); got != 200 { t.Fatal("OIDC start exhaustion locked local recovery", got) }
+	if got := request("/api/auth/oidc/login", admin, nil); got != 429 {
+		t.Fatal("OIDC start not limited", got)
+	}
+	if got := request("/api/auth/login", admin, goodLogin); got != 200 {
+		t.Fatal("OIDC start exhaustion locked local recovery", got)
+	}
 	// Fixed windows expire independently without rejected requests extending them.
 	a.authMu.Lock()
 	v := a.loginFailures["login:"+attacker]
-	v.Since = time.Now().Add(-16*time.Minute)
+	v.Since = time.Now().Add(-16 * time.Minute)
 	a.loginFailures["login:"+attacker] = v
 	a.authMu.Unlock()
-	if got := request("/api/auth/login", attacker, goodLogin); got != 200 { t.Fatal("expired window did not recover", got) }
+	if got := request("/api/auth/login", attacker, goodLogin); got != 200 {
+		t.Fatal("expired window did not recover", got)
+	}
 }

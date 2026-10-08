@@ -14,12 +14,12 @@ import (
 )
 
 type Runtime struct {
-	ConfigDir string `json:"-"`
-	Listen    string `json:"listen"`
-	PublicURL string `json:"public_url"`
-	LogLevel  string `json:"log_level"`
-	FFmpeg    string `json:"ffmpeg"`
-	FFprobe   string `json:"ffprobe"`
+	ConfigDir      string         `json:"-"`
+	Listen         string         `json:"listen"`
+	PublicURL      string         `json:"public_url"`
+	LogLevel       string         `json:"log_level"`
+	FFmpeg         string         `json:"ffmpeg"`
+	FFprobe        string         `json:"ffprobe"`
 	TrustedProxies []netip.Prefix `json:"trusted_proxies,omitempty"`
 }
 

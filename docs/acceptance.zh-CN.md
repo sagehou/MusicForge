@@ -4,7 +4,9 @@
 
 约定行为以 [MVP 基线](mvp-design.md)为准。[六轮审查记录](production-review.md)列出问题、修复与验证链接。六轮审查均已通过运行验证。最终完整 [CI](https://github.com/sagehou/MusicForge/actions/runs/37025923050)包括后端 race/集成/vet 检查、八项 Chromium 浏览器检查以及 amd64/arm64 原生镜像测试。下表记录已验证行为及其范围；容器发布另外由版本标签触发并验收。
 
-2026-10-08 生产试部署复查修复了 OIDC 重新绑定的会话撤销、密码更新并发边界、已有 `/config` 目录权限与构建依赖安全补丁。[复查 CI](https://github.com/sagehou/MusicForge/actions/runs/37717242429)已通过；新增双架构真实 Compose 检查。生产试部署使用 v0.2.1，按[部署指南](deployment.zh-CN.md)核对代理网络、目录所有权和回滚快照。镜像摘要与发布验证见 [v0.2.1 发布页](https://github.com/sagehou/MusicForge/releases/tag/v0.2.1)。
+2026-10-08 生产试部署复查修复了 OIDC 重新绑定的会话撤销、密码更新并发边界、已有 `/config` 目录权限与构建依赖安全补丁。[复查 CI](https://github.com/sagehou/MusicForge/actions/runs/37717242429)已通过；新增双架构真实 Compose 检查。v0.2.1 的试部署按[部署指南](deployment.zh-CN.md)核对代理网络、目录所有权和回滚快照。镜像摘要与发布验证见 [v0.2.1 发布页](https://github.com/sagehou/MusicForge/releases/tag/v0.2.1)。
+
+对 ds4.1-flash 的逐项复核修复了成功登录被限流计数、代理后的客户端 IP 隔离、已保存凭据的显式清除和 Lidarr 绝对路径前缀校验。[本轮 CI](https://github.com/sagehou/MusicForge/actions/runs/37732034349)通过了后端、八项浏览器检查和双架构原生镜像/Compose 检查。官方 Navidrome 0.64.2 测试已明确记录并验证 `1:.`，覆盖根级歌曲发现、封面变更和删除移除。生产试部署使用 [v0.2.2](https://github.com/sagehou/MusicForge/releases/tag/v0.2.2)，按[部署指南](deployment.zh-CN.md)配置可信代理。符号链接延期、损坏源文件处理和可写性探测保留已有取舍。
 
 | 约定 | GitHub Actions 中的验证证据 |
 | --- | --- |

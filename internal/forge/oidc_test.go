@@ -161,7 +161,9 @@ func TestOIDCBindingAndSingleSubject(t *testing.T) {
 	a.authMu.Lock()
 	_, counted := a.loginFailures["oidc:192.0.2.1"]
 	a.authMu.Unlock()
-	if counted { t.Fatal("successful OIDC login did not reset its start budget") }
+	if counted {
+		t.Fatal("successful OIDC login did not reset its start budget")
+	}
 	if w := callback(u, cookie, false); w.Code != 403 {
 		t.Fatal("replayed callback accepted")
 	}

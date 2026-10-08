@@ -2,11 +2,11 @@
 
 **English** · [Simplified Chinese](deployment.zh-CN.md)
 
-This guide targets v0.2.1. Installation, builds and automated validation run in GitHub Actions; the production host pulls published images. See the [acceptance report](acceptance.md) for verified behavior.
+This guide targets v0.2.2. Installation, builds and automated validation run in GitHub Actions; the production host pulls published images. See the [acceptance report](acceptance.md) for verified behavior.
 
 ## Before deployment
 
-- Pin `MUSICFORGE_VERSION=v0.2.1` in `.env` so a trial does not change with `latest`.
+- Pin `MUSICFORGE_VERSION=v0.2.2` in `.env` so a trial does not change with `latest`.
 - Keep `/config` on local host storage, owned by `PUID`, with mode `0700`. It contains accounts, OIDC/Navidrome secrets, the index and jobs. Do not share it publicly. Startup enforces private directory permissions.
 - `FLAC_DIR` must exist and is mounted read-only; `OUTPUT_DIR` must exist, be writable and initially empty. Use a dedicated output directory. None of the three roots may contain another. Compose refuses missing host paths.
 - Verify source read access and output write access for the configured UID/GID. Give Navidrome read-only access to the same output. Reserve disk space for both output and temporary files.
@@ -53,6 +53,6 @@ Automation exercises real ffmpeg, Navidrome, Chromium and both native image arch
 
 Stop MusicForge and back up all of `/config`. For complete library-state rollback, also snapshot the corresponding output directory and record the previous image version while MusicForge remains stopped. Keep an independent FLAC backup.
 
-v0.2.0 → v0.2.1 keeps database schema 2. Version 0.1 cannot read schema 2 and requires its matching pre-upgrade `/config` backup. Restoring only the database cannot undo artifact moves/deletions; use an output snapshot from the same point in time.
+v0.2.0/v0.2.1 → v0.2.2 keeps database schema 2. Version 0.1 cannot read schema 2 and requires its matching pre-upgrade `/config` backup. Restoring only the database cannot undo artifact moves/deletions; use an output snapshot from the same point in time.
 
 If a problem occurs, disable background work in Settings and retain logs/mount state. Do not delete `.musicforge`, the database or old playable artifacts as a repair attempt. A changed-source-mount notice requires checking the real mount before acknowledging it by saving Settings. See the README for password recovery.

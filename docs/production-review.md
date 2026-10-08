@@ -80,3 +80,19 @@ Compose now rejects missing bind paths and rotates JSON logs. Both native image 
 The first re-review run was stopped by npm audit: `source-map-js` 1.2.1 has a high-severity indexed-source-map denial-of-service advisory (GHSA-68fv-2mgg-jv7q). Weekly maintenance now updates compatible transitive npm dependencies as well as direct pins and audits the resulting lockfile. All dependency resolution remains Actions-only; no vulnerability gate is waived.
 
 [Dependency refresh](https://github.com/sagehou/MusicForge/actions/runs/37717088915) passed and generated `source-map-js` 1.2.2 plus compatible patches, with zero npm audit vulnerabilities. It also refreshed current base-image digests. Node 26.11.1 release metadata preceded its official Docker image (HTTP 404), so maintenance explicitly retained the working Node 26.10.0 toolchain and continued security updates. The fallback keeps CI and Docker versions aligned and reports the missing image.
+
+
+## Follow-up: ds4.1-flash findings (2026-10-08)
+
+Reviewed all six findings against v0.2.1. [Follow-up CI](https://github.com/sagehou/MusicForge/actions/runs/37732034349) passed backend race/integration/vet, eight real-application browser checks and native amd64/arm64 image/Compose validation. Actions-generated formatting is included in the release source; version-tag CI repeats the required gates before publishing v0.2.2.
+
+| Finding | Result and change |
+| --- | --- |
+| Authentication requests shared one peer-IP budget, including successes | Confirmed. Local login/setup count credential failures only, reset on success and use separate budgets. OIDC starts have a separate budget, reset on successful OIDC login; authenticated binding bypasses that public budget. Explicit trusted proxy CIDRs identify clients through a validated right-to-left X-Forwarded-For chain. Spoofing an untrusted peer or an invented leftmost address cannot bypass the limit. Proxy deployments must configure this trust boundary; otherwise clients still share the connection peer's budget. |
+| Navidrome target `1:.` was unverified | The previous live whole-album deletion test already reaches the root parent. Extended the official Navidrome 0.64.2 test with an HTTP recording proxy and explicit assertions for root-song discovery, root cover changes, parent fallback and manual root-song deletion. All passed without changing production target generation. |
+| Saved Navidrome/OIDC credentials could not be cleared | Confirmed. Clearing a URL disables the integration while retaining its saved secret. Added explicit API flags and bilingual UI controls to delete saved credentials after disabling the integration. OIDC clearing requires local login and transactionally revokes binding, sessions and flows. Backend and browser regression passed. |
+| Relative Lidarr prefixes could be saved | Confirmed. Nonempty prefixes now require absolute container paths at save time, with localized diagnostics and backend/browser regression. |
+| Any source-tree symlink defers scanning indefinitely | Confirmed documented restriction. Incomplete scans must not expire unseen sources; replace the symlink with a real directory or mount. No change to the existing safety boundary. |
+| Damaged FLAC fails a scan; dashboard probes output writability | Confirmed existing behavior. Healthy tracks continue, damaged inputs are exposed in Library and incomplete scans do not infer deletions. The five-second dashboard writability probe remains a small filesystem cost. No change. |
+
+Production trials should use [v0.2.2](https://github.com/sagehou/MusicForge/releases/tag/v0.2.2) and follow the bilingual deployment guide, including trusted proxy configuration. This patch keeps database schema 2.

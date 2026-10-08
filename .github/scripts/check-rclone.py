@@ -116,7 +116,7 @@ def run():
     threading.Thread(target=proxy.serve_forever, daemon=True).start()
     logs = []
     try:
-        processes.append(subprocess.Popen(["rclone", "serve", "webdav", str(ROOT / "source"), "--addr", "127.0.0.1:19090", "--log-file", str(ROOT / "webdav.log")]))
+        processes.append(subprocess.Popen(["rclone", "serve", "webdav", str(ROOT / "source"), "--addr", "127.0.0.1:19090", "--dir-cache-time", "1s", "--log-file", str(ROOT / "webdav.log")]))
         remote = ":webdav,url='http://127.0.0.1:19091',vendor='other':"
         processes.append(subprocess.Popen(["rclone", "mount", remote, str(ROOT / "mount"), "--read-only", "--vfs-cache-mode", "full", "--cache-dir", str(ROOT / "cache"), "--dir-cache-time", "1s", "--attr-timeout", "1s", "--poll-interval", "0", "--timeout", "30s", "--low-level-retries", "1", "--rc", "--rc-addr", "127.0.0.1:19093", "--rc-no-auth", "--log-file", str(ROOT / "mount.log")]))
         wait_for(lambda: subprocess.run(["mountpoint", "-q", str(ROOT / "mount")], timeout=5).returncode, lambda code: code == 0, timeout=15)
@@ -157,6 +157,8 @@ def run():
         RELEASE.clear()
         shutil.copyfile(album / "36.flac", album / "41.flac")
         os.utime(album / "41.flac", (time.time() - 120, time.time() - 120))
+        # Both the WebDAV server and mount have VFS directory caches.
+        time.sleep(1.1)
         subprocess.run(["rclone", "rc", "vfs/forget", "--url", "http://127.0.0.1:19093"], check=True, capture_output=True)
         second = api("/api/library/scan", {})["job_id"]
         sources = wait_for(lambda: api("/api/library"), lambda sources: any(source["path"].endswith("41.flac") and source["error"].startswith("Source read unavailable: ") for source in sources), timeout=30)

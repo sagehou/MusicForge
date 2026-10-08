@@ -364,5 +364,6 @@
   "error.checking": "正在检查媒体目录，网页和任务控制仍可使用",
   "error.requestTimeout": "请求超时，请重试",
   "error.http": "服务器返回 HTTP {status}，请重试",
-  "error.sourceReadPrefix": "暂时无法读取源文件："
+  "error.sourceReadPrefix": "暂时无法读取源文件：",
+  "phase.storage": "检查媒体目录"
 }

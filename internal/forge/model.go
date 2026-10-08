@@ -27,7 +27,7 @@ type Runtime struct {
 }
 
 func LoadRuntime(dir string) (Runtime, error) {
-	c := Runtime{ConfigDir: dir, Listen: ":8787", LogLevel: "INFO", FFmpeg: "ffmpeg", FFprobe: "ffprobe"}
+	c := Runtime{ConfigDir: dir, Listen: ":8787", LogLevel: "INFO", FFmpeg: "ffmpeg", FFprobe: "ffprobe", SourceTimeoutSeconds: 120}
 	b, err := os.ReadFile(filepath.Join(dir, "config.json"))
 	if err == nil {
 		if err := json.Unmarshal(b, &c); err != nil {
@@ -47,7 +47,7 @@ func LoadRuntime(dir string) (Runtime, error) {
 			return c, errors.New("source_timeout_seconds must be 1–3600")
 		}
 	}
-	if c.SourceTimeoutSeconds < 0 || c.SourceTimeoutSeconds > 3600 {
+	if c.SourceTimeoutSeconds < 1 || c.SourceTimeoutSeconds > 3600 {
 		return c, errors.New("source_timeout_seconds must be 1–3600 (or omitted for 120)")
 	}
 	if value, ok := os.LookupEnv("MUSICFORGE_ALLOWED_ORIGINS"); ok {

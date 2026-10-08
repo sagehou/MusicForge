@@ -222,3 +222,35 @@ func TestStalledEncoderKeepsExistingArtifact(t *testing.T) {
 	var temps int
 	if err = a.db.QueryRow("SELECT count(*) FROM managed WHERE kind='temp'").Scan(&temps); err != nil || temps != 0 { t.Fatal("temporary artifact leaked", temps, err) }
 }
+
+func TestCancelledWorkDoesNotWaitForAnotherScanMutationLock(t *testing.T) {
+	a, _ := testApp(t)
+	for _, kind := range []string{"scan", "convert", "delete", "upgrade"} {
+		t.Run(kind, func(t *testing.T) {
+			a.files.Lock()
+			defer a.files.Unlock()
+			ctx, cancel := context.WithCancel(context.Background())
+			done := make(chan error, 1)
+			go func() { done <- a.execute(ctx, Job{Kind: kind, Args: json.RawMessage(`{}`)}) }()
+			cancel()
+			select {
+			case err := <-done:
+				if !errors.Is(err, context.Canceled) { t.Fatal("cancelled worker did not exit", err) }
+			case <-time.After(time.Second): t.Fatal("cancelled worker still waits for a remote scan")
+			}
+		})
+	}
+}
+
+func TestSourceTimeoutRuntimeValidation(t *testing.T) {
+	cfg, err := LoadRuntime(t.TempDir())
+	if err != nil || cfg.SourceTimeoutSeconds != 120 { t.Fatal("missing timeout default", cfg, err) }
+	for _, value := range []string{"0", "-1", "3601", "invalid"} {
+		t.Run(value, func(t *testing.T) {
+			t.Setenv("MUSICFORGE_SOURCE_TIMEOUT_SECONDS", value)
+			if _, err := LoadRuntime(t.TempDir()); err == nil { t.Fatal("invalid source timeout accepted", value) }
+		})
+	}
+	t.Setenv("MUSICFORGE_SOURCE_TIMEOUT_SECONDS", "300")
+	if cfg, err = LoadRuntime(t.TempDir()); err != nil || cfg.SourceTimeoutSeconds != 300 { t.Fatal("timeout override ignored", cfg, err) }
+}

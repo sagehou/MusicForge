@@ -203,12 +203,13 @@ func scoped(rel string, dirs []string) bool {
 
 func (a *App) scan(ctx context.Context, r ScanRequest) error {
 	jobID, _ := ctx.Value(taskJobKey{}).(int64)
-	a.files.Lock()
+	if err := a.lockFiles(ctx); err != nil { return err }
 	defer a.files.Unlock()
 	s, err := a.settings()
 	if err != nil {
 		return err
 	}
+	a.reportProgress(jobID, Activity{Phase: "storage", Path: s.Source}, 0)
 	if err = a.storageContext(ctx, s); err != nil {
 		return err
 	}
@@ -659,11 +660,7 @@ func (a *App) recoverFiles(ctx context.Context, s Settings) error {
 }
 
 func (a *App) build(ctx context.Context, j Job, r BuildRequest) error {
-	a.files.Lock()
-	if err := ctx.Err(); err != nil {
-		a.files.Unlock()
-		return err
-	}
+	if err := a.lockFiles(ctx); err != nil { return err }
 	s, err := a.settings()
 	if err != nil {
 		a.files.Unlock()
@@ -792,8 +789,8 @@ func (a *App) build(ctx context.Context, j Job, r BuildRequest) error {
 	}
 	a.files.Unlock()
 	defer func() {
-		a.files.Lock()
-		defer a.files.Unlock()
+		// The random registered temp is exclusive to this build. Cleanup must not
+		// wait for an unrelated remote scan to release the library mutation lock.
 		_ = os.Remove(temp)
 		_, _ = a.db.Exec("DELETE FROM managed WHERE path=? AND kind='temp'", tempRel)
 	}()
@@ -835,7 +832,7 @@ func (a *App) build(ctx context.Context, j Job, r BuildRequest) error {
 	if err != nil {
 		return err
 	}
-	a.files.Lock()
+	if err := a.lockFiles(ctx); err != nil { return err }
 	defer a.files.Unlock()
 	if err := ctx.Err(); err != nil {
 		return err
@@ -1136,7 +1133,7 @@ func (a *App) deleteExpired(ids []int64) error {
 	return a.deleteExpiredContext(context.Background(), ids)
 }
 func (a *App) deleteExpiredContext(ctx context.Context, ids []int64) error {
-	a.files.Lock()
+	if err := a.lockFiles(ctx); err != nil { return err }
 	defer a.files.Unlock()
 	s, err := a.settings()
 	if err != nil {

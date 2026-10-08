@@ -38,7 +38,7 @@ jobs:
         run: |
           go get -u ./internal/forge
           go mod tidy
-          (cd web && npm install --package-lock-only --ignore-scripts)
+          (cd web && npm install --package-lock-only --ignore-scripts && npm update --package-lock-only --ignore-scripts && npm audit --audit-level=high)
           gofmt -w cmd internal web/embed.go
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:

@@ -180,7 +180,7 @@ test("bilingual setup, real incremental build, state preservation and login", as
   await aliasPage.getByLabel("Username", { exact: true }).fill("admin");
   await aliasPage.getByLabel("Password", { exact: true }).fill("test-admin-password");
   await aliasPage.getByRole("button", { name: "Log in", exact: true }).click();
-  await expect(aliasPage.getByLabel("Allowed access URLs", { exact: true })).toHaveValue(`${primaryOrigin}\n${aliasOrigin}`);
+  await expect(aliasPage.getByRole("textbox", { name: "Allowed access URLs", exact: true })).toHaveValue(`${primaryOrigin}\n${aliasOrigin}`);
   await expect(aliasPage.getByLabel("Callback URL", { exact: true })).toHaveValue(`${primaryOrigin}/api/auth/oidc/callback`);
   await expect(aliasPage.getByRole("button", { name: "Bind your OIDC identity", exact: true })).toBeDisabled();
   await expect(aliasPage.getByRole("link", { name: "Open primary URL", exact: true })).toHaveAttribute("href", `${primaryOrigin}/settings`);
@@ -193,7 +193,7 @@ test("bilingual setup, real incremental build, state preservation and login", as
   await expect(aliasPage.getByRole("status")).toContainText("Settings saved");
   expect((await (await page.request.get("/api/settings")).json()).settings.concurrency).toBe(3);
   await aliasPage.getByRole("combobox", { name: "Language", exact: true }).selectOption("zh-CN");
-  await expect(aliasPage.getByLabel("允许访问的地址", { exact: true })).toHaveValue(`${primaryOrigin}\n${aliasOrigin}`);
+  await expect(aliasPage.getByRole("textbox", { name: "允许访问的地址", exact: true })).toHaveValue(`${primaryOrigin}\n${aliasOrigin}`);
   await expect(aliasPage.getByText("绑定 OIDC 身份前，请在主地址使用本地管理员账号登录。")).toBeVisible();
   const oidcRedirect = await aliasPage.request.get(`${aliasOrigin}/api/auth/oidc/login?return_to=https://evil.test`, { maxRedirects: 0 });
   expect(oidcRedirect.status()).toBe(303);

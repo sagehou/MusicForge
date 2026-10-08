@@ -53,7 +53,7 @@ Automation exercises real ffmpeg, Navidrome, Chromium and both native image arch
 
 ## Task controls and progress
 
-A scan and its track queue occupy one Jobs entry. Open Details for scope, scan counts, profiles, individual results and diagnostics. The Library starts at artists, then albums, then tracks; search/status filters narrow these groups, and selecting a group selects its matching tracks. Output paths keep the source-relative hierarchy.
+A scan and its track queue occupy one Jobs entry. New scans/rebuilds carry grouping annotations; pre-upgrade history remains individually controllable rather than guessing historical relationships. Open Details for scope, scan counts, profiles, individual results and diagnostics. The Library starts at artists, then albums, then tracks; search/status filters narrow these groups, and selecting a group selects its matching tracks. Output paths keep the source-relative hierarchy.
 
 Pause stops active encoders and holds unfinished work across restarts. Resume starts unfinished tracks from the beginning. Stop leaves completed audio in place and requires explicit retry; retry-all skips deliberately stopped tasks. Delete history requires the queue to be finished or stopped and its workers to have exited. It removes task records only. Deleting failed/stopped history removes that target’s scan-retry suppression, so a later scan may create it again.
 

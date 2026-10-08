@@ -261,7 +261,7 @@ func (a *App) worker(ctx context.Context, conversion bool, slot int) {
 
 func (a *App) execute(ctx context.Context, j Job) error {
 	switch j.Kind {
-		case "scan":
+	case "scan":
 		var r ScanRequest
 		if err := json.Unmarshal(j.Args, &r); err != nil {
 			return err

@@ -10,6 +10,9 @@
 
 本次多域名更新增加明确的 `MUSICFORGE_ALLOWED_ORIGINS`、按主机名隔离的 Cookie，并以 `MUSICFORGE_PUBLIC_URL` 作为 OIDC 主地址。[多域名 CI](https://github.com/sagehou/MusicForge/actions/runs/37746300869)通过后端 race/集成/vet、八项 Chromium 检查（含两个主机的本地登录和保存设置），以及双架构原生镜像/Compose 验证。OIDC 测试覆盖创建 state 前跳转主地址、固定主回调、拒绝其他域名的回调，并保留 PKCE 与重放防护。两个架构的回退证据均记录 v0.2.2、v0.2.1、v0.2.0 往返成功，使用同一 schema-2 数据库、启动配置、源库与输出。生产试部署使用 [v0.2.3](https://github.com/sagehou/MusicForge/releases/tag/v0.2.3) 和更新后的 Compose；旧版本保持数据兼容，回退后仅主地址可正常使用。
 
+
+部署反馈改进将每次扫描／重建队列归为一个任务，加入暂停、继续、停止和记录清理，并在网页与结构化日志中显示逐曲进度。音乐库按歌手 → 专辑 → 歌曲浏览。[任务控制 CI](https://github.com/sagehou/MusicForge/actions/runs/37753296463) 通过后端竞态／集成／vet、真实 Chromium 流程，以及 AMD64／ARM64 原生镜像、Compose 和回滚检查。回归用例终止运行中的编码进程，保留原可播放音频及实际失败次数，验证暂停／分组跨重启保留，且删除记录不删除音乐库或输出。浏览器实际暂停、继续、停止、重试并删除三首歌曲组成的队列。两种架构均用 v0.2.3／v0.2.2／v0.2.1／v0.2.0 重新打开分组进度、暂停队列和停止项，执行设置写回并比较持久化状态。[v0.2.4 发布记录](https://github.com/sagehou/MusicForge/releases/tag/v0.2.4) 保存最终发布验证。新队列归组，升级前的历史继续独立控制。
+
 | 约定 | GitHub Actions 中的验证证据 |
 | --- | --- |
 | Opus/MP3、VBR/CBR、标签、ReplayGain 与单份外部封面 | 真实 ffmpeg 生命周期测试；两个架构的镜像都执行 Opus/MP3 编码与探测 |

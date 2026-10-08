@@ -191,7 +191,9 @@ func (a *App) finishUpgrade(ctx context.Context, r UpgradeRequest) error {
 		newPaths[rel] = true
 	}
 	for _, rel := range r.Old {
-		if err := ctx.Err(); err != nil { return err }
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		if newPaths[rel] {
 			continue
 		}

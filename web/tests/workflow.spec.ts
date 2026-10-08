@@ -241,6 +241,9 @@ async function exerciseTaskQueue(page: import("@playwright/test").Page, root: st
     await page.getByRole("button", { name: "Browse album Queue Album", exact: true }).click();
     await expect(page.getByRole("table").getByText("Queue Track 1", { exact: true })).toBeVisible();
     await page.screenshot({ path: "test-results/library-album-en.png", fullPage: true });
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.screenshot({ path: "test-results/mobile-library-album-en.png", fullPage: true });
+    await page.setViewportSize({ width: 1280, height: 800 });
     await page.getByRole("link", { name: "Jobs", exact: true }).click();
     const task = page.locator(`[data-task-id="${id}"]`);
     await expect(task).toHaveCount(1);
@@ -260,6 +263,7 @@ async function exerciseTaskQueue(page: import("@playwright/test").Page, root: st
     page.once("dialog", dialog => dialog.accept());
     await task.getByRole("button", { name: "Stop", exact: true }).click();
     await expect(task.locator(".task-main .badge")).toHaveText("Stopped");
+    await expect.poll(async () => (await read()).find(job => job.id === id)?.counts.cancelled).toBeGreaterThanOrEqual(1);
     await expect.poll(async () => (await read()).find(job => job.id === id)?.can_delete).toBe(true);
     const playablePath = join(root, "output/Queue Artist/Queue Album/01.opus");
     const playable = readFileSync(playablePath);
@@ -272,6 +276,10 @@ async function exerciseTaskQueue(page: import("@playwright/test").Page, root: st
     await page.getByRole("combobox", { name: "Language", exact: true }).selectOption("zh-CN");
     await expect(task.getByRole("heading", { name: "曲目结果与处理记录", exact: true })).toBeVisible();
     await page.screenshot({ path: "test-results/jobs-complete-zh-CN.png", fullPage: true });
+    await page.setViewportSize({ width: 390, height: 844 });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
+    await page.screenshot({ path: "test-results/mobile-jobs-complete-zh-CN.png", fullPage: true });
+    await page.setViewportSize({ width: 1280, height: 800 });
     await page.getByRole("combobox", { name: "语言", exact: true }).selectOption("en");
     page.once("dialog", dialog => dialog.accept());
     await task.getByRole("button", { name: "Delete history", exact: true }).click();

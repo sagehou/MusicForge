@@ -366,7 +366,9 @@ func (a *App) scan(ctx context.Context, r ScanRequest) error {
 	if quiet {
 		return later("Waiting for source files to be unchanged for 30 seconds", 10)
 	}
-	if err := ctx.Err(); err != nil { return err }
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	// Only a complete scan of accessible storage may expire sources.
 	if err = a.storage(s); err != nil {
 		return err
@@ -390,7 +392,9 @@ func (a *App) scan(ctx context.Context, r ScanRequest) error {
 		}
 	}
 	for dir, tracks := range albums {
-		if err := ctx.Err(); err != nil { return err }
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		a.reportProgress(jobID, Activity{Phase: "artwork", Path: dir, Processed: len(paths), Total: len(paths)}, .99)
 		if err = a.artwork(ctx, s, dir, tracks); err != nil {
 			return err
@@ -590,7 +594,10 @@ func (a *App) recoverFiles(ctx context.Context, s Settings) error {
 
 func (a *App) build(ctx context.Context, j Job, r BuildRequest) error {
 	a.files.Lock()
-	if err := ctx.Err(); err != nil { a.files.Unlock(); return err }
+	if err := ctx.Err(); err != nil {
+		a.files.Unlock()
+		return err
+	}
 	s, err := a.settings()
 	if err != nil {
 		a.files.Unlock()
@@ -642,7 +649,10 @@ func (a *App) build(ctx context.Context, j Job, r BuildRequest) error {
 	}
 	if !r.Move && source.OutputPresent && source.Output == target && source.BuiltHash == r.Hash && source.BuiltProfile == r.Profile.Fingerprint() {
 		path, pathErr := safePath(s.Output, target)
-		if pathErr != nil { a.files.Unlock(); return pathErr }
+		if pathErr != nil {
+			a.files.Unlock()
+			return pathErr
+		}
 		if info, statErr := os.Stat(path); statErr == nil && info.Mode().IsRegular() {
 			a.files.Unlock()
 			return nil
@@ -667,7 +677,10 @@ func (a *App) build(ctx context.Context, j Job, r BuildRequest) error {
 		return err
 	}
 	if r.Move {
-		if err := ctx.Err(); err != nil { a.files.Unlock(); return err }
+		if err := ctx.Err(); err != nil {
+			a.files.Unlock()
+			return err
+		}
 		if source.Output == target {
 			a.files.Unlock()
 			return nil
@@ -733,13 +746,17 @@ func (a *App) build(ctx context.Context, j Job, r BuildRequest) error {
 	args = append(args, r.Profile.Args()...)
 	args = append(args, temp)
 	if err = a.encode(ctx, j.ID, source.Duration, activity, args); err != nil {
-		if ctx.Err() != nil { return ctx.Err() }
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
 		return a.buildError(s, source, err)
 	}
 	activity.Phase, activity.Percent = "validate", 100
 	a.reportProgress(j.ID, activity, .9)
 	if err = a.validateArtifact(ctx, temp, r.Profile, source.Duration); err != nil {
-		if ctx.Err() != nil { return ctx.Err() }
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
 		return a.buildError(s, source, err)
 	}
 	file, err := os.Open(temp)
@@ -757,7 +774,9 @@ func (a *App) build(ctx context.Context, j Job, r BuildRequest) error {
 	}
 	a.files.Lock()
 	defer a.files.Unlock()
-	if err := ctx.Err(); err != nil { return err }
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	if err = a.storage(s); err != nil {
 		return err
 	}
@@ -804,16 +823,26 @@ func (a *App) encode(ctx context.Context, id int64, duration float64, activity A
 	var stderr boundedLog
 	cmd.Stderr = &stderr
 	stdout, err := cmd.StdoutPipe()
-	if err != nil { return err }
-	if err = cmd.Start(); err != nil { return err }
+	if err != nil {
+		return err
+	}
+	if err = cmd.Start(); err != nil {
+		return err
+	}
 	scanner := bufio.NewScanner(stdout)
 	last := time.Time{}
 	for scanner.Scan() {
 		key, value, found := strings.Cut(scanner.Text(), "=")
-		if !found || key != "out_time_us" || duration <= 0 { continue }
+		if !found || key != "out_time_us" || duration <= 0 {
+			continue
+		}
 		microseconds, err := strconv.ParseFloat(value, 64)
-		if err != nil { continue }
-		if time.Since(last) < time.Second { continue }
+		if err != nil {
+			continue
+		}
+		if time.Since(last) < time.Second {
+			continue
+		}
 		activity.Percent = math.Max(0, math.Min(100, microseconds/duration/10000))
 		a.reportProgress(id, activity, activity.Percent/100*.85)
 		last = time.Now()
@@ -1025,7 +1054,9 @@ func (a *App) deleteExpiredContext(ctx context.Context, ids []int64) error {
 		return err
 	}
 	for _, id := range ids {
-		if err := ctx.Err(); err != nil { return err }
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		source, err := a.source(id)
 		if err != nil {
 			return err

@@ -89,12 +89,13 @@ const taskGroups = `WITH members AS (
  sum(kind IN ('convert','move') AND state='running') AS track_running,
  sum(state='pending') AS pending, sum(state='running') AS running,
  sum(state='failed') AS failed, sum(state='pending' AND not_before=253402300799) AS held,
+ sum(state='failed' AND log='Stopped by administrator') AS cancelled,
  max(updated) AS changed, max(attempts) AS tries,
  coalesce(avg(CASE WHEN kind IN ('convert','move') THEN CASE WHEN state='success' THEN 1.0 ELSE progress END END),avg(CASE WHEN state='success' THEN 1.0 ELSE progress END)) AS fraction
  FROM members GROUP BY task_id
 ), tasks AS (
  SELECT g.*,CASE
- WHEN c.value='stopped' AND pending=0 AND running=0 THEN 'stopped'
+ WHEN c.value='stopped' AND cancelled>0 AND pending=0 AND running=0 THEN 'stopped'
  WHEN c.value='paused' AND pending>0 AND pending=held AND running=0 THEN 'paused'
  WHEN running>0 THEN 'running'
  WHEN failed>0 AND track_pending=0 AND root.state IN ('success','failed') THEN 'failed'

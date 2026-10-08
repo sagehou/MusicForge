@@ -92,6 +92,14 @@ func New(cfg Runtime, logger *slog.Logger, version string, assets fs.FS) (*App, 
 	if _, err = db.Exec("UPDATE jobs SET state='pending',not_before=0,updated=? WHERE state='running'", time.Now().Unix()); err != nil {
 		return fail(err)
 	}
+	// An older compatible release can explicitly retry stopped primitive jobs.
+	// Its pending job state is authoritative over the optional UI annotation.
+	if _, err = db.Exec(`DELETE FROM meta WHERE key LIKE 'task-control:%' AND value='stopped' AND EXISTS (
+	 SELECT 1 FROM jobs j LEFT JOIN meta m ON m.key='task-member:'||j.id
+	 WHERE coalesce(CAST(m.value AS INTEGER),j.id)=CAST(substr(meta.key,14) AS INTEGER)
+	 AND j.state IN ('pending','running') AND j.log<>'Stopped by administrator')`); err != nil {
+		return fail(err)
+	}
 	var admins int
 	if err = db.QueryRow("SELECT count(*) FROM admin").Scan(&admins); err != nil {
 		return fail(err)

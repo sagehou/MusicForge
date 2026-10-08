@@ -139,3 +139,23 @@ func TestTaskFiltersAndPaginationCountQueues(t *testing.T) {
 	list, total, err = a.taskList("running", 1, 0)
 	if err != nil || total != 1 || list[0].Counts.Pending != 110 || list[0].Counts.Failed != 0 { t.Fatal("retry missed queue members", list, total, err) }
 }
+
+func TestLegacyWriterCanRetryStoppedJobs(t *testing.T) {
+	a, _ := testApp(t)
+	id, err := a.enqueue("scan", "legacy-writer-retry", ScanRequest{}, true)
+	if err != nil { t.Fatal(err) }
+	if _, err = a.changeTasks("stop", selection{IDs: []int64{id}}); err != nil { t.Fatal(err) }
+	// This is the published schema-2 retry write: no task annotation support.
+	if _, err = a.db.Exec("UPDATE jobs SET state='pending',attempts=0,not_before=0,log='',updated=? WHERE state='failed' AND id=?", time.Now().Unix(), id); err != nil { t.Fatal(err) }
+	cfg, logger, assets := a.cfg, a.logger, a.assets
+	a.Close()
+	a, err = New(cfg, logger, "test", assets)
+	if err != nil { t.Fatal(err) }
+	defer a.Close()
+	j, err := a.claim(false)
+	if err != nil || j.ID != id { t.Fatal("legacy retry lost", j, err) }
+	if err = a.execute(context.Background(), j); err != nil { t.Fatal(err) }
+	if err = a.completeJob(j, "success", 0, 1, "", 0); err != nil { t.Fatal(err) }
+	list, total, err := a.taskList("success", 100, 0)
+	if err != nil || total != 1 || list[0].ID != id { t.Fatal("stale annotation overrode legacy write", list, err) }
+}

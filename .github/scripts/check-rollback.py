@@ -99,7 +99,7 @@ def snapshot():
     return result
 
 
-def verify(api, expected_track, pending):
+def verify(api, expected_track, pending, stopped):
     tracks = api("/api/library")
     assert len(tracks) == 1 and tracks[0] == expected_track, "library/artifact record changed"
     settings = api("/api/settings")
@@ -107,6 +107,7 @@ def verify(api, expected_track, pending):
     assert not settings["settings"]["enabled"], "rollback must keep background work paused"
     jobs = api("/api/jobs?state=all")["jobs"]
     assert any(job["id"] == pending and job["args"] == {"manual": True} and job["state"] in ("paused", "pending") for job in jobs), "paused task lost"
+    assert any(job["id"] == stopped and job["state"] in ("failed", "stopped") and job["log"] == "Stopped by administrator" and job["attempts"] == 0 for job in jobs), "stopped task or failure count lost"
     # Exercise an older writer, including its handling of redacted secret fields.
     values = settings["settings"]
     interval = values["scan_minutes"]
@@ -143,9 +144,11 @@ def main():
         values.update(enabled=False, nav_url="https://navidrome.example.test", nav_user="admin", nav_password="ci-nav-secret",
                       oidc_issuer="https://issuer.example.test", oidc_client_id="client", oidc_secret="ci-oidc-secret")
         api("/api/settings", "PUT", values)
+        stopped = api("/api/navidrome/refresh", "POST", {})["job_id"]
+        api("/api/jobs/control", "POST", {"action": "stop", "ids": [stopped]})
         pending = api("/api/navidrome/refresh", "POST", {})["job_id"]
         api("/api/jobs/control", "POST", {"action": "pause", "ids": [pending]})
-        verify(api, track, pending)
+        verify(api, track, pending, stopped)
         stop()
         expected = snapshot()
         held = next(row for row in expected["jobs"] if row[0] == pending)
@@ -159,7 +162,7 @@ def main():
                 api, running = start(actual_image)
                 if actual_image == image:
                     assert running == version, "wrong rollback release"
-                verify(api, track, pending)
+                verify(api, track, pending, stopped)
                 stop()
                 actual = snapshot()
                 changed = [key for key in expected if actual[key] != expected[key]]

@@ -372,5 +372,6 @@
   "error.taskStopped": "Stopped by administrator",
   "error.taskPaused": "Paused by administrator",
   "jobs.cancelled": "Cancelled by administrator; no failure attempt consumed",
-  "jobs.discovered": "{count} FLAC files discovered; counting the remaining directories"
+  "jobs.discovered": "{count} FLAC files discovered; counting the remaining directories",
+  "jobs.failedHint": "Some work failed. Check track errors below and retry when the cause is fixed."
 }

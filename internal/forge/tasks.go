@@ -99,7 +99,7 @@ const taskGroups = `WITH members AS (
  WHEN c.value='paused' AND pending>0 AND pending=held AND running=0 THEN 'paused'
  WHEN running>0 THEN 'running'
  WHEN failed>0 AND track_pending=0 AND root.state IN ('success','failed') THEN 'failed'
- WHEN pending>0 AND root.kind='scan' AND root.state='success' THEN 'running'
+ WHEN pending>0 AND member_count>1 AND root.state='success' THEN 'running'
  WHEN pending>0 THEN 'pending'
  WHEN failed>0 THEN 'failed' ELSE 'success' END AS task_state
  FROM groups g JOIN jobs root ON root.id=g.task_id
@@ -163,6 +163,16 @@ func (a *App) taskList(state string, limit, offset int) ([]Task, int, error) {
 	}
 	for i := range list {
 		task := &list[i]
+		if task.Profile == nil && task.Counts.Total > 0 {
+			var raw string
+			err := a.db.QueryRow("SELECT j.args FROM jobs j LEFT JOIN meta m ON m.key='task-member:'||j.id WHERE coalesce(CAST(m.value AS INTEGER),j.id)=? AND j.kind IN ('convert','move') ORDER BY j.id LIMIT 1", task.ID).Scan(&raw)
+			if err != nil && err != sql.ErrNoRows { return nil, 0, err }
+			if err == nil {
+				var request BuildRequest
+				if err = json.Unmarshal([]byte(raw), &request); err != nil { return nil, 0, err }
+				task.Profile = &request.Profile
+			}
+		}
 		if task.Kind == "scan" {
 			if raw, err := a.meta(taskProgressKey(task.ID)); err == nil {
 				var activity Activity
@@ -275,7 +285,7 @@ func (a *App) controlJobs(w http.ResponseWriter, r *http.Request) {
 		apiError(w, 400, errors.New("invalid task action"))
 		return
 	}
-	if !body.All && len(body.IDs) == 0 || len(body.IDs) > 10000 {
+	if body.All && body.Action != "retry" || !body.All && len(body.IDs) == 0 || len(body.IDs) > 10000 {
 		apiError(w, 400, errors.New("select tasks"))
 		return
 	}

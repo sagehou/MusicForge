@@ -4,8 +4,10 @@ import (
 	"bytes"
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"log/slog"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -158,4 +160,24 @@ func TestLegacyWriterCanRetryStoppedJobs(t *testing.T) {
 	if err = a.completeJob(j, "success", 0, 1, "", 0); err != nil { t.Fatal(err) }
 	list, total, err := a.taskList("success", 100, 0)
 	if err != nil || total != 1 || list[0].ID != id { t.Fatal("stale annotation overrode legacy write", list, err) }
+}
+
+func TestManualRebuildCreatesOneQueue(t *testing.T) {
+	a, s := testApp(t)
+	for i := 1; i <= 2; i++ { makeFLAC(t, a, s, fmt.Sprintf("Artist/Album/%02d.flac", i), fmt.Sprintf("Track %d", i), false) }
+	if err := a.scan(context.Background(), ScanRequest{}); err != nil { t.Fatal(err) }
+	drain(t, a, true)
+	if _, err := a.db.Exec("DELETE FROM jobs"); err != nil { t.Fatal(err) }
+	if _, err := a.db.Exec("DELETE FROM meta WHERE key LIKE 'task-%'"); err != nil { t.Fatal(err) }
+	s.Encoding = Encoding{"mp3", "vbr", 192, 2}
+	if err := a.saveSettings(s); err != nil { t.Fatal(err) }
+	w := httptest.NewRecorder()
+	a.rebuild(w, httptest.NewRequest("POST", "/api/library/rebuild", strings.NewReader(`{"all":true}`)))
+	if w.Code != 202 { t.Fatal(w.Code, w.Body.String()) }
+	var result struct { Queued int `json:"queued"`; ID int64 `json:"job_id"` }
+	if err := json.Unmarshal(w.Body.Bytes(), &result); err != nil || result.Queued != 2 || result.ID == 0 { t.Fatal("rebuild response", result, err) }
+	list, total, err := a.taskList("all", 100, 0)
+	if err != nil || total != 1 || list[0].Counts.Total != 2 || list[0].ID != result.ID { t.Fatal("manual rebuild split into tracks", list, err) }
+	if _, err = a.changeTasks("pause", selection{IDs: []int64{result.ID}}); err != nil { t.Fatal(err) }
+	if _, err = a.claim(true); err != sql.ErrNoRows { t.Fatal("rebuild queue was not paused as one task", err) }
 }

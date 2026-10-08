@@ -354,5 +354,6 @@
   "error.taskStopped": "管理员已停止任务",
   "error.taskPaused": "管理员已暂停任务",
   "jobs.cancelled": "管理员已取消，未消耗失败尝试次数",
-  "jobs.discovered": "已发现 {count} 个 FLAC 文件，正在枚举其余目录"
+  "jobs.discovered": "已发现 {count} 个 FLAC 文件，正在枚举其余目录",
+  "jobs.failedHint": "部分处理失败。查看下方曲目错误，修复原因后手动重试。"
 }

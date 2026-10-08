@@ -6,7 +6,9 @@
 
 2026-10-08 生产试部署复查修复了 OIDC 重新绑定的会话撤销、密码更新并发边界、已有 `/config` 目录权限与构建依赖安全补丁。[复查 CI](https://github.com/sagehou/MusicForge/actions/runs/37717242429)已通过；新增双架构真实 Compose 检查。v0.2.1 的试部署按[部署指南](deployment.zh-CN.md)核对代理网络、目录所有权和回滚快照。镜像摘要与发布验证见 [v0.2.1 发布页](https://github.com/sagehou/MusicForge/releases/tag/v0.2.1)。
 
-对 ds4.1-flash 的逐项复核修复了成功登录被限流计数、代理后的客户端 IP 隔离、已保存凭据的显式清除和 Lidarr 绝对路径前缀校验。[本轮 CI](https://github.com/sagehou/MusicForge/actions/runs/37732034349)通过了后端、八项浏览器检查和双架构原生镜像/Compose 检查。官方 Navidrome 0.64.2 测试已明确记录并验证 `1:.`，覆盖根级歌曲发现、封面变更和删除移除。生产试部署使用 [v0.2.2](https://github.com/sagehou/MusicForge/releases/tag/v0.2.2)，按[部署指南](deployment.zh-CN.md)配置可信代理。符号链接延期、损坏源文件处理和可写性探测保留已有取舍。
+对 ds4.1-flash 的逐项复核修复了成功登录被限流计数、代理后的客户端 IP 隔离、已保存凭据的显式清除和 Lidarr 绝对路径前缀校验。[本轮 CI](https://github.com/sagehou/MusicForge/actions/runs/37732034349)通过了后端、八项浏览器检查和双架构原生镜像/Compose 检查。官方 Navidrome 0.64.2 测试已明确记录并验证 `1:.`，覆盖根级歌曲发现、封面变更和删除移除。[v0.2.2](https://github.com/sagehou/MusicForge/releases/tag/v0.2.2) 新增的可信代理配置见[部署指南](deployment.zh-CN.md)。符号链接延期、损坏源文件处理和可写性探测保留已有取舍。
+
+本次多域名更新增加明确的 `MUSICFORGE_ALLOWED_ORIGINS`、按主机名隔离的 Cookie，并以 `MUSICFORGE_PUBLIC_URL` 作为 OIDC 主地址。[多域名 CI](https://github.com/sagehou/MusicForge/actions/runs/37746300869)通过后端 race/集成/vet、八项 Chromium 检查（含两个主机的本地登录和保存设置），以及双架构原生镜像/Compose 验证。OIDC 测试覆盖创建 state 前跳转主地址、固定主回调、拒绝其他域名的回调，并保留 PKCE 与重放防护。两个架构的回退证据均记录 v0.2.2、v0.2.1、v0.2.0 往返成功，使用同一 schema-2 数据库、启动配置、源库与输出。生产试部署使用 [v0.2.3](https://github.com/sagehou/MusicForge/releases/tag/v0.2.3) 和更新后的 Compose；旧版本保持数据兼容，回退后仅主地址可正常使用。
 
 | 约定 | GitHub Actions 中的验证证据 |
 | --- | --- |

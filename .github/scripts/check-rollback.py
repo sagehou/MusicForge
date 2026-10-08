@@ -6,10 +6,12 @@ import json
 import os
 from pathlib import Path
 import sqlite3
+import struct
 import subprocess
 import time
 import urllib.error
 import urllib.request
+import zlib
 
 
 ROOT = Path(".ci/rollback").resolve()
@@ -24,7 +26,10 @@ LEGACY = {
 
 
 def docker(*args):
-    return subprocess.run(["docker", *args], check=True, capture_output=True, text=True).stdout
+    result = subprocess.run(["docker", *args], capture_output=True, text=True)
+    if result.returncode:
+        raise RuntimeError("docker " + args[0] + " failed: " + result.stderr.strip())
+    return result.stdout
 
 
 def wait_for(read, ready, description):
@@ -112,7 +117,13 @@ def main():
         (ROOT / directory).mkdir(parents=True, exist_ok=True)
     media = ("run", "--rm", "--user", f"{os.getuid()}:{os.getgid()}", "-v", f"{ROOT / 'source'}:/fixture", "--entrypoint", "ffmpeg", CANDIDATE, "-nostdin", "-v", "error", "-y")
     docker(*media, "-f", "lavfi", "-i", "sine=duration=1", "-c:a", "flac", "-metadata", "artist=Rollback Artist", "-metadata", "album=Rollback Album", "-metadata", "title=Rollback Track", "/fixture/Album/01.flac")
-    docker(*media, "-f", "lavfi", "-i", "color=c=teal:s=32x32:d=0.1", "-frames:v", "1", "/fixture/Album/cover.jpg")
+    # The release media tools omit the color filter; a standard-library PNG is sufficient.
+    def chunk(kind, data):
+        return struct.pack(">I", len(data)) + kind + data + struct.pack(">I", zlib.crc32(kind + data))
+    header = struct.pack(">IIBBBBB", 32, 32, 8, 2, 0, 0, 0)
+    pixels = (b"\x00" + b"\x2c\xa0\xb4" * 32) * 32
+    cover = b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", header) + chunk(b"IDAT", zlib.compress(pixels)) + chunk(b"IEND", b"")
+    (ROOT / "source/Album/cover.png").write_bytes(cover)
     stable = time.time() - 120
     os.utime(ROOT / "source/Album/01.flac", (stable, stable))
     try:

@@ -50,7 +50,7 @@ func TestUnchangedArtworkSkipsProbeAndExternalUpdatesDoNotEncode(t *testing.T) {
 				t.Fatal("artwork update re-encoded audio")
 			}
 			var jobs int
-			if err = a.db.QueryRow("SELECT count(*) FROM jobs WHERE kind='convert'").Scan(&jobs); err != nil || jobs != 1 {
+			if err = a.db.QueryRow("SELECT count(*) FROM jobs WHERE (kind='convert' OR dedup LIKE 'scan:prepare:%')").Scan(&jobs); err != nil || jobs != 1 {
 				t.Fatal("artwork update queued audio conversion")
 			}
 		})

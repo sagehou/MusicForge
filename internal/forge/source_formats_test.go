@@ -132,7 +132,7 @@ func TestMixedAudioSourcesBuildAndRemainIncremental(t *testing.T) {
 				t.Fatal("unchanged mixed library required another probe", err)
 			}
 			var jobs int
-			if err = a.db.QueryRow("SELECT count(*) FROM jobs WHERE kind='convert'").Scan(&jobs); err != nil || jobs != len(fixtures) {
+			if err = a.db.QueryRow("SELECT count(*) FROM jobs WHERE (kind='convert' OR dedup LIKE 'scan:prepare:%')").Scan(&jobs); err != nil || jobs != len(fixtures) {
 				t.Fatal("unchanged mixed sources were re-encoded", jobs, err)
 			}
 		})

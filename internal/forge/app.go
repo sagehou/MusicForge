@@ -13,6 +13,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -43,6 +44,9 @@ type App struct {
 	storageError  error
 	ioContext     context.Context
 	ioCancel      context.CancelFunc
+	stagingMu     sync.Mutex
+	stagingBytes  int64
+	stagingDir    string
 }
 
 type loginLimit struct {
@@ -90,6 +94,9 @@ func New(cfg Runtime, logger *slog.Logger, version string, assets fs.FS) (*App, 
 	a := &App{cfg: cfg, db: db, logger: logger, version: version, assets: assets, lock: lock, loginFailures: map[string]loginLimit{}, activeJobs: map[int64]context.CancelFunc{}, sourceSlots: make(chan struct{}, 20)}
 	a.ioContext, a.ioCancel = context.WithCancel(context.Background())
 	fail := func(err error) (*App, error) { a.Close(); return nil, err }
+	if err = a.initializeStaging(); err != nil {
+		return fail(err)
+	}
 	if _, err = a.settings(); err == sql.ErrNoRows {
 		err = a.saveSettings(DefaultSettings())
 	}
@@ -291,6 +298,24 @@ func (a *App) execute(ctx context.Context, j Job) error {
 		var r ScanRequest
 		if err := json.Unmarshal(j.Args, &r); err != nil {
 			return err
+		}
+		if strings.HasPrefix(j.Key, prepareScanPrefix) {
+			return a.prepare(ctx, j, r)
+		}
+		if strings.HasPrefix(j.Key, "scan:finalize:") {
+			var pending, failed int
+			err := a.db.QueryRow(`SELECT coalesce(sum(state IN ('pending','running')),0),coalesce(sum(state='failed'),0)
+			 FROM jobs j LEFT JOIN meta m ON m.key='task-member:'||j.id
+			 WHERE j.dedup LIKE 'scan:prepare:%' AND coalesce(CAST(m.value AS INTEGER),j.id)=?`, a.taskID(j.ID)).Scan(&pending, &failed)
+			if err != nil {
+				return err
+			}
+			if pending > 0 {
+				return later("Waiting for source verification and conversion to finish", 1)
+			}
+			if failed > 0 {
+				return nil // An incomplete preparation must not expire unseen sources.
+			}
 		}
 		return a.scan(context.WithValue(ctx, taskJobKey{}, j.ID), r)
 	case "convert", "move":

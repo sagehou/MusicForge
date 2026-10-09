@@ -24,10 +24,11 @@ type Runtime struct {
 	FFprobe              string         `json:"ffprobe"`
 	TrustedProxies       []netip.Prefix `json:"trusted_proxies,omitempty"`
 	SourceTimeoutSeconds int            `json:"source_timeout_seconds,omitempty"`
+	StagingMaxBytes       int64          `json:"staging_max_bytes,omitempty"`
 }
 
 func LoadRuntime(dir string) (Runtime, error) {
-	c := Runtime{ConfigDir: dir, Listen: ":8787", LogLevel: "INFO", FFmpeg: "ffmpeg", FFprobe: "ffprobe", SourceTimeoutSeconds: 120}
+	c := Runtime{ConfigDir: dir, Listen: ":8787", LogLevel: "INFO", FFmpeg: "ffmpeg", FFprobe: "ffprobe", SourceTimeoutSeconds: 120, StagingMaxBytes: 4 * 1024 * 1024 * 1024}
 	b, err := os.ReadFile(filepath.Join(dir, "config.json"))
 	if err == nil {
 		if err := json.Unmarshal(b, &c); err != nil {
@@ -49,6 +50,15 @@ func LoadRuntime(dir string) (Runtime, error) {
 	}
 	if c.SourceTimeoutSeconds < 1 || c.SourceTimeoutSeconds > 3600 {
 		return c, errors.New("source_timeout_seconds must be 1–3600 (or omitted for 120)")
+	}
+	if value, ok := os.LookupEnv("MUSICFORGE_STAGING_MAX_BYTES"); ok {
+		c.StagingMaxBytes, err = strconv.ParseInt(value, 10, 64)
+		if err != nil {
+			return c, errors.New("staging_max_bytes must be a positive number of bytes")
+		}
+	}
+	if c.StagingMaxBytes < 1 {
+		return c, errors.New("staging_max_bytes must be a positive number of bytes (or omitted for 4294967296)")
 	}
 	if value, ok := os.LookupEnv("MUSICFORGE_ALLOWED_ORIGINS"); ok {
 		c.AllowedOrigins = nil

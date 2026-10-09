@@ -17,7 +17,13 @@ import (
 // Exercise real process cancellation without requiring a FUSE mount in unit tests.
 func TestMain(m *testing.M) {
 	args := os.Args[1:]
-	if len(args) == 4 && args[0] == "-source-io" {
+	if len(args) >= 4 && args[0] == "-source-io" {
+		if trace := os.Getenv("MUSICFORGE_TEST_SOURCE_TRACE"); trace != "" {
+			if f, err := os.OpenFile(trace, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0600); err == nil {
+				_, _ = fmt.Fprintln(f, args[1]+":"+args[3])
+				_ = f.Close()
+			}
+		}
 		var fault struct {
 			Operation string `json:"operation"`
 			Rel       string `json:"rel"`
@@ -105,7 +111,7 @@ func TestRemoteReadFailurePastThirtyTracksKeepsHealthyQueueAndStopsAfterThreeAtt
 			t.Fatal(err)
 		}
 	}
-	sourceFault(t, "hash", "Artist/Album/36.flac", 10000, 0)
+	sourceFault(t, "stage", "Artist/Album/36.flac", 10000, 0)
 	id, err := a.enqueue("scan", "scan:remote-test", ScanRequest{}, true)
 	if err != nil {
 		t.Fatal(err)
@@ -152,7 +158,7 @@ func TestRemoteReadFailurePastThirtyTracksKeepsHealthyQueueAndStopsAfterThreeAtt
 	}
 	cancel()
 	<-done
-	sourceFault(t, "hash", "Artist/Album/36.flac", 0, 0)
+	sourceFault(t, "stage", "Artist/Album/36.flac", 0, 0)
 	if _, err = a.changeTasks("retry", selection{IDs: []int64{id}}); err != nil {
 		t.Fatal(err)
 	}
@@ -175,7 +181,7 @@ func TestRemoteReadFailurePastThirtyTracksKeepsHealthyQueueAndStopsAfterThreeAtt
 func TestHungScanLeavesAPIResponsiveAndCanPause(t *testing.T) {
 	a, s := testApp(t)
 	makeFLAC(t, a, s, "Artist/Album/01.flac", "Remote track", false)
-	sourceFault(t, "hash", "Artist/Album/01.flac", 10000, 0)
+	sourceFault(t, "stage", "Artist/Album/01.flac", 10000, 0)
 	id, err := a.enqueue("scan", "scan:pause-remote", ScanRequest{}, true)
 	if err != nil {
 		t.Fatal(err)

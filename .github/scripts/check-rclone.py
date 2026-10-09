@@ -20,6 +20,8 @@ ORIGIN = "http://127.0.0.1:19094"
 RELEASE = threading.Event()
 BLOCKED = threading.Event()
 fault_path = "/36.flac"
+TRANSFERRED = {}
+TRANSFER_LOCK = threading.Lock()
 
 
 class Proxy(http.server.BaseHTTPRequestHandler):
@@ -50,6 +52,9 @@ class Proxy(http.server.BaseHTTPRequestHandler):
                 self.wfile.write(chunk)
                 self.wfile.flush()
                 sent += len(chunk)
+                with TRANSFER_LOCK:
+                    key = urllib.parse.unquote(self.path)
+                    TRANSFERRED[key] = TRANSFERRED.get(key, 0) + len(chunk)
                 if stalled and sent >= 256 * 1024 and not RELEASE.is_set():
                     BLOCKED.set()
                     RELEASE.wait(90)
@@ -120,7 +125,7 @@ def run():
     try:
         processes.append(subprocess.Popen(["rclone", "serve", "webdav", str(ROOT / "source"), "--addr", "127.0.0.1:19090", "--dir-cache-time", "1s", "--log-file", str(ROOT / "webdav.log")]))
         remote = ":webdav,url='http://127.0.0.1:19091',vendor='other':"
-        processes.append(subprocess.Popen(["rclone", "mount", remote, str(ROOT / "mount"), "--read-only", "--vfs-cache-mode", "full", "--cache-dir", str(ROOT / "cache"), "--dir-cache-time", "1s", "--attr-timeout", "1s", "--poll-interval", "0", "--timeout", "30s", "--low-level-retries", "1", "--rc", "--rc-addr", "127.0.0.1:19093", "--rc-no-auth", "--log-file", str(ROOT / "mount.log")]))
+        processes.append(subprocess.Popen(["rclone", "mount", remote, str(ROOT / "mount"), "--read-only", "--vfs-cache-mode", "off", "--buffer-size", "0", "--vfs-read-chunk-size", "64k", "--vfs-read-chunk-size-limit", "64k", "--cache-dir", str(ROOT / "cache"), "--dir-cache-time", "1s", "--attr-timeout", "1s", "--poll-interval", "0", "--timeout", "30s", "--low-level-retries", "1", "--rc", "--rc-addr", "127.0.0.1:19093", "--rc-no-auth", "--log-file", str(ROOT / "mount.log")]))
         wait_for(lambda: subprocess.run(["mountpoint", "-q", str(ROOT / "mount")], timeout=5).returncode, lambda code: code == 0, timeout=15)
         app_log = open(ROOT / "app.log", "w")
         logs.append(app_log)
@@ -167,13 +172,26 @@ def run():
         sources = wait_for(lambda: api("/api/library"), lambda sources: any(source["path"].endswith("41.flac") and source["error"].startswith("Source read unavailable: ") for source in sources), timeout=30)
         assert BLOCKED.is_set(), "timeout fixture did not reach remote storage"
         assert all(source["status"] == "ready" for source in sources if not source["path"].endswith("41.flac"))
-        wait_for(lambda: task(second), lambda job: job["state"] == "pending" and job["attempts"] == 1, timeout=5)
+        wait_for(lambda: task(second), lambda job: job["attempts"] == 1 and job["counts"]["pending"] > 0, timeout=5)
         control(second, "pause")
         RELEASE.set()
         control(second, "resume")
         wait_for(lambda: task(second), lambda job: job["state"] == "success", timeout=30)
         assert all(source["status"] == "ready" for source in api("/api/library"))
-        evidence = {"rclone_version": subprocess.check_output(["rclone", "version"], text=True).splitlines()[0], "tracks": 41, "source_formats": ["flac", "mp3", "m4a"], "read_bytes_before_pause": max(activity.get("read_bytes", 0) for activity in reading["current"]), "api_response_seconds_while_stalled": response_times, "pause_attempts": 0, "timeout_attempts_before_recovery": 1, "full_content_hash_preserved": True}
+        single = ROOT / "source/Artist/Single"
+        single.mkdir()
+        shutil.copyfile(album / "36.flac", single / "42.flac")
+        os.utime(single / "42.flac", (time.time() - 120, time.time() - 120))
+        time.sleep(1.1)
+        subprocess.run(["rclone", "rc", "vfs/forget", "--url", "http://127.0.0.1:19093"], check=True, capture_output=True)
+        third = api("/api/library/scan", {"dirs": ["Artist/Single"]})["job_id"]
+        wait_for(lambda: task(third), lambda job: job["state"] == "success", timeout=30)
+        with TRANSFER_LOCK:
+            single_bytes = sum(count for path, count in TRANSFERRED.items() if path.endswith("/42.flac"))
+        single_size = (single / "42.flac").stat().st_size
+        assert single_bytes >= single_size and single_bytes <= single_size + 512 * 1024, (single_size, single_bytes)
+        assert not list((ROOT / "config/source-staging").iterdir()), "source scratch files leaked"
+        evidence = {"vfs_cache_mode": "off", "single_pass_source_bytes": single_size, "single_pass_remote_bytes": single_bytes, "metadata_overhead_budget": 512 * 1024, "rclone_version": subprocess.check_output(["rclone", "version"], text=True).splitlines()[0], "tracks": 42, "source_formats": ["flac", "mp3", "m4a"], "read_bytes_before_pause": max(activity.get("read_bytes", 0) for activity in reading["current"]), "api_response_seconds_while_stalled": response_times, "pause_attempts": 0, "timeout_attempts_before_recovery": 1, "full_content_hash_preserved": True}
         (ROOT / "evidence.json").write_text(json.dumps(evidence, indent=2) + "\n")
         print(json.dumps(evidence))
     finally:

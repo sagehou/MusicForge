@@ -85,10 +85,13 @@ func writeCover(t *testing.T, path string) {
 }
 func drain(t *testing.T, a *App, convert bool) {
 	t.Helper()
-	for i := 0; i < 50; i++ {
+	for i := 0; i < 250; i++ {
 		j, err := a.claim(convert)
 		if err != nil {
-			return
+			j, err = a.claim(!convert)
+			if err != nil {
+				return
+			}
 		}
 		if err = a.execute(context.Background(), j); err != nil {
 			t.Fatalf("job %d %s: %v", j.ID, j.Kind, err)
@@ -134,12 +137,12 @@ func TestEncodingLifecycle(t *testing.T) {
 				t.Fatal("album artwork missing:", err)
 			}
 			var before int
-			_ = a.db.QueryRow("SELECT count(*) FROM jobs WHERE kind='convert'").Scan(&before)
+			_ = a.db.QueryRow("SELECT count(*) FROM jobs WHERE (kind='convert' OR dedup LIKE 'scan:prepare:%')").Scan(&before)
 			if err = a.scan(context.Background(), ScanRequest{}); err != nil {
 				t.Fatal(err)
 			}
 			var after int
-			_ = a.db.QueryRow("SELECT count(*) FROM jobs WHERE kind='convert'").Scan(&after)
+			_ = a.db.QueryRow("SELECT count(*) FROM jobs WHERE (kind='convert' OR dedup LIKE 'scan:prepare:%')").Scan(&after)
 			if before != after {
 				t.Fatal("unchanged scan re-encoded track")
 			}
@@ -178,7 +181,7 @@ func TestMoveRebuildAndExpiration(t *testing.T) {
 		t.Fatal(err)
 	}
 	var pending int
-	_ = a.db.QueryRow("SELECT count(*) FROM jobs WHERE kind='convert' AND state='pending'").Scan(&pending)
+	_ = a.db.QueryRow("SELECT count(*) FROM jobs WHERE (kind='convert' OR dedup LIKE 'scan:prepare:%') AND state='pending'").Scan(&pending)
 	if pending != 0 {
 		t.Fatal("profile change automatically queued rebuild")
 	}
@@ -237,7 +240,7 @@ func TestOwnershipOfflineAndFailedDedup(t *testing.T) {
 		t.Fatal(err)
 	}
 	var pending int
-	_ = a.db.QueryRow("SELECT count(*) FROM jobs WHERE kind='convert' AND state='pending'").Scan(&pending)
+	_ = a.db.QueryRow("SELECT count(*) FROM jobs WHERE (kind='convert' OR dedup LIKE 'scan:prepare:%') AND state='pending'").Scan(&pending)
 	if pending != 0 {
 		t.Fatal("failed target was automatically reset")
 	}

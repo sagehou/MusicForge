@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 )
@@ -124,7 +125,7 @@ func TestScopedScanDistinguishesCrossDirectoryMoveFromCopy(t *testing.T) {
 					t.Fatalf("move did not preserve artifact: %v", err)
 				}
 				var conversions int
-				if err = a.db.QueryRow("SELECT count(*) FROM jobs WHERE kind='convert'").Scan(&conversions); err != nil {
+				if err = a.db.QueryRow("SELECT count(*) FROM jobs WHERE (kind='convert' OR dedup LIKE 'scan:prepare:%')").Scan(&conversions); err != nil {
 					t.Fatal(err)
 				}
 				if conversions != 1 {
@@ -267,7 +268,7 @@ func TestDamagedFLACFramePreservesPlayableArtifact(t *testing.T) {
 		t.Fatal(err)
 	}
 	j, err := a.claim(true)
-	if err != nil || j.Kind != "convert" {
+	if err != nil || (j.Kind != "convert" && !strings.HasPrefix(j.Key, prepareScanPrefix)) {
 		t.Fatalf("damaged source should require replacement: %v / %+v", err, j)
 	}
 	if err = a.execute(ctx, j); err == nil {

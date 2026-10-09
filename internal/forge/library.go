@@ -120,7 +120,7 @@ func (a *App) probe(ctx context.Context, path string) (probeData, error) {
 	probeCtx, cancel := context.WithTimeout(ctx, a.sourceTimeout())
 	defer cancel()
 	// Request only used fields; artwork stream diagnostics can otherwise truncate JSON.
-	cmd := exec.CommandContext(probeCtx, a.cfg.FFprobe, "-v", "error", "-show_entries", "stream=codec_name,codec_type,duration:stream_tags:stream_disposition=attached_pic:format=duration:format_tags", "-of", "json", path)
+	cmd := exec.CommandContext(probeCtx, a.cfg.FFprobe, "-v", "error", "-probesize", "65536", "-analyzeduration", "100000", "-show_entries", "stream=codec_name,codec_type,duration:stream_tags:stream_disposition=attached_pic:format=duration:format_tags", "-of", "json", path)
 	out := boundedLog{limit: 4 * 1024 * 1024}
 	var stderr boundedLog
 	cmd.Stdout, cmd.Stderr = &out, &stderr
@@ -238,6 +238,10 @@ func scoped(rel string, dirs []string) bool {
 	return false
 }
 
+// Preparation uses the published scan/Verify request. Older schema-2 workers
+// can finish these jobs by verifying the source and queuing an ordinary build.
+const prepareScanPrefix = "scan:prepare:"
+
 func (a *App) scan(ctx context.Context, r ScanRequest) error {
 	jobID, _ := ctx.Value(taskJobKey{}).(int64)
 	if err := a.lockFiles(ctx); err != nil {
@@ -292,85 +296,62 @@ func (a *App) scan(ctx context.Context, r ScanRequest) error {
 		paths = append(paths, rel)
 	}
 	sort.Strings(paths)
-	quiet := false
-	invalid := 0
-	unavailable := 0
+	quiet, invalid, unavailable, preparing := false, 0, 0, 0
 	for index, rel := range paths {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
 		info := files[rel]
 		source, found := byRel[rel]
-		a.reportProgress(jobID, Activity{Phase: "scan", Path: rel, Artist: source.Artist, Album: source.Album, Title: source.Title, Processed: index, Total: len(paths)}, float64(index)/float64(len(paths)))
-		changed := !found || !sameStat(info, source) || r.Verify || strings.HasPrefix(source.Error, sourceReadErrorPrefix)
+		activity := Activity{Phase: "scan", Path: rel, Artist: source.Artist, Album: source.Album, Title: source.Title, Processed: index, Total: len(paths)}
+		a.reportProgress(jobID, activity, float64(index)/float64(len(paths)))
+		changed := !found || !sameStat(info, source) || r.Verify || source.Hash == "" && source.Error == ""
+		if !changed && strings.HasPrefix(source.Error, sourceReadErrorPrefix) {
+			key := prepareScanPrefix + digest(fmt.Sprintf("%s:%d:%d:%s", rel, source.Size, source.Mtime, s.Encoding.Fingerprint()))
+			var failed int
+			if err = a.db.QueryRow("SELECT count(*) FROM jobs WHERE dedup=? AND state='failed'", key).Scan(&failed); err != nil {
+				return err
+			}
+			changed = failed == 0
+		}
+		// Failed preparation is retried by task controls, not every periodic scan.
 		if changed && time.Since(info.ModTime()) < 30*time.Second {
 			quiet = true
 			continue
 		}
 		if changed {
-			activity := Activity{Phase: "read", Path: rel, Artist: source.Artist, Album: source.Album, Title: source.Title, Processed: index, Total: len(paths), ReadTotalBytes: info.Size()}
-			a.reportProgress(jobID, activity, float64(index)/float64(len(paths)))
-			lastRead := time.Time{}
-			hash, err := a.sourceHash(ctx, s.Source, rel, func(read, total int64) {
-				if time.Since(lastRead) < time.Second && read != total {
-					return
-				}
-				activity.ReadBytes, activity.ReadTotalBytes = read, total
-				a.reportProgress(jobID, activity, float64(index)/float64(len(paths)))
-				if read > 0 {
-					lastRead = time.Now()
-				}
-			})
-			if err != nil {
-				if ctx.Err() != nil {
-					return ctx.Err()
-				}
-				if err = a.indexSourceReadError(rel, info, err); err != nil {
-					return err
-				}
-				unavailable++
-				continue
-			}
-			current, err := a.sourceStat(ctx, s.Source, rel)
-			if err != nil {
-				if ctx.Err() != nil {
-					return ctx.Err()
-				}
-				if err = a.indexSourceReadError(rel, info, err); err != nil {
-					return err
-				}
-				unavailable++
-				continue
-			}
 			activity.Phase = "probe"
 			a.reportProgress(jobID, activity, float64(index)/float64(len(paths)))
-			p, err := a.probe(ctx, current.Path)
-			if err == nil && !p.audioSource() {
-				err = fmt.Errorf("not a valid audio-only source (artwork is allowed): %s", rel)
+			current, readErr := a.sourceStat(ctx, s.Source, rel)
+			var p probeData
+			if readErr == nil {
+				p, readErr = a.probe(ctx, current.Path)
 			}
-			if err != nil {
+			if readErr == nil && !p.audioSource() {
+				readErr = fmt.Errorf("not a valid audio-only source (artwork is allowed): %s", rel)
+			}
+			if readErr != nil {
 				if ctx.Err() != nil {
 					return ctx.Err()
 				}
-				if errors.Is(err, context.DeadlineExceeded) {
-					if err = a.indexSourceReadError(rel, info, err); err != nil {
-						return err
-					}
+				if errors.Is(readErr, context.DeadlineExceeded) {
+					err = a.indexSourceReadError(rel, info, readErr)
 					unavailable++
-					continue
+				} else {
+					err = a.indexSourceError(rel, info, readErr)
+					invalid++
 				}
-				if err = a.indexSourceError(rel, info, err); err != nil {
+				if err != nil {
 					return err
 				}
-				invalid++
 				continue
 			}
-			after, err := a.sourceStat(ctx, s.Source, rel)
-			if err != nil {
+			after, readErr := a.sourceStat(ctx, s.Source, rel)
+			if readErr != nil {
 				if ctx.Err() != nil {
 					return ctx.Err()
 				}
-				if err = a.indexSourceReadError(rel, info, err); err != nil {
+				if err = a.indexSourceReadError(rel, info, readErr); err != nil {
 					return err
 				}
 				unavailable++
@@ -380,84 +361,58 @@ func (a *App) scan(ctx context.Context, r ScanRequest) error {
 				quiet = true
 				continue
 			}
-			tags := p.tags()
-			metadata, _ := json.Marshal(tags)
-			if !found {
-				// A missing byte-identical source is a rename. Existing duplicates keep their own IDs.
-				for _, old := range existing {
-					if old.Hash == hash && old.Hash != "" && files[old.Rel] == nil {
-						// A scoped scan must confirm absence outside its enumerated directories.
-						if _, err = a.sourceStat(ctx, s.Source, old.Rel); err == nil {
-							continue
-						} else if !os.IsNotExist(err) {
-							return err
-						}
-						var taken int
-						if err = a.db.QueryRow("SELECT count(*) FROM sources WHERE id=? AND rel=?", old.ID, old.Rel).Scan(&taken); err != nil {
-							return err
-						}
-						if taken == 1 {
-							source = old
-							found = true
-							break
-						}
-					}
-				}
-			}
-			if found {
-				_, err = a.db.Exec("UPDATE sources SET rel=?,hash=?,size=?,mtime=?,artist=?,album=?,title=?,track=?,disc=?,duration=?,metadata=?,present=1,error='' WHERE id=?", rel, hash, info.Size(), info.ModTime().UnixNano(), tags["artist"], tags["album"], tags["title"], tagPosition(tags, "track"), tagPosition(tags, "disc"), p.duration(), string(metadata), source.ID)
-			} else {
-				var result sql.Result
-				result, err = a.db.Exec("INSERT INTO sources(rel,hash,size,mtime,artist,album,title,track,disc,duration,metadata) VALUES(?,?,?,?,?,?,?,?,?,?,?)", rel, hash, info.Size(), info.ModTime().UnixNano(), tags["artist"], tags["album"], tags["title"], tagPosition(tags, "track"), tagPosition(tags, "disc"), p.duration(), string(metadata))
-				if err == nil {
-					source.ID, err = result.LastInsertId()
-				}
-			}
+			// An empty hash still means no verified current content fingerprint.
+			// Never queue a BuildRequest until full SHA-256 verification finishes.
+			source, err = a.indexTags(rel, info, p, "")
 			if err != nil {
 				return err
 			}
-		} else {
+		}
+		if !source.Present {
 			if _, err = a.db.Exec("UPDATE sources SET present=1 WHERE id=?", source.ID); err != nil {
 				return err
 			}
 		}
-		source, err = a.source(source.ID)
-		if err != nil {
-			return err
-		}
-		if changed {
-			a.reportProgress(jobID, Activity{Phase: "scan", Path: rel, Artist: source.Artist, Album: source.Album, Title: source.Title, Processed: index, Total: len(paths)}, float64(index)/float64(len(paths)))
-		}
 		present := false
 		if source.Output != "" {
-			out, err := safePath(s.Output, source.Output)
-			if err != nil {
-				return err
+			out, pathErr := safePath(s.Output, source.Output)
+			if pathErr != nil {
+				return pathErr
 			}
-			fi, err := os.Stat(out)
-			present = err == nil && fi.Mode().IsRegular()
-			if err != nil && !os.IsNotExist(err) {
-				return later("Output storage unavailable: "+err.Error(), 30)
+			fi, statErr := os.Stat(out)
+			present = statErr == nil && fi.Mode().IsRegular()
+			if statErr != nil && !os.IsNotExist(statErr) {
+				return later("Output storage unavailable: "+statErr.Error(), 30)
 			}
 		}
 		if _, err = a.db.Exec("UPDATE sources SET output_present=? WHERE id=?", present, source.ID); err != nil {
 			return err
 		}
 		source.OutputPresent = present
-		if source.Hash == "" {
-			if source.Error != "" {
-				invalid++
-			}
-			continue
-		}
-		moved := present && source.BuiltHash == source.Hash && source.Output != outputRel(source.Rel, strings.TrimPrefix(filepath.Ext(source.Output), "."))
-		if moved {
-			if _, err = a.queueBuildTask(source, s.Encoding, true, false, jobID); err != nil {
+		if source.Hash == "" && source.Error == "" {
+			key := prepareScanPrefix + digest(fmt.Sprintf("%s:%d:%d:%s", rel, source.Size, source.Mtime, s.Encoding.Fingerprint()))
+			if _, err = a.enqueueTask("scan", key, ScanRequest{Dirs: []string{rel}, Verify: true}, r.Verify, jobID); err != nil {
 				return err
 			}
-		} else if !present || source.BuiltHash != source.Hash {
-			if _, err = a.queueBuildTask(source, s.Encoding, false, false, jobID); err != nil {
+			preparing++
+		} else if source.Error != "" {
+			if strings.HasPrefix(source.Error, sourceReadErrorPrefix) || source.Hash == "" {
+				unavailable++
+			}
+		} else {
+			var failed int
+			key := prepareScanPrefix + digest(fmt.Sprintf("%s:%d:%d:%s", rel, source.Size, source.Mtime, s.Encoding.Fingerprint()))
+			if err = a.db.QueryRow("SELECT count(*) FROM jobs WHERE dedup=? AND state='failed'", key).Scan(&failed); err != nil {
 				return err
+			}
+			if failed > 0 {
+				continue
+			}
+			moved := present && source.BuiltHash == source.Hash && source.Output != outputRel(source.Rel, strings.TrimPrefix(filepath.Ext(source.Output), "."))
+			if moved || !present || source.BuiltHash != source.Hash {
+				if _, err = a.queueBuildTask(source, s.Encoding, moved, false, jobID); err != nil {
+					return err
+				}
 			}
 		}
 	}
@@ -467,45 +422,210 @@ func (a *App) scan(ctx context.Context, r ScanRequest) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	// Only a complete scan of accessible storage may expire sources.
 	if err = a.storageContext(ctx, s); err != nil {
 		return err
+	}
+	// Leave absence decisions until every source in this scope has been verified.
+	// Re-enumeration in the final scan also protects against a mount disappearing.
+	if jobID != 0 && preparing > 0 && invalid == 0 && unavailable == 0 {
+		if _, err = a.enqueueTask("scan", "scan:finalize:"+strconv.FormatInt(jobID, 10)+":"+digest(strings.Join(r.Dirs, "\x00")), ScanRequest{Dirs: r.Dirs}, false, jobID); err != nil {
+			return err
+		}
 	}
 	all, err := a.allSources()
 	if err != nil {
 		return err
 	}
+	albums := map[string][]Source{}
 	for _, source := range all {
-		if invalid == 0 && unavailable == 0 && scoped(source.Rel, r.Dirs) && files[source.Rel] == nil {
+		if preparing == 0 && invalid == 0 && unavailable == 0 && scoped(source.Rel, r.Dirs) && files[source.Rel] == nil {
 			if _, err = a.db.Exec("UPDATE sources SET present=0 WHERE id=?", source.ID); err != nil {
 				return err
 			}
 		}
-	}
-	albums := map[string][]Source{}
-	for _, source := range all {
 		if files[source.Rel] != nil && source.Hash != "" && source.Error == "" && scoped(source.Rel, r.Dirs) {
 			dir := filepath.Dir(source.Rel)
 			albums[dir] = append(albums[dir], source)
 		}
 	}
-	for dir, tracks := range albums {
-		if err := ctx.Err(); err != nil {
-			return err
-		}
-		a.reportProgress(jobID, Activity{Phase: "artwork", Path: dir, Processed: len(paths), Total: len(paths)}, .99)
-		if err = a.artwork(ctx, s, dir, tracks); err != nil {
-			return err
+	if preparing == 0 && unavailable == 0 {
+		for dir, tracks := range albums {
+			if err := ctx.Err(); err != nil {
+				return err
+			}
+			a.reportProgress(jobID, Activity{Phase: "artwork", Path: dir, Processed: len(paths), Total: len(paths)}, .99)
+			if err = a.artwork(ctx, s, dir, tracks); err != nil {
+				return err
+			}
 		}
 	}
 	a.reportProgress(jobID, Activity{Phase: "indexed", Processed: len(paths), Total: len(paths), Percent: 100}, 1)
-	if unavailable > 0 {
+	if unavailable > 0 || invalid > 0 {
 		return fmt.Errorf("scan found %d unavailable source files and %d invalid audio files; healthy tracks queued, no deletions applied; see Library errors", unavailable, invalid)
 	}
-	if invalid > 0 {
-		return fmt.Errorf("scan found %d invalid audio files; healthy tracks processed, no deletions applied; see Library errors", invalid)
-	}
 	return nil
+}
+
+func (a *App) indexTags(rel string, info fs.FileInfo, p probeData, hash string) (Source, error) {
+	tags := p.tags()
+	metadata, _ := json.Marshal(tags)
+	_, err := a.db.Exec(`INSERT INTO sources(rel,hash,size,mtime,artist,album,title,track,disc,duration,metadata)
+	 VALUES(?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(rel) DO UPDATE SET
+	 hash=excluded.hash,size=excluded.size,mtime=excluded.mtime,artist=excluded.artist,album=excluded.album,
+	 title=excluded.title,track=excluded.track,disc=excluded.disc,duration=excluded.duration,metadata=excluded.metadata,present=1,error=''`,
+		rel, hash, info.Size(), info.ModTime().UnixNano(), tags["artist"], tags["album"], tags["title"], tagPosition(tags, "track"), tagPosition(tags, "disc"), p.duration(), string(metadata))
+	if err != nil {
+		return Source{}, err
+	}
+	return a.sourceRel(rel)
+}
+
+func (a *App) prepare(ctx context.Context, j Job, r ScanRequest) error {
+	if len(r.Dirs) != 1 || !r.Verify || !audioSourcePath(r.Dirs[0]) {
+		return errors.New("invalid source preparation scan")
+	}
+	rel := r.Dirs[0]
+	s, err := a.settings()
+	if err != nil {
+		return err
+	}
+	if err = a.storageContext(ctx, s); err != nil {
+		return err
+	}
+	source, err := a.sourceRel(rel)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil // A rename can replace a tag-only row while this job waits.
+		}
+		return err
+	}
+	expectedKey := prepareScanPrefix + digest(fmt.Sprintf("%s:%d:%d:%s", rel, source.Size, source.Mtime, s.Encoding.Fingerprint()))
+	if j.Key != expectedKey {
+		_, _ = a.enqueue("scan", "scan:periodic", ScanRequest{}, false)
+		return nil
+	}
+	info, err := a.sourceStat(ctx, s.Source, rel)
+	if err != nil {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		if os.IsNotExist(err) {
+			_, _ = a.enqueue("scan", "scan:periodic", ScanRequest{}, false)
+			return nil
+		}
+		_ = a.indexSourceReadError(rel, sourceInfo{Length: source.Size, Modified: source.Mtime}, err)
+		return err
+	}
+	if !sameStat(info, source) {
+		_, _ = a.enqueue("scan", "scan:periodic", ScanRequest{}, false)
+		return nil // A new snapshot supersedes this preparation request.
+	}
+	if time.Since(info.ModTime()) < 30*time.Second {
+		return later("Waiting for source files to be unchanged for 30 seconds", 10)
+	}
+	activity := Activity{Phase: "read", Path: rel, Artist: source.Artist, Album: source.Album, Title: source.Title, ReadTotalBytes: source.Size}
+	staged, err := a.stageSource(ctx, s, source, j.ID, activity)
+	if err != nil {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		cause := err
+		if indexErr := a.indexSourceReadError(rel, info, cause); indexErr != nil {
+			return indexErr
+		}
+		return fmt.Errorf("source preparation failed at %s: %w", rel, cause)
+	}
+	defer staged.Close()
+	after, err := a.sourceStat(ctx, s.Source, rel)
+	if err != nil || !sameStat(after, source) {
+		_, _ = a.enqueue("scan", "scan:periodic", ScanRequest{}, false)
+		return later("Source changed during preparation; staged copy discarded", 10)
+	}
+	p, err := a.probe(ctx, staged.Path)
+	if err == nil && !p.audioSource() {
+		err = fmt.Errorf("not a valid audio-only source: %s", rel)
+	}
+	if err != nil {
+		a.recordSourceError(source.ID, err)
+		return err
+	}
+	if err = a.lockFiles(ctx); err != nil {
+		return err
+	}
+	current, err := a.sourceRel(rel)
+	if err != nil || current.ID != source.ID || current.Size != source.Size || current.Mtime != source.Mtime {
+		a.files.Unlock()
+		return later("Source index changed during preparation", 10)
+	}
+	// A tag-only row has no artifact ownership. Restore an existing missing
+	// byte-identical source's identity before moving its output, as in schema 2.
+	if current.Output == "" && current.BuiltHash == "" {
+		all, readErr := a.allSources()
+		if readErr != nil {
+			a.files.Unlock()
+			return readErr
+		}
+		for _, old := range all {
+			if old.ID == current.ID || old.Hash == "" || old.Hash != staged.Hash {
+				continue
+			}
+			if _, statErr := a.sourceStat(ctx, s.Source, old.Rel); !os.IsNotExist(statErr) {
+				if statErr != nil {
+					a.files.Unlock()
+					return statErr
+				}
+				continue
+			}
+			tx, txErr := a.db.Begin()
+			if txErr == nil {
+				_, txErr = tx.Exec("DELETE FROM sources WHERE id=? AND output='' AND built_hash='' AND NOT EXISTS(SELECT 1 FROM managed WHERE source_id=?)", current.ID, current.ID)
+			}
+			if txErr == nil {
+				_, txErr = tx.Exec("UPDATE sources SET rel=? WHERE id=?", rel, old.ID)
+			}
+			if txErr == nil {
+				txErr = tx.Commit()
+			} else if tx != nil {
+				_ = tx.Rollback()
+			}
+			if txErr != nil {
+				a.files.Unlock()
+				return txErr
+			}
+			break
+		}
+	}
+	source, err = a.indexTags(rel, info, p, staged.Hash)
+	a.files.Unlock()
+	if err != nil {
+		return err
+	}
+	move := source.OutputPresent && source.BuiltHash == source.Hash && source.Output != outputRel(rel, strings.TrimPrefix(filepath.Ext(source.Output), "."))
+	if move || !source.OutputPresent || source.BuiltHash != source.Hash {
+		buildJob := j
+		buildJob.Kind = "convert"
+		if move {
+			buildJob.Kind = "move"
+		}
+		if err = a.buildStaged(ctx, buildJob, BuildRequest{source.ID, source.Hash, s.Encoding, move}, staged); err != nil {
+			return err
+		}
+	}
+	if err = a.lockFiles(ctx); err != nil {
+		return err
+	}
+	defer a.files.Unlock()
+	all, err := a.allSources()
+	if err != nil {
+		return err
+	}
+	tracks := []Source{}
+	for _, track := range all {
+		if track.Present && track.Error == "" && filepath.Dir(track.Rel) == filepath.Dir(rel) {
+			tracks = append(tracks, track)
+		}
+	}
+	return a.artwork(context.WithValue(ctx, stagedSourceKey{}, staged), s, filepath.Dir(rel), tracks)
 }
 
 func (a *App) indexSourceError(rel string, info fs.FileInfo, cause error) error {
@@ -704,6 +824,10 @@ func (a *App) recoverFiles(ctx context.Context, s Settings) error {
 }
 
 func (a *App) build(ctx context.Context, j Job, r BuildRequest) error {
+	return a.buildStaged(ctx, j, r, nil)
+}
+
+func (a *App) buildStaged(ctx context.Context, j Job, r BuildRequest, staged *stagedSource) error {
 	if err := a.lockFiles(ctx); err != nil {
 		return err
 	}
@@ -843,6 +967,18 @@ func (a *App) build(ctx context.Context, j Job, r BuildRequest) error {
 		_ = os.Remove(temp)
 		_, _ = a.db.Exec("DELETE FROM managed WHERE path=? AND kind='temp'", tempRel)
 	}()
+	if staged == nil {
+		staged, err = a.stageSource(ctx, s, source, j.ID, activity)
+		if err != nil {
+			return a.buildError(ctx, s, source, err)
+		}
+		defer staged.Close()
+	}
+	if staged.Rel != source.Rel || staged.Hash != source.Hash {
+		_, _ = a.enqueue("scan", "scan:periodic", ScanRequest{Verify: true, Dirs: []string{source.Rel}}, false)
+		return later("Source content differs from its indexed hash; staged copy discarded", 10)
+	}
+	in = staged.Path
 	args := []string{"-nostdin", "-hide_banner", "-loglevel", "error", "-n", "-xerror", "-err_detect", "crccheck+explode", "-i", in, "-map", "0:a:0", "-map_metadata", "0", "-vn", "-sn", "-dn"}
 	keys := make([]string, 0, len(source.Metadata))
 	for key := range source.Metadata {
@@ -1289,7 +1425,11 @@ func (a *App) embeddedArtwork(ctx context.Context, s Settings, dir string, track
 			if err != nil {
 				return "", "", err
 			}
-			p, err := a.probe(ctx, info.Path)
+			input := info.Path
+			if staged, ok := ctx.Value(stagedSourceKey{}).(*stagedSource); ok && staged.Rel == track.Rel {
+				input = staged.Path
+			}
+			p, err := a.probe(ctx, input)
 			if err != nil {
 				return "", "", err
 			}
@@ -1347,6 +1487,15 @@ func (a *App) artwork(ctx context.Context, s Settings, dir string, tracks []Sour
 		}
 		embedded = input != ""
 	}
+	staged, _ := ctx.Value(stagedSourceKey{}).(*stagedSource)
+	if embedded && staged != nil {
+		// Only the selected album artwork source may publish the shared cover.
+		// Other tracks finish without rereading that source's audio.
+		if input != filepath.Join(s.Source, staged.Rel) || signature != "embedded:"+staged.Hash {
+			return nil
+		}
+		input = staged.Path
+	}
 	target := filepath.Join(dir, "cover.jpg")
 	var kind, oldSig string
 	registered := a.db.QueryRow("SELECT kind,signature FROM managed WHERE path=?", target).Scan(&kind, &oldSig) == nil
@@ -1379,6 +1528,25 @@ func (a *App) artwork(ctx context.Context, s Settings, dir string, tracks []Sour
 		}
 	} else if !os.IsNotExist(err) {
 		return err
+	}
+	if embedded && staged == nil {
+		rel, pathErr := filepath.Rel(s.Source, input)
+		if pathErr != nil {
+			return pathErr
+		}
+		source, readErr := a.sourceRel(rel)
+		if readErr != nil {
+			return readErr
+		}
+		copy, readErr := a.stageSource(ctx, s, source, 0, Activity{Phase: "read", Path: rel})
+		if readErr != nil {
+			return readErr
+		}
+		defer copy.Close()
+		if signature != "embedded:"+copy.Hash {
+			return later("Artwork source changed; waiting for a fresh scan", 10)
+		}
+		input = copy.Path
 	}
 	if err = os.MkdirAll(filepath.Dir(out), 0755); err != nil {
 		return err

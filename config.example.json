@@ -6,5 +6,6 @@
   "ffmpeg": "ffmpeg",
   "ffprobe": "ffprobe",
   "trusted_proxies": [],
-  "source_timeout_seconds": 120
+  "source_timeout_seconds": 120,
+  "staging_max_bytes": 4294967296
 }

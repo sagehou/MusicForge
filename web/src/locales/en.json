@@ -383,5 +383,7 @@
   "error.requestTimeout": "Request timed out; please retry",
   "error.http": "Server returned HTTP {status}; please retry",
   "error.sourceReadPrefix": "Source read unavailable: ",
-  "phase.storage": "Checking library storage"
+  "phase.storage": "Checking library storage",
+  "status.pending": "Waiting for verification and conversion",
+  "phase.staging_wait": "Waiting for local staging space"
 }

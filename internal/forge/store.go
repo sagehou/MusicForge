@@ -135,7 +135,7 @@ func (a *App) enqueueTask(kind, key string, args any, manual bool, task int64) (
 	var id int64
 	var state string
 	err = tx.QueryRow("SELECT id,state FROM jobs WHERE dedup=? ORDER BY (state IN ('pending','running')) DESC,id DESC LIMIT 1", key).Scan(&id, &state)
-	if err == nil && (state == "pending" || state == "running" || (state == "failed" && !manual && (kind == "convert" || kind == "move"))) {
+	if err == nil && (state == "pending" || state == "running" || (state == "failed" && !manual && (kind == "convert" || kind == "move" || strings.HasPrefix(key, prepareScanPrefix)))) {
 		if kind == "scan" && (state == "pending" || state == "running") {
 			var current string
 			followup := "scan-followup:" + strconv.FormatInt(id, 10)
@@ -215,9 +215,9 @@ func readJob(row rowScanner) (Job, error) {
 }
 
 func (a *App) claim(conversion bool) (Job, error) {
-	operator := "<>"
+	operator := "NOT"
 	if conversion {
-		operator = "="
+		operator = ""
 	}
 	tx, err := a.db.Begin()
 	if err != nil {
@@ -230,7 +230,7 @@ func (a *App) claim(conversion bool) (Job, error) {
 		activeIDs = append(activeIDs, strconv.FormatInt(id, 10))
 	}
 	busy := strings.Join(activeIDs, ",")
-	j, err := readJob(tx.QueryRow("SELECT "+jobCols+" FROM jobs candidate WHERE state='pending' AND id NOT IN ("+busy+") AND kind "+operator+" 'convert' AND not_before<=? AND NOT EXISTS(SELECT 1 FROM meta member JOIN jobs parent ON parent.id=CAST(member.value AS INTEGER) WHERE member.key='task-member:'||candidate.id AND parent.id<>candidate.id AND parent.kind='scan' AND parent.state IN ('pending','running')) AND (kind NOT IN ('convert','move') OR NOT EXISTS(SELECT 1 FROM jobs active WHERE (active.state='running' OR active.id IN ("+busy+")) AND active.kind IN ('convert','move') AND json_extract(active.args,'$.id')=json_extract(candidate.args,'$.id'))) ORDER BY CASE kind WHEN 'scan' THEN 0 WHEN 'move' THEN 1 WHEN 'delete' THEN 2 ELSE 3 END,id LIMIT 1", time.Now().Unix()))
+	j, err := readJob(tx.QueryRow("SELECT "+jobCols+" FROM jobs candidate WHERE state='pending' AND id NOT IN ("+busy+") AND "+operator+" (kind='convert' OR dedup LIKE 'scan:prepare:%') AND not_before<=? AND NOT EXISTS(SELECT 1 FROM meta member JOIN jobs parent ON parent.id=CAST(member.value AS INTEGER) WHERE member.key='task-member:'||candidate.id AND parent.id<>candidate.id AND parent.kind='scan' AND parent.state IN ('pending','running')) AND NOT EXISTS(SELECT 1 FROM jobs active WHERE (active.state='running' OR active.id IN ("+busy+")) AND active.id<>candidate.id AND ((active.kind IN ('convert','move') AND candidate.kind IN ('convert','move') AND json_extract(active.args,'$.id')=json_extract(candidate.args,'$.id')) OR (active.dedup LIKE 'scan:prepare:%' AND candidate.dedup LIKE 'scan:prepare:%' AND json_extract(active.args,'$.dirs[0]')=json_extract(candidate.args,'$.dirs[0]')) OR (active.dedup LIKE 'scan:prepare:%' AND candidate.kind IN ('convert','move') AND json_extract(active.args,'$.dirs[0]')=(SELECT rel FROM sources WHERE id=json_extract(candidate.args,'$.id'))) OR (candidate.dedup LIKE 'scan:prepare:%' AND active.kind IN ('convert','move') AND json_extract(candidate.args,'$.dirs[0]')=(SELECT rel FROM sources WHERE id=json_extract(active.args,'$.id'))))) ORDER BY CASE kind WHEN 'scan' THEN 0 WHEN 'move' THEN 1 WHEN 'delete' THEN 2 ELSE 3 END,id LIMIT 1", time.Now().Unix()))
 	if err != nil {
 		return j, err
 	}

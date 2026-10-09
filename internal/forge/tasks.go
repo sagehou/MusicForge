@@ -86,24 +86,24 @@ const taskGroups = `WITH members AS (
  LEFT JOIN meta m ON m.key='task-member:'||j.id
 ), groups AS (
  SELECT task_id, count(*) AS member_count,
- sum(kind IN ('convert','move')) AS track_total,
- sum(kind IN ('convert','move') AND state='success') AS track_done,
- sum(kind IN ('convert','move') AND state='failed' AND log<>'Stopped by administrator') AS track_failed,
- sum(kind IN ('convert','move') AND state='pending') AS track_pending,
- sum(kind IN ('convert','move') AND state='running') AS track_running,
- sum(kind IN ('convert','move') AND state='failed' AND log='Stopped by administrator') AS track_cancelled,
+ sum((kind IN ('convert','move') OR dedup LIKE 'scan:prepare:%')) AS track_total,
+ sum((kind IN ('convert','move') OR dedup LIKE 'scan:prepare:%') AND state='success') AS track_done,
+ sum((kind IN ('convert','move') OR dedup LIKE 'scan:prepare:%') AND state='failed' AND log<>'Stopped by administrator') AS track_failed,
+ sum((kind IN ('convert','move') OR dedup LIKE 'scan:prepare:%') AND state='pending') AS track_pending,
+ sum((kind IN ('convert','move') OR dedup LIKE 'scan:prepare:%') AND state='running') AS track_running,
+ sum((kind IN ('convert','move') OR dedup LIKE 'scan:prepare:%') AND state='failed' AND log='Stopped by administrator') AS track_cancelled,
  sum(state='pending') AS pending, sum(state='running') AS running,
  sum(state='failed') AS failed, sum(state='pending' AND not_before=253402300799) AS held,
  sum(state='failed' AND log='Stopped by administrator') AS cancelled,
  max(updated) AS changed, max(attempts) AS tries,
- coalesce(avg(CASE WHEN kind IN ('convert','move') THEN CASE WHEN state='success' THEN 1.0 ELSE progress END END),avg(CASE WHEN state='success' THEN 1.0 ELSE progress END)) AS fraction
+ coalesce(avg(CASE WHEN (kind IN ('convert','move') OR dedup LIKE 'scan:prepare:%') THEN CASE WHEN state='success' THEN 1.0 ELSE progress END END),avg(CASE WHEN state='success' THEN 1.0 ELSE progress END)) AS fraction
  FROM members GROUP BY task_id
 ), tasks AS (
  SELECT g.*,CASE
  WHEN c.value='stopped' AND cancelled>0 AND pending=0 AND running=0 THEN 'stopped'
  WHEN c.value='paused' AND pending>0 AND pending=held AND running=0 THEN 'paused'
  WHEN running>0 THEN 'running'
- WHEN failed>0 AND track_pending=0 AND root.state IN ('success','failed') THEN 'failed'
+ WHEN failed>0 AND pending=0 AND root.state IN ('success','failed') THEN 'failed'
  WHEN pending>0 AND member_count>1 AND root.state='success' THEN 'running'
  WHEN pending>0 THEN 'pending'
  WHEN failed>0 THEN 'failed' ELSE 'success' END AS task_state
@@ -240,7 +240,7 @@ func (a *App) taskItems(id int64, state string, limit, offset int) ([]TaskItem, 
 	for i := range columns {
 		columns[i] = "j." + columns[i]
 	}
-	rows, err := a.db.Query("SELECT "+strings.Join(columns, ",")+",coalesce(p.value,''),coalesce(s.rel,''),coalesce(s.artist,''),coalesce(s.album,''),coalesce(s.title,''),coalesce(s.output,'') FROM jobs j LEFT JOIN meta m ON m.key='task-member:'||j.id LEFT JOIN meta p ON p.key='task-progress:'||j.id LEFT JOIN sources s ON s.id=json_extract(j.args,'$.id')"+where+" ORDER BY CASE j.state WHEN 'running' THEN 0 WHEN 'failed' THEN 1 WHEN 'pending' THEN 2 ELSE 3 END,j.id LIMIT ? OFFSET ?", append(args, limit, offset)...)
+	rows, err := a.db.Query("SELECT "+strings.Join(columns, ",")+",coalesce(p.value,''),coalesce(s.rel,''),coalesce(s.artist,''),coalesce(s.album,''),coalesce(s.title,''),coalesce(s.output,'') FROM jobs j LEFT JOIN meta m ON m.key='task-member:'||j.id LEFT JOIN meta p ON p.key='task-progress:'||j.id LEFT JOIN sources s ON s.id=json_extract(j.args,'$.id') OR (j.dedup LIKE 'scan:prepare:%' AND s.rel=json_extract(j.args,'$.dirs[0]'))"+where+" ORDER BY CASE j.state WHEN 'running' THEN 0 WHEN 'failed' THEN 1 WHEN 'pending' THEN 2 ELSE 3 END,j.id LIMIT ? OFFSET ?", append(args, limit, offset)...)
 	if err != nil {
 		return nil, 0, err
 	}

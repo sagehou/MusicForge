@@ -12,6 +12,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -61,10 +62,10 @@ func RunSourceIO(args []string) bool {
 	encoder := json.NewEncoder(os.Stdout)
 	emit := func(e sourceEvent) error { return encoder.Encode(e) }
 	var err error
-	if len(args) != 4 {
+	if len(args) != 4 && !(len(args) == 6 && args[1] == "stage") {
 		err = errors.New("invalid source I/O invocation")
 	} else {
-		err = readSourceIO(args[1], args[2], args[3], emit)
+		err = readSourceIO(args[1], args[2], args[3], emit, args[4:]...)
 	}
 	if err != nil {
 		_ = emit(sourceEvent{Error: err.Error(), Missing: os.IsNotExist(err)})
@@ -74,7 +75,7 @@ func RunSourceIO(args []string) bool {
 	return true
 }
 
-func readSourceIO(operation, root, rel string, emit func(sourceEvent) error) error {
+func readSourceIO(operation, root, rel string, emit func(sourceEvent) error, stageArgs ...string) error {
 	path, err := safePath(root, rel)
 	if err != nil {
 		return err
@@ -125,7 +126,7 @@ func readSourceIO(operation, root, rel string, emit func(sourceEvent) error) err
 			snapshot := sourceSnapshot(path, rel, info)
 			return emit(sourceEvent{Info: &snapshot, Path: rel})
 		})
-	case "hash":
+	case "hash", "stage":
 		f, err := os.Open(path)
 		if err != nil {
 			return err
@@ -139,6 +140,21 @@ func readSourceIO(operation, root, rel string, emit func(sourceEvent) error) err
 			return errors.New("source is not a regular file")
 		}
 		snapshot := sourceSnapshot(path, rel, info)
+		var output *os.File
+		if operation == "stage" {
+			if len(stageArgs) != 2 {
+				return errors.New("invalid staging invocation")
+			}
+			limit, err := strconv.ParseInt(stageArgs[1], 10, 64)
+			if err != nil || limit != info.Size() || limit < 1 {
+				return errors.New("source size changed before staging")
+			}
+			output, err = os.OpenFile(stageArgs[0], os.O_WRONLY|os.O_TRUNC, 0600)
+			if err != nil {
+				return err
+			}
+			defer output.Close()
+		}
 		if err = emit(sourceEvent{Info: &snapshot}); err != nil {
 			return err
 		}
@@ -149,6 +165,14 @@ func readSourceIO(operation, root, rel string, emit func(sourceEvent) error) err
 		for {
 			n, readErr := f.Read(buf)
 			if n > 0 {
+				if output != nil {
+					if read+int64(n) > snapshot.Length {
+						return errors.New("source grew during staging")
+					}
+					if _, err = output.Write(buf[:n]); err != nil {
+						return fmt.Errorf("write source staging file: %w", err)
+					}
+				}
 				_, _ = h.Write(buf[:n])
 				read += int64(n)
 			}
@@ -164,6 +188,9 @@ func readSourceIO(operation, root, rel string, emit func(sourceEvent) error) err
 			if readErr != nil {
 				return readErr
 			}
+		}
+		if output != nil && read != snapshot.Length {
+			return errors.New("source size changed during staging")
 		}
 		return emit(sourceEvent{Hash: hex.EncodeToString(h.Sum(nil)), Read: read, Info: &snapshot})
 	default:
@@ -186,7 +213,7 @@ func (a *App) sourceTimeout() time.Duration {
 	return 120 * time.Second
 }
 
-func (a *App) sourceIO(ctx context.Context, operation, root, rel string, receive func(sourceEvent) error) error {
+func (a *App) sourceIO(ctx context.Context, operation, root, rel string, receive func(sourceEvent) error, extra ...string) error {
 	executable, err := os.Executable()
 	if err != nil {
 		return err
@@ -203,7 +230,8 @@ func (a *App) sourceIO(ctx context.Context, operation, root, rel string, receive
 	case <-timer.C:
 		return fmt.Errorf("source I/O workers are still blocked: %w", context.DeadlineExceeded)
 	}
-	cmd := exec.CommandContext(child, executable, "-source-io", operation, root, rel)
+	args := append([]string{"-source-io", operation, root, rel}, extra...)
+	cmd := exec.CommandContext(child, executable, args...)
 	cmd.WaitDelay = 2 * time.Second
 	var stderr boundedLog
 	cmd.Stderr = &stderr

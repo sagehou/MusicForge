@@ -160,8 +160,17 @@ func TestRemoteReadFailurePastThirtyTracksKeepsHealthyQueueAndStopsAfterThreeAtt
 		t.Fatal("missing readable source error", bad, err)
 	}
 	var queued int
-	if err = a.db.QueryRow("SELECT count(*) FROM jobs j JOIN meta m ON m.key='task-member:'||j.id WHERE m.value=? AND j.dedup LIKE 'scan:prepare:%' AND j.state='success'", fmt.Sprint(id)).Scan(&queued); err != nil || queued != 39 {
-		t.Fatal("one unavailable track blocked healthy tracks", queued, err)
+	for {
+		if err = a.db.QueryRow("SELECT count(*) FROM jobs j JOIN meta m ON m.key='task-member:'||j.id WHERE m.value=? AND j.dedup LIKE 'scan:prepare:%' AND j.state='success'", fmt.Sprint(id)).Scan(&queued); err != nil {
+			t.Fatal(err)
+		}
+		if queued == 39 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("one unavailable track blocked healthy tracks", queued)
+		}
+		time.Sleep(20 * time.Millisecond)
 	}
 	cancel()
 	<-done

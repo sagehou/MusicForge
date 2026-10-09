@@ -30,6 +30,9 @@ type App struct {
 	wg        sync.WaitGroup
 	// ponytail: serialize library mutations; ffmpeg runs outside this lock.
 	files         sync.Mutex
+	observedPaths map[string]fs.FileInfo
+	observedDirs  []string
+	observedTask  int64
 	recovered     bool
 	authMu        sync.Mutex
 	loginFailures map[string]loginLimit

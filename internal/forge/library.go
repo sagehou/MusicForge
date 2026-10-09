@@ -283,6 +283,9 @@ func (a *App) scan(ctx context.Context, r ScanRequest) error {
 			return later("Scan incomplete; no deletions applied: "+err.Error(), 30)
 		}
 	}
+	// Reuse this scan's presence observations during deferred rename detection.
+	// A restart or another scan falls back to checking the mount directly.
+	a.observedPaths, a.observedDirs, a.observedTask = files, r.Dirs, jobID
 	existing, err := a.allSources()
 	if err != nil {
 		return err
@@ -574,9 +577,13 @@ func (a *App) prepare(ctx context.Context, j Job, r ScanRequest) error {
 			a.files.Unlock()
 			return readErr
 		}
+		task := a.taskID(j.ID)
 		for _, old := range all {
 			if old.ID == current.ID || old.Hash == "" || old.Hash != staged.Hash {
 				continue
+			}
+			if (a.observedTask == 0 || a.observedTask == task) && scoped(old.Rel, a.observedDirs) && a.observedPaths[old.Rel] != nil {
+				continue // Existing byte-identical copies keep their own identities.
 			}
 			if _, statErr := a.sourceStat(ctx, s.Source, old.Rel); !os.IsNotExist(statErr) {
 				if statErr != nil {

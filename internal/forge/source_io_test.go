@@ -3,6 +3,7 @@ package forge
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -118,11 +119,17 @@ func TestRemoteReadFailurePastThirtyTracksKeepsHealthyQueueAndStopsAfterThreeAtt
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
+	conversionsDone := make(chan struct{})
 	go func() { defer close(done); a.worker(ctx, false, 0) }()
-	defer func() { cancel(); <-done }()
+	go func() { defer close(conversionsDone); a.worker(ctx, true, 0) }()
+	defer func() { cancel(); <-done; <-conversionsDone }()
 	deadline := time.Now().Add(20 * time.Second)
 	for {
-		j, err := readJob(a.db.QueryRow("SELECT "+jobCols+" FROM jobs WHERE id=?", id))
+		j, err := readJob(a.db.QueryRow("SELECT "+jobCols+" FROM jobs WHERE dedup LIKE 'scan:prepare:%' AND json_extract(args,'$.dirs[0]')='Artist/Album/36.flac' ORDER BY id DESC LIMIT 1"))
+		if err == sql.ErrNoRows {
+			time.Sleep(20 * time.Millisecond)
+			continue
+		}
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -133,7 +140,7 @@ func TestRemoteReadFailurePastThirtyTracksKeepsHealthyQueueAndStopsAfterThreeAtt
 			t.Fatalf("read retries did not terminate: %+v", j)
 		}
 		if j.State == "pending" && j.Attempts > 0 {
-			_, _ = a.db.Exec("UPDATE jobs SET not_before=0 WHERE id=?", id)
+			_, _ = a.db.Exec("UPDATE jobs SET not_before=0 WHERE id=?", j.ID)
 		}
 		if _, _, err = a.taskList("all", 100, 0); err != nil {
 			t.Fatal("queue API failed during indexing", err)
@@ -153,16 +160,17 @@ func TestRemoteReadFailurePastThirtyTracksKeepsHealthyQueueAndStopsAfterThreeAtt
 		t.Fatal("missing readable source error", bad, err)
 	}
 	var queued int
-	if err = a.db.QueryRow("SELECT count(*) FROM jobs j JOIN meta m ON m.key='task-member:'||j.id WHERE m.value=? AND j.kind='convert'", fmt.Sprint(id)).Scan(&queued); err != nil || queued != 39 {
+	if err = a.db.QueryRow("SELECT count(*) FROM jobs j JOIN meta m ON m.key='task-member:'||j.id WHERE m.value=? AND j.dedup LIKE 'scan:prepare:%' AND j.state='success'", fmt.Sprint(id)).Scan(&queued); err != nil || queued != 39 {
 		t.Fatal("one unavailable track blocked healthy tracks", queued, err)
 	}
 	cancel()
 	<-done
+	<-conversionsDone
 	sourceFault(t, "stage", "Artist/Album/36.flac", 0, 0)
 	if _, err = a.changeTasks("retry", selection{IDs: []int64{id}}); err != nil {
 		t.Fatal(err)
 	}
-	j, err := a.claim(false)
+	j, err := a.claim(true)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -193,14 +201,20 @@ func TestHungScanLeavesAPIResponsiveAndCanPause(t *testing.T) {
 	cookie := session.Result().Cookies()[0]
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
+	conversionsDone := make(chan struct{})
 	go func() { defer close(done); a.worker(ctx, false, 0) }()
-	defer func() { cancel(); <-done }()
+	go func() { defer close(conversionsDone); a.worker(ctx, true, 0) }()
+	defer func() { cancel(); <-done; <-conversionsDone }()
 	deadline := time.Now().Add(5 * time.Second)
+	var readingID int64
 	for {
-		var activity Activity
-		raw, _ := a.meta(taskProgressKey(id))
-		_ = json.Unmarshal([]byte(raw), &activity)
-		if activity.Phase == "read" {
+		items, _, _ := a.taskItems(id, "running", 50, 0)
+		for _, item := range items {
+			if item.Activity.Phase == "read" {
+				readingID = item.ID
+			}
+		}
+		if readingID != 0 {
 			break
 		}
 		if time.Now().After(deadline) {
@@ -221,10 +235,10 @@ func TestHungScanLeavesAPIResponsiveAndCanPause(t *testing.T) {
 	if _, err = a.changeTasks("pause", selection{IDs: []int64{id}}); err != nil {
 		t.Fatal(err)
 	}
-	waitTaskWorker(t, a, id, false)
+	waitTaskWorker(t, a, readingID, false)
 	var attempts int
 	var notBefore int64
-	if err = a.db.QueryRow("SELECT attempts,not_before FROM jobs WHERE id=?", id).Scan(&attempts, &notBefore); err != nil || attempts != 0 || notBefore != heldUntil {
+	if err = a.db.QueryRow("SELECT attempts,not_before FROM jobs WHERE id=?", readingID).Scan(&attempts, &notBefore); err != nil || attempts != 0 || notBefore != heldUntil {
 		t.Fatal("pause consumed an attempt or did not persist", attempts, notBefore, err)
 	}
 }

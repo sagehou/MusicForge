@@ -477,6 +477,9 @@ func (a *App) indexTags(rel string, info fs.FileInfo, p probeData, hash string) 
 	if err != nil {
 		return Source{}, err
 	}
+	if err = a.rememberArtwork(rel, info.Size(), info.ModTime().UnixNano(), hash, p); err != nil {
+		return Source{}, err
+	}
 	return a.sourceRel(rel)
 }
 
@@ -585,7 +588,8 @@ func (a *App) prepare(ctx context.Context, j Job, r ScanRequest) error {
 			}
 			if txErr == nil {
 				txErr = tx.Commit()
-			} else if tx != nil {
+			}
+			if tx != nil {
 				_ = tx.Rollback()
 			}
 			if txErr != nil {
@@ -979,6 +983,7 @@ func (a *App) buildStaged(ctx context.Context, j Job, r BuildRequest, staged *st
 		return later("Source content differs from its indexed hash; staged copy discarded", 10)
 	}
 	in = staged.Path
+	a.reportProgress(j.ID, activity, .1)
 	args := []string{"-nostdin", "-hide_banner", "-loglevel", "error", "-n", "-xerror", "-err_detect", "crccheck+explode", "-i", in, "-map", "0:a:0", "-map_metadata", "0", "-vn", "-sn", "-dn"}
 	keys := make([]string, 0, len(source.Metadata))
 	for key := range source.Metadata {
@@ -1395,6 +1400,27 @@ type artworkMemo struct {
 	Hash  string `json:"hash"`
 }
 
+// This optional cache prevents every track preparation from probing its album
+// again. Old workers ignore it; hash/stat validation invalidates their writes.
+type artworkHint struct {
+	Hash string `json:"hash"`
+	Size int64 `json:"size"`
+	Mtime int64 `json:"mtime"`
+	Attached bool `json:"attached"`
+}
+
+func (a *App) rememberArtwork(rel string, size, mtime int64, hash string, p probeData) error {
+	hint := artworkHint{Hash: hash, Size: size, Mtime: mtime}
+	for _, stream := range p.Streams {
+		if stream.Type == "video" && stream.Disposition.Attached == 1 {
+			hint.Attached = true
+			break
+		}
+	}
+	b, _ := json.Marshal(hint)
+	return a.setMeta("source-artwork:"+digest(rel), string(b))
+}
+
 func (a *App) embeddedArtwork(ctx context.Context, s Settings, dir string, tracks []Source) (string, string, error) {
 	sort.Slice(tracks, func(i, j int) bool {
 		if tracks[i].Disc != tracks[j].Disc {
@@ -1421,26 +1447,45 @@ func (a *App) embeddedArtwork(ctx context.Context, s Settings, dir string, track
 	if !cached {
 		memo = artworkMemo{Album: album}
 		for _, track := range tracks {
-			info, err := a.sourceStat(ctx, s.Source, track.Rel)
-			if err != nil {
-				return "", "", err
+			var hint artworkHint
+			raw, readErr := a.meta("source-artwork:"+digest(track.Rel))
+			if readErr != nil && readErr != sql.ErrNoRows {
+				return "", "", readErr
 			}
-			input := info.Path
-			if staged, ok := ctx.Value(stagedSourceKey{}).(*stagedSource); ok && staged.Rel == track.Rel {
-				input = staged.Path
-			}
-			p, err := a.probe(ctx, input)
-			if err != nil {
-				return "", "", err
-			}
-			for _, stream := range p.Streams {
-				if stream.Type == "video" && stream.Disposition.Attached == 1 {
-					memo.Rel = track.Rel
-					memo.Hash = track.Hash
-					break
+			known := readErr == nil && json.Unmarshal([]byte(raw), &hint) == nil && hint.Hash == track.Hash && hint.Size == track.Size && hint.Mtime == track.Mtime
+			if !known {
+				info, readErr := a.sourceStat(ctx, s.Source, track.Rel)
+				if os.IsNotExist(readErr) {
+					continue
+				}
+				if readErr != nil {
+					return "", "", readErr
+				}
+				input := info.Path
+				if staged, ok := ctx.Value(stagedSourceKey{}).(*stagedSource); ok && staged.Rel == track.Rel {
+					input = staged.Path
+				}
+				p, readErr := a.probe(ctx, input)
+				if readErr != nil {
+					return "", "", readErr
+				}
+				if readErr = a.rememberArtwork(track.Rel, track.Size, track.Mtime, track.Hash, p); readErr != nil {
+					return "", "", readErr
+				}
+				for _, stream := range p.Streams {
+					if stream.Type == "video" && stream.Disposition.Attached == 1 {
+						hint.Attached = true
+						break
+					}
 				}
 			}
-			if memo.Rel != "" {
+			if hint.Attached {
+				if _, readErr = a.sourceStat(ctx, s.Source, track.Rel); os.IsNotExist(readErr) {
+					continue
+				} else if readErr != nil {
+					return "", "", readErr
+				}
+				memo.Rel, memo.Hash = track.Rel, track.Hash
 				break
 			}
 		}
@@ -1491,7 +1536,7 @@ func (a *App) artwork(ctx context.Context, s Settings, dir string, tracks []Sour
 	if embedded && staged != nil {
 		// Only the selected album artwork source may publish the shared cover.
 		// Other tracks finish without rereading that source's audio.
-		if input != filepath.Join(s.Source, staged.Rel) || signature != "embedded:"+staged.Hash {
+		if input != staged.Original || signature != "embedded:"+staged.Hash {
 			return nil
 		}
 		input = staged.Path
@@ -1538,7 +1583,9 @@ func (a *App) artwork(ctx context.Context, s Settings, dir string, tracks []Sour
 		if readErr != nil {
 			return readErr
 		}
-		copy, readErr := a.stageSource(ctx, s, source, 0, Activity{Phase: "read", Path: rel})
+		// The caller owns the mutation lock; yield instead of waiting for a
+		// converter that needs that lock before it can release its reservation.
+		copy, readErr := a.stageSource(context.WithValue(ctx, stagingNoWaitKey{}, true), s, source, 0, Activity{Phase: "read", Path: rel})
 		if readErr != nil {
 			return readErr
 		}

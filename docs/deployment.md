@@ -83,7 +83,7 @@ The schema-2 storage formats remain unchanged. Versions through v0.2.5 retain mi
 
 ## Rclone mounts and stall diagnostics
 
-Follow the [README mount guidance](../README.md#mounted-remote-source-libraries) and establish the host mount before container startup. VFS full caching reduces repeat remote downloads; it does not change MusicForge's whole-file SHA-256 signatures. Ordinary scans still use size/mtime for incremental checks. After a remount, verify the container's view and root identity before acknowledging it in Settings.
+Follow the [README mount guidance](../README.md#mounted-remote-source-libraries) and establish the host mount before container startup. Tag scanning finishes first; workers copy selected sources into `/config/source-staging`, computing full SHA-256 while copying, and encode the local copies. Reserve local disk space for the default 4 GiB aggregate limit. VFS full caching is optional. Ordinary scans still use size/mtime for incremental checks. After a remount, verify the container's view and root identity before acknowledging it in Settings.
 
 Jobs show read/total MiB. Structured `job progress` adds optional `read_bytes`/`read_total_bytes` byte counters; existing `processed`/`total` remain file counts and `percent` remains 0–100. These fields are diagnostics, not recovery records. The default no-progress timeout is 120 seconds. Set `MUSICFORGE_SOURCE_TIMEOUT_SECONDS=300` in `.env` and recreate the container for a slower remote. Pause/stop cancel source-reading child processes; resume restarts the current track.
 

@@ -13,10 +13,12 @@ import (
 )
 
 type stagedSourceKey struct{}
+type stagingNoWaitKey struct{}
 
 // Scratch files are disposable and never part of artifact recovery or schema 2.
 type stagedSource struct {
 	Path string
+	Original string
 	Rel  string
 	Hash string
 	size int64
@@ -65,22 +67,32 @@ func (a *App) stageSource(ctx context.Context, settings Settings, source Source,
 		return nil, fmt.Errorf("source requires %d staging bytes; MUSICFORGE_STAGING_MAX_BYTES is %d", source.Size, limit)
 	}
 	for {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
 		a.stagingMu.Lock()
 		if source.Size <= limit-a.stagingBytes {
 			var disk syscall.Statfs_t
 			err := syscall.Statfs(a.stagingDir, &disk)
-			if err == nil && uint64(source.Size)+64*1024*1024 > disk.Bavail*uint64(disk.Bsize) {
-				err = errors.New("insufficient local disk space for source staging; keep at least 64 MiB free for /config")
-			}
-			if err != nil {
+			// Account conservatively for reservations whose copies are still writing.
+			free := int64(disk.Bavail) * int64(disk.Bsize)
+			if err != nil || free < source.Size+64*1024*1024 && a.stagingBytes == 0 {
 				a.stagingMu.Unlock()
-				return nil, err
+				if err != nil {
+					return nil, err
+				}
+				return nil, errors.New("insufficient local disk space for source staging; keep at least 64 MiB free for /config")
 			}
-			a.stagingBytes += source.Size
-			a.stagingMu.Unlock()
-			break
+			if free >= source.Size+a.stagingBytes+64*1024*1024 {
+				a.stagingBytes += source.Size
+				a.stagingMu.Unlock()
+				break
+			}
 		}
 		a.stagingMu.Unlock()
+		if noWait, _ := ctx.Value(stagingNoWaitKey{}).(bool); noWait {
+			return nil, later("Waiting for local source staging space", 1)
+		}
 		activity.Phase = "staging_wait"
 		a.reportProgress(job, activity, 0)
 		if !pause(ctx, time.Second) {
@@ -97,6 +109,9 @@ func (a *App) stageSource(ctx context.Context, settings Settings, source Source,
 		a.reportProgress(job, activity, 0)
 		last := time.Time{}
 		err = a.sourceIO(ctx, "stage", settings.Source, source.Rel, func(event sourceEvent) error {
+			if event.Info != nil {
+				staged.Original = event.Info.Path
+			}
 			if event.Hash != "" {
 				staged.Hash = event.Hash
 			}

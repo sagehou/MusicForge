@@ -83,9 +83,9 @@ Give Navidrome a read-only mount of the same physical output directory. Its cont
 
 An existing rclone/FUSE mount can be the read-only audio source. MusicForge does not manage rclone or synchronize cloud storage. Keep `/config` and the output on local reliable storage. Mount rclone before starting the container and give its UID/GID read access; `--allow-other` may be needed when the mount owner differs.
 
-For repeated hashing, metadata and encoding reads, use rclone `--vfs-cache-mode full` with a sufficiently sized local `--cache-dir`. First import still reads each complete new audio file to preserve content hashes and rename detection; ordinary unchanged scans skip audio reads. Jobs and logs show the source path, read stage and bytes read. Background storage checks keep Web requests independent of mount latency.
+Scanning indexes tags and file attributes first; it does not perform a separate whole-file hash pass. A worker then reads each selected audio source once into bounded local scratch storage, computing its full SHA-256 during that copy. Encoding and embedded cover extraction reuse the seekable copy. This works without rclone VFS caching; `--vfs-cache-mode full` remains optional. Metadata probing may read headers and seek to the tail, depending on the format. Ordinary unchanged scans skip audio reads. Jobs and logs show the current source, read bytes, encoding progress and waits for staging space.
 
-A source read with no progress for 120 seconds times out. Adjust `MUSICFORGE_SOURCE_TIMEOUT_SECONDS` for your remote if necessary. Hash/enumeration timers reset on progress; ffprobe and cover extraction have an operation deadline, and encoding must keep advancing. A single unreadable track preserves existing audio and hashes, allows healthy tracks to be queued, and prevents deletion detection for that incomplete scan. The scan retries twice, then waits for manual retry. Whole-root outages defer work without spending track retry budgets.
+A source read with no progress for 120 seconds times out. Adjust `MUSICFORGE_SOURCE_TIMEOUT_SECONDS` for your remote if necessary. Hash/enumeration timers reset on progress; ffprobe and cover extraction have an operation deadline, and encoding must keep advancing. A single unreadable track preserves existing audio and hashes, allows healthy tracks to be queued, and prevents deletion detection for that incomplete scan. Each preparation/conversion retries twice, then waits for manual retry; healthy songs do not repeat their downloads because another song failed. Whole-root outages defer work without spending track retry budgets.
 
 After remounting, verify what the container sees. Docker's default private bind does not automatically follow every host remount; recreate the container if needed. A changed-root warning requires verifying the live mount before saving Settings to acknowledge it. See the [deployment guide](docs/deployment.md) for acceptance and diagnostics.
 
@@ -115,7 +115,9 @@ The source library is the source of truth. MusicForge manages generated audio an
 | Lidarr upgrade | Delete explicitly replaced artifacts after all replacement tracks validate |
 | Output codec switch | Retire each old-format file after its replacement validates |
 
-Ordinary scans compare size and modification time. New or changed files receive complete-file SHA-256 verification and metadata probing. **Full verification** hashes every source file and detects content changes that leave both size and mtime unchanged. Tag changes rebuild audio because output files carry those tags.
+Ordinary scans compare size and modification time. New or changed files receive metadata probing first and appear as **Waiting for verification and conversion** until a worker verifies their complete-file SHA-256. A size/mtime match alone never becomes a content hash. **Full verification** hashes every source file and detects content changes that leave both size and mtime unchanged. Tag changes rebuild audio because output files carry those tags.
+
+Source scratch files live in `/config/source-staging`, shared by all workers. `MUSICFORGE_STAGING_MAX_BYTES` limits their total size to 4 GiB by default. Keep enough local free space for the largest source and at least 64 MiB for configuration writes. A source larger than the limit fails before downloading; increase the limit and retry. Scratch files are removed after success, failure or cancellation, and abandoned files are cleaned on startup. A failed attempt, restart or changed source may require a new read. Explicit full verification and Lidarr's destructive upgrade cleanup still perform the requested complete-content checks.
 
 Sources must stay unchanged for 30 seconds before conversion. Changes during encoding discard the temporary output and trigger a re-scan without consuming a failed attempt. Replacements must pass codec, duration, stream and full decoding checks before publication. Failure preserves playable output.
 
@@ -192,6 +194,7 @@ Optional `/config/config.json` follows [config.example.json](config.example.json
 | `MUSICFORGE_FFMPEG` | `ffmpeg` |
 | `MUSICFORGE_FFPROBE` | `ffprobe` |
 | `MUSICFORGE_SOURCE_TIMEOUT_SECONDS` | `120`; mounted-source no-progress timeout, 1–3600 seconds |
+| `MUSICFORGE_STAGING_MAX_BYTES` | `4294967296`; total local source scratch limit in bytes, shared by workers |
 
 Library, encoding and integration settings live only in SQLite. Logs are JSON. Public `/healthz` checks database liveness; the authenticated Overview reports library availability separately. Migrations run transactionally at startup; unknown newer schemas are rejected.
 

@@ -20,6 +20,7 @@ NAME = "musicforge-rollback"
 CANDIDATE = "musicforge:validation"
 PASSWORD = "ci-rollback-password"
 LEGACY = {
+    "v0.2.6": "sha256:c480adec16045489b3859f38af2a61e2e19b3eae0fb6f915c771b369c6c532c4",
     "v0.2.5": "sha256:3dee84549033b769450b599b4b1b12481927f4dcab56fe15055f811e29e30e49",
     "v0.2.4": "sha256:3af1f8f70fcc208fe8ae293da2a78e3e92288edddd8b4c3807a01b5a47903241",
     "v0.2.3": "sha256:94afc5a3b0db22fbd563623b193376677bde460b4561e68afee7f00c372d70a4",
@@ -49,8 +50,9 @@ def wait_for(read, ready, description):
     raise RuntimeError("Timed out: " + description)
 
 
-def start(image):
-    docker("run", "-d", "--name", NAME, "--user", f"{os.getuid()}:{os.getgid()}",
+def start(image, staging_limit=None):
+    extra = [] if staging_limit is None else ["-e", "MUSICFORGE_STAGING_MAX_BYTES=" + str(staging_limit)]
+    docker("run", "-d", "--name", NAME, "--user", f"{os.getuid()}:{os.getgid()}", *extra,
            "-p", "127.0.0.1:18788:8787", "-e", "MUSICFORGE_PUBLIC_URL=" + ORIGIN,
            "-e", "MUSICFORGE_ALLOWED_ORIGINS=http://localhost:18788",
            "-v", f"{ROOT / 'config'}:/config", "-v", f"{ROOT / 'source'}:/music/source:ro",
@@ -182,7 +184,43 @@ def main():
                 assert not changed, "rollback changed persisted state: " + ", ".join(changed)
             evidence.append({"release": version, "manifest": digest, "image_id": docker("image", "inspect", "--format", "{{.Id}}", image).strip(), "round_trip": "passed"})
             print("Passed: candidate -> " + version + " -> candidate on the same config/source/output", flush=True)
-        Path(".ci/rollback-evidence.json").write_text(json.dumps({"architecture": os.environ["ARCH"], "schema": 2, "checks": evidence}, indent=2) + "\n")
+        pending_checks = []
+        for version, digest in LEGACY.items():
+            rel = "Pending/" + version + ".flac"
+            (ROOT / "source/Pending").mkdir(exist_ok=True)
+            docker(*media, "-f", "lavfi", "-i", "sine=duration=1", "-c:a", "flac", "-metadata", "title=Metadata indexed before content verification", "/fixture/" + rel)
+            os.utime(ROOT / "source" / rel, (stable, stable))
+            expected_hash = hashlib.sha256((ROOT / "source" / rel).read_bytes()).hexdigest()
+            api, _ = start(CANDIDATE, staging_limit=1)
+            values = api("/api/settings")["settings"]
+            values.update(enabled=True, nav_url="")
+            api("/api/settings", "PUT", values)
+            api("/api/library/scan", "POST", {"dirs": ["Pending"]})
+            rows = wait_for(lambda: api("/api/library"), lambda rows: any(row["path"] == rel and row["hash"] == "" and row["title"] == "Metadata indexed before content verification" for row in rows), "tag-only pending row")
+            values["enabled"] = False
+            api("/api/settings", "PUT", values)
+            stop()
+            # Simulate a stopped deployment after metadata indexing, before its
+            # compatible full-verification job has finished. No empty-hash build exists.
+            with sqlite3.connect(ROOT / "config/musicforge.db") as db:
+                assert not db.execute("SELECT 1 FROM jobs WHERE kind IN ('convert','move') AND json_extract(args,'$.hash')='' LIMIT 1").fetchone()
+                db.execute("UPDATE jobs SET state='pending',attempts=0,not_before=0,log='' WHERE dedup LIKE 'scan:prepare:%' AND json_extract(args,'$.dirs[0]')=? AND state<>'success'", (rel,))
+            api, running = start("ghcr.io/sagehou/musicforge@" + digest)
+            assert running == version
+            values = api("/api/settings")["settings"]
+            values["enabled"] = True
+            api("/api/settings", "PUT", values)
+            row = next(row for row in wait_for(lambda: api("/api/library"), lambda rows: any(row["path"] == rel and row["status"] == "ready" for row in rows), "older worker completes pending verification") if row["path"] == rel)
+            assert row["hash"] == row["built_hash"] == expected_hash, "old worker lost complete content identity"
+            values["enabled"] = False
+            api("/api/settings", "PUT", values)
+            stop()
+            api, _ = start(CANDIDATE)
+            restored = next(row for row in api("/api/library") if row["path"] == rel)
+            assert restored == row, "candidate cannot reopen older worker's completed artifact"
+            stop()
+            pending_checks.append({"release": version, "pending_verify_then_old_worker_build": "passed", "source_hash": expected_hash})
+        Path(".ci/rollback-evidence.json").write_text(json.dumps({"architecture": os.environ["ARCH"], "schema": 2, "checks": evidence, "pending_verification_checks": pending_checks}, indent=2) + "\n")
     finally:
         subprocess.run(["docker", "rm", "-f", NAME], capture_output=True)
 

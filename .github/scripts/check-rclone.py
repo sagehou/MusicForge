@@ -49,15 +49,17 @@ class Proxy(http.server.BaseHTTPRequestHandler):
             stalled = self.command == "GET" and urllib.parse.unquote(self.path).endswith(fault_path)
             sent = 0
             while chunk := response.read(64 * 1024):
+                key = urllib.parse.unquote(self.path)
+                with TRANSFER_LOCK:
+                    previous = TRANSFERRED.get(key, 0)
+                if stalled and previous >= 256 * 1024 and not RELEASE.is_set():
+                    BLOCKED.set()
+                    RELEASE.wait(90)
                 self.wfile.write(chunk)
                 self.wfile.flush()
                 sent += len(chunk)
                 with TRANSFER_LOCK:
-                    key = urllib.parse.unquote(self.path)
                     TRANSFERRED[key] = TRANSFERRED.get(key, 0) + len(chunk)
-                if stalled and sent >= 256 * 1024 and not RELEASE.is_set():
-                    BLOCKED.set()
-                    RELEASE.wait(90)
         except (BrokenPipeError, ConnectionResetError, TimeoutError):
             pass
         finally:

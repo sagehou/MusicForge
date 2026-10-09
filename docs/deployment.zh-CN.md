@@ -83,7 +83,7 @@ schema 2 的持久化格式不变。v0.2.5 及更早的同系列版本在关闭�
 
 ## rclone 挂载与卡住诊断
 
-参考 [README 的远程挂载说明](../README.zh-CN.md#远程挂载的源库)，在启动容器前完成宿主机挂载。VFS full 缓存用于减少重复远程下载，不改变 MusicForge 的全文件 SHA-256 签名；普通扫描仍按大小／修改时间增量处理。挂载重建后核对容器视角和根目录身份，不在未挂载状态下保存设置。
+参考 [README 的远程挂载说明](../README.zh-CN.md#远程挂载的源库)，在启动容器前完成宿主机挂载。标签扫描先完成索引；完整源读取由 worker 暂存到本地并同时计算完整 SHA-256，随后编码复用副本。暂存位于 `/config/source-staging`，默认总上限 4 GiB，应预留磁盘空间；VFS full 缓存可按需使用。普通扫描仍按大小／修改时间增量处理。挂载重建后核对容器视角和根目录身份，不在未挂载状态下保存设置。
 
 任务读取阶段显示已读取／总 MiB，Docker 的 `job progress` 增加 `read_bytes`／`read_total_bytes` 字节字段。已有 `processed`／`total` 仍为文件数，`percent` 仍为 0–100；这些可选诊断字段不承担恢复职责。默认无进展时限为 120 秒；慢源库可以在 `.env` 设置 `MUSICFORGE_SOURCE_TIMEOUT_SECONDS=300`，再重建容器。暂停／停止取消读取子进程，恢复从当前歌曲重新开始。
 

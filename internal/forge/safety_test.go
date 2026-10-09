@@ -107,6 +107,7 @@ func TestScopedScanDistinguishesCrossDirectoryMoveFromCopy(t *testing.T) {
 			if err = a.scan(context.Background(), ScanRequest{Dirs: []string{"NewAlbum"}}); err != nil {
 				t.Fatal(err)
 			}
+			drain(t, a, true)
 			current, err := a.sourceRel("NewAlbum/01.flac")
 			if err != nil {
 				t.Fatal(err)
@@ -125,7 +126,7 @@ func TestScopedScanDistinguishesCrossDirectoryMoveFromCopy(t *testing.T) {
 					t.Fatalf("move did not preserve artifact: %v", err)
 				}
 				var conversions int
-				if err = a.db.QueryRow("SELECT count(*) FROM jobs WHERE (kind='convert' OR dedup LIKE 'scan:prepare:%')").Scan(&conversions); err != nil {
+				if err = a.db.QueryRow("SELECT count(*) FROM meta WHERE key LIKE 'task-progress:%' AND json_extract(value,'$.phase')='move' ").Scan(&conversions); err != nil {
 					t.Fatal(err)
 				}
 				if conversions != 1 {

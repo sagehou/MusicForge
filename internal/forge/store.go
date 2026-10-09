@@ -140,7 +140,7 @@ func (a *App) enqueueTask(kind, key string, args any, manual bool, task int64) (
 	var state string
 	err = tx.QueryRow("SELECT id,state FROM jobs WHERE dedup=? ORDER BY (state IN ('pending','running')) DESC,id DESC LIMIT 1", key).Scan(&id, &state)
 	if err == nil && (state == "pending" || state == "running" || (state == "failed" && !manual && (kind == "convert" || kind == "move" || strings.HasPrefix(key, prepareScanPrefix)))) {
-		if kind == "scan" && (state == "pending" || state == "running") {
+		if kind == "scan" && !strings.HasPrefix(key, prepareScanPrefix) && (state == "pending" || state == "running") {
 			var current string
 			followup := "scan-followup:" + strconv.FormatInt(id, 10)
 			if state == "pending" {

@@ -306,8 +306,38 @@ func (a *App) execute(ctx context.Context, j Job) error {
 			return a.prepare(ctx, j, r)
 		}
 		if strings.HasPrefix(j.Key, "scan:finalize:") {
+			// Another scan can share a preparation owned by an earlier task.
+			// Wait for all live preparations in this scope, not only our members.
+			rows, err := a.db.Query("SELECT args FROM jobs WHERE dedup LIKE 'scan:prepare:%' AND state IN ('pending','running')")
+			if err != nil {
+				return err
+			}
+			waiting := false
+			for rows.Next() {
+				var raw string
+				var request ScanRequest
+				if err = rows.Scan(&raw); err == nil {
+					err = json.Unmarshal([]byte(raw), &request)
+				}
+				if err != nil {
+					break
+				}
+				if len(request.Dirs) == 1 && scoped(request.Dirs[0], r.Dirs) {
+					waiting = true
+				}
+			}
+			if err == nil {
+				err = rows.Err()
+			}
+			rows.Close()
+			if err != nil {
+				return err
+			}
+			if waiting {
+				return later("Waiting for source verification and conversion to finish", 1)
+			}
 			var pending, failed int
-			err := a.db.QueryRow(`SELECT coalesce(sum(state IN ('pending','running')),0),coalesce(sum(state='failed'),0)
+			err = a.db.QueryRow(`SELECT coalesce(sum(state IN ('pending','running')),0),coalesce(sum(state='failed'),0)
 			 FROM jobs j LEFT JOIN meta m ON m.key='task-member:'||j.id
 			 WHERE j.dedup LIKE 'scan:prepare:%' AND coalesce(CAST(m.value AS INTEGER),j.id)=?`, a.taskID(j.ID)).Scan(&pending, &failed)
 			if err != nil {

@@ -118,7 +118,9 @@ func (a *App) stageSource(ctx context.Context, settings Settings, source Source,
 			if time.Since(last) >= time.Second || event.Hash != "" {
 				activity.ReadBytes = event.Read
 				a.reportProgress(job, activity, float64(event.Read)/float64(source.Size)*.1)
-				last = time.Now()
+				if event.Read > 0 {
+					last = time.Now()
+				}
 			}
 			return nil
 		}, staged.Path, strconv.FormatInt(source.Size, 10))

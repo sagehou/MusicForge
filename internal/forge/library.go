@@ -244,6 +244,7 @@ const prepareScanPrefix = "scan:prepare:"
 
 func (a *App) scan(ctx context.Context, r ScanRequest) error {
 	jobID, _ := ctx.Value(taskJobKey{}).(int64)
+	taskID := a.taskID(jobID)
 	if err := a.lockFiles(ctx); err != nil {
 		return err
 	}
@@ -285,7 +286,7 @@ func (a *App) scan(ctx context.Context, r ScanRequest) error {
 	}
 	// Reuse this scan's presence observations during deferred rename detection.
 	// A restart or another scan falls back to checking the mount directly.
-	a.observedPaths, a.observedDirs, a.observedTask = files, r.Dirs, jobID
+	a.observedPaths, a.observedDirs, a.observedTask = files, r.Dirs, taskID
 	existing, err := a.allSources()
 	if err != nil {
 		return err
@@ -308,7 +309,7 @@ func (a *App) scan(ctx context.Context, r ScanRequest) error {
 		source, found := byRel[rel]
 		activity := Activity{Phase: "scan", Path: rel, Artist: source.Artist, Album: source.Album, Title: source.Title, Processed: index, Total: len(paths)}
 		a.reportProgress(jobID, activity, float64(index)/float64(len(paths)))
-		changed := !found || !sameStat(info, source) || r.Verify || source.Hash == "" && source.Error == ""
+		changed := !found || !sameStat(info, source) || r.Verify || source.Hash == "" && source.Error == "" && source.Duration <= 0
 		if !changed && strings.HasPrefix(source.Error, sourceReadErrorPrefix) {
 			key := prepareScanPrefix + digest(fmt.Sprintf("%s:%d:%d:%s", rel, source.Size, source.Mtime, s.Encoding.Fingerprint()))
 			var failed int
@@ -369,7 +370,7 @@ func (a *App) scan(ctx context.Context, r ScanRequest) error {
 			// Persist the compatible verification request before the tag-only row,
 			// so an interruption followed by rollback cannot strand an empty hash.
 			key := prepareScanPrefix + digest(fmt.Sprintf("%s:%d:%d:%s", rel, info.Size(), info.ModTime().UnixNano(), s.Encoding.Fingerprint()))
-			if _, err = a.enqueueTask("scan", key, ScanRequest{Dirs: []string{rel}, Verify: true}, r.Verify, jobID); err != nil {
+			if _, err = a.enqueueTask("scan", key, ScanRequest{Dirs: []string{rel}, Verify: true}, r.Verify, taskID); err != nil {
 				return err
 			}
 			source, err = a.indexTags(rel, info, p, "")
@@ -399,6 +400,12 @@ func (a *App) scan(ctx context.Context, r ScanRequest) error {
 		}
 		source.OutputPresent = present
 		if source.Hash == "" && source.Error == "" {
+			if !changed {
+				key := prepareScanPrefix + digest(fmt.Sprintf("%s:%d:%d:%s", rel, info.Size(), info.ModTime().UnixNano(), s.Encoding.Fingerprint()))
+				if _, err = a.enqueueTask("scan", key, ScanRequest{Dirs: []string{rel}, Verify: true}, false, taskID); err != nil {
+					return err
+				}
+			}
 			preparing++
 		} else if source.Error != "" {
 			if strings.HasPrefix(source.Error, sourceReadErrorPrefix) || source.Hash == "" {
@@ -415,7 +422,7 @@ func (a *App) scan(ctx context.Context, r ScanRequest) error {
 			}
 			moved := present && source.BuiltHash == source.Hash && source.Output != outputRel(source.Rel, strings.TrimPrefix(filepath.Ext(source.Output), "."))
 			if moved || !present || source.BuiltHash != source.Hash {
-				if _, err = a.queueBuildTask(source, s.Encoding, moved, false, jobID); err != nil {
+				if _, err = a.queueBuildTask(source, s.Encoding, moved, false, taskID); err != nil {
 					return err
 				}
 			}
@@ -433,7 +440,10 @@ func (a *App) scan(ctx context.Context, r ScanRequest) error {
 	// Leave absence decisions until every source in this scope has been verified.
 	// Re-enumeration in the final scan also protects against a mount disappearing.
 	if jobID != 0 && preparing > 0 && invalid == 0 && unavailable == 0 {
-		if _, err = a.enqueueTask("scan", "scan:finalize:"+strconv.FormatInt(jobID, 10)+":"+digest(strings.Join(r.Dirs, "\x00")), ScanRequest{Dirs: r.Dirs}, false, jobID); err != nil {
+		if jobID != taskID {
+			return later("Waiting for source verification and conversion to finish", 1)
+		}
+		if _, err = a.enqueueTask("scan", "scan:finalize:"+strconv.FormatInt(taskID, 10)+":"+digest(strings.Join(r.Dirs, "\x00")), ScanRequest{Dirs: r.Dirs}, false, taskID); err != nil {
 			return err
 		}
 	}

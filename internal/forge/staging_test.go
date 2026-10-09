@@ -2,9 +2,11 @@ package forge
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -51,6 +53,22 @@ func TestTagsPrecedeFullReadAndEncodingReusesOneStagedCopy(t *testing.T) {
 		}
 	}
 	sourceFault(t, "stage", rel, 0, 0)
+	// Repeated indexing shares the original verification, including while it runs.
+	if err = a.scan(context.Background(), ScanRequest{}); err != nil {
+		t.Fatal("repeated metadata scan could not share preparation", err)
+	}
+	var preparedID int64
+	if err = a.db.QueryRow("SELECT id FROM jobs WHERE dedup LIKE 'scan:prepare:%' AND state='pending'").Scan(&preparedID); err != nil {
+		t.Fatal(err)
+	}
+	_, _ = a.db.Exec("UPDATE jobs SET state='running' WHERE id=?", preparedID)
+	if err = a.scan(context.Background(), ScanRequest{}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = a.meta("scan-followup:"+strconv.FormatInt(preparedID, 10)); err != sql.ErrNoRows {
+		t.Fatal("identical preparation was scheduled for a second full read", err)
+	}
+	_, _ = a.db.Exec("UPDATE jobs SET state='pending' WHERE id=?", preparedID)
 	// ffmpeg may decode/encode scratch files, never the mounted source audio.
 	tool := filepath.Join(t.TempDir(), "local-input-only")
 	script := "#!/bin/sh\nprevious=\nfor argument do\nif [ \"$previous\" = -i ]; then\ncase \"$argument\" in\n\"$MUSICFORGE_TEST_SOURCE_ROOT\"/*) exit 41;;\nesac\nfi\nprevious=$argument\ndone\nexec ffmpeg \"$@\"\n"

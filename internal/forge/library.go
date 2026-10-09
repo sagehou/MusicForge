@@ -1424,10 +1424,10 @@ type artworkMemo struct {
 // This optional cache prevents every track preparation from probing its album
 // again. Old workers ignore it; hash/stat validation invalidates their writes.
 type artworkHint struct {
-	Hash string `json:"hash"`
-	Size int64 `json:"size"`
-	Mtime int64 `json:"mtime"`
-	Attached bool `json:"attached"`
+	Hash     string `json:"hash"`
+	Size     int64  `json:"size"`
+	Mtime    int64  `json:"mtime"`
+	Attached bool   `json:"attached"`
 }
 
 func (a *App) rememberArtwork(rel string, size, mtime int64, hash string, p probeData) error {
@@ -1469,7 +1469,7 @@ func (a *App) embeddedArtwork(ctx context.Context, s Settings, dir string, track
 		memo = artworkMemo{Album: album}
 		for _, track := range tracks {
 			var hint artworkHint
-			raw, readErr := a.meta("source-artwork:"+digest(track.Rel))
+			raw, readErr := a.meta("source-artwork:" + digest(track.Rel))
 			if readErr != nil && readErr != sql.ErrNoRows {
 				return "", "", readErr
 			}

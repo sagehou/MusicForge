@@ -24,7 +24,7 @@ type Runtime struct {
 	FFprobe              string         `json:"ffprobe"`
 	TrustedProxies       []netip.Prefix `json:"trusted_proxies,omitempty"`
 	SourceTimeoutSeconds int            `json:"source_timeout_seconds,omitempty"`
-	StagingMaxBytes       int64          `json:"staging_max_bytes,omitempty"`
+	StagingMaxBytes      int64          `json:"staging_max_bytes,omitempty"`
 }
 
 func LoadRuntime(dir string) (Runtime, error) {

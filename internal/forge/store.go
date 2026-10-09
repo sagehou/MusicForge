@@ -106,7 +106,7 @@ func (a *App) allSources() ([]Source, error) {
 }
 
 func (a *App) sourcesWhere(where string, args ...any) ([]Source, error) {
-	rows, err := a.db.Query("SELECT " + sourceCols + " FROM sources" + where + " ORDER BY disc,track,rel", args...)
+	rows, err := a.db.Query("SELECT "+sourceCols+" FROM sources"+where+" ORDER BY disc,track,rel", args...)
 	if err != nil {
 		return nil, err
 	}

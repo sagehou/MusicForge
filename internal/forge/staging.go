@@ -17,12 +17,12 @@ type stagingNoWaitKey struct{}
 
 // Scratch files are disposable and never part of artifact recovery or schema 2.
 type stagedSource struct {
-	Path string
+	Path     string
 	Original string
-	Rel  string
-	Hash string
-	size int64
-	app  *App
+	Rel      string
+	Hash     string
+	size     int64
+	app      *App
 }
 
 func (s *stagedSource) Close() {

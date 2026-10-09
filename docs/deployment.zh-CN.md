@@ -91,4 +91,4 @@ schema 2 的持久化格式不变。v0.2.5 及更早的同系列版本在关闭�
 
 报错时记录任务 ID、歌曲路径、时间和 HTTP 状态码。`docker compose logs --since 10m musicforge` 中的 `source read failed`、`API request failed` 和 `slow API request` 包含路径、阶段或错误详情；不记录请求正文、密码或 OIDC 回调查询参数。浏览器遇到代理返回的 HTML／空响应会提示 HTTP 状态并保留已有任务数据。
 
-Actions 新增真实 rclone WebDAV／FUSE 验证：混合 FLAC/MP3/M4A，40 首库的第 36 首传输暂停，检查字节进度、API 响应、任务暂停／恢复和全文件哈希；再检查新增歌曲超时与恢复。证据产物为 `rclone-acceptance`。内核永久阻塞的存储调用无法保证立刻释放，需要恢复宿主机挂载；应用限制同时未回收的读取子进程数量。
+Actions 新增真实 rclone WebDAV／FUSE 验证，关闭 VFS 缓存：混合 FLAC/MP3/M4A，40 首库的第 36 首传输暂停，检查字节进度、API 响应、任务暂停／恢复和全文件哈希；再检查新增歌曲超时与恢复。另一次成功构建的源文件为 2,781,108 字节，网络仅多读取 65,536 字节标签数据，结束后不留暂存文件。证据产物为 `rclone-acceptance`。内核永久阻塞的存储调用无法保证立刻释放，需要恢复宿主机挂载；应用限制同时未回收的读取子进程数量。

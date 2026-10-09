@@ -125,7 +125,7 @@ func TestRemoteReadFailurePastThirtyTracksKeepsHealthyQueueAndStopsAfterThreeAtt
 	defer func() { cancel(); <-done; <-conversionsDone }()
 	deadline := time.Now().Add(60 * time.Second)
 	for {
-		j, err := readJob(a.db.QueryRow("SELECT "+jobCols+" FROM jobs WHERE dedup LIKE 'scan:prepare:%' AND json_extract(args,'$.dirs[0]')='Artist/Album/36.flac' ORDER BY id DESC LIMIT 1"))
+		j, err := readJob(a.db.QueryRow("SELECT " + jobCols + " FROM jobs WHERE dedup LIKE 'scan:prepare:%' AND json_extract(args,'$.dirs[0]')='Artist/Album/36.flac' ORDER BY id DESC LIMIT 1"))
 		if err == sql.ErrNoRows {
 			time.Sleep(20 * time.Millisecond)
 			continue

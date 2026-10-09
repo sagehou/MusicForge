@@ -103,6 +103,12 @@ def snapshot():
     return result
 
 
+def verification_queued(rel):
+    # Multiple scans share preparation; its original task remains the owner.
+    with sqlite3.connect(f"file:{ROOT / 'config/musicforge.db'}?mode=ro", uri=True) as db:
+        return db.execute("SELECT 1 FROM jobs WHERE kind='scan' AND dedup LIKE 'scan:prepare:%' AND json_extract(args,'$.dirs[0]')=? AND json_extract(args,'$.verify')=1 LIMIT 1", (rel,)).fetchone() is not None
+
+
 def verify(api, expected_tracks, pending, stopped):
     tracks = api("/api/library")
     assert sorted(tracks, key=lambda track: track["id"]) == expected_tracks, "library/artifact records changed"
@@ -195,8 +201,8 @@ def main():
             values = api("/api/settings")["settings"]
             values.update(enabled=True, nav_url="")
             api("/api/settings", "PUT", values)
-            pending_task = api("/api/library/scan", "POST", {"dirs": ["Pending"]})["job_id"]
-            wait_for(lambda: api(f"/api/jobs/{pending_task}/items")["items"], lambda items: any(item["kind"] == "scan" and item["args"].get("dirs") == [rel] and item["args"].get("verify") is True for item in items), "durable compatible verification request")
+            api("/api/library/scan", "POST", {"dirs": ["Pending"]})
+            wait_for(lambda: verification_queued(rel), bool, "durable compatible verification request")
             rows = wait_for(lambda: api("/api/library"), lambda rows: any(row["path"] == rel and row["hash"] == "" and row["title"] == "Metadata indexed before content verification" for row in rows), "tag-only pending row")
             values["enabled"] = False
             api("/api/settings", "PUT", values)

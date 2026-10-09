@@ -19,7 +19,7 @@ import (
 )
 
 // Source mount calls can block inside FUSE. Keep them in a disposable process,
-// without a database connection; this mode only reads the supplied source.
+// without a database connection; staging writes only a pre-created local scratch file.
 type sourceInfo struct {
 	Path     string      `json:"path"`
 	Rel      string      `json:"rel"`

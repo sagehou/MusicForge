@@ -65,7 +65,7 @@ func TestTagsPrecedeFullReadAndEncodingReusesOneStagedCopy(t *testing.T) {
 	if err = a.scan(context.Background(), ScanRequest{}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err = a.meta("scan-followup:"+strconv.FormatInt(preparedID, 10)); err != sql.ErrNoRows {
+	if _, err = a.meta("scan-followup:" + strconv.FormatInt(preparedID, 10)); err != sql.ErrNoRows {
 		t.Fatal("identical preparation was scheduled for a second full read", err)
 	}
 	_, _ = a.db.Exec("UPDATE jobs SET state='pending' WHERE id=?", preparedID)

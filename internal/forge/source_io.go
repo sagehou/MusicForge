@@ -112,7 +112,7 @@ func readSourceIO(operation, root, rel string, emit func(sourceEvent) error) err
 			if d.IsDir() {
 				return emit(sourceEvent{Path: rel})
 			}
-			if !strings.EqualFold(filepath.Ext(path), ".flac") {
+			if !audioSourcePath(path) {
 				return nil
 			}
 			info, err := d.Info()
@@ -169,6 +169,14 @@ func readSourceIO(operation, root, rel string, emit func(sourceEvent) error) err
 	default:
 		return errors.New("unknown source I/O operation")
 	}
+}
+
+func audioSourcePath(path string) bool {
+	switch strings.ToLower(filepath.Ext(path)) {
+	case ".flac", ".mp3", ".m4a", ".m4b", ".mp4", ".aac", ".wav", ".wave", ".aif", ".aiff", ".aifc", ".ogg", ".oga", ".opus", ".wma", ".ape", ".wv", ".mka":
+		return true
+	}
+	return false
 }
 
 func (a *App) sourceTimeout() time.Duration {

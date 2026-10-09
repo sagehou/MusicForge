@@ -117,17 +117,17 @@ func TestNativeLidarrDownloadUpgradeAndStrictPayload(t *testing.T) {
 	if err := a.saveSettings(s); err != nil {
 		t.Fatal(err)
 	}
-	old := makeFLAC(t, a, s, "Album/old.flac", "Old", false)
+	old := makeAudioSource(t, a, s, "Album/old.mp3", "Old", "libmp3lame", false)
 	if err := a.scan(context.Background(), ScanRequest{}); err != nil {
 		t.Fatal(err)
 	}
 	drain(t, a, true)
-	previous, _ := a.sourceRel("Album/old.flac")
+	previous, _ := a.sourceRel("Album/old.mp3")
 	if err := os.Remove(old); err != nil {
 		t.Fatal(err)
 	}
-	makeFLAC(t, a, s, "Album/new.flac", "New", false)
-	payload := `{"eventType":"Download","isUpgrade":true,"artist":{"name":"Artist"},"trackFiles":[{"path":"/lidarr/flac/Album/new.flac","quality":{"quality":{"name":"FLAC"}}}],"deletedFiles":[{"path":"/lidarr/flac/Album/old.flac"}]}`
+	makeAudioSource(t, a, s, "Album/new.m4a", "New", "aac", false)
+	payload := `{"eventType":"Download","isUpgrade":true,"artist":{"name":"Artist"},"trackFiles":[{"path":"/lidarr/flac/Album/new.m4a","quality":{"quality":{"name":"AAC"}}}],"deletedFiles":[{"path":"/lidarr/flac/Album/old.mp3"}]}`
 	send := func(body string, basic bool) *httptest.ResponseRecorder {
 		r := httptest.NewRequest("POST", "/api/webhook/lidarr", strings.NewReader(body))
 		if basic {

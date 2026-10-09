@@ -6,9 +6,9 @@ This document records the agreed product behavior and serves as the implementati
 
 ## Goal and scope
 
-MusicForge is a self-hosted streaming-library build tool. Lidarr manages FLAC sources, MusicForge calls ffmpeg to generate playback artifacts, and Navidrome serves those artifacts.
+MusicForge is a self-hosted streaming-library build tool. Lidarr manages audio sources, MusicForge calls ffmpeg to generate playback artifacts, and Navidrome serves those artifacts.
 
-- FLAC is the source of truth for music and tags; the application generates output audio and covers.
+- The source library is the source of truth for music and tags; the application generates output audio and covers.
 - Prioritize a single machine, Docker deployment, reliability and long-term maintainability.
 - Maintain one source/output pair and one current encoding profile.
 - Exclude cloud sync, rclone mount management, distributed workers, user permissions, multitenancy and plugins from the MVP. Existing rclone/FUSE mounts are supported as read-only sources.
@@ -26,7 +26,7 @@ MusicForge is a self-hosted streaming-library build tool. Lidarr manages FLAC so
 ## Mounts and ownership
 
 - Mount `/config` read-write on local Docker host storage, including the database and WAL state.
-- Mount the FLAC source separately, read-only.
+- Mount the audio source separately, read-only.
 - Mount the output separately, read-write. Background jobs write, replace, move and delete artifacts.
 - Give Navidrome a read-only mount of the same host output directory; container paths may differ.
 - Keep source/output separate and validate all task paths against their configured roots.
@@ -39,6 +39,14 @@ Mirror relative directories and filenames, replacing only the extension:
 source/Artist/Album/01 - Title.flac
 output/Artist/Album/01 - Title.opus
 ```
+
+## Supported source formats
+
+Allow mixed FLAC, MP3, AAC/ALAC, PCM WAV/AIFF, Ogg/Vorbis/Opus, WMA, APE, WavPack and MKA sources. Scan `.flac`, `.mp3`, `.m4a`, `.m4b`, `.mp4`, `.aac`, `.wav`, `.wave`, `.aif`, `.aiff`, `.aifc`, `.ogg`, `.oga`, `.opus`, `.wma`, `.ape`, `.wv` and `.mka`, case-insensitively. Skip unsupported extensions.
+
+ffprobe validates audio streams and finite positive duration. Attached artwork is allowed; ordinary video streams are rejected. Encode the first audio stream and retain original tags, recognizing common track/disc aliases such as `tracknumber`/`discnumber` for display. Re-encode every source using the current output profile, including lossy or same-codec inputs; another lossy encode can reduce quality.
+
+Preserve existing output paths, hashes and signatures. Same-named sources with different extensions can conflict, such as `01.flac` and `01.mp3`. Do not automatically select or overwrite another source's artifact: expose the error in Jobs and Library and resolve it by renaming the source and rescanning. Lidarr Download/Upgrade accepts the same source extensions; explicitly replaced artifacts retain the existing validated-album cleanup rules.
 
 ## Encoding profile
 
@@ -58,7 +66,7 @@ Support Opus and MP3, each with VBR or CBR. Choose one format for the single out
 
 ## Scanning and incremental builds
 
-Scan FLAC and store artist, album, title, track/disc number, metadata, size and modification time in SQLite.
+Scan supported audio files and store artist, album, title, track/disc number, metadata, size and modification time in SQLite.
 
 Ordinary scanning uses a fast check:
 
@@ -109,7 +117,7 @@ Generate a temporary file and validate before replacement. Failed conversion pre
 - Preserve audio metadata and existing ReplayGain tags.
 - Do not embed duplicate artwork in every output track.
 - Prefer external source album covers such as `cover.jpg` or `folder.jpg`.
-- Otherwise extract from the first FLAC with artwork in track order.
+- Otherwise extract from the first audio file with artwork in track order.
 - Generate one `cover.jpg` per output album.
 - Update external artwork independently of audio encoding.
 
@@ -191,7 +199,7 @@ Endpoint: `POST /api/webhook/lidarr`.
 
 Use React, TypeScript, TailwindCSS and shadcn/ui.
 
-- Overview: FLAC/output counts, build completion and recent jobs.
+- Overview: source/output counts, build completion and recent jobs.
 - Library: browse Artist → Album → Track using source-relative directories, breadcrumbs, disc/track ordering, search and status filters. Select artists, albums or tracks for bulk actions with clear expired/rebuild status. Output keeps the source library’s relative hierarchy.
 - Jobs: whole scan/build queue states, live track progress, human-readable details, queue controls and bulk history cleanup.
 - Settings: paths, encoding/mode/parameters, concurrency, scan interval, OIDC and integrations.

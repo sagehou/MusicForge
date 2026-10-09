@@ -2,10 +2,10 @@
 
 [English](README.md) · **简体中文**
 
-MusicForge 为无损音乐收藏构建适合流媒体播放的版本。Lidarr 管理 FLAC 母库，MusicForge 调用 ffmpeg 生成 Opus 或 MP3，Navidrome 读取输出库提供播放。增量构建只处理需要更新的歌曲。
+MusicForge 为音乐收藏构建适合流媒体播放的版本。Lidarr 管理源库，MusicForge 调用 ffmpeg 生成 Opus 或 MP3，Navidrome 读取输出库提供播放。增量构建只处理需要更新的歌曲。
 
 ```text
-Lidarr FLAC 源库（只读）
+Lidarr 音频源库（只读）
             ↓
 MusicForge · SQLite · ffmpeg
             ↓
@@ -16,11 +16,17 @@ Navidrome（只读）
 
 一个容器、一个管理员、一组源库与输出库。镜像发布于 `ghcr.io/sagehou/musicforge`，支持 `linux/amd64` 和 `linux/arm64`。
 
+## 支持的源音频
+
+支持 FLAC、MP3、M4A/M4B/MP4 中的 AAC/ALAC、裸 AAC、PCM WAV/AIFF、Ogg/Vorbis/Opus、WMA、APE、WavPack 与 MKA，可混合存放。后缀不区分大小写；ffprobe 检查实际音频内容，允许内嵌封面，拒绝普通视频流。所有源文件均按所选 Opus/MP3 配置重新编码；有损源再次编码可能降低音质。
+
+输出仍沿用源库的相对目录和文件名。`01.flac` 与 `01.mp3` 会映射到同一输出；已有登记文件受保护，冲突任务在音乐库及任务页显示错误和来源路径。重命名冲突源文件后重新扫描即可。不支持的后缀会跳过。Compose 的源路径变量保留 `FLAC_DIR` 名称以兼容现有部署，也可指向混合音频源库。
+
 ## 主要功能
 
 - 按歌手 → 专辑 → 歌曲浏览音乐库，整次扫描／构建归为一个任务，并显示实时曲目进度。
 - 支持任务暂停、继续、停止和完成记录清理，保留已生成的音频。
-- 扫描 FLAC，在 SQLite 中索引文件和标签，转换新增或变化的歌曲。
+- 扫描支持的音频文件，在 SQLite 中索引文件和标签，转换新增或变化的歌曲。
 - 内容完全相同的重命名或搬迁直接移动产物，无需重新编码。
 - 保留标签与 ReplayGain，每个专辑只保存一份 `cover.jpg`。
 - 替换前验证新文件，转换失败时保留已有可播放产物。
@@ -32,7 +38,7 @@ MVP 不包含云同步、分布式 worker、多组音乐库、多用户或插件
 
 ## 使用 Docker Compose 部署
 
-需要 Docker Engine、Compose v2、现有 FLAC 源库，以及空的专用输出目录。示例仅在宿主机回环地址开放端口，供反向代理转发。
+需要 Docker Engine、Compose v2、现有音频源库，以及空的专用输出目录。示例仅在宿主机回环地址开放端口，供反向代理转发。
 
 1. 下载部署文件：
 
@@ -61,7 +67,7 @@ MVP 不包含云同步、分布式 worker、多组音乐库、多用户或插件
    docker compose logs musicforge
    ```
 
-   修改所有者需要相应宿主机权限。该用户还需要读取 FLAC 的权限。`/config` 使用适合 SQLite WAL 的本地文件系统，不放在 NFS/SMB 上。源库与输出库分别挂载。
+   修改所有者需要相应宿主机权限。该用户还需要读取源音频的权限。`/config` 使用适合 SQLite WAL 的本地文件系统，不放在 NFS/SMB 上。源库与输出库分别挂载。
 
 4. 配置反向代理，将公开 HTTPS 地址转发到 `127.0.0.1:8787`，并保留 Host。`MUSICFORGE_PUBLIC_URL` 填写主地址，例如 `https://musicforge.example.com`，不带路径。其他访问地址通过下文的 `MUSICFORGE_ALLOWED_ORIGINS` 配置。应用部署在 `/`，不支持子路径。
 
@@ -88,9 +94,9 @@ Navidrome 只读挂载同一个宿主机输出目录。容器内路径可以不�
 
 ## 远程挂载的源库
 
-已有的 rclone／FUSE 挂载可以作为只读 FLAC 源库。MusicForge 不管理 rclone，也不负责云同步；`/config` 和输出目录仍应使用可靠的本地存储。先挂载 rclone，再启动容器，并确认配置的 UID/GID 可以读取；挂载用户不同时可能需要 `--allow-other`。
+已有的 rclone／FUSE 挂载可以作为只读音频源库。MusicForge 不管理 rclone，也不负责云同步；`/config` 和输出目录仍应使用可靠的本地存储。先挂载 rclone，再启动容器，并确认配置的 UID/GID 可以读取；挂载用户不同时可能需要 `--allow-other`。
 
-建议 rclone 使用 `--vfs-cache-mode full`，并配置容量足够的本地 `--cache-dir`，让哈希、标签检查和编码复用下载内容。首次导入仍完整读取新增 FLAC，保留原有哈希和搬迁识别；普通扫描跳过未变化歌曲的内容读取。任务页和日志展示读取阶段、歌曲路径及字节进度；存储检查在后台执行，不让网页请求等待挂载。
+建议 rclone 使用 `--vfs-cache-mode full`，并配置容量足够的本地 `--cache-dir`，让哈希、标签检查和编码复用下载内容。首次导入仍完整读取新增音频文件，保留原有哈希和搬迁识别；普通扫描跳过未变化歌曲的内容读取。任务页和日志展示读取阶段、歌曲路径及字节进度；存储检查在后台执行，不让网页请求等待挂载。
 
 默认连续 120 秒没有进展时终止源库读取，可通过 `MUSICFORGE_SOURCE_TIMEOUT_SECONDS` 调整。哈希和枚举有进展会重置计时；ffprobe、封面提取使用单次操作时限，编码须持续推进。个别歌曲读不出来时保留旧音频与已知哈希，继续为健康歌曲排队，且本轮不判定源文件过期。扫描自动重试两次，之后等待手动重试；整个根目录离线的等待不消耗单曲重试额度。
 
@@ -98,11 +104,11 @@ Navidrome 只读挂载同一个宿主机输出目录。容器内路径可以不�
 
 ## 增量构建与文件生命周期
 
-FLAC 是唯一事实来源。生成的音频和封面由 MusicForge 管理，输出维护通过网页完成。
+源库是唯一事实来源。生成的音频和封面由 MusicForge 管理，输出维护通过网页完成。
 
 | 触发条件 | 处理方式 |
 | --- | --- |
-| 新增 FLAC、内容或标签变化、输出缺失 | 自动创建构建任务 |
+| 新增音频、内容或标签变化、输出缺失 | 自动创建构建任务 |
 | 内容完全相同的重命名或移动 | 搬迁已登记产物，不重新编码 |
 | 编码配置变化 | 标记**待重建**，在音乐库手动启动 |
 | 普通源文件删除 | 保留输出并标记**过期 · 源已删除**，等待手动删除 |
@@ -123,7 +129,7 @@ FLAC 是唯一事实来源。生成的音频和封面由 MusicForge 管理，输
 
 存储离线时暂停受影响任务，扫描不完整时不将未见文件标记为过期。挂载身份和输出目录的 `.musicforge` 归属标记用于识别挂载异常，避免将缺失挂载误判为空库。主动更换源挂载后，核对路径并保存设置以确认。保留归属标记。
 
-索引后不能修改容器内根路径。搬迁存储时调整宿主机挂载位置，保持容器路径不变。停止 MusicForge 后备份整个 `/config`，包括数据库；另行备份 FLAC。升级时在 `.env` 选择镜像版本，再运行 `docker compose pull` 和 `docker compose up -d`。
+索引后不能修改容器内根路径。搬迁存储时调整宿主机挂载位置，保持容器路径不变。停止 MusicForge 后备份整个 `/config`，包括数据库；另行备份源库。升级时在 `.env` 选择镜像版本，再运行 `docker compose pull` 和 `docker compose up -d`。
 
 ## Lidarr 集成
 
@@ -136,7 +142,7 @@ FLAC 是唯一事实来源。生成的音频和封面由 MusicForge 管理，输
 | Password | 在 MusicForge 设置中保存的独立 webhook 密钥 |
 | 事件 | 导入和升级通知 |
 
-连接测试不创建真实转换任务。原生 `Download` 事件使用 `trackFiles[].path`、`isUpgrade` 和 `deletedFiles[].path`。Lidarr 看到不同的源根目录时，填写容器内的绝对路径作为 **Lidarr 源路径前缀**。映射后的路径仍限制在 FLAC 根目录内。自定义客户端也可通过同一密钥使用 Bearer 认证。
+连接测试不创建真实转换任务。原生 `Download` 事件使用 `trackFiles[].path`、`isUpgrade` 和 `deletedFiles[].path`。Lidarr 看到不同的源根目录时，填写容器内的绝对路径作为 **Lidarr 源路径前缀**。映射后的路径仍限制在源根目录内。自定义客户端也可通过同一密钥使用 Bearer 认证。
 
 ## Navidrome 集成
 

@@ -43,8 +43,8 @@ func mapLidarr(s Settings, path string) (string, error) {
 	if err = validRelativePath(rel); err != nil {
 		return "", err
 	}
-	if !strings.EqualFold(filepath.Ext(rel), ".flac") {
-		return "", errors.New("Lidarr track path must be FLAC")
+	if !audioSourcePath(rel) {
+		return "", errors.New("Lidarr track path must use a supported audio extension")
 	}
 	return rel, nil
 }

@@ -132,7 +132,7 @@ func (a *App) probe(ctx context.Context, path string) (probeData, error) {
 		return p, fmt.Errorf("ffprobe failed: %w\n%s", err, stderr.String())
 	}
 	if out.truncated {
-		return p, errors.New("FLAC metadata exceeds the 4 MiB limit")
+		return p, errors.New("audio metadata exceeds the 4 MiB limit")
 	}
 	err = json.Unmarshal(out.Bytes(), &p)
 	if err != nil {
@@ -166,6 +166,22 @@ func (p probeData) tags() map[string]string {
 	}
 	return tags
 }
+func (p probeData) audioSource() bool {
+	audio := false
+	for _, stream := range p.Streams {
+		if stream.Type == "video" && stream.Disposition.Attached != 1 {
+			return false
+		}
+		if stream.Type == "audio" && !audio {
+			if stream.Codec == "" || stream.Codec == "unknown" {
+				return false
+			}
+			audio = true
+		}
+	}
+	duration := p.duration()
+	return audio && duration > 0 && !math.IsNaN(duration) && !math.IsInf(duration, 0)
+}
 func fileHash(ctx context.Context, path string) (string, error) {
 	f, err := os.Open(path)
 	if err != nil {
@@ -195,6 +211,14 @@ func tagNumber(value string) int {
 	value = strings.Split(value, "/")[0]
 	v, _ := strconv.Atoi(value)
 	return v
+}
+func tagPosition(tags map[string]string, name string) int {
+	for _, key := range []string{name, name + "number", name + "_number"} {
+		if value := tags[key]; value != "" {
+			return tagNumber(value)
+		}
+	}
+	return 0
 }
 func outputRel(rel, codec string) string {
 	return strings.TrimSuffix(rel, filepath.Ext(rel)) + "." + codec
@@ -321,15 +345,8 @@ func (a *App) scan(ctx context.Context, r ScanRequest) error {
 			activity.Phase = "probe"
 			a.reportProgress(jobID, activity, float64(index)/float64(len(paths)))
 			p, err := a.probe(ctx, current.Path)
-			audio := false
-			for _, stream := range p.Streams {
-				if stream.Type == "audio" && stream.Codec == "flac" {
-					audio = true
-				}
-			}
-			duration := p.duration()
-			if err == nil && (!audio || duration <= 0 || math.IsNaN(duration) || math.IsInf(duration, 0)) {
-				err = fmt.Errorf("not FLAC audio: %s", rel)
+			if err == nil && !p.audioSource() {
+				err = fmt.Errorf("not a valid audio-only source (artwork is allowed): %s", rel)
 			}
 			if err != nil {
 				if ctx.Err() != nil {
@@ -388,10 +405,10 @@ func (a *App) scan(ctx context.Context, r ScanRequest) error {
 				}
 			}
 			if found {
-				_, err = a.db.Exec("UPDATE sources SET rel=?,hash=?,size=?,mtime=?,artist=?,album=?,title=?,track=?,disc=?,duration=?,metadata=?,present=1,error='' WHERE id=?", rel, hash, info.Size(), info.ModTime().UnixNano(), tags["artist"], tags["album"], tags["title"], tagNumber(tags["track"]), tagNumber(tags["disc"]), p.duration(), string(metadata), source.ID)
+				_, err = a.db.Exec("UPDATE sources SET rel=?,hash=?,size=?,mtime=?,artist=?,album=?,title=?,track=?,disc=?,duration=?,metadata=?,present=1,error='' WHERE id=?", rel, hash, info.Size(), info.ModTime().UnixNano(), tags["artist"], tags["album"], tags["title"], tagPosition(tags, "track"), tagPosition(tags, "disc"), p.duration(), string(metadata), source.ID)
 			} else {
 				var result sql.Result
-				result, err = a.db.Exec("INSERT INTO sources(rel,hash,size,mtime,artist,album,title,track,disc,duration,metadata) VALUES(?,?,?,?,?,?,?,?,?,?,?)", rel, hash, info.Size(), info.ModTime().UnixNano(), tags["artist"], tags["album"], tags["title"], tagNumber(tags["track"]), tagNumber(tags["disc"]), p.duration(), string(metadata))
+				result, err = a.db.Exec("INSERT INTO sources(rel,hash,size,mtime,artist,album,title,track,disc,duration,metadata) VALUES(?,?,?,?,?,?,?,?,?,?,?)", rel, hash, info.Size(), info.ModTime().UnixNano(), tags["artist"], tags["album"], tags["title"], tagPosition(tags, "track"), tagPosition(tags, "disc"), p.duration(), string(metadata))
 				if err == nil {
 					source.ID, err = result.LastInsertId()
 				}
@@ -483,10 +500,10 @@ func (a *App) scan(ctx context.Context, r ScanRequest) error {
 	}
 	a.reportProgress(jobID, Activity{Phase: "indexed", Processed: len(paths), Total: len(paths), Percent: 100}, 1)
 	if unavailable > 0 {
-		return fmt.Errorf("scan found %d unavailable source files and %d invalid FLAC files; healthy tracks queued, no deletions applied; see Library errors", unavailable, invalid)
+		return fmt.Errorf("scan found %d unavailable source files and %d invalid audio files; healthy tracks queued, no deletions applied; see Library errors", unavailable, invalid)
 	}
 	if invalid > 0 {
-		return fmt.Errorf("scan found %d invalid FLAC files; healthy tracks processed, no deletions applied; see Library errors", invalid)
+		return fmt.Errorf("scan found %d invalid audio files; healthy tracks processed, no deletions applied; see Library errors", invalid)
 	}
 	return nil
 }
@@ -522,13 +539,13 @@ func (a *App) queueBuildTask(source Source, profile Encoding, move, manual bool,
 
 func (a *App) owned(rel string, id int64) error {
 	var owner int64
-	var kind string
-	err := a.db.QueryRow("SELECT source_id,kind FROM managed WHERE path=?", rel).Scan(&owner, &kind)
+	var kind, sourcePath string
+	err := a.db.QueryRow("SELECT m.source_id,m.kind,COALESCE(s.rel,'') FROM managed m LEFT JOIN sources s ON s.id=m.source_id WHERE m.path=?", rel).Scan(&owner, &kind, &sourcePath)
 	if err != nil {
 		return fmt.Errorf("refusing unregistered output %q: %w", rel, err)
 	}
 	if kind != "audio" || owner != id {
-		return fmt.Errorf("output %q is owned by another source", rel)
+		return fmt.Errorf("output path conflict: %q is owned by source %q; rename the conflicting source before retrying", rel, sourcePath)
 	}
 	return nil
 }
@@ -542,7 +559,7 @@ func (a *App) targetAvailable(s Settings, rel string, id int64) error {
 		var owner int64
 		err = a.db.QueryRow("SELECT source_id FROM managed WHERE path=?", rel).Scan(&owner)
 		if err == nil && owner != id {
-			return errors.New("target reserved by another source")
+			return a.owned(rel, id)
 		}
 		if err != nil && err != sql.ErrNoRows {
 			return err
@@ -756,6 +773,7 @@ func (a *App) build(ctx context.Context, j Job, r BuildRequest) error {
 	a.reportProgress(j.ID, activity, 0)
 	if err = a.targetAvailable(s, target, source.ID); err != nil {
 		a.files.Unlock()
+		a.recordSourceError(source.ID, err)
 		return err
 	}
 	out, err := safePath(s.Output, target)
@@ -890,6 +908,7 @@ func (a *App) build(ctx context.Context, j Job, r BuildRequest) error {
 		return nil
 	}
 	if err = a.targetAvailable(s, target, source.ID); err != nil {
+		a.recordSourceError(source.ID, err)
 		return err
 	}
 	p := promotion{source.ID, tempRel, target, latest.Output, source.Hash, r.Profile.Fingerprint(), hash}

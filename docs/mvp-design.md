@@ -8,9 +8,9 @@
 
 ## 目标与范围
 
-MusicForge 是自托管的音乐流媒体版本构建工具：Lidarr 管理 FLAC 源库，MusicForge 调用 ffmpeg 生成播放产物，Navidrome 读取产物提供播放。
+MusicForge 是自托管的音乐流媒体版本构建工具：Lidarr 管理音频源库，MusicForge 调用 ffmpeg 生成播放产物，Navidrome 读取产物提供播放。
 
-- FLAC 源库是音乐内容和标签的事实来源；输出歌曲和封面由程序生成。
+- 源库是音乐内容和标签的事实来源；输出歌曲和封面由程序生成。
 - 单机优先、Docker 部署、简单可靠、长期可维护。
 - MVP 只维护一组源库与输出库，一个输出库使用一套当前编码配置。
 - 第一阶段不实现云同步、rclone 挂载管理、多节点 worker、多用户权限、多租户或插件系统；允许将已有 rclone／FUSE 挂载作为只读源库。
@@ -29,7 +29,7 @@ MusicForge 是自托管的音乐流媒体版本构建工具：Lidarr 管理 FLAC
 ## 挂载与文件管理范围
 
 - `/config` 读写挂载到 Docker 宿主机本地磁盘，包含数据库及其 WAL 等状态文件。
-- FLAC 源目录独立只读挂载。
+- 音频源目录独立只读挂载。
 - 转码输出目录独立读写挂载，音乐文件的写入、替换、搬迁和删除由后台任务执行。
 - Navidrome 对应音乐库只读挂载同一个宿主机输出目录；容器内路径名称可以不同。
 - 源目录和输出目录分开，任务路径必须校验在配置的根目录范围内。
@@ -42,6 +42,14 @@ MusicForge 是自托管的音乐流媒体版本构建工具：Lidarr 管理 FLAC
 source/Artist/Album/01 - Title.flac
 output/Artist/Album/01 - Title.opus
 ```
+
+## 支持的源格式
+
+源库允许混合 FLAC、MP3、AAC/ALAC、PCM WAV/AIFF、Ogg/Vorbis/Opus、WMA、APE、WavPack 与 MKA。扫描后缀为 `.flac`、`.mp3`、`.m4a`、`.m4b`、`.mp4`、`.aac`、`.wav`、`.wave`、`.aif`、`.aiff`、`.aifc`、`.ogg`、`.oga`、`.opus`、`.wma`、`.ape`、`.wv`、`.mka`，不区分大小写。不支持的后缀跳过。
+
+ffprobe 验证音频流与有效时长；允许内嵌封面，拒绝普通视频流。编码使用第一条音频流，保留原始标签；track/disc 同时识别 `tracknumber`／`discnumber` 等常见别名。即使源为有损格式或与输出编码相同，也按当前输出配置重新编码；有损源再次编码可能降低音质。
+
+保持既有输出路径规则、哈希与签名。不同后缀的同名源可能冲突（例如 `01.flac` 和 `01.mp3`）；不自动选择或覆盖另一源的产物，任务与音乐库显示错误，用户重命名源文件后重新扫描。Lidarr Download/Upgrade 接受相同源后缀；专辑完整验证后仍按既有规则清理明确被替换的产物。
 
 ## 编码配置
 
@@ -61,7 +69,7 @@ output/Artist/Album/01 - Title.opus
 
 ## 扫描与增量构建
 
-扫描 FLAC，读取 Artist、Album、Title、Track number、Disc number、metadata、文件大小和修改时间，保存到 SQLite。
+扫描支持的音频文件，读取 Artist、Album、Title、Track number、Disc number、metadata、文件大小和修改时间，保存到 SQLite。
 
 日常扫描采用快速检查：
 
@@ -114,7 +122,7 @@ output/Artist/Album/01 - Title.opus
 - 保留音频 metadata 和已有 ReplayGain 标签。
 - 每首生成的歌曲不重复嵌入封面。
 - 优先使用源专辑目录里的 `cover.jpg`、`folder.jpg` 等外置封面。
-- 无外置封面时，按曲目顺序从第一首带封面的 FLAC 提取。
+- 无外置封面时，按曲目顺序从第一首带封面的音频文件 提取。
 - 专辑输出一份 `cover.jpg`。
 - 外置封面可以独立更新，无需重新编码歌曲。
 
@@ -197,7 +205,7 @@ output/Artist/Album/01 - Title.opus
 
 技术栈：React、TypeScript、TailwindCSS、shadcn/ui。
 
-- Dashboard：FLAC 数量、输出数量、构建完成比例、最近任务。
+- Dashboard：音频源文件数量、输出数量、构建完成比例、最近任务。
 - Library：按源相对目录逐层浏览歌手 → 专辑 → 歌曲，支持面包屑返回、多碟曲目、搜索和状态筛选；过期与待重建明显区分，可选择歌手、专辑或歌曲批量操作。源目录和输出目录继续保持相同的相对层级。
 - Jobs：整次扫描／构建队列状态、实时曲目进度、可读详情、整队列控制和批量任务记录清理。
 - Settings：源/输出路径、编码格式、模式及其参数、转换并发、扫描间隔、OIDC 与集成配置。

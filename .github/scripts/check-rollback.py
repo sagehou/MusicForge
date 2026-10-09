@@ -20,6 +20,7 @@ NAME = "musicforge-rollback"
 CANDIDATE = "musicforge:validation"
 PASSWORD = "ci-rollback-password"
 LEGACY = {
+    "v0.2.5": "sha256:3dee84549033b769450b599b4b1b12481927f4dcab56fe15055f811e29e30e49",
     "v0.2.4": "sha256:3af1f8f70fcc208fe8ae293da2a78e3e92288edddd8b4c3807a01b5a47903241",
     "v0.2.3": "sha256:94afc5a3b0db22fbd563623b193376677bde460b4561e68afee7f00c372d70a4",
     "v0.2.2": "sha256:fd7f6045a7f31dfe2c1a853cf3004377ebef3cebba4cb3a0b488b925fae28d8d",
@@ -100,9 +101,9 @@ def snapshot():
     return result
 
 
-def verify(api, expected_track, pending, stopped):
+def verify(api, expected_tracks, pending, stopped):
     tracks = api("/api/library")
-    assert len(tracks) == 1 and tracks[0] == expected_track, "library/artifact record changed"
+    assert sorted(tracks, key=lambda track: track["id"]) == expected_tracks, "library/artifact records changed"
     settings = api("/api/settings")
     assert settings["configured"] == {"webhook": True, "nav_password": True, "oidc_secret": True}, "saved credentials lost"
     assert not settings["settings"]["enabled"], "rollback must keep background work paused"
@@ -124,6 +125,8 @@ def main():
     (ROOT / "config/config.json").write_text(json.dumps({"public_url": ORIGIN, "allowed_origins": ["http://localhost:18788"], "source_timeout_seconds": 120}) + "\n")
     media = ("run", "--rm", "--user", f"{os.getuid()}:{os.getgid()}", "-v", f"{ROOT / 'source'}:/fixture", "--entrypoint", "ffmpeg", CANDIDATE, "-nostdin", "-v", "error", "-y")
     docker(*media, "-f", "lavfi", "-i", "sine=duration=1", "-c:a", "flac", "-metadata", "artist=Rollback Artist", "-metadata", "album=Rollback Album", "-metadata", "title=Rollback Track", "/fixture/Album/01.flac")
+    for rel, codec in (("02.mp3", "libmp3lame"), ("03.m4a", "aac")):
+        docker(*media, "-f", "lavfi", "-i", "sine=duration=1", "-c:a", codec, "-metadata", "artist=Rollback Artist", "-metadata", "album=Rollback Album", "-metadata", "title=" + rel, "/fixture/Album/" + rel)
     # The release media tools omit the color filter; a standard-library PNG is sufficient.
     def chunk(kind, data):
         return struct.pack(">I", len(data)) + kind + data + struct.pack(">I", zlib.crc32(kind + data))
@@ -132,14 +135,16 @@ def main():
     cover = b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", header) + chunk(b"IDAT", zlib.compress(pixels)) + chunk(b"IEND", b"")
     (ROOT / "source/Album/cover.png").write_bytes(cover)
     stable = time.time() - 120
-    os.utime(ROOT / "source/Album/01.flac", (stable, stable))
+    for rel in ("01.flac", "02.mp3", "03.m4a"):
+        os.utime(ROOT / "source/Album" / rel, (stable, stable))
     try:
         api, _ = start(CANDIDATE)
         values = api("/api/settings")["settings"]
         values["enabled"] = True
         values["webhook_secret"] = "ci-rollback-webhook-secret-24-plus"
         api("/api/settings", "PUT", values)
-        track = wait_for(lambda: api("/api/library"), lambda rows: len(rows) == 1 and rows[0]["status"] == "ready", "candidate conversion")[0]
+        tracks = wait_for(lambda: api("/api/library"), lambda rows: len(rows) == 3 and all(row["status"] == "ready" for row in rows), "candidate mixed-source conversion")
+        tracks.sort(key=lambda track: track["id"])
         wait_for(lambda: api("/api/jobs")["jobs"], lambda rows: all(row["state"] == "success" for row in rows), "completed conversion jobs")
         values = api("/api/settings")["settings"]
         values.update(enabled=False, nav_url="https://navidrome.example.test", nav_user="admin", nav_password="ci-nav-secret",
@@ -149,7 +154,7 @@ def main():
         api("/api/jobs/control", "POST", {"action": "stop", "ids": [stopped]})
         pending = api("/api/navidrome/refresh", "POST", {})["job_id"]
         api("/api/jobs/control", "POST", {"action": "pause", "ids": [pending]})
-        verify(api, track, pending, stopped)
+        verify(api, tracks, pending, stopped)
         stop()
         # Optional read counters must survive older readers and Settings writers too.
         with sqlite3.connect(ROOT / "config/musicforge.db") as db:
@@ -161,7 +166,7 @@ def main():
         expected = snapshot()
         held = next(row for row in expected["jobs"] if row[0] == pending)
         assert held[4] == "pending" and held[8] == 253402300799, "paused task changed schema-2 job semantics"
-        assert "Album/01.opus" in expected["output"] and "Album/cover.jpg" in expected["output"], "audio/cover fixture missing"
+        assert all(path in expected["output"] for path in ("Album/01.opus", "Album/02.opus", "Album/03.opus", "Album/cover.jpg")), "mixed audio/cover fixture missing"
         evidence = []
         for version, digest in LEGACY.items():
             image = "ghcr.io/sagehou/musicforge@" + digest
@@ -170,7 +175,7 @@ def main():
                 api, running = start(actual_image)
                 if actual_image == image:
                     assert running == version, "wrong rollback release"
-                verify(api, track, pending, stopped)
+                verify(api, tracks, pending, stopped)
                 stop()
                 actual = snapshot()
                 changed = [key for key in expected if actual[key] != expected[key]]

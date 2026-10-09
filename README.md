@@ -2,10 +2,10 @@
 
 **English** · [Simplified Chinese](README.zh-CN.md)
 
-MusicForge builds a streaming edition of your lossless music collection. Lidarr manages the FLAC masters, MusicForge generates Opus or MP3 with ffmpeg, and Navidrome serves the output. Incremental builds process only tracks that need work.
+MusicForge builds a streaming edition of your music collection. Lidarr manages the source library, MusicForge generates Opus or MP3 with ffmpeg, and Navidrome serves the output. Incremental builds process only tracks that need work.
 
 ```text
-Lidarr FLAC library (read-only)
+Lidarr audio library (read-only)
               ↓
 MusicForge · SQLite · ffmpeg
               ↓
@@ -16,11 +16,17 @@ Navidrome (read-only)
 
 One container, one administrator, one source library and one output library. Images are published at `ghcr.io/sagehou/musicforge` for `linux/amd64` and `linux/arm64`.
 
+## Supported source audio
+
+Scan FLAC, MP3, AAC/ALAC in M4A/M4B/MP4, raw AAC, PCM WAV/AIFF, Ogg/Vorbis/Opus, WMA, APE, WavPack and MKA. Extensions are case-insensitive; ffprobe checks actual audio and rejects ordinary video streams while allowing attached artwork. Source formats can coexist in one library. All tracks are re-encoded with the selected Opus/MP3 profile, including lossy inputs; another lossy encode can reduce quality.
+
+Keep the existing source-relative output names. `01.flac` and `01.mp3` map to the same output; the existing registered owner is preserved and the conflicting build fails with the source path in Library and Jobs. Rename the conflicting source to resolve it. Unsupported extensions are skipped. `FLAC_DIR` remains the Compose source-path variable for deployment compatibility; it may point to a mixed audio library.
+
 ## Features
 
 - Browse Artist → Album → Track; control entire scan/build queues with live track progress.
 - Pause/resume or stop tasks and delete completed history while keeping generated audio.
-- Index FLAC files and metadata in SQLite; convert new or changed tracks.
+- Index supported audio files and metadata in SQLite; convert new or changed tracks.
 - Move byte-identical renamed files without re-encoding.
 - Preserve tags and ReplayGain; store album artwork once as `cover.jpg`.
 - Validate replacements before retiring playable output.
@@ -32,7 +38,7 @@ Cloud sync, distributed workers, multiple libraries, multiple users and plugins 
 
 ## Deploy with Docker Compose
 
-You need Docker Engine with Compose v2, an existing FLAC library and an empty, dedicated output directory. The Compose example binds to the Docker host's loopback address for use with a reverse proxy.
+You need Docker Engine with Compose v2, an existing audio library and an empty, dedicated output directory. The Compose example binds to the Docker host's loopback address for use with a reverse proxy.
 
 1. Download the deployment files:
 
@@ -61,7 +67,7 @@ You need Docker Engine with Compose v2, an existing FLAC library and an empty, d
    docker compose logs musicforge
    ```
 
-   Run the ownership command with sufficient host permissions. The selected user also needs read access to FLAC. `/config` must use a local filesystem suitable for SQLite WAL, not NFS/SMB. Mount source and output separately.
+   Run the ownership command with sufficient host permissions. The selected user also needs read access to source audio. `/config` must use a local filesystem suitable for SQLite WAL, not NFS/SMB. Mount source and output separately.
 
 4. Forward the public HTTPS origin to `127.0.0.1:8787` through your reverse proxy, preserving Host. Set `MUSICFORGE_PUBLIC_URL` to the primary origin, for example `https://musicforge.example.com`, without a path. Add other origins through `MUSICFORGE_ALLOWED_ORIGINS` as described below. MusicForge serves from `/`.
 
@@ -75,9 +81,9 @@ Give Navidrome a read-only mount of the same physical output directory. Its cont
 
 ## Mounted remote source libraries
 
-An existing rclone/FUSE mount can be the read-only FLAC source. MusicForge does not manage rclone or synchronize cloud storage. Keep `/config` and the output on local reliable storage. Mount rclone before starting the container and give its UID/GID read access; `--allow-other` may be needed when the mount owner differs.
+An existing rclone/FUSE mount can be the read-only audio source. MusicForge does not manage rclone or synchronize cloud storage. Keep `/config` and the output on local reliable storage. Mount rclone before starting the container and give its UID/GID read access; `--allow-other` may be needed when the mount owner differs.
 
-For repeated hashing, metadata and encoding reads, use rclone `--vfs-cache-mode full` with a sufficiently sized local `--cache-dir`. First import still reads each complete new FLAC to preserve content hashes and rename detection; ordinary unchanged scans skip audio reads. Jobs and logs show the source path, read stage and bytes read. Background storage checks keep Web requests independent of mount latency.
+For repeated hashing, metadata and encoding reads, use rclone `--vfs-cache-mode full` with a sufficiently sized local `--cache-dir`. First import still reads each complete new audio file to preserve content hashes and rename detection; ordinary unchanged scans skip audio reads. Jobs and logs show the source path, read stage and bytes read. Background storage checks keep Web requests independent of mount latency.
 
 A source read with no progress for 120 seconds times out. Adjust `MUSICFORGE_SOURCE_TIMEOUT_SECONDS` for your remote if necessary. Hash/enumeration timers reset on progress; ffprobe and cover extraction have an operation deadline, and encoding must keep advancing. A single unreadable track preserves existing audio and hashes, allows healthy tracks to be queued, and prevents deletion detection for that incomplete scan. The scan retries twice, then waits for manual retry. Whole-root outages defer work without spending track retry budgets.
 
@@ -98,11 +104,11 @@ Navigation, forms, statuses, confirmations, notifications, common API errors, da
 
 ## Incremental builds and file lifecycle
 
-FLAC is the source of truth. MusicForge manages generated audio and covers; use the Web UI to maintain output.
+The source library is the source of truth. MusicForge manages generated audio and covers; use the Web UI to maintain output.
 
 | Trigger | Behavior |
 | --- | --- |
-| New FLAC, changed content/tags or missing output | Automatically queue a build |
+| New audio, changed content/tags or missing output | Automatically queue a build |
 | Byte-identical rename or move | Relocate the registered artifact without re-encoding |
 | Encoding profile change | Mark artifacts **Needs rebuild**; start manually in Library |
 | Normal source deletion | Keep output as **Expired · Source deleted** until manual deletion |
@@ -123,7 +129,7 @@ Jobs allow three failed attempts: the initial attempt and two automatic retries 
 
 Offline storage pauses affected jobs. Incomplete scans never expire unseen files. Mount identity and the output `.musicforge` ownership marker protect against missing mounts appearing as empty libraries. After an intentional source mount change, verify paths and save Settings to acknowledge it. Keep the ownership marker intact.
 
-Container root paths cannot change after indexing. Relocate storage through host mounts while retaining container paths. Back up all of `/config`, including its database, with MusicForge stopped before upgrading; keep an independent FLAC backup. Upgrade by selecting an image version in `.env`, then running `docker compose pull` and `docker compose up -d`.
+Container root paths cannot change after indexing. Relocate storage through host mounts while retaining container paths. Back up all of `/config`, including its database, with MusicForge stopped before upgrading; keep an independent source-library backup. Upgrade by selecting an image version in `.env`, then running `docker compose pull` and `docker compose up -d`.
 
 ## Lidarr integration
 
@@ -136,7 +142,7 @@ Create a native **Webhook** connection in Lidarr:
 | Password | The independent webhook secret saved in MusicForge Settings |
 | Events | Release import and upgrade notifications |
 
-The connection test creates no conversion work. Native `Download` events use `trackFiles[].path`, `isUpgrade` and `deletedFiles[].path`. Set **Lidarr source path prefix** to an absolute container path if Lidarr sees a different source root. Mapped paths must remain within MusicForge's FLAC root. Custom clients may use Bearer authentication with the same secret.
+The connection test creates no conversion work. Native `Download` events use `trackFiles[].path`, `isUpgrade` and `deletedFiles[].path`. Set **Lidarr source path prefix** to an absolute container path if Lidarr sees a different source root. Mapped paths must remain within MusicForge's source root. Custom clients may use Bearer authentication with the same secret.
 
 ## Navidrome integration
 

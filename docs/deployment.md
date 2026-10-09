@@ -45,7 +45,7 @@ For a small album trial, use a separate temporary `/config`, dedicated output an
 1. Confirm `docker compose ps` reports healthy. Complete setup over public HTTPS, log out and log in. Health checks cover the database; separately confirm source/output storage is online in Overview.
 2. Keep concurrency at 1 and default Opus VBR 192 kbps. Convert an album, check tags and the single `cover.jpg`, then scan again: no new conversion jobs should appear.
 3. Play a converted track in Navidrome. Save integration settings and manually refresh; confirm the job succeeds and tracks appear.
-4. Delete a FLAC only from the test source library. After scanning it should be expired, while output and Navidrome playback remain. Manually delete its expired artifact in MusicForge and refresh: only then should the playback entry disappear.
+4. Delete a source audio file only from the test source library. After scanning it should be expired, while output and Navidrome playback remain. Manually delete its expired artifact in MusicForge and refresh: only then should the playback entry disappear.
 5. Change an encoding parameter: the artifact should need rebuilding until manually started. Its validated replacement retires the old file. Restart the container and confirm successful tracks are skipped while pending work continues.
 6. For OIDC, retain the local recovery password, bind an identity and test login in another browser session. Rebinding revokes previous OIDC sessions while retaining local sessions. Test your Lidarr connection, one import and one upgrade.
 
@@ -63,7 +63,7 @@ Schema 2 remains unchanged. Task grouping/control/progress use optional metadata
 
 ## Upgrade and rollback
 
-Stop MusicForge and back up all of `/config`. For complete library-state rollback, also snapshot the corresponding output directory and record the previous image version while MusicForge remains stopped. Keep an independent FLAC backup.
+Stop MusicForge and back up all of `/config`. For complete library-state rollback, also snapshot the corresponding output directory and record the previous image version while MusicForge remains stopped. Keep an independent source-library backup.
 
 Schema 2 is the stable MVP baseline. The `0.2.x` series preserves the database structure and persisted Settings, jobs and recovery formats. v0.2.0/v0.2.1/v0.2.2/v0.2.3/v0.2.4 → v0.2.5 does not migrate the schema. A same-series software rollback can reuse the current `/config`: pause background work, stop the application, pin the earlier image, then verify accounts, library and jobs before resuming. Do not change database version numbers to perform a rollback.
 
@@ -74,6 +74,12 @@ Software rollback retains the current library state. Restoring the full pre-upgr
 Version 0.1 cannot read schema 2 and requires its matching pre-upgrade backup. Future incompatible persistence changes require a clearly marked breaking release with upgrade backups and a CI-verified restore-and-rollback path. Do not manually lower `user_version`; this does not convert data structures or recover deleted data.
 
 If a problem occurs, disable background work in Settings and retain logs/mount state. Do not delete `.musicforge`, the database or old playable artifacts as a repair attempt. A changed-source-mount notice requires checking the real mount before acknowledging it by saving Settings. See the README for password recovery.
+
+## Mixed audio libraries
+
+Use the same read-only source mount for supported audio formats; the existing `FLAC_DIR` Compose variable may point to a mixed library. See the [supported source formats](../README.md#supported-source-audio). After upgrading, run a scan to discover files that older versions skipped. The UI reports audio-source counts and displays each track's extension.
+
+The schema-2 storage formats remain unchanged. Versions through v0.2.5 retain mixed-source records, artifacts and job arguments when reopening and saving settings with background work disabled. Their scanner still discovers only FLAC; if resumed, it can mark non-FLAC sources expired while retaining output. Some older media-tool builds also lack new input decoders. Keep background work disabled during a feature rollback, then use the newer release to resume mixed-source work. A downgrade does not add new format support to older versions.
 
 ## Rclone mounts and stall diagnostics
 

@@ -27,11 +27,11 @@ test("bilingual setup, real incremental build, state preservation and login", as
   await page.getByRole("button", { name: "创建管理员" }).click();
   await expect(page.getByRole("heading", { name: "音乐，从母库到播放" })).toBeVisible();
   await page.getByRole("link", { name: "设置", exact: true }).click();
-  await page.getByLabel("FLAC 源目录").fill(join(root, "source"));
+  await page.getByLabel("音频源目录").fill(join(root, "source"));
   await page.getByLabel("转码输出目录").fill(join(root, "output"));
   await page.getByLabel("启用音乐库扫描和后台任务").check();
   await page.getByRole("combobox", { name: "语言", exact: true }).selectOption("en");
-  await expect(page.getByLabel("FLAC source directory", { exact: true })).toHaveValue(join(root, "source"));
+  await expect(page.getByLabel("Source audio directory", { exact: true })).toHaveValue(join(root, "source"));
   await expect(page.getByLabel("Enable library scanning and background jobs", { exact: true })).toBeChecked();
   await expect(page.getByRole("heading", { name: "Encoding profile" })).toBeVisible();
   await expect(page.getByText("VBR varies bitrate with audio complexity; CBR uses a fixed bitrate.", { exact: true })).toBeVisible();
@@ -225,8 +225,10 @@ async function exerciseTaskQueue(page: import("@playwright/test").Page, root: st
   const album = join(root, "source/Queue Artist/Queue Album");
   mkdirSync(album, { recursive: true });
   for (let index = 1; index <= 3; index++) {
-    const track = join(album, `0${index}.flac`);
-    execFileSync("ffmpeg", ["-nostdin", "-v", "error", "-f", "lavfi", "-i", "sine=duration=12", "-c:a", "flac", "-metadata", "artist=Queue Artist", "-metadata", "album=Queue Album", "-metadata", `title=Queue Track ${index}`, "-metadata", `track=${index}`, track]);
+    const format = ["flac", "mp3", "m4a"][index - 1];
+    const codec = ["flac", "libmp3lame", "aac"][index - 1];
+    const track = join(album, `0${index}.${format}`);
+    execFileSync("ffmpeg", ["-nostdin", "-v", "error", "-f", "lavfi", "-i", "sine=duration=12", "-c:a", codec, "-metadata", "artist=Queue Artist", "-metadata", "album=Queue Album", "-metadata", `title=Queue Track ${index}`, "-metadata", `track=${index}`, track]);
     const old = new Date(Date.now() - 120000); utimesSync(track, old, old);
   }
   writeFileSync(slow, "observe real ffmpeg progress");
@@ -240,6 +242,11 @@ async function exerciseTaskQueue(page: import("@playwright/test").Page, root: st
     await page.getByRole("button", { name: "Browse artist Queue Artist", exact: true }).click();
     await page.getByRole("button", { name: "Browse album Queue Album", exact: true }).click();
     await expect(page.getByRole("table").getByText("Queue Track 1", { exact: true })).toBeVisible();
+    await expect(page.getByRole("table").getByText("MP3 · Online", { exact: true })).toBeVisible();
+    await expect(page.getByRole("table").getByText("M4A · Online", { exact: true })).toBeVisible();
+    await page.getByRole("combobox", { name: "Language", exact: true }).selectOption("zh-CN");
+    await expect(page.getByRole("table").getByText("MP3 · 在线", { exact: true })).toBeVisible();
+    await page.getByRole("combobox", { name: "语言", exact: true }).selectOption("en");
     await page.screenshot({ path: "test-results/library-album-en.png", fullPage: true });
     await page.setViewportSize({ width: 390, height: 844 });
     await page.screenshot({ path: "test-results/mobile-library-album-en.png", fullPage: true });

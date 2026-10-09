@@ -48,7 +48,7 @@ MVP 不包含云同步、分布式 worker、多组音乐库、多用户或插件
    curl -fsSL https://raw.githubusercontent.com/sagehou/MusicForge/main/.env.example -o .env
    ```
 
-2. 编辑 `.env`，设置宿主机目录、`PUID`/`PGID` 和公开访问地址。可将 `MUSICFORGE_VERSION` 固定为已发布版本，例如 `v0.2.5`；`latest` 跟随稳定版本。默认路径：
+2. 编辑 `.env`，设置宿主机目录、`PUID`/`PGID` 和公开访问地址。可将 `MUSICFORGE_VERSION` 固定为已发布版本，例如 `v0.2.6`；`latest` 跟随稳定版本。默认路径：
 
    | 宿主机路径 | 容器内路径 | 访问方式 |
    | --- | --- | --- |

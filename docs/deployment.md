@@ -2,11 +2,11 @@
 
 **English** · [Simplified Chinese](deployment.zh-CN.md)
 
-This guide targets v0.2.5. Installation, builds and automated validation run in GitHub Actions; the production host pulls published images. See the [acceptance report](acceptance.md) for verified behavior.
+This guide targets v0.2.6. Installation, builds and automated validation run in GitHub Actions; the production host pulls published images. See the [acceptance report](acceptance.md) for verified behavior.
 
 ## Before deployment
 
-- Pin `MUSICFORGE_VERSION=v0.2.5` in `.env` so a trial does not change with `latest`.
+- Pin `MUSICFORGE_VERSION=v0.2.6` in `.env` so a trial does not change with `latest`.
 - Keep `/config` on local host storage, owned by `PUID`, with mode `0700`. It contains accounts, OIDC/Navidrome secrets, the index and jobs. Do not share it publicly. Startup enforces private directory permissions.
 - `FLAC_DIR` must exist and is mounted read-only; `OUTPUT_DIR` must exist, be writable and initially empty. Use a dedicated output directory. None of the three roots may contain another. Compose refuses missing host paths.
 - Verify source read access and output write access for the configured UID/GID. Give Navidrome read-only access to the same output. Reserve disk space for both output and temporary files.
@@ -59,15 +59,15 @@ Pause stops active encoders and holds unfinished work across restarts. Resume st
 
 Jobs refresh every two seconds and show the current path, artist/album/title, track encoding percentage and queue counts. Container logs emit `job progress` records with `task`, `job`, `phase`, `path`, `title`, `processed`, `total` and `percent`. Encoding reports at most once per second. Discovery has an unknown total until enumeration finishes; artwork/validation are separate phases. Retries may return a track’s percentage to zero.
 
-Schema 2 remains unchanged. Task grouping/control/progress use optional metadata keys, retaining the original executable jobs and arguments. Older images retain held `pending` jobs through their future `not_before` timestamp and show stopped work as `failed` with a cancellation message; their UI has individual jobs and lacks Resume. Resume through v0.2.5 when reopening. Snapshot comparison includes task annotations and the held timestamp.
+Schema 2 remains unchanged. Task grouping/control/progress use optional metadata keys, retaining the original executable jobs and arguments. Older images retain held `pending` jobs through their future `not_before` timestamp and show stopped work as `failed` with a cancellation message; their UI has individual jobs and lacks Resume. Resume through v0.2.6 when reopening. Snapshot comparison includes task annotations and the held timestamp.
 
 ## Upgrade and rollback
 
 Stop MusicForge and back up all of `/config`. For complete library-state rollback, also snapshot the corresponding output directory and record the previous image version while MusicForge remains stopped. Keep an independent source-library backup.
 
-Schema 2 is the stable MVP baseline. The `0.2.x` series preserves the database structure and persisted Settings, jobs and recovery formats. v0.2.0/v0.2.1/v0.2.2/v0.2.3/v0.2.4 → v0.2.5 does not migrate the schema. A same-series software rollback can reuse the current `/config`: pause background work, stop the application, pin the earlier image, then verify accounts, library and jobs before resuming. Do not change database version numbers to perform a rollback.
+Schema 2 is the stable MVP baseline. The `0.2.x` series preserves the database structure and persisted Settings, jobs and recovery formats. v0.2.0/v0.2.1/v0.2.2/v0.2.3/v0.2.4/v0.2.5 → v0.2.6 does not migrate the schema. A same-series software rollback can reuse the current `/config`: pause background work, stop the application, pin the earlier image, then verify accounts, library and jobs before resuming. Do not change database version numbers to perform a rollback.
 
-The CI step `Same-schema rollback with published releases` uses digest-pinned v0.2.4/v0.2.3/v0.2.2/v0.2.1/v0.2.0 images on AMD64 and ARM64. They read the candidate's real audio, cover, credentials and pending task, save settings, then return to the candidate; database and artifact state are compared. Successful runs produce `rollback-amd64` / `rollback-arm64` evidence artifacts. Equal schema numbers are only one condition; older readers and writers must also remain compatible.
+The CI step `Same-schema rollback with published releases` uses digest-pinned v0.2.5/v0.2.4/v0.2.3/v0.2.2/v0.2.1/v0.2.0 images on AMD64 and ARM64. They read the candidate's FLAC/MP3/M4A records, real audio, cover, credentials and pending task, save settings, then return to the candidate; database and artifact state are compared. Successful runs produce `rollback-amd64` / `rollback-arm64` evidence artifacts. Equal schema numbers are only one condition; older readers and writers must also remain compatible.
 
 Software rollback retains the current library state. Restoring the full pre-upgrade state requires matching `/config` and output snapshots. Switching images cannot undo completed replacements, moves or deletions.
 
@@ -91,4 +91,4 @@ Individual read failures appear in Library while other tracks continue through i
 
 Record the task ID, source path, time and HTTP status when reporting an error. `docker compose logs --since 10m musicforge` includes `source read failed`, `API request failed` and `slow API request` with paths/stages/diagnostics. Request bodies, passwords and OIDC callback query parameters are not logged. HTML or empty proxy responses produce an HTTP-status message while existing task data remains visible.
 
-Actions adds actual rclone WebDAV/FUSE acceptance: stall the 36th download in a 40-track library, check byte progress, API response time, pause/resume and whole-file hashes, then test a new-track timeout and recovery. Evidence is uploaded as `rclone-acceptance`. A permanently blocked kernel storage call may require host mount recovery; the application bounds unreaped source helper processes.
+Actions adds actual rclone WebDAV/FUSE acceptance: mix FLAC/MP3/M4A, stall the 36th download in a 40-track library, check byte progress, API response time, pause/resume and whole-file hashes, then test a new-track timeout and recovery. Evidence is uploaded as `rclone-acceptance`. A permanently blocked kernel storage call may require host mount recovery; the application bounds unreaped source helper processes.

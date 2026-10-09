@@ -106,8 +106,10 @@ def run():
     for duration, path, signal in ((2, album / "01.flac", "sine"), (180, album / "36.flac", "sine")):
         subprocess.run(["ffmpeg", "-v", "error", "-f", "lavfi", "-i", f"{signal}=duration={duration}", "-c:a", "flac", "-metadata", "artist=Remote Artist", "-metadata", "album=Remote Album", "-metadata", "title=Remote track", str(path)], check=True)
     for index in range(2, 41):
-        if index != 36:
+        if index not in (2, 3, 36):
             shutil.copyfile(album / "01.flac", album / f"{index:02d}.flac")
+    for rel, codec in (("02.mp3", "libmp3lame"), ("03.m4a", "aac")):
+        subprocess.run(["ffmpeg", "-v", "error", "-f", "lavfi", "-i", "sine=duration=2", "-c:a", codec, "-metadata", "artist=Remote Artist", "-metadata", "album=Remote Album", "-metadata", "title=Remote track", str(album / rel)], check=True)
     for path in album.iterdir():
         os.utime(path, (time.time() - 120, time.time() - 120))
 
@@ -149,8 +151,9 @@ def run():
         wait_for(lambda: task(root), lambda job: job["state"] == "success" and job["counts"]["done"] == 40, timeout=90)
         indexed = api("/api/library")
         assert len(indexed) == 40 and all(source["status"] == "ready" for source in indexed)
-        known_hash = next(source["hash"] for source in indexed if source["path"].endswith("36.flac"))
-        assert known_hash == hashlib.sha256((album / "36.flac").read_bytes()).hexdigest()
+        assert {Path(source["path"]).suffix for source in indexed} == {".flac", ".mp3", ".m4a"}
+        for source in indexed:
+            assert source["hash"] == hashlib.sha256((ROOT / "source" / source["path"]).read_bytes()).hexdigest()
 
         fault_path = "/41.flac"
         BLOCKED.clear()
@@ -170,7 +173,7 @@ def run():
         control(second, "resume")
         wait_for(lambda: task(second), lambda job: job["state"] == "success", timeout=30)
         assert all(source["status"] == "ready" for source in api("/api/library"))
-        evidence = {"rclone_version": subprocess.check_output(["rclone", "version"], text=True).splitlines()[0], "tracks": 41, "read_bytes_before_pause": max(activity.get("read_bytes", 0) for activity in reading["current"]), "api_response_seconds_while_stalled": response_times, "pause_attempts": 0, "timeout_attempts_before_recovery": 1, "full_content_hash_preserved": True}
+        evidence = {"rclone_version": subprocess.check_output(["rclone", "version"], text=True).splitlines()[0], "tracks": 41, "source_formats": ["flac", "mp3", "m4a"], "read_bytes_before_pause": max(activity.get("read_bytes", 0) for activity in reading["current"]), "api_response_seconds_while_stalled": response_times, "pause_attempts": 0, "timeout_attempts_before_recovery": 1, "full_content_hash_preserved": True}
         (ROOT / "evidence.json").write_text(json.dumps(evidence, indent=2) + "\n")
         print(json.dumps(evidence))
     finally:

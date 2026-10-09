@@ -48,7 +48,7 @@ You need Docker Engine with Compose v2, an existing audio library and an empty, 
    curl -fsSL https://raw.githubusercontent.com/sagehou/MusicForge/main/.env.example -o .env
    ```
 
-2. Edit `.env` to set host directories, `PUID`/`PGID` and the public origin. Pin `MUSICFORGE_VERSION` to a published version such as `v0.2.5`, or use `latest` to follow stable releases. Default paths:
+2. Edit `.env` to set host directories, `PUID`/`PGID` and the public origin. Pin `MUSICFORGE_VERSION` to a published version such as `v0.2.6`, or use `latest` to follow stable releases. Default paths:
 
    | Host path | Container path | Access |
    | --- | --- | --- |

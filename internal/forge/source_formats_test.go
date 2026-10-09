@@ -26,6 +26,9 @@ func makeAudioSource(t *testing.T, a *App, s Settings, rel, title, codec string,
 	if codec == "vorbis" {
 		args = append(args, "-f", "ogg")
 	}
+	if strings.EqualFold(filepath.Ext(path), ".mka") {
+		args = append(args, "-f", "matroska")
+	}
 	args = append(args, path)
 	if _, err := runTool(context.Background(), a.cfg.FFmpeg, args...); err != nil {
 		t.Fatal(err)

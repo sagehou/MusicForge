@@ -110,6 +110,7 @@ func TestMixedAudioSourcesBuildAndRemainIncremental(t *testing.T) {
 					if want := source.Metadata[key]; want != "" && p.tags()[key] != want {
 						t.Fatalf("%s lost %s: %q", source.Rel, key, p.tags()[key])
 					}
+				}
 				for _, stream := range p.Streams {
 					if stream.Type == "video" {
 						t.Fatal("artwork was duplicated in a track", source.Output)

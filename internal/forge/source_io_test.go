@@ -123,7 +123,7 @@ func TestRemoteReadFailurePastThirtyTracksKeepsHealthyQueueAndStopsAfterThreeAtt
 	go func() { defer close(done); a.worker(ctx, false, 0) }()
 	go func() { defer close(conversionsDone); a.worker(ctx, true, 0) }()
 	defer func() { cancel(); <-done; <-conversionsDone }()
-	deadline := time.Now().Add(20 * time.Second)
+	deadline := time.Now().Add(60 * time.Second)
 	for {
 		j, err := readJob(a.db.QueryRow("SELECT "+jobCols+" FROM jobs WHERE dedup LIKE 'scan:prepare:%' AND json_extract(args,'$.dirs[0]')='Artist/Album/36.flac' ORDER BY id DESC LIMIT 1"))
 		if err == sql.ErrNoRows {

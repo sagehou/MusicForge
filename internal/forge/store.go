@@ -102,7 +102,11 @@ func (a *App) sourceRel(rel string) (Source, error) {
 	return readSource(a.db.QueryRow("SELECT "+sourceCols+" FROM sources WHERE rel=?", rel))
 }
 func (a *App) allSources() ([]Source, error) {
-	rows, err := a.db.Query("SELECT " + sourceCols + " FROM sources ORDER BY disc,track,rel")
+	return a.sourcesWhere("")
+}
+
+func (a *App) sourcesWhere(where string, args ...any) ([]Source, error) {
+	rows, err := a.db.Query("SELECT " + sourceCols + " FROM sources" + where + " ORDER BY disc,track,rel", args...)
 	if err != nil {
 		return nil, err
 	}

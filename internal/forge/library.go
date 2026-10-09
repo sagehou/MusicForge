@@ -363,6 +363,12 @@ func (a *App) scan(ctx context.Context, r ScanRequest) error {
 			}
 			// An empty hash still means no verified current content fingerprint.
 			// Never queue a BuildRequest until full SHA-256 verification finishes.
+			// Persist the compatible verification request before the tag-only row,
+			// so an interruption followed by rollback cannot strand an empty hash.
+			key := prepareScanPrefix + digest(fmt.Sprintf("%s:%d:%d:%s", rel, info.Size(), info.ModTime().UnixNano(), s.Encoding.Fingerprint()))
+			if _, err = a.enqueueTask("scan", key, ScanRequest{Dirs: []string{rel}, Verify: true}, r.Verify, jobID); err != nil {
+				return err
+			}
 			source, err = a.indexTags(rel, info, p, "")
 			if err != nil {
 				return err
@@ -390,10 +396,6 @@ func (a *App) scan(ctx context.Context, r ScanRequest) error {
 		}
 		source.OutputPresent = present
 		if source.Hash == "" && source.Error == "" {
-			key := prepareScanPrefix + digest(fmt.Sprintf("%s:%d:%d:%s", rel, source.Size, source.Mtime, s.Encoding.Fingerprint()))
-			if _, err = a.enqueueTask("scan", key, ScanRequest{Dirs: []string{rel}, Verify: true}, r.Verify, jobID); err != nil {
-				return err
-			}
 			preparing++
 		} else if source.Error != "" {
 			if strings.HasPrefix(source.Error, sourceReadErrorPrefix) || source.Hash == "" {
@@ -495,7 +497,11 @@ func (a *App) prepare(ctx context.Context, j Job, r ScanRequest) error {
 	if err = a.storageContext(ctx, s); err != nil {
 		return err
 	}
+	if err = a.lockFiles(ctx); err != nil {
+		return err
+	}
 	source, err := a.sourceRel(rel)
+	a.files.Unlock()
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil // A rename can replace a tag-only row while this job waits.
@@ -563,7 +569,7 @@ func (a *App) prepare(ctx context.Context, j Job, r ScanRequest) error {
 	// A tag-only row has no artifact ownership. Restore an existing missing
 	// byte-identical source's identity before moving its output, as in schema 2.
 	if current.Output == "" && current.BuiltHash == "" {
-		all, readErr := a.allSources()
+		all, readErr := a.sourcesWhere(" WHERE hash=? AND id<>?", staged.Hash, current.ID)
 		if readErr != nil {
 			a.files.Unlock()
 			return readErr
@@ -619,15 +625,13 @@ func (a *App) prepare(ctx context.Context, j Job, r ScanRequest) error {
 		return err
 	}
 	defer a.files.Unlock()
-	all, err := a.allSources()
+	prefix := filepath.Dir(rel) + string(filepath.Separator)
+	if filepath.Dir(rel) == "." {
+		prefix = ""
+	}
+	tracks, err := a.sourcesWhere(" WHERE present=1 AND error='' AND substr(rel,1,length(?))=? AND instr(substr(rel,length(?)+1),?)=0", prefix, prefix, prefix, string(filepath.Separator))
 	if err != nil {
 		return err
-	}
-	tracks := []Source{}
-	for _, track := range all {
-		if track.Present && track.Error == "" && filepath.Dir(track.Rel) == filepath.Dir(rel) {
-			tracks = append(tracks, track)
-		}
 	}
 	return a.artwork(context.WithValue(ctx, stagedSourceKey{}, staged), s, filepath.Dir(rel), tracks)
 }
@@ -1472,6 +1476,7 @@ func (a *App) embeddedArtwork(ctx context.Context, s Settings, dir string, track
 				if readErr = a.rememberArtwork(track.Rel, track.Size, track.Mtime, track.Hash, p); readErr != nil {
 					return "", "", readErr
 				}
+				hint.Attached = false
 				for _, stream := range p.Streams {
 					if stream.Type == "video" && stream.Disposition.Attached == 1 {
 						hint.Attached = true

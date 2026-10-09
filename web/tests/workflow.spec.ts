@@ -260,7 +260,7 @@ async function exerciseTaskQueue(page: import("@playwright/test").Page, root: st
     await expect(task.locator(".task-main .badge")).toHaveText("Paused");
     await expect.poll(async () => {
       const items = (await (await page.request.get(`/api/jobs/${id}/items`)).json()).items as TaskItem[];
-      return items.some(item => item.kind === "convert" && item.log === "Paused by administrator");
+      return items.some(item => item.activity.phase === "convert" && item.log === "Paused by administrator");
     }).toBe(true);
     await task.getByRole("button", { name: "Details", exact: true }).click();
     await expect(task.getByRole("heading", { name: "Track results and operations", exact: true })).toBeVisible();

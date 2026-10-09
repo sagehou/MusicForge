@@ -11,7 +11,7 @@ import (
 
 func TestTagsPrecedeFullReadAndEncodingReusesOneStagedCopy(t *testing.T) {
 	a, s := testApp(t)
-	rel := "Artist/Album/01.flac"
+	rel := "歌手/专辑/01.flac"
 	path := makeFLAC(t, a, s, rel, "Visible before download", true)
 	expected, err := fileHash(context.Background(), path)
 	if err != nil {
@@ -64,7 +64,7 @@ func TestTagsPrecedeFullReadAndEncodingReusesOneStagedCopy(t *testing.T) {
 	if err != nil || source.Hash != expected || source.BuiltHash != expected || !source.OutputPresent {
 		t.Fatal("staged build changed whole-file hash semantics", source, err)
 	}
-	if _, err = os.Stat(filepath.Join(s.Output, "Artist/Album/cover.jpg")); err != nil {
+	if _, err = os.Stat(filepath.Join(s.Output, "歌手/专辑/cover.jpg")); err != nil {
 		t.Fatal("embedded cover did not use staged audio", err)
 	}
 	reads, err := os.ReadFile(trace)

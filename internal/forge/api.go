@@ -176,7 +176,7 @@ func (a *App) sourcesWithStatus() ([]Source, error) {
 		case source.Error != "":
 			source.Status = "failed"
 		case source.Hash == "":
-			source.Status = "pending"
+			source.Status = "unverified"
 		case !source.OutputPresent:
 			source.Status = "missing"
 		case source.BuiltHash != source.Hash:

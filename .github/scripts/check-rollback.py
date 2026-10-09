@@ -195,7 +195,8 @@ def main():
             values = api("/api/settings")["settings"]
             values.update(enabled=True, nav_url="")
             api("/api/settings", "PUT", values)
-            api("/api/library/scan", "POST", {"dirs": ["Pending"]})
+            pending_task = api("/api/library/scan", "POST", {"dirs": ["Pending"]})["job_id"]
+            wait_for(lambda: api(f"/api/jobs/{pending_task}/items")["items"], lambda items: any(item["kind"] == "scan" and item["args"].get("dirs") == [rel] and item["args"].get("verify") is True for item in items), "durable compatible verification request")
             rows = wait_for(lambda: api("/api/library"), lambda rows: any(row["path"] == rel and row["hash"] == "" and row["title"] == "Metadata indexed before content verification" for row in rows), "tag-only pending row")
             values["enabled"] = False
             api("/api/settings", "PUT", values)

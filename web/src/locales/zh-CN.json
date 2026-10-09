@@ -366,6 +366,6 @@
   "error.http": "服务器返回 HTTP {status}，请重试",
   "error.sourceReadPrefix": "暂时无法读取源文件：",
   "phase.storage": "检查媒体目录",
-  "status.pending": "等待校验和转换",
+  "status.unverified": "等待校验和转换",
   "phase.staging_wait": "等待本地暂存空间"
 }

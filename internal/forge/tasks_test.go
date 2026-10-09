@@ -101,6 +101,15 @@ func waitTaskWorker(t *testing.T, a *App, id int64, active bool) {
 			t.Fatal(err)
 		}
 		if running == active && (active && temps > 0 || !active && temps == 0) {
+			if active {
+				raw, _ := a.meta(taskProgressKey(id))
+				var activity Activity
+				_ = json.Unmarshal([]byte(raw), &activity)
+				if activity.Phase != "convert" {
+					time.Sleep(10 * time.Millisecond)
+					continue
+				}
+			}
 			return
 		}
 		time.Sleep(10 * time.Millisecond)

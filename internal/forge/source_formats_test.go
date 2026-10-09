@@ -22,7 +22,11 @@ func makeAudioSource(t *testing.T, a *App, s Settings, rel, title, codec string,
 		writeCover(t, cover)
 		args = append(args, "-i", cover, "-map", "0:a:0", "-map", "1:v:0", "-c:v", "copy", "-disposition:v", "attached_pic")
 	}
-	args = append(args, "-ac", "2", "-c:a", codec, "-strict", "-2", "-metadata", "artist=Mixed Artist", "-metadata", "album=Mixed Album", "-metadata", "title="+title, "-metadata", "track=2/9", "-metadata", "disc=3/4", "-metadata", "REPLAYGAIN_TRACK_GAIN=-6.00 dB", path)
+	args = append(args, "-ac", "2", "-c:a", codec, "-strict", "-2", "-metadata", "artist=Mixed Artist", "-metadata", "album=Mixed Album", "-metadata", "title="+title, "-metadata", "track=2/9", "-metadata", "disc=3/4", "-metadata", "REPLAYGAIN_TRACK_GAIN=-6.00 dB")
+	if codec == "vorbis" {
+		args = append(args, "-f", "ogg")
+	}
+	args = append(args, path)
 	if _, err := runTool(context.Background(), a.cfg.FFmpeg, args...); err != nil {
 		t.Fatal(err)
 	}
@@ -36,7 +40,7 @@ func makeAudioSource(t *testing.T, a *App, s Settings, rel, title, codec string,
 func TestMixedAudioSourcesBuildAndRemainIncremental(t *testing.T) {
 	fixtures := []struct {
 		rel, codec string
-		embedded bool
+		embedded   bool
 	}{
 		{"01.flac", "flac", false},
 		{"02.MP3", "libmp3lame", true},

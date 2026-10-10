@@ -221,7 +221,7 @@ def run():
         unmount(mounted)
         wait_for(lambda: api("/api/dashboard"), lambda data: not data["online"] and data["storage_message"].startswith("Source mount changed;"), timeout=15)
         fourth = api("/api/library/scan", {})["job_id"]
-        wait_for(lambda: task(fourth), lambda job: job["state"] == "pending" and job["log"].startswith("Source mount changed;"), timeout=10)
+        wait_for(lambda: task(fourth), lambda job: job["state"] == "pending" and job.get("log", "").startswith("Source mount changed;"), timeout=10)
         assert all(source["present"] for source in api("/api/library")), "missing mount expired known sources"
         assert source_meta() == before, "missing mount overwrote source acknowledgment"
 

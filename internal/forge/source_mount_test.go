@@ -17,7 +17,7 @@ func TestRcloneMountSignatureIgnoresTransientIDsAndResolvesBindRoots(t *testing.
 	}
 	for _, test := range []struct {
 		name, mount, path, device string
-		same                     bool
+		same                      bool
 	}{
 		{"reconnect", `93 8 0:87 / /music/source rw - fuse.rclone remote:Library rw,user_id=12001`, "/music/source", "0:87", true},
 		{"other remote", `93 8 0:87 / /music/source ro - fuse.rclone other:Library ro`, "/music/source", "0:87", false},

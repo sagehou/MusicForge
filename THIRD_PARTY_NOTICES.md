@@ -34,4 +34,10 @@ media executables. FFmpeg is executed as a separate process. See
 [Opus licensing](https://opus-codec.org/license/) and
 [LAME](https://lame.sourceforge.io/).
 
+The independent FLAC reference decoder runs as a separate `flac` process. Its
+command-line tool is GPL-licensed and libFLAC uses the Xiph BSD license. The image
+includes the corresponding pinned FLAC source archive, `COPYING.GPL` and
+`COPYING.Xiph`, checksum and build script in the same media directory. See
+[FLAC licensing](https://xiph.org/flac/license.html).
+
 Go and JavaScript dependencies retain their respective upstream licenses.

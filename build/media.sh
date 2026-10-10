@@ -22,6 +22,13 @@ cd "lame-$LAME_VERSION"
 make -j"$(nproc)"
 make install
 cd /build
+fetch "flac-$FLAC_VERSION.tar.xz" "$FLAC_SHA256" "https://downloads.xiph.org/releases/flac/flac-$FLAC_VERSION.tar.xz"
+cd "flac-$FLAC_VERSION"
+./configure --disable-shared --enable-static --disable-ogg --disable-cpplibs --disable-doxygen-docs --disable-examples LDFLAGS=-static
+make -j"$(nproc)"
+make install
+cp COPYING.Xiph COPYING.GPL /usr/local/share/musicforge/media/
+cd /build
 fetch "ffmpeg-$FFMPEG_VERSION.tar.xz" "$FFMPEG_SHA256" "https://ffmpeg.org/releases/ffmpeg-$FFMPEG_VERSION.tar.xz"
 cd "ffmpeg-$FFMPEG_VERSION"
 # Mixed audio input, Opus/MP3 output, JPEG/PNG artwork and CI fixtures.
@@ -42,3 +49,4 @@ cp COPYING.LGPLv2.1 /usr/local/share/musicforge/media/
 cp /src/build/media.sh /src/build/media-versions.env /usr/local/share/musicforge/media/
 ffmpeg -version
 ffprobe -version
+flac --version

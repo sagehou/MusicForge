@@ -133,5 +133,6 @@ func (a *App) stageSource(ctx context.Context, settings Settings, source Source,
 		staged.Close()
 		return nil, errors.New("source staging completed without a full content hash")
 	}
+	a.logger.Info("source staged", "task", a.taskID(job), "job", job, "path", source.Rel, "source_bytes", source.Size, "input_sha256", staged.Hash)
 	return staged, nil
 }

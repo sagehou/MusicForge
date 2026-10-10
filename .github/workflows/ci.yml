@@ -185,6 +185,9 @@ jobs:
           docker exec musicforge-validation ffmpeg -v error -f lavfi -i sine=duration=1 -c:a libmp3lame -q:a 2 /tmp/smoke.mp3
           docker exec musicforge-validation ffprobe -v error -show_entries stream=codec_name /tmp/smoke.opus
           docker exec musicforge-validation ffprobe -v error -show_entries stream=codec_name /tmp/smoke.mp3
+          docker exec musicforge-validation ffmpeg -v error -f lavfi -i sine=duration=1 -c:a flac /tmp/smoke.flac
+          docker exec musicforge-validation flac --test --silent /tmp/smoke.flac
+          docker exec musicforge-validation sh -c 'flac --decode --stdout --silent /tmp/smoke.flac | ffmpeg -v error -xerror -f wav -i pipe:0 -c:a libopus /tmp/reference.opus'
           docker exec musicforge-validation test -f /usr/share/doc/musicforge/media/media-versions.env
           curl --fail http://localhost:8787/api/auth/me
           docker stop musicforge-validation

@@ -25,14 +25,14 @@ COPY build/ /src/build/
 RUN sh /src/build/media.sh
 
 FROM scratch AS media
-COPY --from=media-builder /usr/local/bin/ffmpeg /usr/local/bin/ffprobe /bin/
+COPY --from=media-builder /usr/local/bin/ffmpeg /usr/local/bin/ffprobe /usr/local/bin/flac /bin/
 
 FROM debian:trixie-slim@sha256:a29215f6a35e51e22adffa17f89e9d2ef06214e64a2bad10d765c46aea49f11f
 LABEL org.opencontainers.image.source="https://github.com/sagehou/MusicForge" \
       org.opencontainers.image.title="MusicForge" \
       org.opencontainers.image.description="Incremental builds for a self-hosted streaming music library"
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates && rm -rf /var/lib/apt/lists/* && groupadd -g 10001 musicforge && useradd -u 10001 -g musicforge -M -s /usr/sbin/nologin musicforge && mkdir -p /config /music/source /music/output && chown -R musicforge:musicforge /config /music/output
-COPY --from=media-builder /usr/local/bin/ffmpeg /usr/local/bin/ffprobe /usr/local/bin/
+COPY --from=media-builder /usr/local/bin/ffmpeg /usr/local/bin/ffprobe /usr/local/bin/flac /usr/local/bin/
 COPY --from=media-builder /usr/local/share/musicforge/media /usr/share/doc/musicforge/media
 COPY --from=backend /musicforge /usr/local/bin/musicforge
 COPY THIRD_PARTY_NOTICES.md /usr/share/doc/musicforge/THIRD_PARTY_NOTICES.md

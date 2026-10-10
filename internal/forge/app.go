@@ -51,6 +51,7 @@ type App struct {
 	stagingMu     sync.Mutex
 	stagingBytes  int64
 	stagingDir    string
+	mediaOnce     sync.Once
 }
 
 type loginLimit struct {
@@ -315,7 +316,7 @@ func (a *App) worker(ctx context.Context, conversion bool, slot int) {
 		if actual, readErr := readJob(a.reads.QueryRow("SELECT "+jobCols+" FROM jobs WHERE id=?", j.ID)); readErr == nil {
 			state, attempts, message = actual.State, actual.Attempts, actual.Log
 		}
-		a.logger.Info("job finished", "task", a.taskID(j.ID), "job", j.ID, "kind", j.Kind, "state", state, "attempts", attempts, "detail", message)
+		a.logJobFinished(j, state, attempts, message, err)
 	}
 }
 

@@ -276,6 +276,7 @@ type TaskItem struct {
 	Activity Activity  `json:"activity"`
 	Output   string    `json:"output"`
 	Profile  *Encoding `json:"profile,omitempty"`
+	Failure  string    `json:"failure,omitempty"`
 }
 
 func (a *App) taskItems(id int64, state string, limit, offset int) ([]TaskItem, int, error) {
@@ -310,6 +311,7 @@ func (a *App) taskItems(id int64, state string, limit, offset int) ([]TaskItem, 
 			return nil, 0, err
 		}
 		item.Args = json.RawMessage(raw)
+		item.Failure = failureCategory(item.Log)
 		if activity != "" {
 			_ = json.Unmarshal([]byte(activity), &item.Activity)
 		}

@@ -372,5 +372,9 @@
   "jobs.selectMatching": "选择筛选结果中的全部 {count} 项任务",
   "jobs.allSelected": "已选择筛选结果中的全部 {count} 项任务",
   "jobs.bulkHint": "仅处理当前状态允许此操作的任务；全选按执行时的筛选结果生效。",
-  "notice.noTasksChanged": "没有符合操作条件的任务"
+  "notice.noTasksChanged": "没有符合操作条件的任务",
+  "jobs.failure.read": "未能完整读取源文件。下次重试会重新读取。",
+  "jobs.failure.decode": "音频解码失败，可能与输入内容或解码器兼容性有关，尚不能认定源文件损坏。",
+  "jobs.failure.encode": "音频转换失败，已有可播放文件已保留。",
+  "jobs.failure.validate": "转码结果未通过输出校验，已有可播放文件已保留。"
 }

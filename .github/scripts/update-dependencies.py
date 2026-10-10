@@ -90,10 +90,12 @@ opus_page = fetch("https://opus-codec.org/downloads/").decode()
 media["OPUS_VERSION"] = re.search(r"opus-([\d.]+)\.tar\.gz", opus_page.split('id="source-code-stable-release"')[1])[1]
 lame_page = fetch("https://lame.sourceforge.io/download.php").decode()
 media["LAME_VERSION"] = re.search(r"current release version of LAME is ([\d.]+)", lame_page)[1].rstrip(".")
+media["FLAC_VERSION"] = metadata("https://api.github.com/repos/xiph/flac/releases/latest")["tag_name"].removeprefix("v")
 urls = {
     "FFMPEG": "https://ffmpeg.org/releases/ffmpeg-{FFMPEG_VERSION}.tar.xz",
     "OPUS": "https://downloads.xiph.org/releases/opus/opus-{OPUS_VERSION}.tar.gz",
     "LAME": "https://downloads.sourceforge.net/project/lame/lame/{LAME_VERSION}/lame-{LAME_VERSION}.tar.gz",
+    "FLAC": "https://downloads.xiph.org/releases/flac/flac-{FLAC_VERSION}.tar.xz",
 }
 # The job records hashes from upstream HTTPS releases once; regular builds verify
 # committed hashes. A refresh PR reviews version and hash changes together.

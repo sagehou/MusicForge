@@ -151,6 +151,8 @@ After restart:
 - Clean registered unfinished temporary files while preserving existing output.
 - Interruptions do not count as failures. Recovery is per track, without resuming within a file.
 
+FLAC compatibility recovery: only an ffmpeg decoding failure on a complete scratch file with a native `fLaC` header enables the independent reference `flac` decoder. RF64/PCM is piped into ffmpeg, with no decode-through-errors or ReplayGain application. Existing metadata, external artwork and artifact validation still apply. The reference process must exit successfully, including its final MD5 check; pause, stop and idle timeout cancel the whole pipeline. This fallback belongs to the same processing attempt and creates no new job. A failed attempt removes the scratch file; the next attempt reads the source again. Schema 2, job arguments, encoding signatures and ownership formats remain compatible; diagnostics remain ordinary log text and API error categories are derived from it.
+
 ## Scan triggers
 
 - Configurable periodic scans discover deletions, moves and missed changes.

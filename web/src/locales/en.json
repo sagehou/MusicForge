@@ -405,5 +405,9 @@
   "jobs.selectMatching": "Select all {count} matching tasks",
   "jobs.allSelected": "All {count} matching tasks selected",
   "jobs.bulkHint": "Each action applies only to tasks whose current state permits it. Selection covers the current filter at execution time.",
-  "notice.noTasksChanged": "No eligible tasks to update"
+  "notice.noTasksChanged": "No eligible tasks to update",
+  "jobs.failure.read": "The source could not be read completely. The next retry reads it again.",
+  "jobs.failure.decode": "Audio decoding failed. The cause may be the input data or decoder compatibility; the source is not assumed damaged.",
+  "jobs.failure.encode": "Audio conversion failed. Existing playable output is kept.",
+  "jobs.failure.validate": "The converted audio did not pass output validation. Existing playable output is kept."
 }

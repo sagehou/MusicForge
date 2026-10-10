@@ -1020,11 +1020,16 @@ func (a *App) buildStaged(ctx context.Context, j Job, r BuildRequest, staged *st
 	}
 	args = append(args, r.Profile.Args()...)
 	args = append(args, temp)
-	if err = a.encode(ctx, j.ID, source.Duration, activity, args); err != nil {
+	if err = a.encodeWithFallback(ctx, j.ID, source, activity, args, in, temp); err != nil {
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
-		return a.buildError(ctx, s, source, err)
+		stage := "encode"
+		if decodingFailure(err.Error()) {
+			a.logMediaVersions(ctx)
+			stage = "decode"
+		}
+		return a.buildError(ctx, s, source, &conversionFailure{source, stage, err})
 	}
 	activity.Phase, activity.Percent = "validate", 100
 	a.reportProgress(j.ID, activity, .9)
@@ -1032,7 +1037,7 @@ func (a *App) buildStaged(ctx context.Context, j Job, r BuildRequest, staged *st
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
-		return a.buildError(ctx, s, source, err)
+		return a.buildError(ctx, s, source, &conversionFailure{source, "validate", err})
 	}
 	file, err := os.Open(temp)
 	if err != nil {
@@ -1096,6 +1101,10 @@ func (a *App) buildStaged(ctx context.Context, j Job, r BuildRequest, staged *st
 }
 
 func (a *App) encode(ctx context.Context, id int64, duration float64, activity Activity, args []string) error {
+	return a.encodeMedia(ctx, id, duration, activity, args, "")
+}
+
+func (a *App) encodeMedia(ctx context.Context, id int64, duration float64, activity Activity, args []string, referenceInput string) error {
 	encodeCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	stalled := time.AfterFunc(a.sourceTimeout(), cancel)
@@ -1113,6 +1122,23 @@ func (a *App) encode(ctx context.Context, id int64, duration float64, activity A
 	cmd.WaitDelay = 2 * time.Second
 	var stderr boundedLog
 	cmd.Stderr = &stderr
+	var reference *exec.Cmd
+	var referenceLog boundedLog
+	var reader, writer *os.File
+	if referenceInput != "" {
+		var err error
+		reader, writer, err = os.Pipe()
+		if err != nil {
+			<-a.sourceSlots
+			return err
+		}
+		defer reader.Close()
+		defer writer.Close()
+		cmd.Stdin = reader
+		reference = exec.CommandContext(encodeCtx, "flac", "--decode", "--stdout", "--silent", "--force-rf64-format", "--", referenceInput)
+		reference.Stdout, reference.Stderr = writer, &referenceLog
+		reference.WaitDelay = 2 * time.Second
+	}
 	stdout, err := cmd.StdoutPipe()
 	if err == nil {
 		err = cmd.Start()
@@ -1122,6 +1148,13 @@ func (a *App) encode(ctx context.Context, id int64, duration float64, activity A
 		return err
 	}
 	defer stdout.Close()
+	var referenceStart error
+	if reference != nil {
+		referenceStart = reference.Start()
+		// Children own their pipe ends now; close parent copies so EOF propagates.
+		_ = reader.Close()
+		_ = writer.Close()
+	}
 	values := make(chan float64)
 	done := make(chan error, 1)
 	go func() {
@@ -1148,8 +1181,22 @@ func (a *App) encode(ctx context.Context, id int64, duration float64, activity A
 		if scanner.Err() != nil {
 			cancel()
 		}
-		if err := cmd.Wait(); err != nil {
-			done <- fmt.Errorf("%s failed: %w\n%s", filepath.Base(a.cfg.FFmpeg), err, stderr.String())
+		encodeErr := cmd.Wait()
+		if reference != nil {
+			decodeErr := referenceStart
+			if referenceStart == nil {
+				if encodeErr != nil {
+					_ = reference.Process.Kill()
+				}
+				decodeErr = reference.Wait()
+			}
+			if decodeErr != nil {
+				done <- fmt.Errorf("reference FLAC decoder failed: %w\n%s\nffmpeg: %v\n%s", decodeErr, referenceLog.String(), encodeErr, stderr.String())
+				return
+			}
+		}
+		if encodeErr != nil {
+			done <- fmt.Errorf("%s failed: %w\n%s", filepath.Base(a.cfg.FFmpeg), encodeErr, stderr.String())
 			return
 		}
 		done <- scanner.Err()

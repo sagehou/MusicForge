@@ -155,3 +155,5 @@ code { font-family: "SFMono-Regular", Consolas, monospace; }
 @media(max-width:600px) { .task-progress { padding: 0 16px 16px; }.library-groups { padding: 16px; }.task-progress-label { flex-wrap: wrap; }.task-result-heading { align-items: flex-start; flex-wrap: wrap; } }
 
 .selection-hint { width: 100%; color: #8b9bb1; }.selection-bar .check-field { margin: 0; }
+
+.task-error-summary { grid-column: 1 / -1; margin: 0; }

@@ -119,15 +119,12 @@ func (a *App) taskList(state string, limit, offset int) ([]Task, int, error) {
 		args = append(args, state)
 	}
 	var total int
-	if err := a.reads.QueryRow(taskGroups+"SELECT count(*) FROM tasks"+where, args...).Scan(&total); err != nil {
-		return nil, 0, err
-	}
 	columns := strings.Split(jobCols, ",")
 	for i := range columns {
 		columns[i] = "root." + columns[i]
 	}
 	queryArgs := append(append([]any{}, args...), limit, offset)
-	rows, err := a.reads.Query(taskGroups+"SELECT "+strings.Join(columns, ",")+",task_state,track_total,track_done,track_failed,track_pending,track_running,track_cancelled,changed,tries,fraction,pending+running FROM tasks JOIN jobs root ON root.id=task_id"+where+" ORDER BY task_id DESC LIMIT ? OFFSET ?", queryArgs...)
+	rows, err := a.reads.Query(taskGroups+"SELECT "+strings.Join(columns, ",")+",task_state,track_total,track_done,track_failed,track_pending,track_running,track_cancelled,changed,tries,fraction,pending+running,count(*) OVER () FROM tasks JOIN jobs root ON root.id=task_id"+where+" ORDER BY task_id DESC LIMIT ? OFFSET ?", queryArgs...)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -137,7 +134,7 @@ func (a *App) taskList(state string, limit, offset int) ([]Task, int, error) {
 		var raw, taskState string
 		var active int
 		err = rows.Scan(&task.ID, &task.Kind, &task.Key, &raw, &task.State, &task.Attempts, &task.Progress, &task.Log, &task.Created, &task.Updated,
-			&taskState, &task.Counts.Total, &task.Counts.Done, &task.Counts.Failed, &task.Counts.Pending, &task.Counts.Running, &task.Counts.Cancelled, &task.Updated, &task.Attempts, &task.Progress, &active)
+			&taskState, &task.Counts.Total, &task.Counts.Done, &task.Counts.Failed, &task.Counts.Pending, &task.Counts.Running, &task.Counts.Cancelled, &task.Updated, &task.Attempts, &task.Progress, &active, &total)
 		if err != nil {
 			break
 		}
@@ -165,6 +162,14 @@ func (a *App) taskList(state string, limit, offset int) ([]Task, int, error) {
 	rows.Close()
 	if err != nil {
 		return nil, 0, err
+	}
+	if len(list) == 0 {
+		// Empty/out-of-range pages still need their filtered total. Nonempty pages
+		// obtain it from the same aggregation as the rows.
+		if err = a.reads.QueryRow(taskGroups+"SELECT count(*) FROM tasks"+where, args...).Scan(&total); err != nil {
+			return nil, 0, err
+		}
+		return list, total, nil
 	}
 	profiles := map[int64]Encoding{}
 	profileIDs, visibleIDs := []string{}, []string{}
@@ -550,43 +555,60 @@ func (a *App) changeTasksFiltered(action string, chosen selection, filter string
 				}
 			}
 		}
-		if action == "resume" || action == "retry" || action == "delete" {
+		if action == "resume" || action == "delete" {
 			if _, err = tx.Exec("DELETE FROM meta WHERE key=?", taskControlKey(root)); err != nil {
 				return 0, err
 			}
 		}
+		mutated := false
 		for _, m := range members {
+			var result sql.Result
 			switch action {
 			case "pause":
 				if m.state != "pending" && m.state != "running" {
 					continue
 				}
-				_, err = tx.Exec("UPDATE jobs SET state='pending',not_before=?,updated=? WHERE id=?", heldUntil, time.Now().Unix(), m.id)
+				result, err = tx.Exec("UPDATE jobs SET state='pending',not_before=?,updated=? WHERE id=?", heldUntil, time.Now().Unix(), m.id)
 				cancelIDs = append(cancelIDs, m.id)
 			case "stop":
 				if m.state != "pending" && m.state != "running" {
 					continue
 				}
-				_, err = tx.Exec("UPDATE jobs SET state='failed',progress=0,log='Stopped by administrator',updated=? WHERE id=?", time.Now().Unix(), m.id)
+				result, err = tx.Exec("UPDATE jobs SET state='failed',progress=0,log='Stopped by administrator',updated=? WHERE id=?", time.Now().Unix(), m.id)
 				cancelIDs = append(cancelIDs, m.id)
 				_, _ = tx.Exec("DELETE FROM meta WHERE key=?", "scan-followup:"+strconv.FormatInt(m.id, 10))
 			case "resume":
 				if m.state != "pending" || m.wait != heldUntil {
 					continue
 				}
-				_, err = tx.Exec("UPDATE jobs SET not_before=0,log='',updated=? WHERE id=?", time.Now().Unix(), m.id)
+				result, err = tx.Exec("UPDATE jobs SET not_before=0,log='',updated=? WHERE id=?", time.Now().Unix(), m.id)
 			case "retry":
 				if m.state != "failed" {
 					continue
 				}
-				_, err = tx.Exec("UPDATE jobs SET state='pending',attempts=0,progress=0,not_before=0,log='',updated=? WHERE id=? AND NOT EXISTS(SELECT 1 FROM jobs active WHERE active.dedup=jobs.dedup AND active.state IN ('pending','running'))", time.Now().Unix(), m.id)
+				result, err = tx.Exec("UPDATE jobs SET state='pending',attempts=0,progress=0,not_before=0,log='',updated=? WHERE id=? AND NOT EXISTS(SELECT 1 FROM jobs active WHERE active.dedup=jobs.dedup AND active.state IN ('pending','running'))", time.Now().Unix(), m.id)
 			case "delete":
 				if _, err = tx.Exec("DELETE FROM meta WHERE key IN (?,?,?)", taskMemberKey(m.id), taskProgressKey(m.id), "scan-followup:"+strconv.FormatInt(m.id, 10)); err != nil {
 					return 0, err
 				}
-				_, err = tx.Exec("DELETE FROM jobs WHERE id=?", m.id)
+				result, err = tx.Exec("DELETE FROM jobs WHERE id=?", m.id)
 			}
 			if err != nil {
+				return 0, err
+			}
+			if result != nil {
+				n, err := result.RowsAffected()
+				if err != nil {
+					return 0, err
+				}
+				mutated = mutated || n > 0
+			}
+		}
+		if !mutated {
+			continue
+		}
+		if action == "retry" {
+			if _, err = tx.Exec("DELETE FROM meta WHERE key=?", taskControlKey(root)); err != nil {
 				return 0, err
 			}
 		}

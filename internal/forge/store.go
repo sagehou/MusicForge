@@ -161,6 +161,20 @@ func (a *App) enqueueTask(kind, key string, args any, manual bool, task int64) (
 	defer tx.Rollback()
 	var id int64
 	var state string
+	if kind == "scan" && key == "scan:periodic" && !manual && task == 0 {
+		// Check inside the writer transaction as well: another request can arrive
+		// between the scheduler's idle check and enqueueing.
+		err = tx.QueryRow(`SELECT coalesce(CAST(m.value AS INTEGER),j.id) FROM jobs j
+		 LEFT JOIN meta m ON m.key='task-member:'||j.id
+		 WHERE j.state IN ('pending','running') AND j.kind IN ('scan','convert','move','delete','upgrade')
+		 ORDER BY j.id LIMIT 1`).Scan(&id)
+		if err == nil {
+			return id, nil
+		}
+		if err != sql.ErrNoRows {
+			return 0, err
+		}
+	}
 	sharedScan := false
 	if kind == "scan" && task == 0 && !strings.HasPrefix(key, prepareScanPrefix) && !strings.HasPrefix(key, "scan:finalize:") {
 		// All entry points share the active library scan, including its remaining conversions.
@@ -174,10 +188,6 @@ func (a *App) enqueueTask(kind, key string, args any, manual bool, task int64) (
 			return 0, err
 		}
 		sharedScan = err == nil
-	}
-	if sharedScan && key == "scan:periodic" && !manual {
-		// A timer tick cannot add follow-up work to a scan requested meanwhile.
-		return id, nil
 	}
 	if !sharedScan {
 		err = tx.QueryRow("SELECT id,state FROM jobs WHERE dedup=? ORDER BY (state IN ('pending','running')) DESC,id DESC LIMIT 1", key).Scan(&id, &state)

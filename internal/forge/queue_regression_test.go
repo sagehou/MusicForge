@@ -15,7 +15,7 @@ import (
 func TestScanEntryPointsCoalesceConcurrentRequests(t *testing.T) {
 	a, _ := testApp(t)
 	type result struct {
-		id int64
+		id  int64
 		err error
 	}
 	results := make(chan result, 24)
@@ -117,6 +117,9 @@ func TestPeriodicScanWaitsForEntireQueue(t *testing.T) {
 				if err != nil || time.Since(last) > time.Second {
 					t.Fatal("busy interval was not reset", last, err)
 				}
+			}
+			if id, err := a.enqueue("scan", "scan:periodic", ScanRequest{}, false); err != nil || id != root {
+				t.Fatal("direct timer enqueue bypassed busy guard", id, err)
 			}
 			var after, followups int
 			if err = a.reads.QueryRow("SELECT count(*) FROM jobs").Scan(&after); err != nil || before != after {
@@ -260,7 +263,9 @@ func TestFilteredBulkControlsAcrossPages(t *testing.T) {
 	for _, step := range []struct{ action, state string }{{"pause", "pending"}, {"resume", "paused"}, {"stop", "pending"}, {"retry", "stopped"}, {"stop", "pending"}, {"delete", "stopped"}} {
 		w := httptest.NewRecorder()
 		a.controlJobs(w, httptest.NewRequest("POST", "/api/jobs/control", strings.NewReader(fmt.Sprintf(`{"action":%q,"all":true,"state":%q}`, step.action, step.state))))
-		var result struct{ Changed int `json:"changed"` }
+		var result struct {
+			Changed int `json:"changed"`
+		}
 		if err = json.Unmarshal(w.Body.Bytes(), &result); err != nil || w.Code != 202 || result.Changed != 125 {
 			t.Fatalf("bulk %s missed later pages: %d %s %v", step.action, w.Code, w.Body.String(), err)
 		}
@@ -426,5 +431,21 @@ func TestLegacyMemberCompletionRecoversScanFollowup(t *testing.T) {
 	var request ScanRequest
 	if err = json.Unmarshal(j.Args, &request); err != nil || !request.Verify || !reflect.DeepEqual(request.Dirs, []string{"Changed/Album"}) {
 		t.Fatal("legacy round-trip changed the request", request, err)
+	}
+}
+
+func TestBulkRetryDoesNotCountAlreadyActiveTargets(t *testing.T) {
+	a, _ := testApp(t)
+	if _, err := a.db.Exec("INSERT INTO jobs(id,kind,dedup,args,state,log,created,updated) VALUES(1,'convert','same-target','{}','failed','Stopped by administrator',1,1),(2,'convert','same-target','{}','pending','',1,1)"); err != nil {
+		t.Fatal(err)
+	}
+	if err := a.setMeta(taskControlKey(1), "stopped"); err != nil {
+		t.Fatal(err)
+	}
+	if n, err := a.changeTasksFiltered("retry", selection{All: true}, "stopped"); err != nil || n != 0 {
+		t.Fatal("suppressed retry counted as changed", n, err)
+	}
+	if value, err := a.meta(taskControlKey(1)); err != nil || value != "stopped" {
+		t.Fatal("suppressed retry cleared deliberate stop", value, err)
 	}
 }

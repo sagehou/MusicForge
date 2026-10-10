@@ -8,6 +8,7 @@ import json
 import os
 from pathlib import Path
 import shutil
+import sqlite3
 import subprocess
 import threading
 import time
@@ -127,12 +128,27 @@ def run():
     try:
         processes.append(subprocess.Popen(["rclone", "serve", "webdav", str(ROOT / "source"), "--addr", "127.0.0.1:19090", "--dir-cache-time", "1s", "--log-file", str(ROOT / "webdav.log")]))
         remote = ":webdav,url='http://127.0.0.1:19091',vendor='other':"
-        processes.append(subprocess.Popen(["rclone", "mount", remote, str(ROOT / "mount"), "--read-only", "--vfs-cache-mode", "off", "--buffer-size", "0", "--vfs-read-chunk-size", "64k", "--vfs-read-chunk-size-limit", "64k", "--cache-dir", str(ROOT / "cache"), "--dir-cache-time", "1s", "--attr-timeout", "1s", "--poll-interval", "0", "--timeout", "30s", "--low-level-retries", "1", "--rc", "--rc-addr", "127.0.0.1:19093", "--rc-no-auth", "--log-file", str(ROOT / "mount.log")]))
-        wait_for(lambda: subprocess.run(["mountpoint", "-q", str(ROOT / "mount")], timeout=5).returncode, lambda code: code == 0, timeout=15)
+
+        def mount(source):
+            process = subprocess.Popen(["rclone", "mount", source, str(ROOT / "mount"), "--read-only", "--vfs-cache-mode", "off", "--buffer-size", "0", "--vfs-read-chunk-size", "64k", "--vfs-read-chunk-size-limit", "64k", "--cache-dir", str(ROOT / "cache"), "--dir-cache-time", "1s", "--attr-timeout", "1s", "--poll-interval", "0", "--timeout", "30s", "--low-level-retries", "1", "--rc", "--rc-addr", "127.0.0.1:19093", "--rc-no-auth", "--log-file", str(ROOT / "mount.log")])
+            processes.append(process)
+            wait_for(lambda: subprocess.run(["mountpoint", "-q", str(ROOT / "mount")], timeout=5).returncode, lambda code: code == 0, timeout=15)
+            return process
+
+        def unmount(process):
+            subprocess.run(["fusermount3", "-u", str(ROOT / "mount")], check=True, capture_output=True, timeout=5)
+            process.wait(timeout=10)
+
+        def source_meta():
+            with sqlite3.connect(f"file:{ROOT / 'config/musicforge.db'}?mode=ro", uri=True) as db:
+                return dict(db.execute("SELECT key,value FROM meta WHERE key IN ('source_root','source_mount')"))
+
+        mounted = mount(remote)
         app_log = open(ROOT / "app.log", "w")
         logs.append(app_log)
         environment = dict(os.environ, MUSICFORGE_CONFIG_DIR=str(ROOT / "config"), MUSICFORGE_LISTEN="127.0.0.1:19094", MUSICFORGE_PUBLIC_URL=ORIGIN, MUSICFORGE_ALLOWED_ORIGINS="", MUSICFORGE_SOURCE_TIMEOUT_SECONDS="2")
-        processes.append(subprocess.Popen([str(Path(".ci/musicforge").resolve())], env=environment, stdout=app_log, stderr=subprocess.STDOUT))
+        application = subprocess.Popen([str(Path(".ci/musicforge").resolve())], env=environment, stdout=app_log, stderr=subprocess.STDOUT)
+        processes.append(application)
         wait_for(lambda: api("/healthz"), lambda data: data["status"] == "ok", timeout=15)
         records = [json.loads(line) for line in (ROOT / "app.log").read_text().splitlines() if line.startswith("{")]
         code = next(record["setup_code"] for record in records if "setup_code" in record)
@@ -196,7 +212,49 @@ def run():
         single_size = (single / "42.flac").stat().st_size
         assert single_bytes >= single_size and single_bytes <= single_size + 512 * 1024, (single_size, single_bytes)
         assert not list((ROOT / "config/source-staging").iterdir()), "source scratch files leaked"
-        evidence = {"coalesced_scan_requests": 5, "vfs_cache_mode": "off", "single_pass_source_bytes": single_size, "single_pass_remote_bytes": single_bytes, "metadata_overhead_budget": 512 * 1024, "rclone_version": subprocess.check_output(["rclone", "version"], text=True).splitlines()[0], "tracks": 42, "source_formats": ["flac", "mp3", "m4a"], "read_bytes_before_pause": max(activity.get("read_bytes", 0) for activity in reading["current"]), "api_response_seconds_while_stalled": response_times, "pause_attempts": 0, "timeout_attempts_before_recovery": 1, "full_content_hash_preserved": True}
+
+        # A real unmount must never turn a known remote library into an empty one.
+        before = source_meta()
+        witness = json.loads(before["source_mount"])
+        assert witness["identity"] == before["source_root"] and len(witness["signature"]) == 64
+        before_outputs = {path.relative_to(ROOT / "output").as_posix(): hashlib.sha256(path.read_bytes()).hexdigest() for path in (ROOT / "output").rglob("*") if path.is_file()}
+        unmount(mounted)
+        wait_for(lambda: api("/api/dashboard"), lambda data: not data["online"] and data["storage_message"].startswith("Source mount changed;"), timeout=15)
+        fourth = api("/api/library/scan", {})["job_id"]
+        wait_for(lambda: task(fourth), lambda job: job["state"] == "pending" and job["log"].startswith("Source mount changed;"), timeout=10)
+        assert all(source["present"] for source in api("/api/library")), "missing mount expired known sources"
+        assert source_meta() == before, "missing mount overwrote source acknowledgment"
+
+        # A different remote subdirectory is not a reconnect, even on this path.
+        mounted = mount(remote + "Artist")
+        time.sleep(5.1)
+        wait_for(lambda: api("/api/dashboard"), lambda data: not data["online"] and data["storage_message"].startswith("Source mount changed;"), timeout=15)
+        assert source_meta() == before, "wrong remote was automatically acknowledged"
+        unmount(mounted)
+
+        # The same named remote survives new device IDs without a Settings save.
+        mounted = mount(remote)
+        wait_for(lambda: api("/api/dashboard"), lambda data: data["online"], timeout=15)
+        after = source_meta()
+        assert after["source_root"] != before["source_root"], "fixture did not change root identity"
+        assert json.loads(after["source_mount"])["signature"] == witness["signature"], "same remote changed stable signature"
+        wait_for(lambda: task(fourth), lambda job: job["state"] == "success" and job["attempts"] == 0, timeout=45)
+        after_outputs = {path.relative_to(ROOT / "output").as_posix(): hashlib.sha256(path.read_bytes()).hexdigest() for path in (ROOT / "output").rglob("*") if path.is_file()}
+        assert after_outputs == before_outputs, "reconnect modified playable output"
+        assert all(source["status"] == "ready" for source in api("/api/library"))
+        application.terminate()
+        application.wait(timeout=20)
+        unmount(mounted)
+        mounted = mount(remote)
+        application = subprocess.Popen([str(Path(".ci/musicforge").resolve())], env=environment, stdout=app_log, stderr=subprocess.STDOUT)
+        processes.append(application)
+        wait_for(lambda: api("/api/dashboard"), lambda data: data["online"], timeout=15)
+        restarted = source_meta()
+        assert restarted["source_root"] != after["source_root"], "restart fixture did not change root identity"
+        assert json.loads(restarted["source_mount"])["signature"] == witness["signature"], "restart lost stable witness"
+        wait_for(lambda: api("/api/jobs")["jobs"], lambda jobs: all(job["state"] == "success" for job in jobs), timeout=45)
+        assert all(source["status"] == "ready" for source in api("/api/library"))
+        evidence = {"source_reconnect": {"missing_mount_blocked": True, "wrong_remote_blocked": True, "same_remote_resumed_without_settings_save": True, "restart_reconnect_without_settings_save": True, "device_identity_changed": True, "outputs_unchanged": True, "attempts": 0}, "coalesced_scan_requests": 5, "vfs_cache_mode": "off", "single_pass_source_bytes": single_size, "single_pass_remote_bytes": single_bytes, "metadata_overhead_budget": 512 * 1024, "rclone_version": subprocess.check_output(["rclone", "version"], text=True).splitlines()[0], "tracks": 42, "source_formats": ["flac", "mp3", "m4a"], "read_bytes_before_pause": max(activity.get("read_bytes", 0) for activity in reading["current"]), "api_response_seconds_while_stalled": response_times, "pause_attempts": 0, "timeout_attempts_before_recovery": 1, "full_content_hash_preserved": True}
         (ROOT / "evidence.json").write_text(json.dumps(evidence, indent=2) + "\n")
         print(json.dumps(evidence))
     finally:

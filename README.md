@@ -87,7 +87,9 @@ Scanning indexes tags and file attributes first; it does not perform a separate 
 
 A source read with no progress for 120 seconds times out. Adjust `MUSICFORGE_SOURCE_TIMEOUT_SECONDS` for your remote if necessary. Hash/enumeration timers reset on progress; ffprobe and cover extraction have an operation deadline, and encoding must keep advancing. A single unreadable track preserves existing audio and hashes, allows healthy tracks to be queued, and prevents deletion detection for that incomplete scan. Each preparation/conversion retries twice, then waits for manual retry; healthy songs do not repeat their downloads because another song failed. Whole-root outages defer work without spending track retry budgets.
 
-After remounting, verify what the container sees. Docker's default private bind does not automatically follow every host remount; recreate the container if needed. A changed-root warning requires verifying the live mount before saving Settings to acknowledge it. See the [deployment guide](docs/deployment.md) for acceptance and diagnostics.
+MusicForge records the root's Linux device/inode identity to detect a disappeared mount exposing an empty directory. Named `fuse.rclone` sources also get a stable digest of their remote and effective source directory; reconnecting that same source automatically acknowledges new device/inode IDs, including after application restart. A different remote/directory or missing mount still pauses work. Generic rclone `--devname` labels and other filesystems use the strict device/inode check. This verification reads mount information, not audio contents.
+
+After remounting, verify what the container sees. Docker's default private bind does not automatically follow every host remount; recreate the container if needed. A remaining changed-root warning requires verifying the live library before saving Settings to acknowledge it. When upgrading an already-remounted legacy installation with no stable witness, this confirmation is needed once. See the [deployment guide](docs/deployment.md) for acceptance and diagnostics.
 
 ## Interface and language
 

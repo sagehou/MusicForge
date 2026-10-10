@@ -276,7 +276,7 @@
   "error.identity": "此 OIDC 身份不是绑定的管理员",
   "error.json": "请求必须包含一个 JSON 对象",
   "app.loading": "加载中",
-  "error.sourceMount": "源目录挂载已改变，请核对挂载后保存设置以确认",
+  "error.sourceMount": "无法确认源目录挂载身份，请核对容器内可见的源库后保存设置",
   "error.outputMarker": "输出存储离线或缺少归属标记",
   "error.sourceOfflinePrefix": "源存储离线：",
   "error.outputOfflinePrefix": "输出存储离线：",

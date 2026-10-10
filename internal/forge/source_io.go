@@ -27,6 +27,7 @@ type sourceInfo struct {
 	Modified int64       `json:"mtime"`
 	Bits     fs.FileMode `json:"mode"`
 	Identity string      `json:"identity,omitempty"`
+	Mount    string      `json:"mount,omitempty"`
 }
 
 func (s sourceInfo) Name() string       { return filepath.Base(s.Path) }
@@ -87,6 +88,9 @@ func readSourceIO(operation, root, rel string, emit func(sourceEvent) error, sta
 			return err
 		}
 		snapshot := sourceSnapshot(path, rel, info)
+		if rel == "." && info.IsDir() {
+			snapshot.Mount = sourceMountSignature(path, info)
+		}
 		return emit(sourceEvent{Info: &snapshot})
 	case "walk":
 		base, err := safePath(root, ".")

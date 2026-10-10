@@ -20,6 +20,7 @@ NAME = "musicforge-rollback"
 CANDIDATE = "musicforge:validation"
 PASSWORD = "ci-rollback-password"
 LEGACY = {
+    "v0.2.9": "sha256:cf3a93e67bfda5754c7bf2395fd092e8aefa4b8b758bb4b3099e617c6f9a0097",
     "v0.2.8": "sha256:665db2d6230cede949c75a7734076dce15f0a04a2aa8eea9c2da93c2f6152fa7",
     "v0.2.7": "sha256:0a9b9addba11189c4a5057b581e73004dc2315bb819ac25e7f15bb05f7964639",
     "v0.2.6": "sha256:c480adec16045489b3859f38af2a61e2e19b3eae0fb6f915c771b369c6c532c4",
@@ -189,6 +190,11 @@ def main():
             activity.update(read_bytes=(ROOT / "source/Album/01.flac").stat().st_size,
                             read_total_bytes=(ROOT / "source/Album/01.flac").stat().st_size)
             db.execute("UPDATE meta SET value=? WHERE key=?", (json.dumps(activity), key))
+            # Retain the optional rclone witness through old readers/writers while
+            # work is disabled. Enabling this local fixture resets it normally.
+            identity = db.execute("SELECT value FROM meta WHERE key='source_root'").fetchone()[0]
+            witness = {"identity": identity, "signature": hashlib.sha256(b"rollback-remote:Library").hexdigest()}
+            db.execute("INSERT INTO meta(key,value) VALUES('source_mount',?)", (json.dumps(witness),))
         expected = snapshot()
         held = next(row for row in expected["jobs"] if row[0] == pending)
         assert held[4] == "pending" and held[8] == 253402300799, "paused task changed schema-2 job semantics"

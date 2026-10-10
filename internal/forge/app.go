@@ -46,6 +46,7 @@ type App struct {
 	storageOutput string
 	storageAt     time.Time
 	storageError  error
+	sourceRootMu  sync.Mutex
 	ioContext     context.Context
 	ioCancel      context.CancelFunc
 	stagingMu     sync.Mutex
@@ -429,9 +430,8 @@ func (a *App) storageContext(ctx context.Context, s Settings) error {
 	if !source.IsDir() || source.Identity == "" {
 		return later("Source storage offline: library root is not an identifiable directory", 30)
 	}
-	expected, err := a.meta("source_root")
-	if err != nil || source.Identity != expected {
-		return later("Source mount changed; verify the mount and save Settings to acknowledge it", 30)
+	if err = a.verifySourceRoot(source); err != nil {
+		return err
 	}
 	id, err := a.meta("instance")
 	if err != nil {
@@ -529,7 +529,9 @@ func (a *App) initializeStorageContext(ctx context.Context, s Settings) error {
 	} else if string(b) != id {
 		return errors.New("output directory belongs to another MusicForge instance")
 	}
-	return a.setMeta("source_root", source.Identity)
+	a.sourceRootMu.Lock()
+	defer a.sourceRootMu.Unlock()
+	return a.recordSourceRoot(source)
 }
 
 func (a *App) ensureRecovery(ctx context.Context, s Settings) error {

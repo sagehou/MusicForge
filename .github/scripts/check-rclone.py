@@ -153,6 +153,9 @@ def run():
         control(root, "pause")
         wait_for(lambda: api(f"/api/jobs/{root}/items")["items"], lambda items: any(item["kind"] == "scan" and item["log"] == "Paused by administrator" for item in items), timeout=5)
         assert task(root)["attempts"] == 0, "pause consumed a failure attempt"
+        for _ in range(5):
+            assert api("/api/library/scan", {"dirs": ["Artist/Album"]})["job_id"] == root, "active queue created another scan task"
+        assert api("/api/jobs")["total"] == 1, "repeated requests split the stalled queue"
         RELEASE.set()
         control(root, "resume")
         wait_for(lambda: task(root), lambda job: job["state"] == "success" and job["counts"]["done"] == 40, timeout=90)
@@ -193,7 +196,7 @@ def run():
         single_size = (single / "42.flac").stat().st_size
         assert single_bytes >= single_size and single_bytes <= single_size + 512 * 1024, (single_size, single_bytes)
         assert not list((ROOT / "config/source-staging").iterdir()), "source scratch files leaked"
-        evidence = {"vfs_cache_mode": "off", "single_pass_source_bytes": single_size, "single_pass_remote_bytes": single_bytes, "metadata_overhead_budget": 512 * 1024, "rclone_version": subprocess.check_output(["rclone", "version"], text=True).splitlines()[0], "tracks": 42, "source_formats": ["flac", "mp3", "m4a"], "read_bytes_before_pause": max(activity.get("read_bytes", 0) for activity in reading["current"]), "api_response_seconds_while_stalled": response_times, "pause_attempts": 0, "timeout_attempts_before_recovery": 1, "full_content_hash_preserved": True}
+        evidence = {"coalesced_scan_requests": 5, "vfs_cache_mode": "off", "single_pass_source_bytes": single_size, "single_pass_remote_bytes": single_bytes, "metadata_overhead_budget": 512 * 1024, "rclone_version": subprocess.check_output(["rclone", "version"], text=True).splitlines()[0], "tracks": 42, "source_formats": ["flac", "mp3", "m4a"], "read_bytes_before_pause": max(activity.get("read_bytes", 0) for activity in reading["current"]), "api_response_seconds_while_stalled": response_times, "pause_attempts": 0, "timeout_attempts_before_recovery": 1, "full_content_hash_preserved": True}
         (ROOT / "evidence.json").write_text(json.dumps(evidence, indent=2) + "\n")
         print(json.dumps(evidence))
     finally:

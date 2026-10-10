@@ -361,11 +361,26 @@
   "phase.convert": "Encoding track",
   "phase.validate": "Validating encoded track",
   "phase.move": "Moving artifact",
-  "notice.taskPause": "Task paused",
-  "notice.taskResume": "Task resumed",
-  "notice.taskStop": "Task stopped; completed audio kept",
-  "notice.taskDelete": "Task history deleted",
-  "notice.taskRetry": "Failed work queued for retry",
+  "notice.taskPause": {
+    "one": "Paused {count} task",
+    "other": "Paused {count} tasks"
+  },
+  "notice.taskResume": {
+    "one": "Resumed {count} task",
+    "other": "Resumed {count} tasks"
+  },
+  "notice.taskStop": {
+    "one": "Stopped {count} task; completed audio kept",
+    "other": "Stopped {count} tasks; completed audio kept"
+  },
+  "notice.taskDelete": {
+    "one": "Deleted history for {count} task",
+    "other": "Deleted history for {count} tasks"
+  },
+  "notice.taskRetry": {
+    "one": "Queued failed work in {count} task for retry",
+    "other": "Queued failed work in {count} tasks for retry"
+  },
   "error.taskSelect": "select tasks",
   "error.taskDeleteActive": "stop the task and wait for its worker to finish before deleting history",
   "error.taskPausing": "the worker is still pausing; try again shortly",
@@ -385,5 +400,10 @@
   "error.sourceReadPrefix": "Source read unavailable: ",
   "phase.storage": "Checking library storage",
   "status.unverified": "Waiting for verification and conversion",
-  "phase.staging_wait": "Waiting for local staging space"
+  "phase.staging_wait": "Waiting for local staging space",
+  "jobs.selectPage": "Select this page",
+  "jobs.selectMatching": "Select all {count} matching tasks",
+  "jobs.allSelected": "All {count} matching tasks selected",
+  "jobs.bulkHint": "Each action applies only to tasks whose current state permits it. Selection covers the current filter at execution time.",
+  "notice.noTasksChanged": "No eligible tasks to update"
 }

@@ -124,7 +124,9 @@ Generate a temporary file and validate before replacement. Failed conversion pre
 ## Queue and recovery
 
 - Treat a scan and its conversion, move and upgrade-cleanup queue as one controllable task. Execute the track queue after indexing finishes. Group a manual rebuild into one task as well, reusing existing active targets.
+- Timer scans wait while any scan/build/move/delete/upgrade queue is active or paused; the next interval starts after that work finishes. Manual scans and Lidarr imports share the active scan task, merging scopes and verification without creating another parent task. Requests arriving after indexing are retained as a follow-up on the same task.
 - Show Pending, Running, Paused, Success, Failed and Stopped tasks. Keep per-track states and retry budgets internally and aggregate the queue into one task-list entry.
+- Select the current page or every task matching the current state filter across pages. Bulk actions skip ineligible tasks and report the number changed; deleting history retains audio.
 - Pause, resume, stop, retry and delete selected task histories. Pause/stop terminate active encoding subprocesses and clean registered temporary files; published results remain. Resume restarts unfinished tracks without consuming a failure attempt.
 - Pauses survive container restarts. Stopped unfinished targets require explicit retry; retry-all does not restart deliberately stopped tasks. Periodic scanning is an independent trigger and may discover new targets.
 - Delete history only when no work remains queued and workers have exited; retain library records and audio. Deleting failed/stopped history also removes its target's automatic-retry suppression record.

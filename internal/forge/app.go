@@ -22,6 +22,7 @@ import (
 type App struct {
 	cfg       Runtime
 	db        *sql.DB
+	reads     *sql.DB
 	logger    *slog.Logger
 	version   string
 	assets    fs.FS
@@ -97,6 +98,9 @@ func New(cfg Runtime, logger *slog.Logger, version string, assets fs.FS) (*App, 
 	a := &App{cfg: cfg, db: db, logger: logger, version: version, assets: assets, lock: lock, loginFailures: map[string]loginLimit{}, activeJobs: map[int64]context.CancelFunc{}, sourceSlots: make(chan struct{}, 20)}
 	a.ioContext, a.ioCancel = context.WithCancel(context.Background())
 	fail := func(err error) (*App, error) { a.Close(); return nil, err }
+	if a.reads, err = openReaders(filepath.Join(cfg.ConfigDir, "musicforge.db")); err != nil {
+		return fail(err)
+	}
 	if err = a.initializeStaging(); err != nil {
 		return fail(err)
 	}
@@ -120,6 +124,9 @@ func New(cfg Runtime, logger *slog.Logger, version string, assets fs.FS) (*App, 
 	 AND j.state IN ('pending','running') AND j.log<>'Stopped by administrator')`); err != nil {
 		return fail(err)
 	}
+	if err = a.recoverScanFollowups(); err != nil {
+		return fail(err)
+	}
 	var admins int
 	if err = db.QueryRow("SELECT count(*) FROM admin").Scan(&admins); err != nil {
 		return fail(err)
@@ -138,6 +145,9 @@ func (a *App) Close() {
 		a.ioCancel()
 	}
 	if a.db != nil {
+		if a.reads != nil {
+			a.reads.Close()
+		}
 		a.db.Close()
 	}
 	if a.lock != nil {
@@ -180,6 +190,25 @@ func (a *App) lockFiles(ctx context.Context) error {
 	return nil
 }
 
+// Interval scans wait for the whole library queue, including paused members.
+func (a *App) scheduleScan(s Settings, lastScan time.Time) (time.Time, error) {
+	var busy bool
+	err := a.reads.QueryRow("SELECT EXISTS(SELECT 1 FROM jobs WHERE state IN ('pending','running') AND kind IN ('scan','convert','move','delete','upgrade'))").Scan(&busy)
+	if err != nil {
+		return lastScan, err
+	}
+	if busy {
+		return time.Now(), nil
+	}
+	if lastScan.IsZero() || time.Since(lastScan) >= time.Duration(s.ScanMinutes)*time.Minute {
+		if _, err = a.enqueue("scan", "scan:periodic", ScanRequest{}, false); err != nil {
+			return lastScan, err
+		}
+		return time.Now(), nil
+	}
+	return lastScan, nil
+}
+
 func (a *App) scheduler(ctx context.Context) {
 	var lastScan time.Time
 	for ctx.Err() == nil {
@@ -187,15 +216,13 @@ func (a *App) scheduler(ctx context.Context) {
 		if err != nil {
 			a.logger.Error("settings read failed", "error", err)
 		} else if s.Enabled {
-			if lastScan.IsZero() || time.Since(lastScan) >= time.Duration(s.ScanMinutes)*time.Minute {
-				if _, err = a.enqueue("scan", "scan:periodic", ScanRequest{}, false); err == nil {
-					lastScan = time.Now()
-				}
+			if lastScan, err = a.scheduleScan(s, lastScan); err != nil {
+				a.logger.Error("scan scheduling failed", "error", err)
 			}
 			var dirty, active int
 			var latest int64
-			if err = a.db.QueryRow("SELECT count(*),coalesce(max(updated),0) FROM dirty_dirs").Scan(&dirty, &latest); err == nil && dirty > 0 && time.Since(time.Unix(0, latest)) >= 5*time.Second {
-				_ = a.db.QueryRow("SELECT count(*) FROM jobs WHERE state IN ('pending','running') AND kind IN ('scan','convert','move','delete')").Scan(&active)
+			if err = a.reads.QueryRow("SELECT count(*),coalesce(max(updated),0) FROM dirty_dirs").Scan(&dirty, &latest); err == nil && dirty > 0 && time.Since(time.Unix(0, latest)) >= 5*time.Second {
+				_ = a.reads.QueryRow("SELECT count(*) FROM jobs WHERE state IN ('pending','running') AND kind IN ('scan','convert','move','delete')").Scan(&active)
 				if active == 0 && s.NavURL != "" {
 					_, _ = a.enqueue("refresh", "nav:refresh", map[string]bool{"manual": false}, false)
 				}
@@ -288,7 +315,7 @@ func (a *App) worker(ctx context.Context, conversion bool, slot int) {
 				return
 			}
 		}
-		if actual, readErr := readJob(a.db.QueryRow("SELECT "+jobCols+" FROM jobs WHERE id=?", j.ID)); readErr == nil {
+		if actual, readErr := readJob(a.reads.QueryRow("SELECT "+jobCols+" FROM jobs WHERE id=?", j.ID)); readErr == nil {
 			state, attempts, message = actual.State, actual.Attempts, actual.Log
 		}
 		a.logger.Info("job finished", "task", a.taskID(j.ID), "job", j.ID, "kind", j.Kind, "state", state, "attempts", attempts, "detail", message)
@@ -308,7 +335,7 @@ func (a *App) execute(ctx context.Context, j Job) error {
 		if strings.HasPrefix(j.Key, "scan:finalize:") {
 			// Another scan can share a preparation owned by an earlier task.
 			// Wait for all live preparations in this scope, not only our members.
-			rows, err := a.db.Query("SELECT args FROM jobs WHERE dedup LIKE 'scan:prepare:%' AND state IN ('pending','running')")
+			rows, err := a.reads.Query("SELECT args FROM jobs WHERE dedup LIKE 'scan:prepare:%' AND state IN ('pending','running')")
 			if err != nil {
 				return err
 			}
@@ -380,7 +407,7 @@ func (a *App) execute(ctx context.Context, j Job) error {
 
 func (a *App) meta(key string) (string, error) {
 	var value string
-	err := a.db.QueryRow("SELECT value FROM meta WHERE key=?", key).Scan(&value)
+	err := a.reads.QueryRow("SELECT value FROM meta WHERE key=?", key).Scan(&value)
 	return value, err
 }
 func (a *App) setMeta(key, value string) error {

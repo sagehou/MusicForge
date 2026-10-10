@@ -62,7 +62,7 @@ func (a *App) session(r *http.Request) (session, error) {
 		return session{}, err
 	}
 	var method string
-	err = a.db.QueryRow("SELECT method FROM sessions WHERE token=? AND expires>?", digest(cookie.Value), time.Now().Unix()).Scan(&method)
+	err = a.reads.QueryRow("SELECT method FROM sessions WHERE token=? AND expires>?", digest(cookie.Value), time.Now().Unix()).Scan(&method)
 	return session{cookie.Value, method}, err
 }
 func (a *App) secureCookie(r *http.Request) bool {
@@ -173,7 +173,7 @@ func (a *App) limited(key string, record bool) bool {
 
 func (a *App) me(w http.ResponseWriter, r *http.Request) {
 	var count int
-	if err := a.db.QueryRow("SELECT count(*) FROM admin").Scan(&count); err != nil {
+	if err := a.reads.QueryRow("SELECT count(*) FROM admin").Scan(&count); err != nil {
 		apiError(w, 500, err)
 		return
 	}
@@ -185,7 +185,7 @@ func (a *App) me(w http.ResponseWriter, r *http.Request) {
 	result := map[string]any{"initialized": count > 0, "authenticated": false, "oidc": s.OIDCIssuer != "" && s.BoundSubject != "", "version": a.version}
 	if session, err := a.session(r); err == nil {
 		var username string
-		if err = a.db.QueryRow("SELECT username FROM admin WHERE id=1").Scan(&username); err != nil {
+		if err = a.reads.QueryRow("SELECT username FROM admin WHERE id=1").Scan(&username); err != nil {
 			apiError(w, 500, err)
 			return
 		}
@@ -257,7 +257,7 @@ func (a *App) login(w http.ResponseWriter, r *http.Request) {
 	}
 	var username string
 	var hash []byte
-	err := a.db.QueryRow("SELECT username,password FROM admin WHERE id=1").Scan(&username, &hash)
+	err := a.reads.QueryRow("SELECT username,password FROM admin WHERE id=1").Scan(&username, &hash)
 	if err != nil || bcrypt.CompareHashAndPassword(hash, []byte(body.Password)) != nil || subtle.ConstantTimeCompare([]byte(username), []byte(body.Username)) != 1 {
 		a.limited(key, true)
 		apiError(w, 401, errors.New("invalid username or password"))
@@ -461,7 +461,7 @@ func (a *App) auth(next http.HandlerFunc) http.HandlerFunc {
 
 func (a *App) verifyPassword(password string) bool {
 	var hash []byte
-	if a.db.QueryRow("SELECT password FROM admin WHERE id=1").Scan(&hash) != nil {
+	if a.reads.QueryRow("SELECT password FROM admin WHERE id=1").Scan(&hash) != nil {
 		return false
 	}
 	return bcrypt.CompareHashAndPassword(hash, []byte(password)) == nil

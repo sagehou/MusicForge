@@ -99,7 +99,7 @@ Navigation, forms, statuses, confirmations, notifications, common API errors, da
 | --- | --- |
 | Overview | Library counts, completion, recent jobs and storage status |
 | Library | Search/filter, scan, full verification, rebuild and expired-artifact deletion |
-| Jobs | Queue status, logs and individual/bulk failed-job retries |
+| Jobs | Queue progress, page/filter selection, bulk pause/resume/stop/retry and history cleanup |
 | Settings | Paths, encoding, scans, concurrency, integrations, OIDC and password |
 
 ## Incremental builds and file lifecycle
@@ -126,6 +126,8 @@ Expired artifacts remain in the output and Navidrome until explicit deletion. **
 Tags and ReplayGain are preserved. Each album gets one external `cover.jpg`, using source external artwork first, then an embedded cover in disc/track order. External artwork changes update the cover independently of audio encoding.
 
 ## Reliability and maintenance
+
+Timer scans wait for active and paused library queues to finish, then wait the configured interval. Manual scans and Lidarr imports merge into the active scan task; later scopes are retained on the same task. Select this page or all tasks matching a state to control accumulated queues. Bulk actions report the number changed and preserve completed audio. Numeric job IDs also include internal per-track work; the Jobs total counts logical tasks.
 
 Jobs allow three failed attempts: the initial attempt and two automatic retries with increasing delays. Exhausted jobs wait for manual retry; ordinary scans do not reset unchanged failed targets. Pending and interrupted work survives restart. Interrupted encoding starts again from the beginning of that track.
 

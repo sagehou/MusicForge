@@ -4,6 +4,8 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"net/url"
+	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
@@ -81,6 +83,27 @@ func openDB(path string) (*sql.DB, error) {
 	return db, nil
 }
 
+// WAL readers must not queue behind the single writer's connection or transaction.
+func openReaders(path string) (*sql.DB, error) {
+	absolute, err := filepath.Abs(path)
+	if err != nil {
+		return nil, err
+	}
+	query := url.Values{"mode": {"ro"}, "_pragma": {"query_only(1)", "busy_timeout(5000)"}}
+	dsn := (&url.URL{Scheme: "file", Path: filepath.ToSlash(absolute), RawQuery: query.Encode()}).String()
+	db, err := sql.Open("sqlite", dsn)
+	if err != nil {
+		return nil, err
+	}
+	db.SetMaxOpenConns(4)
+	db.SetMaxIdleConns(4)
+	if err = db.Ping(); err != nil {
+		db.Close()
+		return nil, err
+	}
+	return db, nil
+}
+
 const sourceCols = "id,rel,hash,size,mtime,artist,album,title,track,disc,duration,metadata,present,output,built_hash,built_profile,output_present,error"
 
 type rowScanner interface{ Scan(...any) error }
@@ -96,17 +119,17 @@ func readSource(row rowScanner) (Source, error) {
 }
 
 func (a *App) source(id int64) (Source, error) {
-	return readSource(a.db.QueryRow("SELECT "+sourceCols+" FROM sources WHERE id=?", id))
+	return readSource(a.reads.QueryRow("SELECT "+sourceCols+" FROM sources WHERE id=?", id))
 }
 func (a *App) sourceRel(rel string) (Source, error) {
-	return readSource(a.db.QueryRow("SELECT "+sourceCols+" FROM sources WHERE rel=?", rel))
+	return readSource(a.reads.QueryRow("SELECT "+sourceCols+" FROM sources WHERE rel=?", rel))
 }
 func (a *App) allSources() ([]Source, error) {
 	return a.sourcesWhere("")
 }
 
 func (a *App) sourcesWhere(where string, args ...any) ([]Source, error) {
-	rows, err := a.db.Query("SELECT "+sourceCols+" FROM sources"+where+" ORDER BY disc,track,rel", args...)
+	rows, err := a.reads.Query("SELECT "+sourceCols+" FROM sources"+where+" ORDER BY disc,track,rel", args...)
 	if err != nil {
 		return nil, err
 	}
@@ -138,9 +161,29 @@ func (a *App) enqueueTask(kind, key string, args any, manual bool, task int64) (
 	defer tx.Rollback()
 	var id int64
 	var state string
-	err = tx.QueryRow("SELECT id,state FROM jobs WHERE dedup=? ORDER BY (state IN ('pending','running')) DESC,id DESC LIMIT 1", key).Scan(&id, &state)
-	if err == nil && (state == "pending" || state == "running" || (state == "failed" && !manual && (kind == "convert" || kind == "move" || strings.HasPrefix(key, prepareScanPrefix)))) {
-		if kind == "scan" && !strings.HasPrefix(key, prepareScanPrefix) && (state == "pending" || state == "running") {
+	sharedScan := false
+	if kind == "scan" && task == 0 && !strings.HasPrefix(key, prepareScanPrefix) && !strings.HasPrefix(key, "scan:finalize:") {
+		// All entry points share the active library scan, including its remaining conversions.
+		err = tx.QueryRow(`SELECT root.id,root.state FROM jobs active
+		 LEFT JOIN meta member ON member.key='task-member:'||active.id
+		 JOIN jobs root ON root.id=coalesce(CAST(member.value AS INTEGER),active.id)
+		 WHERE active.state IN ('pending','running') AND root.kind='scan'
+		 AND root.dedup NOT LIKE 'scan:prepare:%' AND root.dedup NOT LIKE 'scan:finalize:%'
+		 ORDER BY root.id LIMIT 1`).Scan(&id, &state)
+		if err != nil && err != sql.ErrNoRows {
+			return 0, err
+		}
+		sharedScan = err == nil
+	}
+	if sharedScan && key == "scan:periodic" && !manual {
+		// A timer tick cannot add follow-up work to a scan requested meanwhile.
+		return id, nil
+	}
+	if !sharedScan {
+		err = tx.QueryRow("SELECT id,state FROM jobs WHERE dedup=? ORDER BY (state IN ('pending','running')) DESC,id DESC LIMIT 1", key).Scan(&id, &state)
+	}
+	if err == nil && (sharedScan || state == "pending" || state == "running" || (state == "failed" && !manual && (kind == "convert" || kind == "move" || strings.HasPrefix(key, prepareScanPrefix)))) {
+		if kind == "scan" && !strings.HasPrefix(key, prepareScanPrefix) && (sharedScan || state == "pending" || state == "running") {
 			var current string
 			followup := "scan-followup:" + strconv.FormatInt(id, 10)
 			if state == "pending" {
@@ -223,18 +266,24 @@ func (a *App) claim(conversion bool) (Job, error) {
 	if conversion {
 		operator = ""
 	}
-	tx, err := a.db.Begin()
-	if err != nil {
-		return Job{}, err
-	}
-	defer tx.Rollback()
 	// A scan fills one queue. Its conversions become eligible after indexing finishes.
 	activeIDs := []string{"-1"}
 	for id := range a.activeJobs {
 		activeIDs = append(activeIDs, strconv.FormatInt(id, 10))
 	}
 	busy := strings.Join(activeIDs, ",")
-	j, err := readJob(tx.QueryRow("SELECT "+jobCols+" FROM jobs candidate WHERE state='pending' AND id NOT IN ("+busy+") AND "+operator+" (kind='convert' OR dedup LIKE 'scan:prepare:%') AND not_before<=? AND (dedup NOT LIKE 'scan:finalize:%' OR NOT EXISTS(SELECT 1 FROM jobs p LEFT JOIN meta pm ON pm.key='task-member:'||p.id WHERE p.dedup LIKE 'scan:prepare:%' AND p.state IN ('pending','running') AND coalesce(CAST(pm.value AS INTEGER),p.id)=coalesce((SELECT CAST(value AS INTEGER) FROM meta WHERE key='task-member:'||candidate.id),candidate.id))) AND NOT EXISTS(SELECT 1 FROM meta member JOIN jobs parent ON parent.id=CAST(member.value AS INTEGER) WHERE member.key='task-member:'||candidate.id AND parent.id<>candidate.id AND parent.kind='scan' AND parent.state IN ('pending','running')) AND NOT EXISTS(SELECT 1 FROM jobs active WHERE (active.state='running' OR active.id IN ("+busy+")) AND active.id<>candidate.id AND ((active.kind IN ('convert','move') AND candidate.kind IN ('convert','move') AND json_extract(active.args,'$.id')=json_extract(candidate.args,'$.id')) OR (active.dedup LIKE 'scan:prepare:%' AND candidate.dedup LIKE 'scan:prepare:%' AND json_extract(active.args,'$.dirs[0]')=json_extract(candidate.args,'$.dirs[0]')) OR (active.dedup LIKE 'scan:prepare:%' AND candidate.kind IN ('convert','move') AND json_extract(active.args,'$.dirs[0]')=(SELECT rel FROM sources WHERE id=json_extract(candidate.args,'$.id'))) OR (candidate.dedup LIKE 'scan:prepare:%' AND active.kind IN ('convert','move') AND json_extract(candidate.args,'$.dirs[0]')=(SELECT rel FROM sources WHERE id=json_extract(active.args,'$.id'))))) ORDER BY CASE kind WHEN 'scan' THEN 0 WHEN 'move' THEN 1 WHEN 'delete' THEN 2 ELSE 3 END,id LIMIT 1", time.Now().Unix()))
+	j, err := readJob(a.reads.QueryRow("SELECT "+jobCols+" FROM jobs candidate WHERE state='pending' AND id NOT IN ("+busy+") AND "+operator+" (kind='convert' OR dedup LIKE 'scan:prepare:%') AND not_before<=? AND (dedup NOT LIKE 'scan:finalize:%' OR NOT EXISTS(SELECT 1 FROM jobs p LEFT JOIN meta pm ON pm.key='task-member:'||p.id WHERE p.dedup LIKE 'scan:prepare:%' AND p.state IN ('pending','running') AND coalesce(CAST(pm.value AS INTEGER),p.id)=coalesce((SELECT CAST(value AS INTEGER) FROM meta WHERE key='task-member:'||candidate.id),candidate.id))) AND NOT EXISTS(SELECT 1 FROM meta member JOIN jobs parent ON parent.id=CAST(member.value AS INTEGER) WHERE member.key='task-member:'||candidate.id AND parent.id<>candidate.id AND parent.kind='scan' AND parent.state IN ('pending','running')) AND NOT EXISTS(SELECT 1 FROM jobs active WHERE (active.state='running' OR active.id IN ("+busy+")) AND active.id<>candidate.id AND ((active.kind IN ('convert','move') AND candidate.kind IN ('convert','move') AND json_extract(active.args,'$.id')=json_extract(candidate.args,'$.id')) OR (active.dedup LIKE 'scan:prepare:%' AND candidate.dedup LIKE 'scan:prepare:%' AND json_extract(active.args,'$.dirs[0]')=json_extract(candidate.args,'$.dirs[0]')) OR (active.dedup LIKE 'scan:prepare:%' AND candidate.kind IN ('convert','move') AND json_extract(active.args,'$.dirs[0]')=(SELECT rel FROM sources WHERE id=json_extract(candidate.args,'$.id'))) OR (candidate.dedup LIKE 'scan:prepare:%' AND active.kind IN ('convert','move') AND json_extract(candidate.args,'$.dirs[0]')=(SELECT rel FROM sources WHERE id=json_extract(active.args,'$.id'))))) ORDER BY CASE kind WHEN 'scan' THEN 0 WHEN 'move' THEN 1 WHEN 'delete' THEN 2 ELSE 3 END,id LIMIT 1", time.Now().Unix()))
+	if err != nil {
+		return j, err
+	}
+	// Empty workers leave the writer available. Re-read pending arguments inside
+	// the write transaction so a concurrently merged request cannot be lost.
+	tx, err := a.db.Begin()
+	if err != nil {
+		return Job{}, err
+	}
+	defer tx.Rollback()
+	j, err = readJob(tx.QueryRow("SELECT "+jobCols+" FROM jobs WHERE id=? AND state='pending' AND not_before<=?", j.ID, time.Now().Unix()))
 	if err != nil {
 		return j, err
 	}
@@ -249,7 +298,7 @@ func (a *App) claim(conversion bool) (Job, error) {
 func (a *App) settings() (Settings, error) {
 	var b string
 	var s Settings
-	err := a.db.QueryRow("SELECT data FROM settings WHERE id=1").Scan(&b)
+	err := a.reads.QueryRow("SELECT data FROM settings WHERE id=1").Scan(&b)
 	if err != nil {
 		return s, err
 	}
@@ -343,6 +392,79 @@ func (a *App) completeJob(j Job, state string, attempts int, progress float64, m
 	_, err = tx.Exec("UPDATE jobs SET args=?,state=?,attempts=?,progress=?,log=?,not_before=?,updated=? WHERE id=?", args, state, attempts, progress, message, notBefore, time.Now().Unix(), j.ID)
 	if err != nil {
 		return err
+	}
+	// A request arriving after indexing stays on this task until its members finish.
+	// The journal retains the published ScanRequest format for older workers.
+	var root int64
+	err = tx.QueryRow("SELECT coalesce((SELECT CAST(value AS INTEGER) FROM meta WHERE key=?),?)", taskMemberKey(j.ID), j.ID).Scan(&root)
+	if err != nil {
+		return err
+	}
+	if root != j.ID && control != "stopped" {
+		if err = rearmScanFollowup(tx, root); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
+}
+
+func rearmScanFollowup(tx *sql.Tx, root int64) error {
+	key := "scan-followup:" + strconv.FormatInt(root, 10)
+	var followup, control string
+	err := tx.QueryRow(`SELECT m.value,coalesce(c.value,'') FROM meta m JOIN jobs root ON root.id=?
+	 LEFT JOIN meta c ON c.key='task-control:'||root.id
+	 WHERE m.key=? AND root.kind='scan' AND root.state IN ('success','failed')
+	 AND coalesce(c.value,'')<>'stopped'
+	 AND NOT EXISTS(SELECT 1 FROM jobs active LEFT JOIN meta member ON member.key='task-member:'||active.id
+	 WHERE active.state IN ('pending','running') AND coalesce(CAST(member.value AS INTEGER),active.id)=root.id)
+	 AND NOT EXISTS(SELECT 1 FROM jobs active WHERE active.dedup=root.dedup AND active.state IN ('pending','running'))`, root, key).Scan(&followup, &control)
+	if err == sql.ErrNoRows {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	resumeAt := int64(0)
+	if control == "paused" {
+		resumeAt = heldUntil
+	}
+	if _, err = tx.Exec("UPDATE jobs SET args=?,state='pending',attempts=0,progress=0,log='',not_before=?,updated=? WHERE id=?", followup, resumeAt, time.Now().Unix(), root); err != nil {
+		return err
+	}
+	_, err = tx.Exec("DELETE FROM meta WHERE key=?", key)
+	return err
+}
+
+// Older compatible workers may finish members without rearming the scan root.
+func (a *App) recoverScanFollowups() error {
+	tx, err := a.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	rows, err := tx.Query("SELECT j.id FROM jobs j JOIN meta m ON m.key='scan-followup:'||j.id WHERE j.kind='scan' AND j.state IN ('success','failed')")
+	if err != nil {
+		return err
+	}
+	roots := []int64{}
+	for rows.Next() {
+		var root int64
+		if err = rows.Scan(&root); err != nil {
+			break
+		}
+		roots = append(roots, root)
+	}
+	if err == nil {
+		err = rows.Err()
+	}
+	rows.Close()
+	if err != nil {
+		return err
+	}
+	for _, root := range roots {
+		if err = rearmScanFollowup(tx, root); err != nil {
+			return err
+		}
 	}
 	return tx.Commit()
 }

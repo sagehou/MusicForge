@@ -64,7 +64,7 @@ func decode(w http.ResponseWriter, r *http.Request, value any) bool {
 func (a *App) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {
-		if err := a.db.PingContext(r.Context()); err != nil {
+		if err := a.reads.PingContext(r.Context()); err != nil {
 			apiError(w, 503, errors.New("database unavailable"))
 			return
 		}
@@ -383,7 +383,7 @@ func (a *App) putSettings(w http.ResponseWriter, r *http.Request) {
 	}
 	if s.Source != old.Source || s.Output != old.Output {
 		var count int
-		if err = a.db.QueryRow("SELECT (SELECT count(*) FROM sources)+(SELECT count(*) FROM managed)+(SELECT count(*) FROM jobs WHERE state IN ('pending','running'))").Scan(&count); err != nil {
+		if err = a.reads.QueryRow("SELECT (SELECT count(*) FROM sources)+(SELECT count(*) FROM managed)+(SELECT count(*) FROM jobs WHERE state IN ('pending','running'))").Scan(&count); err != nil {
 			apiError(w, 500, err)
 			return
 		}

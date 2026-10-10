@@ -3,9 +3,9 @@ import { Activity, ArrowDownToLine, ArrowRight, Check, ChevronLeft, ChevronRight
 import { Button } from "./components/ui/button";
 import { api, setCSRF } from "./api";
 import type { Activity as JobActivity, Dashboard, Encoding, Job, Me, Settings, Source, TaskItem } from "./types";
-import { LanguageSelector, useI18n, type MessageKey } from "./i18n";
+import { LanguageSelector, useI18n, type MessageKey, type Params } from "./i18n";
 
-type Notice = (message: MessageKey | Error, error?: boolean) => void;
+type Notice = (message: MessageKey | Error, error?: boolean, params?: Params) => void;
 
 function useResource<T>(path: string, poll: boolean | number = false) {
   const [result, setResult] = useState<{ path: string; data: T }>();
@@ -44,8 +44,8 @@ export function App() {
   const [me, setMe] = useState<Me>();
   const [authError, setAuthError] = useState("");
   const [page, setPage] = useState(location.pathname);
-  const [toast, setToast] = useState<{ message: MessageKey | Error; error: boolean }>();
-  const notify: Notice = (message, error = false) => setToast({ message, error });
+  const [toast, setToast] = useState<{ message: MessageKey | Error; error: boolean; params?: Params }>();
+  const notify: Notice = (message, error = false, params) => setToast({ message, error, params });
   const loadMe = () => api<Me>("/auth/me").then(value => { setCSRF(value.csrf || ""); setMe(value); setAuthError(""); }).catch(err => setAuthError(err.message));
   useEffect(() => {
     void loadMe();
@@ -71,7 +71,7 @@ export function App() {
     <main className="main" id="main-content" tabIndex={-1}><header className="topbar"><span>{t("app.workspace")}<ChevronRight size={14} /> <strong>{current.label}</strong></span><div className="topbar-actions"><LanguageSelector /><Button className="mobile-logout" variant="ghost" size="icon" aria-label={t("app.logout")} onClick={() => void api("/auth/logout", "POST", {}).then(loadMe).catch(err => notify(err as Error, true))}><LogOut size={17} /></Button><span className="topbar-note"><ShieldCheck size={15} />{t("app.session")}</span></div></header>
       <div className="page-content">{page === "/library" ? <Library notify={notify} /> : page === "/jobs" ? <Jobs notify={notify} /> : page === "/settings" ? <SettingsPage me={me} notify={notify} /> : <Overview notify={notify} navigate={navigate} />}</div>
     </main>
-    {toast && <div className={`toast ${toast.error ? "toast-error" : ""}`} role={toast.error ? "alert" : "status"}>{toast.error ? <Activity size={17} /> : <Check size={17} />}{toast.message instanceof Error ? errorMessage(toast.message.message) : t(toast.message)}<button aria-label={t("app.dismiss")} onClick={() => setToast(undefined)}>×</button></div>}
+    {toast && <div className={`toast ${toast.error ? "toast-error" : ""}`} role={toast.error ? "alert" : "status"}>{toast.error ? <Activity size={17} /> : <Check size={17} />}{toast.message instanceof Error ? errorMessage(toast.message.message) : t(toast.message, toast.params)}<button aria-label={t("app.dismiss")} onClick={() => setToast(undefined)}>×</button></div>}
   </div>;
 }
 
@@ -187,30 +187,53 @@ function TaskDetails({ job }: { job: Job }) {
 
 function Jobs({ notify }: { notify: Notice }) {
   const { t, status, kind, date } = useI18n();
-  const [offset, setOffset] = useState(0); const [filter, setFilter] = useState("all"); const [expanded, setExpanded] = useState<number>(); const [selected, setSelected] = useState<Set<number>>(new Set()); const [busy, setBusy] = useState(false);
+  const [offset, setOffset] = useState(0); const [filter, setFilter] = useState("all"); const [expanded, setExpanded] = useState<number>(); const [selected, setSelected] = useState<Set<number>>(new Set()); const [busy, setBusy] = useState(false); const [allSelected, setAllSelected] = useState(false);
   const { data, error, retry: retryResource } = useResource<{ jobs: Job[]; total: number }>(`/jobs?offset=${offset}&limit=100&state=${filter}`, 2000);
-  async function control(action: "pause" | "resume" | "stop" | "delete" | "retry", ids?: number[]) {
+  type Action = "pause" | "resume" | "stop" | "delete" | "retry";
+  function eligible(job: Job, action: Action) {
+    if (action === "pause") return ["pending", "running"].includes(job.state);
+    if (action === "resume") return job.state === "paused";
+    if (action === "stop") return ["pending", "running", "paused"].includes(job.state) || job.state === "failed" && !job.can_delete;
+    if (action === "retry") return ["failed", "stopped"].includes(job.state);
+    return job.can_delete;
+  }
+  function clearSelection() { setSelected(new Set()); setAllSelected(false); }
+  function paginate(next: number) { setOffset(next); setExpanded(undefined); if (!allSelected) setSelected(new Set()); }
+  async function control(action: Action, ids?: number[], matching = false) {
     if (action === "stop" && !window.confirm(t("jobs.stopConfirm")) || action === "delete" && !window.confirm(t("jobs.deleteConfirm"))) return;
     setBusy(true);
-    try { await api("/jobs/control", "POST", { action, ...(ids ? { ids } : { all: true }) }); notify(`notice.task${action[0].toUpperCase()}${action.slice(1)}` as MessageKey); setSelected(new Set()); retryResource(); }
+    try {
+      const result = await api<{ changed: number }>("/jobs/control", "POST", { action, ...(ids ? { ids } : { all: true, ...(matching ? { state: filter } : {}) }) });
+      notify(result.changed ? `notice.task${action[0].toUpperCase()}${action.slice(1)}` as MessageKey : "notice.noTasksChanged", false, { count: result.changed });
+      clearSelection(); retryResource();
+    }
     catch (err) { notify(err as Error, true); } finally { setBusy(false); }
   }
   if (!data) return <Loading error={error} retry={retryResource} />;
   const chosen = data.jobs.filter(job => selected.has(job.id));
+  const selectedCount = allSelected ? data.total : chosen.length;
+  const pageChecked = data.jobs.length > 0 && (allSelected || chosen.length === data.jobs.length);
+  function canBulk(action: Action) {
+    if (!allSelected) return chosen.some(job => eligible(job, action));
+    const states = { pause: ["all", "pending", "running"], resume: ["all", "paused"], stop: ["all", "pending", "running", "paused", "failed"], retry: ["all", "failed", "stopped"], delete: ["all", "success", "failed", "stopped"] };
+    return selectedCount > 0 && states[action].includes(filter);
+  }
+  function bulk(action: Action) { void control(action, allSelected ? undefined : chosen.filter(job => eligible(job, action)).map(job => job.id), allSelected); }
   return <>
     <ResourceWarning error={error} retry={retryResource} />
     <div className="page-heading"><div><span className="eyebrow">{t("jobs.eyebrow")}</span><h1>{t("jobs.title")}</h1><p>{t("jobs.description")}</p></div><Button variant="outline" disabled={busy} onClick={() => void control("retry")}><RefreshCw size={16} />{t("jobs.retryAll")}</Button></div>
-    <div className="panel"><div className="table-toolbar"><div className="filter-tabs">{["all", "pending", "running", "paused", "success", "failed", "stopped"].map(state => <button key={state} className={filter === state ? "active" : ""} aria-pressed={filter === state} onClick={() => { setFilter(state); setOffset(0); setSelected(new Set()); setExpanded(undefined); }}>{state === "all" ? t("jobs.all") : status(state)}</button>)}</div></div>
-      {selected.size > 0 && <div className="selection-bar"><span>{t("library.selected", { count: selected.size })}</span><Button size="sm" disabled={busy || !chosen.every(job => ["pending", "running"].includes(job.state))} onClick={() => void control("pause", [...selected])}>{t("jobs.pause")}</Button><Button size="sm" disabled={busy || !chosen.every(job => job.state === "paused")} onClick={() => void control("resume", [...selected])}>{t("jobs.resume")}</Button><Button size="sm" variant="outline" disabled={busy || !chosen.every(job => (["pending", "running", "paused"].includes(job.state) || job.state === "failed" && !job.can_delete))} onClick={() => void control("stop", [...selected])}>{t("jobs.stop")}</Button><Button size="sm" variant="outline" disabled={busy || !chosen.every(job => ["failed", "stopped"].includes(job.state))} onClick={() => void control("retry", [...selected])}>{t("jobs.retrySelected", { count: selected.size })}</Button><Button size="sm" variant="destructive" disabled={busy || !chosen.every(job => job.can_delete)} onClick={() => void control("delete", [...selected])}>{t("jobs.delete")}</Button></div>}
+    <div className="panel"><div className="table-toolbar"><div className="filter-tabs">{["all", "pending", "running", "paused", "success", "failed", "stopped"].map(state => <button key={state} className={filter === state ? "active" : ""} aria-pressed={filter === state} onClick={() => { setFilter(state); setOffset(0); clearSelection(); setExpanded(undefined); }}>{state === "all" ? t("jobs.all") : status(state)}</button>)}</div></div>
+      {data.jobs.length > 0 && <div className="selection-bar"><label className="check-field"><input type="checkbox" checked={pageChecked} ref={node => { if (node) node.indeterminate = !pageChecked && chosen.length > 0; }} disabled={busy} onChange={event => { setAllSelected(false); setSelected(event.target.checked ? new Set(data.jobs.map(job => job.id)) : new Set()); }} /><span>{t("jobs.selectPage")}</span></label><Button variant="ghost" size="sm" disabled={busy || allSelected} onClick={() => { setAllSelected(true); setSelected(new Set()); }}>{t("jobs.selectMatching", { count: data.total })}</Button>{selectedCount > 0 && <Button variant="ghost" size="sm" disabled={busy} onClick={clearSelection}>{t("library.clearSelection")}</Button>}</div>}
+      {selectedCount > 0 && <div className="selection-bar"><span>{t(allSelected ? "jobs.allSelected" : "library.selected", { count: selectedCount })}</span><Button size="sm" disabled={busy || !canBulk("pause")} onClick={() => bulk("pause")}>{t("jobs.pause")}</Button><Button size="sm" disabled={busy || !canBulk("resume")} onClick={() => bulk("resume")}>{t("jobs.resume")}</Button><Button size="sm" variant="outline" disabled={busy || !canBulk("stop")} onClick={() => bulk("stop")}>{t("jobs.stop")}</Button><Button size="sm" variant="outline" disabled={busy || !canBulk("retry")} onClick={() => bulk("retry")}>{t("jobs.retry")}</Button><Button size="sm" variant="destructive" disabled={busy || !canBulk("delete")} onClick={() => bulk("delete")}>{t("jobs.delete")}</Button><small className="selection-hint">{t("jobs.bulkHint")}</small></div>}
       {data.jobs.length ? <div className="task-list">{data.jobs.map(job => {
         const scanActive = job.scan?.phase !== "indexed" && job.current.some(activity => ["storage", "discover", "scan", "read", "staging_wait", "probe", "artwork"].includes(activity.phase));
         const percent = Math.round(Math.max(0, Math.min(1, scanActive && job.scan?.total ? job.scan.processed / job.scan.total : job.progress)) * 100);
-        return <div className="task" key={job.id} data-task-id={job.id}><div className="task-main"><input type="checkbox" aria-label={t("jobs.select", { id: String(job.id) })} checked={selected.has(job.id)} onChange={event => setSelected(old => { const value = new Set(old); event.target.checked ? value.add(job.id) : value.delete(job.id); return value; })} /><span className={`job-symbol ${job.state}`}>{job.state === "running" ? <Loader2 className="animate-spin" size={18} /> : <Activity size={18} />}</span><div className="task-description"><strong>{kind(job.kind)} <span>#{job.id}</span></strong><small>{date(job.updated)}</small></div><Badge status={job.state} /><div className="task-actions"><Button variant="ghost" size="sm" onClick={() => setExpanded(expanded === job.id ? undefined : job.id)}>{expanded === job.id ? t("jobs.collapse") : t("jobs.details")}</Button>{["pending", "running"].includes(job.state) && <Button variant="outline" size="sm" disabled={busy} onClick={() => void control("pause", [job.id])}><Pause size={14} />{t("jobs.pause")}</Button>}{job.state === "paused" && <Button variant="outline" size="sm" disabled={busy} onClick={() => void control("resume", [job.id])}><Play size={14} />{t("jobs.resume")}</Button>}{(["pending", "running", "paused"].includes(job.state) || job.state === "failed" && !job.can_delete) && <Button variant="outline" size="sm" disabled={busy} onClick={() => void control("stop", [job.id])}><Square size={14} />{t("jobs.stop")}</Button>}{["failed", "stopped"].includes(job.state) && <Button variant="outline" size="sm" disabled={busy} onClick={() => void control("retry", [job.id])}>{t("jobs.retry")}</Button>}<Button variant="ghost" size="sm" disabled={busy || !job.can_delete} onClick={() => void control("delete", [job.id])}><Trash2 size={14} />{t("jobs.delete")}</Button></div></div>
+        return <div className="task" key={job.id} data-task-id={job.id}><div className="task-main"><input type="checkbox" aria-label={t("jobs.select", { id: String(job.id) })} checked={allSelected || selected.has(job.id)} disabled={busy} onChange={event => { setAllSelected(false); setSelected(old => { const value = allSelected ? new Set(data.jobs.map(item => item.id)) : new Set(old); event.target.checked ? value.add(job.id) : value.delete(job.id); return value; }); }} /><span className={`job-symbol ${job.state}`}>{job.state === "running" ? <Loader2 className="animate-spin" size={18} /> : <Activity size={18} />}</span><div className="task-description"><strong>{kind(job.kind)} <span>#{job.id}</span></strong><small>{date(job.updated)}</small></div><Badge status={job.state} /><div className="task-actions"><Button variant="ghost" size="sm" onClick={() => setExpanded(expanded === job.id ? undefined : job.id)}>{expanded === job.id ? t("jobs.collapse") : t("jobs.details")}</Button>{["pending", "running"].includes(job.state) && <Button variant="outline" size="sm" disabled={busy} onClick={() => void control("pause", [job.id])}><Pause size={14} />{t("jobs.pause")}</Button>}{job.state === "paused" && <Button variant="outline" size="sm" disabled={busy} onClick={() => void control("resume", [job.id])}><Play size={14} />{t("jobs.resume")}</Button>}{(["pending", "running", "paused"].includes(job.state) || job.state === "failed" && !job.can_delete) && <Button variant="outline" size="sm" disabled={busy} onClick={() => void control("stop", [job.id])}><Square size={14} />{t("jobs.stop")}</Button>}{["failed", "stopped"].includes(job.state) && <Button variant="outline" size="sm" disabled={busy} onClick={() => void control("retry", [job.id])}>{t("jobs.retry")}</Button>}<Button variant="ghost" size="sm" disabled={busy || !job.can_delete} onClick={() => void control("delete", [job.id])}><Trash2 size={14} />{t("jobs.delete")}</Button></div></div>
           <div className="task-progress"><div className="task-progress-label"><span>{job.counts.total ? t("jobs.queueProgress", { done: job.counts.done, total: job.counts.total, pending: job.counts.pending, running: job.counts.running, failed: job.counts.failed }) : job.scan?.total ? t("jobs.files", { done: job.scan.processed, total: job.scan.total }) : t(job.state === "success" ? "jobs.completed" : job.state === "failed" ? "jobs.failedHint" : "jobs.waiting")}{job.counts.cancelled > 0 && ` · ${t("jobs.cancelledCount", { count: job.counts.cancelled })}`}</span><span>{percent}%</span></div><div className="task-meter" role="progressbar" aria-label={t("jobs.progress", { id: String(job.id) })} aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent}><span style={{ width: `${percent}%` }} /></div>{job.current.map((activity, index) => <ActivityView key={index} activity={activity} />)}{job.state === "paused" && <p>{t("jobs.pausedHint")}</p>}{job.state === "stopped" && <p>{t("jobs.stoppedHint")}</p>}</div>
           {expanded === job.id && <TaskDetails job={job} />}
         </div>;
       })}</div> : <Empty title={t("jobs.empty")}>{t("jobs.emptyHint")}</Empty>}
-      <div className="pagination"><span>{t("jobs.total", { count: data.total })}</span><Button variant="ghost" size="icon" aria-label={t("jobs.previous")} disabled={offset === 0} onClick={() => setOffset(Math.max(0, offset - 100))}><ChevronLeft size={16} /></Button><Button variant="ghost" size="icon" aria-label={t("jobs.next")} disabled={offset + 100 >= data.total} onClick={() => setOffset(offset + 100)}><ChevronRight size={16} /></Button></div>
+      <div className="pagination"><span>{t("jobs.total", { count: data.total })}</span><Button variant="ghost" size="icon" aria-label={t("jobs.previous")} disabled={offset === 0} onClick={() => paginate(Math.max(0, offset - 100))}><ChevronLeft size={16} /></Button><Button variant="ghost" size="icon" aria-label={t("jobs.next")} disabled={offset + 100 >= data.total} onClick={() => paginate(offset + 100)}><ChevronRight size={16} /></Button></div>
     </div>
   </>;
 }

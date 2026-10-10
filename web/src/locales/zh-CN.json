@@ -343,11 +343,11 @@
   "phase.convert": "编码曲目",
   "phase.validate": "验证编码结果",
   "phase.move": "搬迁产物",
-  "notice.taskPause": "任务已暂停",
-  "notice.taskResume": "任务已继续",
-  "notice.taskStop": "任务已停止，已完成的音频保留",
-  "notice.taskDelete": "任务记录已删除",
-  "notice.taskRetry": "已将失败项加入重试队列",
+  "notice.taskPause": "已暂停 {count} 项任务",
+  "notice.taskResume": "已继续 {count} 项任务",
+  "notice.taskStop": "已停止 {count} 项任务，已完成的音频保留",
+  "notice.taskDelete": "已删除 {count} 项任务记录",
+  "notice.taskRetry": "已将 {count} 项任务的失败处理加入重试队列",
   "error.taskSelect": "请选择任务",
   "error.taskDeleteActive": "请先停止任务，等待工作进程结束后再删除记录",
   "error.taskPausing": "工作进程正在暂停，请稍后再试",
@@ -367,5 +367,10 @@
   "error.sourceReadPrefix": "暂时无法读取源文件：",
   "phase.storage": "检查媒体目录",
   "status.unverified": "等待校验和转换",
-  "phase.staging_wait": "等待本地暂存空间"
+  "phase.staging_wait": "等待本地暂存空间",
+  "jobs.selectPage": "全选本页",
+  "jobs.selectMatching": "选择筛选结果中的全部 {count} 项任务",
+  "jobs.allSelected": "已选择筛选结果中的全部 {count} 项任务",
+  "jobs.bulkHint": "仅处理当前状态允许此操作的任务；全选按执行时的筛选结果生效。",
+  "notice.noTasksChanged": "没有符合操作条件的任务"
 }

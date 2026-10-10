@@ -172,7 +172,7 @@ def run():
             response_times.append(round(time.monotonic() - started, 3))
         assert max(response_times) < 1, response_times
         control(root, "pause")
-        wait_for(lambda: api(f"/api/jobs/{root}/items")["items"], lambda items: any(item["kind"] == "scan" and item["log"] == "Paused by administrator" for item in items), timeout=5)
+        wait_for(lambda: api(f"/api/jobs/{root}/items")["items"], lambda items: any(item["kind"] == "scan" and item.get("log", "") == "Paused by administrator" for item in items), timeout=5)
         assert task(root)["attempts"] == 0, "pause consumed a failure attempt"
         for _ in range(5):
             assert api("/api/library/scan", {"dirs": ["Artist/Album"]})["job_id"] == root, "active queue created another scan task"

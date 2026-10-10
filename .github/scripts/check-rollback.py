@@ -84,6 +84,22 @@ def start(image, staging_limit=None):
     return api, me["version"]
 
 
+def save_settings(api, values):
+    # Read-only APIs can observe published audio before the worker releases its
+    # file lock. Retry only the documented Settings conflict, not arbitrary errors.
+    deadline = time.monotonic() + 10
+    while True:
+        try:
+            return api("/api/settings", "PUT", values)
+        except urllib.error.HTTPError as error:
+            detail = json.load(error) if error.code == 409 else {}
+            if error.code != 409 or detail.get("error") != "library file operation in progress; try saving Settings again shortly":
+                raise
+            if time.monotonic() >= deadline:
+                raise RuntimeError("Settings file operation remained busy") from error
+            time.sleep(0.1)
+
+
 def stop():
     docker("stop", "-t", "20", NAME)
     docker("rm", NAME)
@@ -124,7 +140,7 @@ def verify(api, expected_tracks, pending, stopped):
     interval = values["scan_minutes"]
     for minutes in (interval + 1, interval):
         values["scan_minutes"] = minutes
-        api("/api/settings", "PUT", values)
+        save_settings(api, values)
     assert api("/api/settings")["configured"] == settings["configured"], "settings save erased credentials"
 
 
@@ -151,14 +167,14 @@ def main():
         values = api("/api/settings")["settings"]
         values["enabled"] = True
         values["webhook_secret"] = "ci-rollback-webhook-secret-24-plus"
-        api("/api/settings", "PUT", values)
+        save_settings(api, values)
         tracks = wait_for(lambda: api("/api/library"), lambda rows: len(rows) == 3 and all(row["status"] == "ready" for row in rows), "candidate mixed-source conversion")
         tracks.sort(key=lambda track: track["id"])
         wait_for(lambda: api("/api/jobs")["jobs"], lambda rows: all(row["state"] == "success" for row in rows), "completed conversion jobs")
         values = api("/api/settings")["settings"]
         values.update(enabled=False, nav_url="https://navidrome.example.test", nav_user="admin", nav_password="ci-nav-secret",
                       oidc_issuer="https://issuer.example.test", oidc_client_id="client", oidc_secret="ci-oidc-secret")
-        api("/api/settings", "PUT", values)
+        save_settings(api, values)
         stopped = api("/api/navidrome/refresh", "POST", {})["job_id"]
         api("/api/jobs/control", "POST", {"action": "stop", "ids": [stopped]})
         pending = api("/api/navidrome/refresh", "POST", {})["job_id"]
@@ -201,12 +217,12 @@ def main():
             api, _ = start(CANDIDATE, staging_limit=1)
             values = api("/api/settings")["settings"]
             values.update(enabled=True, nav_url="")
-            api("/api/settings", "PUT", values)
+            save_settings(api, values)
             api("/api/library/scan", "POST", {"dirs": ["Pending"]})
             wait_for(lambda: verification_queued(rel), bool, "durable compatible verification request")
             rows = wait_for(lambda: api("/api/library"), lambda rows: any(row["path"] == rel and row["hash"] == "" and row["title"] == "Metadata indexed before content verification" for row in rows), "tag-only pending row")
             values["enabled"] = False
-            api("/api/settings", "PUT", values)
+            save_settings(api, values)
             stop()
             # Simulate a stopped deployment after metadata indexing, before its
             # compatible full-verification job has finished. No empty-hash build exists.
@@ -217,11 +233,11 @@ def main():
             assert running == version
             values = api("/api/settings")["settings"]
             values["enabled"] = True
-            api("/api/settings", "PUT", values)
+            save_settings(api, values)
             row = next(row for row in wait_for(lambda: api("/api/library"), lambda rows: any(row["path"] == rel and row["status"] == "ready" for row in rows), "older worker completes pending verification") if row["path"] == rel)
             assert row["hash"] == row["built_hash"] == expected_hash, "old worker lost complete content identity"
             values["enabled"] = False
-            api("/api/settings", "PUT", values)
+            save_settings(api, values)
             stop()
             api, _ = start(CANDIDATE)
             restored = next(row for row in api("/api/library") if row["path"] == rel)

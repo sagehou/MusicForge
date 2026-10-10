@@ -161,6 +161,7 @@ func (a *App) enqueueTask(kind, key string, args any, manual bool, task int64) (
 	defer tx.Rollback()
 	var id int64
 	var state string
+	// Explicit source-change repairs pass manual=true; only interval ticks wait.
 	if kind == "scan" && key == "scan:periodic" && !manual && task == 0 {
 		// Check inside the writer transaction as well: another request can arrive
 		// between the scheduler's idle check and enqueueing.

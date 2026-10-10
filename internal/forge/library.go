@@ -523,7 +523,7 @@ func (a *App) prepare(ctx context.Context, j Job, r ScanRequest) error {
 	}
 	expectedKey := prepareScanPrefix + digest(fmt.Sprintf("%s:%d:%d:%s", rel, source.Size, source.Mtime, s.Encoding.Fingerprint()))
 	if j.Key != expectedKey {
-		_, _ = a.enqueue("scan", "scan:periodic", ScanRequest{}, false)
+		_, _ = a.enqueue("scan", "scan:periodic", ScanRequest{}, true)
 		return nil
 	}
 	info, err := a.sourceStat(ctx, s.Source, rel)
@@ -532,14 +532,14 @@ func (a *App) prepare(ctx context.Context, j Job, r ScanRequest) error {
 			return ctx.Err()
 		}
 		if os.IsNotExist(err) {
-			_, _ = a.enqueue("scan", "scan:periodic", ScanRequest{}, false)
+			_, _ = a.enqueue("scan", "scan:periodic", ScanRequest{}, true)
 			return nil
 		}
 		_ = a.indexSourceReadError(rel, sourceInfo{Length: source.Size, Modified: source.Mtime}, err)
 		return err
 	}
 	if !sameStat(info, source) {
-		_, _ = a.enqueue("scan", "scan:periodic", ScanRequest{}, false)
+		_, _ = a.enqueue("scan", "scan:periodic", ScanRequest{}, true)
 		return nil // A new snapshot supersedes this preparation request.
 	}
 	if time.Since(info.ModTime()) < 30*time.Second {
@@ -560,7 +560,7 @@ func (a *App) prepare(ctx context.Context, j Job, r ScanRequest) error {
 	defer staged.Close()
 	after, err := a.sourceStat(ctx, s.Source, rel)
 	if err != nil || !sameStat(after, source) {
-		_, _ = a.enqueue("scan", "scan:periodic", ScanRequest{}, false)
+		_, _ = a.enqueue("scan", "scan:periodic", ScanRequest{}, true)
 		return later("Source changed during preparation; staged copy discarded", 10)
 	}
 	p, err := a.probe(ctx, staged.Path)
@@ -887,7 +887,7 @@ func (a *App) buildStaged(ctx context.Context, j Job, r BuildRequest, staged *st
 	if err != nil {
 		a.files.Unlock()
 		if os.IsNotExist(err) {
-			_, _ = a.enqueue("scan", "scan:periodic", ScanRequest{}, false)
+			_, _ = a.enqueue("scan", "scan:periodic", ScanRequest{}, true)
 			return nil
 		}
 		if ctx.Err() != nil {
@@ -897,7 +897,7 @@ func (a *App) buildStaged(ctx context.Context, j Job, r BuildRequest, staged *st
 	}
 	if !sameStat(info, source) || time.Since(info.ModTime()) < 30*time.Second {
 		a.files.Unlock()
-		_, _ = a.enqueue("scan", "scan:periodic", ScanRequest{}, false)
+		_, _ = a.enqueue("scan", "scan:periodic", ScanRequest{}, true)
 		return later("Source changed or is still being written", 10)
 	}
 	target := outputRel(source.Rel, r.Profile.Codec)
@@ -919,6 +919,9 @@ func (a *App) buildStaged(ctx context.Context, j Job, r BuildRequest, staged *st
 		}
 	}
 	activity := Activity{Phase: j.Kind, Path: source.Rel, Artist: source.Artist, Album: source.Album, Title: source.Title}
+	if !r.Move && staged == nil {
+		activity.Phase = "read"
+	}
 	a.reportProgress(j.ID, activity, 0)
 	if err = a.targetAvailable(s, target, source.ID); err != nil {
 		a.files.Unlock()
@@ -1000,10 +1003,11 @@ func (a *App) buildStaged(ctx context.Context, j Job, r BuildRequest, staged *st
 		defer staged.Close()
 	}
 	if staged.Rel != source.Rel || staged.Hash != source.Hash {
-		_, _ = a.enqueue("scan", "scan:periodic", ScanRequest{Verify: true, Dirs: []string{source.Rel}}, false)
+		_, _ = a.enqueue("scan", "scan:periodic", ScanRequest{Verify: true, Dirs: []string{source.Rel}}, true)
 		return later("Source content differs from its indexed hash; staged copy discarded", 10)
 	}
 	in = staged.Path
+	activity.Phase = j.Kind
 	a.reportProgress(j.ID, activity, .1)
 	args := []string{"-nostdin", "-hide_banner", "-loglevel", "error", "-n", "-xerror", "-err_detect", "crccheck+explode", "-i", in, "-map", "0:a:0", "-map_metadata", "0", "-vn", "-sn", "-dn"}
 	keys := make([]string, 0, len(source.Metadata))
@@ -1063,7 +1067,7 @@ func (a *App) buildStaged(ctx context.Context, j Job, r BuildRequest, staged *st
 	}
 	after, err := a.sourceStat(ctx, s.Source, source.Rel)
 	if err != nil || !sameStat(after, source) || latest.Rel != source.Rel || latest.Hash != source.Hash {
-		_, _ = a.enqueue("scan", "scan:periodic", ScanRequest{}, false)
+		_, _ = a.enqueue("scan", "scan:periodic", ScanRequest{}, true)
 		return later("Source changed during conversion; temporary artifact discarded", 10)
 	}
 	if settings.Encoding.Fingerprint() != r.Profile.Fingerprint() {
@@ -1199,7 +1203,7 @@ func (a *App) buildError(ctx context.Context, s Settings, source Source, err err
 	}
 	info, statErr := a.sourceStat(ctx, s.Source, source.Rel)
 	if os.IsNotExist(statErr) || statErr == nil && !sameStat(info, source) {
-		_, _ = a.enqueue("scan", "scan:periodic", ScanRequest{}, false)
+		_, _ = a.enqueue("scan", "scan:periodic", ScanRequest{}, true)
 		return later("Source changed during conversion; temporary artifact discarded", 10)
 	}
 	a.recordSourceError(source.ID, err)

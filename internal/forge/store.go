@@ -183,7 +183,7 @@ func (a *App) enqueueTask(kind, key string, args any, manual bool, task int64) (
 		 JOIN jobs root ON root.id=coalesce(CAST(member.value AS INTEGER),active.id)
 		 WHERE active.state IN ('pending','running') AND root.kind='scan'
 		 AND root.dedup NOT LIKE 'scan:prepare:%' AND root.dedup NOT LIKE 'scan:finalize:%'
-		 ORDER BY root.id LIMIT 1`).Scan(&id, &state)
+		 ORDER BY (root.state IN ('pending','running')) DESC,root.id LIMIT 1`).Scan(&id, &state)
 		if err != nil && err != sql.ErrNoRows {
 			return 0, err
 		}
@@ -214,8 +214,24 @@ func (a *App) enqueueTask(kind, key string, args any, manual bool, task int64) (
 			}
 			if state == "pending" {
 				_, err = tx.Exec("UPDATE jobs SET args=? WHERE id=?", merged, id)
-			} else {
+			} else if state == "running" {
 				_, err = tx.Exec("INSERT INTO meta(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", followup, merged)
+			} else {
+				// Index new scopes before remaining tracks; source-change repairs must
+				// not wait for conversions that themselves need the updated index.
+				var control string
+				err = tx.QueryRow("SELECT value FROM meta WHERE key=?", taskControlKey(id)).Scan(&control)
+				if err != nil && err != sql.ErrNoRows {
+					return 0, err
+				}
+				notBefore := int64(0)
+				if control == "paused" {
+					notBefore = heldUntil
+				}
+				_, err = tx.Exec("UPDATE jobs SET args=?,state='pending',attempts=0,progress=0,log='',not_before=?,updated=? WHERE id=?", merged, notBefore, time.Now().Unix(), id)
+				if err == nil {
+					_, err = tx.Exec("DELETE FROM meta WHERE key=?", followup)
+				}
 			}
 			if err != nil {
 				return 0, err
@@ -402,79 +418,6 @@ func (a *App) completeJob(j Job, state string, attempts int, progress float64, m
 	_, err = tx.Exec("UPDATE jobs SET args=?,state=?,attempts=?,progress=?,log=?,not_before=?,updated=? WHERE id=?", args, state, attempts, progress, message, notBefore, time.Now().Unix(), j.ID)
 	if err != nil {
 		return err
-	}
-	// A request arriving after indexing stays on this task until its members finish.
-	// The journal retains the published ScanRequest format for older workers.
-	var root int64
-	err = tx.QueryRow("SELECT coalesce((SELECT CAST(value AS INTEGER) FROM meta WHERE key=?),?)", taskMemberKey(j.ID), j.ID).Scan(&root)
-	if err != nil {
-		return err
-	}
-	if root != j.ID && control != "stopped" {
-		if err = rearmScanFollowup(tx, root); err != nil {
-			return err
-		}
-	}
-	return tx.Commit()
-}
-
-func rearmScanFollowup(tx *sql.Tx, root int64) error {
-	key := "scan-followup:" + strconv.FormatInt(root, 10)
-	var followup, control string
-	err := tx.QueryRow(`SELECT m.value,coalesce(c.value,'') FROM meta m JOIN jobs root ON root.id=?
-	 LEFT JOIN meta c ON c.key='task-control:'||root.id
-	 WHERE m.key=? AND root.kind='scan' AND root.state IN ('success','failed')
-	 AND coalesce(c.value,'')<>'stopped'
-	 AND NOT EXISTS(SELECT 1 FROM jobs active LEFT JOIN meta member ON member.key='task-member:'||active.id
-	 WHERE active.state IN ('pending','running') AND coalesce(CAST(member.value AS INTEGER),active.id)=root.id)
-	 AND NOT EXISTS(SELECT 1 FROM jobs active WHERE active.dedup=root.dedup AND active.state IN ('pending','running'))`, root, key).Scan(&followup, &control)
-	if err == sql.ErrNoRows {
-		return nil
-	}
-	if err != nil {
-		return err
-	}
-	resumeAt := int64(0)
-	if control == "paused" {
-		resumeAt = heldUntil
-	}
-	if _, err = tx.Exec("UPDATE jobs SET args=?,state='pending',attempts=0,progress=0,log='',not_before=?,updated=? WHERE id=?", followup, resumeAt, time.Now().Unix(), root); err != nil {
-		return err
-	}
-	_, err = tx.Exec("DELETE FROM meta WHERE key=?", key)
-	return err
-}
-
-// Older compatible workers may finish members without rearming the scan root.
-func (a *App) recoverScanFollowups() error {
-	tx, err := a.db.Begin()
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback()
-	rows, err := tx.Query("SELECT j.id FROM jobs j JOIN meta m ON m.key='scan-followup:'||j.id WHERE j.kind='scan' AND j.state IN ('success','failed')")
-	if err != nil {
-		return err
-	}
-	roots := []int64{}
-	for rows.Next() {
-		var root int64
-		if err = rows.Scan(&root); err != nil {
-			break
-		}
-		roots = append(roots, root)
-	}
-	if err == nil {
-		err = rows.Err()
-	}
-	rows.Close()
-	if err != nil {
-		return err
-	}
-	for _, root := range roots {
-		if err = rearmScanFollowup(tx, root); err != nil {
-			return err
-		}
 	}
 	return tx.Commit()
 }

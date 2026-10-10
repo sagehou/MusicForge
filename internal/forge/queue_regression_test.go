@@ -212,14 +212,25 @@ func TestScanFollowupDuringConversionSurvivesRestartAndControl(t *testing.T) {
 				}
 			}
 			j, err = a.claim(false)
-			if err != nil || !strings.HasPrefix(j.Key, "scan:finalize:") {
-				t.Fatal("follow-up did not wait for members", j, err)
+			if err != nil || j.ID != root {
+				t.Fatal("late scan did not reuse the same root before conversions", j, err)
+			}
+			var request ScanRequest
+			if err = json.Unmarshal(j.Args, &request); err != nil || !request.Verify || !reflect.DeepEqual(request.Dirs, []string{"Changed/A", "Changed/B"}) {
+				t.Fatal("durable scope lost", request, err)
+			}
+			if _, err = a.claim(true); err != sql.ErrNoRows {
+				t.Fatal("conversion started before reindexing", err)
 			}
 			if err = a.completeJob(j, "success", 0, 1, "", 0); err != nil {
 				t.Fatal(err)
 			}
-			if _, err = a.claim(false); err != sql.ErrNoRows {
-				t.Fatal("follow-up started before last conversion", err)
+			j, err = a.claim(false)
+			if err != nil || !strings.HasPrefix(j.Key, "scan:finalize:") {
+				t.Fatal("finalizer lost", j, err)
+			}
+			if err = a.completeJob(j, "success", 0, 1, "", 0); err != nil {
+				t.Fatal(err)
 			}
 			j, err = a.claim(true)
 			if err != nil || j.ID != child {
@@ -228,13 +239,8 @@ func TestScanFollowupDuringConversionSurvivesRestartAndControl(t *testing.T) {
 			if err = a.completeJob(j, "success", 0, 1, "", 0); err != nil {
 				t.Fatal(err)
 			}
-			j, err = a.claim(false)
-			if err != nil || j.ID != root {
-				t.Fatal("last child did not rearm the same root", j, err)
-			}
-			var request ScanRequest
-			if err = json.Unmarshal(j.Args, &request); err != nil || !request.Verify || !reflect.DeepEqual(request.Dirs, []string{"Changed/A", "Changed/B"}) {
-				t.Fatal("durable scope lost", request, err)
+			if _, total, err := a.taskList("success", 100, 0); err != nil || total != 1 {
+				t.Fatal("reindex split the queue", total, err)
 			}
 		})
 	}
@@ -397,7 +403,7 @@ func TestWALReadAPIsStayResponsiveDuringLargeQueueWrite(t *testing.T) {
 	}
 }
 
-func TestLegacyMemberCompletionRecoversScanFollowup(t *testing.T) {
+func TestLegacyMemberCompletionPreservesPendingScanScope(t *testing.T) {
 	a, _ := testApp(t)
 	root, err := a.enqueue("scan", "scan:legacy-followup", ScanRequest{}, true)
 	if err != nil {
@@ -413,7 +419,7 @@ func TestLegacyMemberCompletionRecoversScanFollowup(t *testing.T) {
 	if id, err := a.enqueue("scan", "scan:new-scope", ScanRequest{Dirs: []string{"Changed/Album"}, Verify: true}, true); err != nil || id != root {
 		t.Fatal(id, err)
 	}
-	// Published workers can complete primitive jobs without the newer wake-up logic.
+	// Published workers can finish primitive jobs while the same scan root stays pending.
 	if _, err = a.db.Exec("UPDATE jobs SET state='success' WHERE id=?", child); err != nil {
 		t.Fatal(err)
 	}
@@ -447,5 +453,54 @@ func TestBulkRetryDoesNotCountAlreadyActiveTargets(t *testing.T) {
 	}
 	if value, err := a.meta(taskControlKey(1)); err != nil || value != "stopped" {
 		t.Fatal("suppressed retry cleared deliberate stop", value, err)
+	}
+}
+
+func TestSourceChangeReindexesSameTaskBeforePendingTracks(t *testing.T) {
+	a, s := testApp(t)
+	rel := "Artist/Album/01.flac"
+	makeFLAC(t, a, s, rel, "Original", false)
+	root, err := a.enqueue("scan", "scan:source-change", ScanRequest{}, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	j, err := a.claim(false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = a.execute(context.Background(), j); err != nil {
+		t.Fatal(err)
+	}
+	if err = a.completeJob(j, "success", 0, 1, "", 0); err != nil {
+		t.Fatal(err)
+	}
+	makeFLAC(t, a, s, rel, "Changed before queued preparation", false)
+	j, err = a.claim(true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = a.execute(context.Background(), j); err != nil {
+		t.Fatal(err)
+	}
+	if err = a.completeJob(j, "success", 0, 1, "", 0); err != nil {
+		t.Fatal(err)
+	}
+	j, err = a.claim(false)
+	if err != nil || j.ID != root {
+		t.Fatal("source repair was suppressed or created a different task", j, err)
+	}
+	if err = a.execute(context.Background(), j); err != nil {
+		t.Fatal(err)
+	}
+	if err = a.completeJob(j, "success", 0, 1, "", 0); err != nil {
+		t.Fatal(err)
+	}
+	drain(t, a, true)
+	source, err := a.sourceRel(rel)
+	if err != nil || source.Title != "Changed before queued preparation" || !source.OutputPresent || source.Hash == "" || source.BuiltHash != source.Hash {
+		t.Fatal("source repair did not complete", source, err)
+	}
+	if _, total, err := a.taskList("all", 100, 0); err != nil || total != 1 {
+		t.Fatal("source repair split the task", total, err)
 	}
 }

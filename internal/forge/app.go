@@ -124,9 +124,6 @@ func New(cfg Runtime, logger *slog.Logger, version string, assets fs.FS) (*App, 
 	 AND j.state IN ('pending','running') AND j.log<>'Stopped by administrator')`); err != nil {
 		return fail(err)
 	}
-	if err = a.recoverScanFollowups(); err != nil {
-		return fail(err)
-	}
 	var admins int
 	if err = db.QueryRow("SELECT count(*) FROM admin").Scan(&admins); err != nil {
 		return fail(err)

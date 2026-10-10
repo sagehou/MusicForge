@@ -97,7 +97,7 @@ func TestScanFailureLogIncludesUnreadableSourcePath(t *testing.T) {
 		t.Fatal("scan was not claimed", j, err)
 	}
 	cause := a.execute(context.Background(), j)
-	if cause == nil || !strings.Contains(cause.Error(), "1 unavailable source files and 0 invalid audio files") || !strings.Contains(cause.Error(), fmt.Sprintf("Source: %q", rel)) || !strings.Contains(cause.Error(), sourceReadErrorPrefix+context.DeadlineExceeded.Error()) {
+	if cause == nil || !strings.Contains(cause.Error(), "1 unavailable source files and 0 invalid audio files") || !strings.Contains(cause.Error(), fmt.Sprintf("Source: %q", rel)) || !strings.Contains(cause.Error(), sourceReadErrorPrefix) || !strings.Contains(cause.Error(), context.DeadlineExceeded.Error()) {
 		t.Fatal("scan summary omitted the unavailable file or cause", cause)
 	}
 	if err = a.completeJob(j, "failed", 3, 0, cause.Error(), 0); err != nil {

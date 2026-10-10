@@ -21,9 +21,13 @@ func failNativeFLAC(t *testing.T, a *App) {
 	t.Helper()
 	tool := filepath.Join(t.TempDir(), "native-decoder-failure")
 	script := `#!/bin/sh
+encoding=false
+for argument do
+  case "$argument" in libopus|libmp3lame) encoding=true ;; esac
+done
 previous=
 for argument do
-  if [ "$previous" = -i ]; then
+  if [ "$encoding" = true ] && [ "$previous" = -i ]; then
     case "$argument" in
       *.source) printf '%s\n' '[dec:flac] Decoding error: Invalid data found when processing input' >&2; exit 183 ;;
     esac
@@ -229,14 +233,14 @@ func TestReferenceFLACPipelineCancellationAndStall(t *testing.T) {
 			defer cancel()
 			done := make(chan error, 1)
 			go func() { done <- a.execute(ctx, j) }()
-			deadline := time.Now().Add(3*time.Second)
+			deadline := time.Now().Add(3 * time.Second)
 			var rawPID []byte
 			for time.Now().Before(deadline) {
 				rawPID, _ = os.ReadFile(pidFile)
 				if len(rawPID) > 0 {
 					break
 				}
-				time.Sleep(10*time.Millisecond)
+				time.Sleep(10 * time.Millisecond)
 			}
 			if len(rawPID) == 0 {
 				t.Fatal("reference decoder did not start")
@@ -253,12 +257,12 @@ func TestReferenceFLACPipelineCancellationAndStall(t *testing.T) {
 				if !errors.Is(err, want) {
 					t.Fatal("pipeline did not preserve cancellation", err)
 				}
-			case <-time.After(3*time.Second):
+			case <-time.After(3 * time.Second):
 				t.Fatal("reference decoder blocked cancellation or timeout")
 			}
-			deadline = time.Now().Add(3*time.Second)
+			deadline = time.Now().Add(3 * time.Second)
 			for len(a.sourceSlots) != 0 && time.Now().Before(deadline) {
-				time.Sleep(10*time.Millisecond)
+				time.Sleep(10 * time.Millisecond)
 			}
 			pid, _ := strconv.Atoi(string(rawPID))
 			if len(a.sourceSlots) != 0 || !errors.Is(syscall.Kill(pid, 0), syscall.ESRCH) {

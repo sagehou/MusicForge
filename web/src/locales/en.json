@@ -398,6 +398,7 @@
   "error.requestTimeout": "Request timed out; please retry",
   "error.http": "Server returned HTTP {status}; please retry",
   "error.sourceReadPrefix": "Source read unavailable: ",
+  "error.scanIncomplete": "Scan found {unavailable} unavailable source files and {invalid} invalid audio files. Healthy tracks are queued; missing-source detection was skipped. Failed file paths and diagnostics follow; full details are in Library.",
   "phase.storage": "Checking library storage",
   "status.unverified": "Waiting for verification and conversion",
   "phase.staging_wait": "Waiting for local staging space",

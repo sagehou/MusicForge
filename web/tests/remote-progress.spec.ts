@@ -31,3 +31,25 @@ test("completed tag indexing does not show 100 percent while a source is being s
   await expect(page.getByRole("progressbar")).toHaveAttribute("aria-valuenow", "5");
   await expect(page.locator(".task-activity")).toContainText("Still downloading");
 });
+
+test("scan failure summaries show file paths and causes in both languages", async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem("musicforge.language", "en"));
+  await page.route("**/api/auth/me", route => route.fulfill({ json: { initialized: true, authenticated: true, username: "admin", method: "local", csrf: "test" } }));
+  const path = '歌手/Album/01 "unavailable".flac';
+  const diagnostic = `Source: ${JSON.stringify(path)}\nSource read unavailable: context deadline exceeded`;
+  const log = `scan found 1 unavailable source files and 0 invalid audio files; healthy tracks queued, no deletions applied; see Library errors\n\n${diagnostic}`;
+  await page.route("**/api/jobs?*", route => route.fulfill({ json: { jobs: [{
+    id: 1, kind: "scan", state: "failed", attempts: 3, progress: 0, log, created: 1800000000, updated: 1800000000, args: {},
+    counts: { total: 0, done: 0, failed: 0, pending: 0, running: 0, cancelled: 0 }, current: [], scope: [], can_delete: true,
+  }], total: 1 } }));
+  await page.route("**/api/jobs/1/items?*", route => route.fulfill({ json: { items: [], total: 0 } }));
+  await page.goto("/jobs");
+  await page.getByRole("button", { name: "Details", exact: true }).click();
+  await expect(page.locator(".task-outcome")).toContainText("1 unavailable source files and 0 invalid audio files");
+  await expect(page.locator(".task-outcome")).toContainText(diagnostic);
+  await page.getByRole("combobox", { name: "Language", exact: true }).selectOption("zh-CN");
+  await expect(page.locator(".task-outcome")).toContainText("1 个源文件无法读取、0 个音频文件无效");
+  await expect(page.locator(".task-outcome")).toContainText(diagnostic);
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+});

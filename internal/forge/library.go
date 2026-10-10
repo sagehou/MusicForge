@@ -301,6 +301,19 @@ func (a *App) scan(ctx context.Context, r ScanRequest) error {
 	}
 	sort.Strings(paths)
 	quiet, invalid, unavailable, preparing := false, 0, 0, 0
+	var failures []string
+	recordFailure := func(rel, message string) {
+		// Bound the task summary; complete per-file diagnostics remain in Library.
+		if len(failures) >= 20 {
+			return
+		}
+		message = strings.TrimSpace(message)
+		detail := fmt.Sprintf("%.2048s", message)
+		if len(detail) < len(message) {
+			detail += "…"
+		}
+		failures = append(failures, fmt.Sprintf("Source: %q\n%s", rel, detail))
+	}
 	for index, rel := range paths {
 		if err := ctx.Err(); err != nil {
 			return err
@@ -341,9 +354,11 @@ func (a *App) scan(ctx context.Context, r ScanRequest) error {
 				if errors.Is(readErr, context.DeadlineExceeded) {
 					err = a.indexSourceReadError(rel, info, readErr)
 					unavailable++
+					recordFailure(rel, sourceReadErrorPrefix+readErr.Error())
 				} else {
 					err = a.indexSourceError(rel, info, readErr)
 					invalid++
+					recordFailure(rel, readErr.Error())
 				}
 				if err != nil {
 					return err
@@ -359,6 +374,7 @@ func (a *App) scan(ctx context.Context, r ScanRequest) error {
 					return err
 				}
 				unavailable++
+				recordFailure(rel, sourceReadErrorPrefix+readErr.Error())
 				continue
 			}
 			if after.Size() != info.Size() || !after.ModTime().Equal(info.ModTime()) {
@@ -410,6 +426,7 @@ func (a *App) scan(ctx context.Context, r ScanRequest) error {
 		} else if source.Error != "" {
 			if strings.HasPrefix(source.Error, sourceReadErrorPrefix) || source.Hash == "" {
 				unavailable++
+				recordFailure(rel, source.Error)
 			}
 		} else {
 			var failed int
@@ -476,7 +493,12 @@ func (a *App) scan(ctx context.Context, r ScanRequest) error {
 	}
 	a.reportProgress(jobID, Activity{Phase: "indexed", Processed: len(paths), Total: len(paths), Percent: 100}, 1)
 	if unavailable > 0 || invalid > 0 {
-		return fmt.Errorf("scan found %d unavailable source files and %d invalid audio files; healthy tracks queued, no deletions applied; see Library errors", unavailable, invalid)
+		message := fmt.Sprintf("scan found %d unavailable source files and %d invalid audio files; healthy tracks queued, no deletions applied; see Library errors", unavailable, invalid)
+		message += "\n\n" + strings.Join(failures, "\n\n")
+		if remaining := unavailable + invalid - len(failures); remaining > 0 {
+			message += fmt.Sprintf("\n\n%d further failed source files omitted; see Library errors", remaining)
+		}
+		return errors.New(message)
 	}
 	return nil
 }

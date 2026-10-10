@@ -219,8 +219,8 @@ func TestInvalidMixedAudioAndVideoDoNotExpireKnownSources(t *testing.T) {
 		}
 	}
 	makeAudioSource(t, a, s, "Healthy/01.m4a", "Healthy", "alac", false)
-	if err := a.scan(context.Background(), ScanRequest{}); err == nil {
-		t.Fatal("invalid audio/video source passed validation")
+	if err := a.scan(context.Background(), ScanRequest{}); err == nil || !strings.Contains(err.Error(), `Source: "broken.m4a"`) || !strings.Contains(err.Error(), `Source: "video.mp4"`) || !strings.Contains(err.Error(), "ffprobe failed:") || !strings.Contains(err.Error(), "not a valid audio-only source") {
+		t.Fatal("scan diagnostics omitted invalid source paths or causes", err)
 	}
 	for _, rel := range []string{"broken.m4a", "video.mp4"} {
 		source, err := a.sourceRel(rel)

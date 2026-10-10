@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
@@ -78,6 +79,43 @@ func TestSourceHashKeepsWholeFileSignatureAndUsesIdleTimeout(t *testing.T) {
 	}
 	if _, err = a.sourceStat(context.Background(), s.Source, "missing.flac"); !os.IsNotExist(err) || !errors.Is(err, os.ErrNotExist) {
 		t.Fatal("missing files lost filesystem error compatibility", err)
+	}
+}
+
+func TestScanFailureLogIncludesUnreadableSourcePath(t *testing.T) {
+	a, s := testApp(t)
+	a.cfg.SourceTimeoutSeconds = 1
+	rel := "歌手/Album/01 \"unavailable\".flac"
+	makeFLAC(t, a, s, rel, "Unavailable track", false)
+	sourceFault(t, "stat", rel, 10000, 0)
+	id, err := a.enqueue("scan", "scan:failure-path", ScanRequest{}, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	j, err := a.claim(false)
+	if err != nil || j.ID != id {
+		t.Fatal("scan was not claimed", j, err)
+	}
+	cause := a.execute(context.Background(), j)
+	if cause == nil || !strings.Contains(cause.Error(), "1 unavailable source files and 0 invalid audio files") || !strings.Contains(cause.Error(), fmt.Sprintf("Source: %q", rel)) || !strings.Contains(cause.Error(), sourceReadErrorPrefix+context.DeadlineExceeded.Error()) {
+		t.Fatal("scan summary omitted the unavailable file or cause", cause)
+	}
+	if err = a.completeJob(j, "failed", 3, 0, cause.Error(), 0); err != nil {
+		t.Fatal(err)
+	}
+	items, _, err := a.taskItems(id, "failed", 50, 0)
+	if err != nil || len(items) != 1 || items[0].Log != cause.Error() {
+		t.Fatal("task API lost the scan diagnostics", items, err)
+	}
+	var logs bytes.Buffer
+	a.logger = slog.New(slog.NewJSONHandler(&logs, nil))
+	a.logJobFinished(j, "failed", 3, cause.Error(), cause)
+	var entry struct {
+		Message string `json:"msg"`
+		Detail  string `json:"detail"`
+	}
+	if err = json.Unmarshal(bytes.TrimSpace(logs.Bytes()), &entry); err != nil || entry.Message != "job finished" || entry.Detail != cause.Error() {
+		t.Fatal("Docker job summary lost the file diagnostics", entry, err)
 	}
 }
 
@@ -171,6 +209,9 @@ func TestRemoteReadFailurePastThirtyTracksKeepsHealthyQueueAndStopsAfterThreeAtt
 			t.Fatal("one unavailable track blocked healthy tracks", queued)
 		}
 		time.Sleep(20 * time.Millisecond)
+	}
+	if scanErr := a.scan(context.Background(), ScanRequest{}); scanErr == nil || !strings.Contains(scanErr.Error(), fmt.Sprintf("Source: %q", bad.Rel)) || !strings.Contains(scanErr.Error(), bad.Error) {
+		t.Fatal("scan summary omitted the saved preparation failure", scanErr)
 	}
 	cancel()
 	<-done

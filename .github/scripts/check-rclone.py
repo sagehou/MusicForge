@@ -142,7 +142,7 @@ def run():
         settings.update(enabled=True, source=str(ROOT / "mount"), output=str(ROOT / "output"), scan_minutes=60)
         api("/api/settings", settings, "PUT")
         root = wait_for(lambda: api("/api/jobs")["jobs"], lambda jobs: any(job["kind"] == "scan" for job in jobs))[0]["id"]
-        reading = wait_for(lambda: task(root), lambda job: any(activity["phase"] == "read" and activity["path"].endswith("36.flac") and activity.get("read_bytes", 0) > 0 for activity in job["current"]), timeout=45)
+        reading = wait_for(lambda: task(root), lambda job: BLOCKED.is_set() and any(activity["phase"] == "read" and activity["path"].endswith("36.flac") and activity.get("read_bytes", 0) > 0 for activity in job["current"]), timeout=45)
         assert BLOCKED.is_set(), "fixture did not stall an actual remote GET"
         response_times = []
         for path in ("/api/jobs", "/api/library", "/api/dashboard", "/healthz"):

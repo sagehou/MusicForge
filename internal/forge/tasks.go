@@ -518,7 +518,10 @@ func (a *App) changeTasksFiltered(action string, chosen selection, filter string
 		for _, m := range members {
 			_, executing := a.activeJobs[m.id]
 			if action == "delete" && (m.state == "pending" || m.state == "running" || executing) {
-				return 0, errors.New("stop the task and wait for its worker to finish before deleting history")
+				if !filteredAll {
+					return 0, errors.New("stop the task and wait for its worker to finish before deleting history")
+				}
+				workerBusy = true
 			}
 			if (action == "resume" || action == "retry") && executing {
 				if !filteredAll {

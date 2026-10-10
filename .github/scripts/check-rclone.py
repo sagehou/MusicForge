@@ -122,6 +122,7 @@ def run():
         os.utime(path, (time.time() - 120, time.time() - 120))
 
     processes = []
+    held_mounts = []
     proxy = http.server.ThreadingHTTPServer(("127.0.0.1", 19091), Proxy)
     threading.Thread(target=proxy.serve_forever, daemon=True).start()
     logs = []
@@ -136,7 +137,11 @@ def run():
             return process
 
         def unmount(process):
-            subprocess.run(["fusermount3", "-u", str(ROOT / "mount")], check=True, capture_output=True, timeout=5)
+            # Retain the old superblock like a container bind reference, so Linux
+            # cannot recycle its device ID and accidentally skip reconnect logic.
+            held_mounts.append(os.open(ROOT / "mount", os.O_RDONLY | os.O_DIRECTORY))
+            subprocess.run(["fusermount3", "-uz", str(ROOT / "mount")], check=True, capture_output=True, timeout=5)
+            process.terminate()
             process.wait(timeout=10)
 
         def source_meta():
@@ -266,6 +271,8 @@ def run():
             except subprocess.TimeoutExpired:
                 process.kill()
                 process.wait(timeout=5)
+        for descriptor in held_mounts:
+            os.close(descriptor)
         subprocess.run(["fusermount3", "-u", str(ROOT / "mount")], capture_output=True, timeout=5)
         proxy.shutdown()
         for log in logs:

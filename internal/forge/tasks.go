@@ -192,7 +192,7 @@ func (a *App) taskListContext(ctx context.Context, state string, limit, offset i
 		 FROM jobs j LEFT JOIN meta m ON m.key='task-member:'||j.id
 		 WHERE j.kind IN ('convert','move') GROUP BY task_id
 		) SELECT b.task_id,j.args FROM builds b JOIN jobs j ON j.id=b.first_id
-		 WHERE b.task_id IN (` + strings.Join(profileIDs, ",") + ")")
+		 WHERE b.task_id IN (`+strings.Join(profileIDs, ",")+")")
 		if err != nil {
 			return nil, 0, err
 		}
@@ -218,7 +218,7 @@ func (a *App) taskListContext(ctx context.Context, state string, limit, offset i
 	}
 	runningRoots := map[int64]bool{}
 	if len(visibleIDs) > 0 {
-		rows, err := a.reads.QueryContext(ctx, "SELECT DISTINCT coalesce(CAST(m.value AS INTEGER),j.id) FROM jobs j LEFT JOIN meta m ON m.key='task-member:'||j.id WHERE j.state='running' AND coalesce(CAST(m.value AS INTEGER),j.id) IN (" + strings.Join(visibleIDs, ",") + ")")
+		rows, err := a.reads.QueryContext(ctx, "SELECT DISTINCT coalesce(CAST(m.value AS INTEGER),j.id) FROM jobs j LEFT JOIN meta m ON m.key='task-member:'||j.id WHERE j.state='running' AND coalesce(CAST(m.value AS INTEGER),j.id) IN ("+strings.Join(visibleIDs, ",")+")")
 		if err != nil {
 			return nil, 0, err
 		}

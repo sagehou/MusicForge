@@ -405,8 +405,11 @@ func (a *App) execute(ctx context.Context, j Job) error {
 }
 
 func (a *App) meta(key string) (string, error) {
+	return a.metaContext(context.Background(), key)
+}
+func (a *App) metaContext(ctx context.Context, key string) (string, error) {
 	var value string
-	err := a.reads.QueryRow("SELECT value FROM meta WHERE key=?", key).Scan(&value)
+	err := a.reads.QueryRowContext(ctx, "SELECT value FROM meta WHERE key=?", key).Scan(&value)
 	return value, err
 }
 func (a *App) setMeta(key, value string) error {

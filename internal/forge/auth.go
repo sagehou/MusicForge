@@ -3,8 +3,10 @@ package forge
 import (
 	"context"
 	"crypto/subtle"
+	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net"
 	"net/http"
 	"net/netip"
@@ -61,9 +63,21 @@ func (a *App) session(r *http.Request) (session, error) {
 	if err != nil {
 		return session{}, err
 	}
+	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+	defer cancel()
 	var method string
-	err = a.reads.QueryRow("SELECT method FROM sessions WHERE token=? AND expires>?", digest(cookie.Value), time.Now().Unix()).Scan(&method)
+	err = a.reads.QueryRowContext(ctx, "SELECT method FROM sessions WHERE token=? AND expires>?", digest(cookie.Value), time.Now().Unix()).Scan(&method)
 	return session{cookie.Value, method}, err
+}
+
+// Missing credentials differ from a lookup that could not verify them.
+func authReadFailed(w http.ResponseWriter, err error) bool {
+	if err == nil || errors.Is(err, http.ErrNoCookie) || errors.Is(err, sql.ErrNoRows) {
+		return false
+	}
+	w.Header().Set("Retry-After", "1")
+	apiError(w, 503, fmt.Errorf("Authentication temporarily unavailable; please retry: %w", err))
+	return true
 }
 func (a *App) secureCookie(r *http.Request) bool {
 	return r.TLS != nil || strings.HasPrefix(a.origin(r), "https://")
@@ -173,20 +187,30 @@ func (a *App) limited(key string, record bool) bool {
 
 func (a *App) me(w http.ResponseWriter, r *http.Request) {
 	var count int
-	if err := a.reads.QueryRow("SELECT count(*) FROM admin").Scan(&count); err != nil {
-		apiError(w, 500, err)
+	if err := a.reads.QueryRowContext(r.Context(), "SELECT count(*) FROM admin").Scan(&count); err != nil {
+		if !authReadFailed(w, err) {
+			apiError(w, 500, err)
+		}
 		return
 	}
-	s, err := a.settings()
+	s, err := a.settingsContext(r.Context())
 	if err != nil {
-		apiError(w, 500, err)
+		if !authReadFailed(w, err) {
+			apiError(w, 500, err)
+		}
 		return
 	}
 	result := map[string]any{"initialized": count > 0, "authenticated": false, "oidc": s.OIDCIssuer != "" && s.BoundSubject != "", "version": a.version}
-	if session, err := a.session(r); err == nil {
+	session, err := a.session(r)
+	if authReadFailed(w, err) {
+		return
+	}
+	if err == nil {
 		var username string
-		if err = a.reads.QueryRow("SELECT username FROM admin WHERE id=1").Scan(&username); err != nil {
-			apiError(w, 500, err)
+		if err = a.reads.QueryRowContext(r.Context(), "SELECT username FROM admin WHERE id=1").Scan(&username); err != nil {
+			if !authReadFailed(w, err) {
+				apiError(w, 500, err)
+			}
 			return
 		}
 		result["authenticated"] = true
@@ -257,7 +281,10 @@ func (a *App) login(w http.ResponseWriter, r *http.Request) {
 	}
 	var username string
 	var hash []byte
-	err := a.reads.QueryRow("SELECT username,password FROM admin WHERE id=1").Scan(&username, &hash)
+	err := a.reads.QueryRowContext(r.Context(), "SELECT username,password FROM admin WHERE id=1").Scan(&username, &hash)
+	if authReadFailed(w, err) {
+		return
+	}
 	if err != nil || bcrypt.CompareHashAndPassword(hash, []byte(body.Password)) != nil || subtle.ConstantTimeCompare([]byte(username), []byte(body.Username)) != 1 {
 		a.limited(key, true)
 		apiError(w, 401, errors.New("invalid username or password"))
@@ -271,15 +298,22 @@ func (a *App) login(w http.ResponseWriter, r *http.Request) {
 	respond(w, 200, map[string]bool{"ok": true})
 }
 func (a *App) logout(w http.ResponseWriter, r *http.Request) {
-	if session, err := a.session(r); err == nil {
-		_, _ = a.db.Exec("DELETE FROM sessions WHERE token=?", digest(session.Token))
+	session, err := a.session(r)
+	if authReadFailed(w, err) {
+		return
+	}
+	if err == nil {
+		if _, err = a.db.ExecContext(r.Context(), "DELETE FROM sessions WHERE token=?", digest(session.Token)); err != nil {
+			apiError(w, 500, err)
+			return
+		}
 	}
 	http.SetCookie(w, &http.Cookie{Name: "musicforge_session", Value: "", Path: "/", HttpOnly: true, Secure: a.secureCookie(r), SameSite: http.SameSiteLaxMode, MaxAge: -1})
 	respond(w, 200, map[string]bool{"ok": true})
 }
 
 func (a *App) oidcConfig(ctx context.Context) (*oidc.Provider, oauth2.Config, Settings, error) {
-	s, err := a.settings()
+	s, err := a.settingsContext(ctx)
 	if err != nil {
 		return nil, oauth2.Config{}, s, err
 	}
@@ -318,6 +352,9 @@ func (a *App) oidcStart(w http.ResponseWriter, r *http.Request, bind bool) {
 	action := "login"
 	if bind {
 		session, err := a.session(r)
+		if authReadFailed(w, err) {
+			return
+		}
 		if err != nil || session.Method != "local" {
 			apiError(w, 403, errors.New("use local administrator login to bind OIDC"))
 			return
@@ -362,7 +399,10 @@ func (a *App) oidcCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var nonce, verifier, action, sessionHash string
-	err = a.db.QueryRow("DELETE FROM oidc_flows WHERE state=? AND expires>? RETURNING nonce,verifier,action,session", digest(state), time.Now().Unix()).Scan(&nonce, &verifier, &action, &sessionHash)
+	err = a.db.QueryRowContext(r.Context(), "DELETE FROM oidc_flows WHERE state=? AND expires>? RETURNING nonce,verifier,action,session", digest(state), time.Now().Unix()).Scan(&nonce, &verifier, &action, &sessionHash)
+	if authReadFailed(w, err) {
+		return
+	}
 	if err != nil {
 		apiError(w, 403, errors.New("expired or already used OIDC flow"))
 		return
@@ -402,11 +442,17 @@ func (a *App) oidcCallback(w http.ResponseWriter, r *http.Request) {
 		a.authMu.Lock()
 		defer a.authMu.Unlock()
 		session, err := a.session(r)
+		if authReadFailed(w, err) {
+			return
+		}
 		if err != nil || session.Method != "local" || digest(session.Token) != sessionHash {
 			apiError(w, 403, errors.New("local administrator session expired"))
 			return
 		}
-		latest, err := a.settings()
+		latest, err := a.settingsContext(ctx)
+		if authReadFailed(w, err) {
+			return
+		}
 		if err == nil && (latest.OIDCIssuer != s.OIDCIssuer || latest.OIDCClientID != s.OIDCClientID || latest.OIDCSecret != s.OIDCSecret) {
 			err = errors.New("OIDC settings changed during binding")
 		}
@@ -427,7 +473,10 @@ func (a *App) oidcCallback(w http.ResponseWriter, r *http.Request) {
 	// Serialize binding/configuration changes with session issuance.
 	a.authMu.Lock()
 	defer a.authMu.Unlock()
-	latest, err := a.settings()
+	latest, err := a.settingsContext(ctx)
+	if authReadFailed(w, err) {
+		return
+	}
 	if err != nil || latest.OIDCIssuer != s.OIDCIssuer || latest.OIDCClientID != s.OIDCClientID || latest.OIDCSecret != s.OIDCSecret || id.Issuer != latest.BoundIssuer || id.Subject != latest.BoundSubject {
 		apiError(w, 403, errors.New("this OIDC identity is not the administrator"))
 		return
@@ -443,6 +492,9 @@ func (a *App) oidcCallback(w http.ResponseWriter, r *http.Request) {
 func (a *App) auth(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		session, err := a.session(r)
+		if authReadFailed(w, err) {
+			return
+		}
 		if err != nil {
 			apiError(w, 401, errors.New("login required"))
 			return
@@ -459,12 +511,12 @@ func (a *App) auth(next http.HandlerFunc) http.HandlerFunc {
 	}
 }
 
-func (a *App) verifyPassword(password string) bool {
+func (a *App) verifyPassword(ctx context.Context, password string) (bool, error) {
 	var hash []byte
-	if a.reads.QueryRow("SELECT password FROM admin WHERE id=1").Scan(&hash) != nil {
-		return false
+	if err := a.reads.QueryRowContext(ctx, "SELECT password FROM admin WHERE id=1").Scan(&hash); err != nil {
+		return false, err
 	}
-	return bcrypt.CompareHashAndPassword(hash, []byte(password)) == nil
+	return bcrypt.CompareHashAndPassword(hash, []byte(password)) == nil, nil
 }
 
 // Caller holds authMu so a callback cannot issue a session for the previous binding.

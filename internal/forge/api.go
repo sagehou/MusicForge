@@ -24,7 +24,17 @@ func apiError(w http.ResponseWriter, status int, err error) {
 	if response, ok := w.(*apiResponse); ok {
 		response.err = err
 	}
-	respond(w, status, map[string]string{"error": err.Error()})
+	message := err.Error()
+	var coded interface{ Code() int }
+	if errors.As(err, &coded) && (coded.Code()&255 == 5 || coded.Code()&255 == 6) {
+		status, message = 503, "Database is busy; please retry"
+	} else if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
+		status, message = 503, "Request timed out; please retry"
+	}
+	if status == 503 {
+		w.Header().Set("Retry-After", "1")
+	}
+	respond(w, status, map[string]string{"error": message})
 }
 
 type apiResponse struct {
@@ -134,12 +144,19 @@ func (a *App) Handler() http.Handler {
 		w.Header().Set("Referrer-Policy", "no-referrer")
 		w.Header().Set("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'")
 		if strings.HasPrefix(r.URL.Path, "/api/") {
+			if r.Method == "GET" && !strings.HasPrefix(r.URL.Path, "/api/auth/oidc/") {
+				ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+				defer cancel()
+				r = r.WithContext(ctx)
+			}
 			w.Header().Set("Cache-Control", "no-store")
 			response := &apiResponse{ResponseWriter: w}
 			started := time.Now()
 			defer func() {
 				if response.status >= 500 {
-					a.logger.Error("API request failed", "method", r.Method, "path", r.URL.Path, "status", response.status, "duration_ms", time.Since(started).Milliseconds(), "error", response.err)
+					stats := a.reads.Stats()
+					a.logger.Error("API request failed", "method", r.Method, "path", r.URL.Path, "status", response.status, "duration_ms", time.Since(started).Milliseconds(), "error", response.err,
+						"db_read_in_use", stats.InUse, "db_read_open", stats.OpenConnections, "db_read_wait_count", stats.WaitCount, "db_read_wait_ms", stats.WaitDuration.Milliseconds())
 				} else if time.Since(started) >= 2*time.Second {
 					a.logger.Warn("slow API request", "method", r.Method, "path", r.URL.Path, "status", response.status, "duration_ms", time.Since(started).Milliseconds())
 				}
@@ -160,11 +177,14 @@ func (a *App) jobResult(w http.ResponseWriter, id int64, err error) {
 }
 
 func (a *App) sourcesWithStatus() ([]Source, error) {
-	s, err := a.settings()
+	return a.sourcesWithStatusContext(context.Background())
+}
+func (a *App) sourcesWithStatusContext(ctx context.Context) ([]Source, error) {
+	s, err := a.settingsContext(ctx)
 	if err != nil {
 		return nil, err
 	}
-	list, err := a.allSources()
+	list, err := a.sourcesWhereContext(ctx, "")
 	if err != nil {
 		return nil, err
 	}
@@ -190,7 +210,7 @@ func (a *App) sourcesWithStatus() ([]Source, error) {
 	return list, nil
 }
 func (a *App) library(w http.ResponseWriter, r *http.Request) {
-	list, err := a.sourcesWithStatus()
+	list, err := a.sourcesWithStatusContext(r.Context())
 	if err != nil {
 		apiError(w, 500, err)
 		return
@@ -198,7 +218,7 @@ func (a *App) library(w http.ResponseWriter, r *http.Request) {
 	respond(w, 200, list)
 }
 func (a *App) dashboard(w http.ResponseWriter, r *http.Request) {
-	list, err := a.sourcesWithStatus()
+	list, err := a.sourcesWithStatusContext(r.Context())
 	if err != nil {
 		apiError(w, 500, err)
 		return
@@ -224,7 +244,7 @@ func (a *App) dashboard(w http.ResponseWriter, r *http.Request) {
 			failed++
 		}
 	}
-	s, err := a.settings()
+	s, err := a.settingsContext(r.Context())
 	if err != nil {
 		apiError(w, 500, err)
 		return
@@ -254,7 +274,7 @@ func (a *App) jobs(w http.ResponseWriter, r *http.Request) {
 		apiError(w, 400, errors.New("invalid job state filter"))
 		return
 	}
-	list, total, err := a.taskList(state, limit, offset)
+	list, total, err := a.taskListContext(r.Context(), state, limit, offset)
 	if err != nil {
 		apiError(w, 500, err)
 		return
@@ -289,7 +309,7 @@ func (a *App) retry(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *App) getSettings(w http.ResponseWriter, r *http.Request) {
-	s, err := a.settings()
+	s, err := a.settingsContext(r.Context())
 	if err != nil {
 		apiError(w, 500, err)
 		return
@@ -356,6 +376,9 @@ func (a *App) putSettings(w http.ResponseWriter, r *http.Request) {
 	oidcChanged := body.UnbindOIDC || body.ClearOIDCSecret || s.OIDCIssuer != old.OIDCIssuer || s.OIDCClientID != old.OIDCClientID || s.OIDCSecret != old.OIDCSecret
 	if oidcChanged {
 		current, sessionErr := a.session(r)
+		if authReadFailed(w, sessionErr) {
+			return
+		}
 		if sessionErr != nil || current.Method != "local" {
 			apiError(w, 403, errors.New("local login required to change OIDC settings"))
 			return
@@ -527,11 +550,18 @@ func (a *App) changePassword(w http.ResponseWriter, r *http.Request) {
 	a.authMu.Lock()
 	defer a.authMu.Unlock()
 	session, err := a.session(r)
+	if authReadFailed(w, err) {
+		return
+	}
 	if err != nil || session.Method != "local" {
 		apiError(w, 403, errors.New("local login required"))
 		return
 	}
-	if !a.verifyPassword(body.Current) {
+	valid, err := a.verifyPassword(r.Context(), body.Current)
+	if authReadFailed(w, err) {
+		return
+	}
+	if !valid {
 		apiError(w, 403, errors.New("current password is incorrect"))
 		return
 	}

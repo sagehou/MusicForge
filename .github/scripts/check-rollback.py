@@ -20,6 +20,7 @@ NAME = "musicforge-rollback"
 CANDIDATE = "musicforge:validation"
 PASSWORD = "ci-rollback-password"
 LEGACY = {
+    "v0.2.11": "sha256:dce503fb6f8b75566a479295ccd3027fb9cee2e6ee19efe0cfc9bf52be223c29",
     "v0.2.10": "sha256:5f94b457bcbb208c269f4a9b1b5eef685c707e8bd6c0496fb74f7cabed8514ad",
     "v0.2.9": "sha256:cf3a93e67bfda5754c7bf2395fd092e8aefa4b8b758bb4b3099e617c6f9a0097",
     "v0.2.8": "sha256:665db2d6230cede949c75a7734076dce15f0a04a2aa8eea9c2da93c2f6152fa7",

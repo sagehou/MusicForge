@@ -1,6 +1,7 @@
 package forge
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"errors"
@@ -21,7 +22,10 @@ func taskControlKey(id int64) string  { return "task-control:" + strconv.FormatI
 func taskProgressKey(id int64) string { return "task-progress:" + strconv.FormatInt(id, 10) }
 
 func (a *App) taskID(id int64) int64 {
-	value, err := a.meta(taskMemberKey(id))
+	return a.taskIDContext(context.Background(), id)
+}
+func (a *App) taskIDContext(ctx context.Context, id int64) int64 {
+	value, err := a.metaContext(ctx, taskMemberKey(id))
 	if err == nil {
 		if root, err := strconv.ParseInt(value, 10, 64); err == nil {
 			return root
@@ -112,6 +116,9 @@ const taskGroups = `WITH members AS (
 ) `
 
 func (a *App) taskList(state string, limit, offset int) ([]Task, int, error) {
+	return a.taskListContext(context.Background(), state, limit, offset)
+}
+func (a *App) taskListContext(ctx context.Context, state string, limit, offset int) ([]Task, int, error) {
 	where := ""
 	args := []any{}
 	if state != "" && state != "all" {
@@ -124,7 +131,7 @@ func (a *App) taskList(state string, limit, offset int) ([]Task, int, error) {
 		columns[i] = "root." + columns[i]
 	}
 	queryArgs := append(append([]any{}, args...), limit, offset)
-	rows, err := a.reads.Query(taskGroups+"SELECT "+strings.Join(columns, ",")+",task_state,track_total,track_done,track_failed,track_pending,track_running,track_cancelled,changed,tries,fraction,pending+running,count(*) OVER () FROM tasks JOIN jobs root ON root.id=task_id"+where+" ORDER BY task_id DESC LIMIT ? OFFSET ?", queryArgs...)
+	rows, err := a.reads.QueryContext(ctx, taskGroups+"SELECT "+strings.Join(columns, ",")+",task_state,track_total,track_done,track_failed,track_pending,track_running,track_cancelled,changed,tries,fraction,pending+running,count(*) OVER () FROM tasks JOIN jobs root ON root.id=task_id"+where+" ORDER BY task_id DESC LIMIT ? OFFSET ?", queryArgs...)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -166,7 +173,7 @@ func (a *App) taskList(state string, limit, offset int) ([]Task, int, error) {
 	if len(list) == 0 {
 		// Empty/out-of-range pages still need their filtered total. Nonempty pages
 		// obtain it from the same aggregation as the rows.
-		if err = a.reads.QueryRow(taskGroups+"SELECT count(*) FROM tasks"+where, args...).Scan(&total); err != nil {
+		if err = a.reads.QueryRowContext(ctx, taskGroups+"SELECT count(*) FROM tasks"+where, args...).Scan(&total); err != nil {
 			return nil, 0, err
 		}
 		return list, total, nil
@@ -180,7 +187,7 @@ func (a *App) taskList(state string, limit, offset int) ([]Task, int, error) {
 		}
 	}
 	if len(profileIDs) > 0 {
-		rows, err := a.reads.Query(`WITH builds AS (
+		rows, err := a.reads.QueryContext(ctx, `WITH builds AS (
 		 SELECT coalesce(CAST(m.value AS INTEGER),j.id) AS task_id,min(j.id) AS first_id
 		 FROM jobs j LEFT JOIN meta m ON m.key='task-member:'||j.id
 		 WHERE j.kind IN ('convert','move') GROUP BY task_id
@@ -211,7 +218,7 @@ func (a *App) taskList(state string, limit, offset int) ([]Task, int, error) {
 	}
 	runningRoots := map[int64]bool{}
 	if len(visibleIDs) > 0 {
-		rows, err := a.reads.Query("SELECT DISTINCT coalesce(CAST(m.value AS INTEGER),j.id) FROM jobs j LEFT JOIN meta m ON m.key='task-member:'||j.id WHERE j.state='running' AND coalesce(CAST(m.value AS INTEGER),j.id) IN (" + strings.Join(visibleIDs, ",") + ")")
+		rows, err := a.reads.QueryContext(ctx, "SELECT DISTINCT coalesce(CAST(m.value AS INTEGER),j.id) FROM jobs j LEFT JOIN meta m ON m.key='task-member:'||j.id WHERE j.state='running' AND coalesce(CAST(m.value AS INTEGER),j.id) IN (" + strings.Join(visibleIDs, ",") + ")")
 		if err != nil {
 			return nil, 0, err
 		}
@@ -236,7 +243,7 @@ func (a *App) taskList(state string, limit, offset int) ([]Task, int, error) {
 			task.Profile = &profile
 		}
 		if task.Kind == "scan" {
-			if raw, err := a.meta(taskProgressKey(task.ID)); err == nil {
+			if raw, err := a.metaContext(ctx, taskProgressKey(task.ID)); err == nil {
 				var activity Activity
 				if json.Unmarshal([]byte(raw), &activity) == nil {
 					task.Scan = &activity
@@ -244,7 +251,7 @@ func (a *App) taskList(state string, limit, offset int) ([]Task, int, error) {
 			}
 		}
 		if runningRoots[task.ID] {
-			items, _, err := a.taskItems(task.ID, "running", 16, 0)
+			items, _, err := a.taskItemsContext(ctx, task.ID, "running", 16, 0)
 			if err != nil {
 				return nil, 0, err
 			}
@@ -253,14 +260,21 @@ func (a *App) taskList(state string, limit, offset int) ([]Task, int, error) {
 			}
 		}
 	}
-	a.jobsMu.Lock()
+	if err := ctx.Err(); err != nil {
+		return nil, 0, err
+	}
+	for !a.jobsMu.TryLock() {
+		if !pause(ctx, 10*time.Millisecond) {
+			return nil, 0, ctx.Err()
+		}
+	}
 	active := make([]int64, 0, len(a.activeJobs))
 	for id := range a.activeJobs {
 		active = append(active, id)
 	}
 	a.jobsMu.Unlock()
 	for _, id := range active {
-		root := a.taskID(id)
+		root := a.taskIDContext(ctx, id)
 		for i := range list {
 			task := &list[i]
 			if root == task.ID {
@@ -268,7 +282,7 @@ func (a *App) taskList(state string, limit, offset int) ([]Task, int, error) {
 			}
 		}
 	}
-	return list, total, nil
+	return list, total, ctx.Err()
 }
 
 type TaskItem struct {
@@ -280,6 +294,9 @@ type TaskItem struct {
 }
 
 func (a *App) taskItems(id int64, state string, limit, offset int) ([]TaskItem, int, error) {
+	return a.taskItemsContext(context.Background(), id, state, limit, offset)
+}
+func (a *App) taskItemsContext(ctx context.Context, id int64, state string, limit, offset int) ([]TaskItem, int, error) {
 	where := " WHERE coalesce(CAST(m.value AS INTEGER),j.id)=?"
 	args := []any{id}
 	if state != "" && state != "all" {
@@ -287,7 +304,7 @@ func (a *App) taskItems(id int64, state string, limit, offset int) ([]TaskItem, 
 		args = append(args, state)
 	}
 	var total int
-	if err := a.reads.QueryRow("SELECT count(*) FROM jobs j LEFT JOIN meta m ON m.key='task-member:'||j.id"+where, args...).Scan(&total); err != nil {
+	if err := a.reads.QueryRowContext(ctx, "SELECT count(*) FROM jobs j LEFT JOIN meta m ON m.key='task-member:'||j.id"+where, args...).Scan(&total); err != nil {
 		return nil, 0, err
 	}
 	columns := strings.Split(jobCols, ",")
@@ -296,7 +313,7 @@ func (a *App) taskItems(id int64, state string, limit, offset int) ([]TaskItem, 
 	}
 	order := " ORDER BY CASE j.state WHEN 'running' THEN 0 WHEN 'failed' THEN 1 WHEN 'pending' THEN 2 ELSE 3 END,j.id"
 	// Page jobs before joining tags, and use the source indexes separately.
-	rows, err := a.reads.Query("WITH page AS MATERIALIZED (SELECT j.* FROM jobs j LEFT JOIN meta m ON m.key='task-member:'||j.id"+where+order+" LIMIT ? OFFSET ?) SELECT "+strings.Join(columns, ",")+",coalesce(p.value,''),coalesce(s.rel,prepared.rel,''),coalesce(s.artist,prepared.artist,''),coalesce(s.album,prepared.album,''),coalesce(s.title,prepared.title,''),coalesce(s.output,prepared.output,'') FROM page j LEFT JOIN meta p ON p.key='task-progress:'||j.id LEFT JOIN sources s ON s.id=json_extract(j.args,'$.id') LEFT JOIN sources prepared ON j.dedup LIKE 'scan:prepare:%' AND prepared.rel=json_extract(j.args,'$.dirs[0]')"+order, append(args, limit, offset)...)
+	rows, err := a.reads.QueryContext(ctx, "WITH page AS MATERIALIZED (SELECT j.* FROM jobs j LEFT JOIN meta m ON m.key='task-member:'||j.id"+where+order+" LIMIT ? OFFSET ?) SELECT "+strings.Join(columns, ",")+",coalesce(p.value,''),coalesce(s.rel,prepared.rel,''),coalesce(s.artist,prepared.artist,''),coalesce(s.album,prepared.album,''),coalesce(s.title,prepared.title,''),coalesce(s.output,prepared.output,'') FROM page j LEFT JOIN meta p ON p.key='task-progress:'||j.id LEFT JOIN sources s ON s.id=json_extract(j.args,'$.id') LEFT JOIN sources prepared ON j.dedup LIKE 'scan:prepare:%' AND prepared.rel=json_extract(j.args,'$.dirs[0]')"+order, append(args, limit, offset)...)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -343,7 +360,7 @@ func (a *App) jobItems(w http.ResponseWriter, r *http.Request) {
 	if offset < 0 {
 		offset = 0
 	}
-	items, total, err := a.taskItems(a.taskID(id), state, 50, offset)
+	items, total, err := a.taskItemsContext(r.Context(), a.taskIDContext(r.Context(), id), state, 50, offset)
 	if err != nil {
 		apiError(w, 500, err)
 		return

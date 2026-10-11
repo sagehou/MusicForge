@@ -1,6 +1,7 @@
 package forge
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"fmt"
@@ -129,7 +130,10 @@ func (a *App) allSources() ([]Source, error) {
 }
 
 func (a *App) sourcesWhere(where string, args ...any) ([]Source, error) {
-	rows, err := a.reads.Query("SELECT "+sourceCols+" FROM sources"+where+" ORDER BY disc,track,rel", args...)
+	return a.sourcesWhereContext(context.Background(), where, args...)
+}
+func (a *App) sourcesWhereContext(ctx context.Context, where string, args ...any) ([]Source, error) {
+	rows, err := a.reads.QueryContext(ctx, "SELECT "+sourceCols+" FROM sources"+where+" ORDER BY disc,track,rel", args...)
 	if err != nil {
 		return nil, err
 	}
@@ -323,9 +327,12 @@ func (a *App) claim(conversion bool) (Job, error) {
 }
 
 func (a *App) settings() (Settings, error) {
+	return a.settingsContext(context.Background())
+}
+func (a *App) settingsContext(ctx context.Context) (Settings, error) {
 	var b string
 	var s Settings
-	err := a.reads.QueryRow("SELECT data FROM settings WHERE id=1").Scan(&b)
+	err := a.reads.QueryRowContext(ctx, "SELECT data FROM settings WHERE id=1").Scan(&b)
 	if err != nil {
 		return s, err
 	}

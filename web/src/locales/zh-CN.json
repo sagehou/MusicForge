@@ -364,6 +364,8 @@
   "error.checking": "正在检查媒体目录，网页和任务控制仍可使用",
   "error.requestTimeout": "请求超时，请重试",
   "error.http": "服务器返回 HTTP {status}，请重试",
+  "error.databaseBusy": "数据库繁忙，请重试",
+  "error.authUnavailablePrefix": "暂时无法验证登录状态，请重试：",
   "error.sourceReadPrefix": "暂时无法读取源文件：",
   "error.scanIncomplete": "扫描发现 {unavailable} 个源文件无法读取、{invalid} 个音频文件无效。正常曲目已加入队列，本次跳过源文件删除判定。下方列出失败文件路径和错误，完整详情保留在媒体库中。",
   "phase.storage": "检查媒体目录",

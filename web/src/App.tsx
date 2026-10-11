@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent, type ReactNode } from "react";
+import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { Activity, ArrowDownToLine, ArrowRight, Check, ChevronLeft, ChevronRight, Clock3, Disc3, FolderOpen, HardDrive, LayoutDashboard, ListMusic, Loader2, LogOut, Music2, Pause, Play, RefreshCw, Search, Settings2, ShieldCheck, Square, Trash2, Waves } from "lucide-react";
 import { Button } from "./components/ui/button";
 import { api, setCSRF } from "./api";
@@ -14,11 +14,12 @@ function useResource<T>(path: string, poll: boolean | number = false) {
   useEffect(() => {
     let alive = true;
     let loading = false;
+    const controller = new AbortController();
     const load = async () => {
       if (loading) return;
       loading = true;
       try {
-        const data = await api<T>(path);
+        const data = await api<T>(path, "GET", undefined, controller.signal);
         if (alive) { setResult({ path, data }); setFailure(undefined); }
       } catch (err) {
         if (alive) setFailure({ path, message: (err as Error).message });
@@ -26,7 +27,7 @@ function useResource<T>(path: string, poll: boolean | number = false) {
     };
     void load();
     const timer = poll ? setInterval(() => void load(), typeof poll === "number" ? poll : 5000) : undefined;
-    return () => { alive = false; clearInterval(timer); };
+    return () => { alive = false; clearInterval(timer); controller.abort(); };
   }, [path, poll, revision]);
   return { data: result?.path === path ? result.data : undefined, error: failure?.path === path ? failure.message : "", retry: () => setRevision(value => value + 1) };
 }
@@ -43,14 +44,18 @@ export function App() {
   const { t, errorMessage } = useI18n();
   const [me, setMe] = useState<Me>();
   const [authError, setAuthError] = useState("");
+  const authRequest = useRef<Promise<void> | undefined>(undefined);
   const [page, setPage] = useState(location.pathname);
   const [toast, setToast] = useState<{ message: MessageKey | Error; error: boolean; params?: Params }>();
   const notify: Notice = (message, error = false, params) => setToast({ message, error, params });
-  const loadMe = () => api<Me>("/auth/me").then(value => { setCSRF(value.csrf || ""); setMe(value); setAuthError(""); }).catch(err => setAuthError(err.message));
+  const loadMe = () => {
+    if (!authRequest.current) authRequest.current = api<Me>("/auth/me").then(value => { setCSRF(value.csrf || ""); setMe(value); setAuthError(""); }).catch(err => setAuthError(err.message)).finally(() => { authRequest.current = undefined; });
+    return authRequest.current;
+  };
   useEffect(() => {
     void loadMe();
     const pop = () => setPage(location.pathname);
-    const expired = () => { setMe(undefined); void loadMe(); };
+    const expired = () => { void loadMe(); };
     window.addEventListener("popstate", pop); window.addEventListener("session-expired", expired);
     return () => { window.removeEventListener("popstate", pop); window.removeEventListener("session-expired", expired); };
   }, []);
@@ -69,7 +74,7 @@ export function App() {
       <div className="sidebar-bottom"><div className="single-host"><HardDrive size={16} /><span>{t("app.singleHost")}<small>{me.version}</small></span></div><div className="account"><span className="avatar">{me.username?.slice(0, 1).toUpperCase()}</span><span>{me.username}<small>{me.method === "oidc" ? t("app.oidcAdmin") : t("app.localAdmin")}</small></span><Button variant="ghost" size="icon" aria-label={t("app.logout")} onClick={() => void api("/auth/logout", "POST", {}).then(loadMe).catch(err => notify(err as Error, true))}><LogOut size={17} /></Button></div></div>
     </aside>
     <main className="main" id="main-content" tabIndex={-1}><header className="topbar"><span>{t("app.workspace")}<ChevronRight size={14} /> <strong>{current.label}</strong></span><div className="topbar-actions"><LanguageSelector /><Button className="mobile-logout" variant="ghost" size="icon" aria-label={t("app.logout")} onClick={() => void api("/auth/logout", "POST", {}).then(loadMe).catch(err => notify(err as Error, true))}><LogOut size={17} /></Button><span className="topbar-note"><ShieldCheck size={15} />{t("app.session")}</span></div></header>
-      <div className="page-content">{page === "/library" ? <Library notify={notify} /> : page === "/jobs" ? <Jobs notify={notify} /> : page === "/settings" ? <SettingsPage me={me} notify={notify} /> : <Overview notify={notify} navigate={navigate} />}</div>
+      <div className="page-content"><ResourceWarning error={authError} retry={() => void loadMe()} />{page === "/library" ? <Library notify={notify} /> : page === "/jobs" ? <Jobs notify={notify} /> : page === "/settings" ? <SettingsPage me={me} notify={notify} /> : <Overview notify={notify} navigate={navigate} />}</div>
     </main>
     {toast && <div className={`toast ${toast.error ? "toast-error" : ""}`} role={toast.error ? "alert" : "status"}>{toast.error ? <Activity size={17} /> : <Check size={17} />}{toast.message instanceof Error ? errorMessage(toast.message.message) : t(toast.message, toast.params)}<button aria-label={t("app.dismiss")} onClick={() => setToast(undefined)}>×</button></div>}
   </div>;

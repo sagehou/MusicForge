@@ -1,0 +1,108 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-10-12",
+  "title": "Design System: MusicForge",
+  "extensions": {
+    "colorMeta": {
+      "primary": { "role": "primary", "displayName": "Muted Burgundy" },
+      "dark-primary": { "role": "primary", "displayName": "Pale Rose" }
+    },
+    "shadows": [
+      { "name": "toast-light", "value": "0 8px 24px #1e202514", "purpose": "Dismissible operational feedback over the flat workspace." },
+      { "name": "toast-dark", "value": "0 8px 24px #00000038", "purpose": "Dismissible operational feedback in dark appearance." }
+    ],
+    "motion": [
+      { "name": "ease-feedback", "value": "cubic-bezier(.16, 1, .3, 1)", "purpose": "Artwork continuity, loading, toast entrance and progress changes." },
+      { "name": "artwork-continuity", "value": "320ms", "purpose": "Clicked album cover moves into its detail header; progressive and skipped with reduced motion." },
+      { "name": "artwork-loading", "value": "240ms", "purpose": "Resolve blur and opacity once per image load, not per poll." },
+      { "name": "control-feedback", "value": "100-160ms", "purpose": "Press and selection acknowledgment." },
+      { "name": "toast-enter", "value": "240ms", "purpose": "One visible feedback entrance; disabled with reduced motion." },
+      { "name": "progress", "value": "400ms", "purpose": "Progress width interpolation; disabled with reduced motion." }
+    ],
+    "breakpoints": [
+      { "name": "compact-desktop", "value": "1100px" },
+      { "name": "tablet", "value": "800px" },
+      { "name": "mobile", "value": "600px" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "An explicit operation, with loading and disabled states in the application.",
+      "html": "<button class=\"ds-primary\">Save settings</button>",
+      "css": ".ds-primary{background:var(--accent);color:var(--accent-ink);border:1px solid var(--accent);border-radius:6px;padding:9px 16px;min-height:36px;font:500 13px/1.3 sans-serif;cursor:pointer}.ds-primary:hover{background:var(--accent-hover);border-color:var(--accent-hover)}.ds-primary:focus-visible{outline:2px solid var(--accent);outline-offset:3px}.ds-primary:disabled{opacity:.4;pointer-events:none}"
+    },
+    {
+      "name": "Outline Button",
+      "kind": "button",
+      "refersTo": "button-outline",
+      "description": "A secondary operation.",
+      "html": "<button class=\"ds-outline\">Verify library</button>",
+      "css": ".ds-outline{background:var(--surface);color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:9px 16px;min-height:36px;font:500 13px/1.3 sans-serif;cursor:pointer}.ds-outline:hover{background:var(--subtle)}.ds-outline:focus-visible{outline:2px solid var(--accent);outline-offset:3px}.ds-outline:disabled{opacity:.4;pointer-events:none}"
+    },
+    {
+      "name": "Ghost Button",
+      "kind": "button",
+      "description": "A quiet contextual command.",
+      "html": "<button class=\"ds-ghost\">Details</button>",
+      "css": ".ds-ghost{background:transparent;color:var(--muted);border:1px solid transparent;border-radius:6px;padding:9px 12px;min-height:36px;font:500 13px/1.3 sans-serif;cursor:pointer}.ds-ghost:hover{background:var(--subtle);color:var(--ink)}.ds-ghost:focus-visible{outline:2px solid var(--accent);outline-offset:3px}.ds-ghost:disabled{opacity:.4;pointer-events:none}"
+    },
+    {
+      "name": "Destructive Button",
+      "kind": "button",
+      "description": "Explicit removal, with confirmation at the operation boundary.",
+      "html": "<button class=\"ds-danger\">Delete history</button>",
+      "css": ".ds-danger{background:var(--danger-soft);color:var(--danger);border:1px solid var(--danger);border-radius:6px;padding:9px 16px;min-height:36px;font:500 13px/1.3 sans-serif;cursor:pointer}.ds-danger:hover{background:var(--danger);color:var(--surface)}.ds-danger:focus-visible{outline:2px solid var(--accent);outline-offset:3px}.ds-danger:disabled{opacity:.4;pointer-events:none}"
+    },
+    {
+      "name": "Input",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "A restrained operational field.",
+      "html": "<input class=\"ds-input\" aria-label=\"Source directory\" value=\"/music/source\">",
+      "css": ".ds-input{background:var(--surface);color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:10px 12px;font:13px sans-serif;caret-color:var(--accent);max-width:100%}.ds-input:focus{border-color:var(--accent)}.ds-input:focus-visible{outline:2px solid var(--accent);outline-offset:3px}.ds-input:disabled{opacity:.6}"
+    },
+    {
+      "name": "Navigation",
+      "kind": "nav",
+      "description": "An active destination indicated by tone and semantics.",
+      "html": "<a class=\"ds-nav\" aria-current=\"page\" href=\"#library\">Library</a>",
+      "css": ".ds-nav{display:inline-flex;align-items:center;min-height:44px;padding:12px 14px;border-radius:6px;font:550 13px sans-serif;text-decoration:none;color:var(--accent);background:var(--accent-soft);transition:background 160ms,color 160ms}.ds-nav:hover{background:var(--subtle);color:var(--ink)}.ds-nav:focus-visible{outline:2px solid var(--accent);outline-offset:3px}"
+    },
+    {
+      "name": "Status",
+      "kind": "chip",
+      "description": "A dot and text, never color alone.",
+      "html": "<span class=\"ds-status\"><span></span>Ready</span>",
+      "css": ".ds-status{display:inline-flex;align-items:center;gap:6px;color:var(--success);font:11px/1.35 sans-serif;padding:4px 0}.ds-status>span{width:5px;height:5px;border-radius:50%;background:currentColor}"
+    }
+  ],
+  "narrative": {
+    "overview": "An artwork-led, task-focused library workspace. Real output covers supply the visual variety; controls stay compact, consistent and quiet. This records the current source implementation, not user-approved branding or rendered approval.",
+    "keyCharacteristics": [
+      "Real artwork with explicit missing-image fallbacks.",
+      "Unframed sections, clear hierarchy and persistent operational feedback.",
+      "Equivalent light/dark surfaces and bilingual content."
+    ],
+    "rules": [
+      { "name": "The Status Rule", "body": "Never communicate artifact or job state by color alone.", "section": "colors" }
+    ],
+    "dos": [
+      "Do preserve real artwork proportions and reserve media dimensions.",
+      "Do use labels, keyboard focus and indeterminate partial-selection states.",
+      "Do keep long translated text and file paths inside their layout.",
+      "Do retain state and provide recovery during temporary failures.",
+      "Do close compact library options on selection and restore summary focus on Escape.",
+      "Do keep density choices in desktop grids while preserving density and layout preferences.",
+      "Do retain error toasts until dismissal and expire success toasts after six seconds.",
+      "Do lead pipeline stages with headings, without redundant above-heading labels."
+    ],
+    "donts": [
+      "Don't invent artist portraits or playback features.",
+      "Don't use decorative hero sections or nested floating cards for operations.",
+      "Don't hide diagnostics or automatically replay rejected writes."
+    ]
+  }
+}

@@ -54,9 +54,12 @@ func (a *App) ResetPassword(password string) error {
 }
 
 type session struct {
-	Token  string
-	Method string
+	Token   string
+	Method  string
+	Expires int64
 }
+
+const sessionLifetime = 7 * 24 * time.Hour
 
 func (a *App) session(r *http.Request) (session, error) {
 	cookie, err := r.Cookie("musicforge_session")
@@ -65,9 +68,9 @@ func (a *App) session(r *http.Request) (session, error) {
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 	defer cancel()
-	var method string
-	err = a.reads.QueryRowContext(ctx, "SELECT method FROM sessions WHERE token=? AND expires>?", digest(cookie.Value), time.Now().Unix()).Scan(&method)
-	return session{cookie.Value, method}, err
+	value := session{Token: cookie.Value}
+	err = a.reads.QueryRowContext(ctx, "SELECT method,expires FROM sessions WHERE token=? AND expires>?", digest(cookie.Value), time.Now().Unix()).Scan(&value.Method, &value.Expires)
+	return value, err
 }
 
 // Missing credentials differ from a lookup that could not verify them.
@@ -84,11 +87,39 @@ func (a *App) secureCookie(r *http.Request) bool {
 }
 func (a *App) newSession(w http.ResponseWriter, r *http.Request, method string) error {
 	token := randomToken()
-	_, err := a.db.Exec("INSERT INTO sessions(token,method,expires) VALUES(?,?,?)", digest(token), method, time.Now().Add(7*24*time.Hour).Unix())
+	_, err := a.db.Exec("INSERT INTO sessions(token,method,expires) VALUES(?,?,?)", digest(token), method, time.Now().Add(sessionLifetime).Unix())
 	if err != nil {
 		return err
 	}
-	http.SetCookie(w, &http.Cookie{Name: "musicforge_session", Value: token, Path: "/", HttpOnly: true, Secure: a.secureCookie(r), SameSite: http.SameSiteLaxMode, MaxAge: 7 * 24 * 3600})
+	a.sessionCookie(w, r, token)
+	return nil
+}
+func (a *App) sessionCookie(w http.ResponseWriter, r *http.Request, token string) {
+	http.SetCookie(w, &http.Cookie{Name: "musicforge_session", Value: token, Path: "/", HttpOnly: true, Secure: a.secureCookie(r), SameSite: http.SameSiteLaxMode, MaxAge: int(sessionLifetime.Seconds())})
+}
+
+// Renew only near expiry, without rotating CSRF or resurrecting revoked sessions.
+func (a *App) renewSession(w http.ResponseWriter, r *http.Request, value session) error {
+	if time.Until(time.Unix(value.Expires, 0)) > 24*time.Hour {
+		return nil
+	}
+	a.authMu.Lock()
+	defer a.authMu.Unlock()
+	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+	defer cancel()
+	now := time.Now()
+	result, err := a.db.ExecContext(ctx, "UPDATE sessions SET expires=max(expires,?) WHERE token=? AND method=? AND expires>?", now.Add(sessionLifetime).Unix(), digest(value.Token), value.Method, now.Unix())
+	if err != nil {
+		return err
+	}
+	count, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if count == 0 {
+		return sql.ErrNoRows
+	}
+	a.sessionCookie(w, r, value.Token)
 	return nil
 }
 func (a *App) origin(r *http.Request) string {
@@ -217,6 +248,13 @@ func (a *App) me(w http.ResponseWriter, r *http.Request) {
 		result["username"] = username
 		result["method"] = session.Method
 		result["csrf"] = digest(session.Token + ":csrf")
+		if err = a.renewSession(w, r, session); err != nil {
+			if authReadFailed(w, err) {
+				return
+			}
+			result["authenticated"] = false
+			delete(result, "csrf")
+		}
 	}
 	respond(w, 200, result)
 }

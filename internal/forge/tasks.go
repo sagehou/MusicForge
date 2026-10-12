@@ -76,12 +76,14 @@ type TaskCounts struct {
 
 type Task struct {
 	Job
-	Counts    TaskCounts `json:"counts"`
-	Scan      *Activity  `json:"scan,omitempty"`
-	Current   []Activity `json:"current"`
-	Scope     []string   `json:"scope"`
-	Profile   *Encoding  `json:"profile,omitempty"`
-	CanDelete bool       `json:"can_delete"`
+	Counts        TaskCounts `json:"counts"`
+	Scan          *Activity  `json:"scan,omitempty"`
+	Current       []Activity `json:"current"`
+	Scope         []string   `json:"scope"`
+	Profile       *Encoding  `json:"profile,omitempty"`
+	CanDelete     bool       `json:"can_delete"`
+	WaitingReason string     `json:"waiting_reason,omitempty"`
+	RetryAt       int64      `json:"retry_at,omitempty"`
 }
 
 // Aggregate before pagination so a scan with thousands of tracks remains one task.
@@ -237,8 +239,43 @@ func (a *App) taskListContext(ctx context.Context, state string, limit, offset i
 			return nil, 0, err
 		}
 	}
+	type waitingInfo struct {
+		reason string
+		retry  int64
+	}
+	waiting := map[int64]waitingInfo{}
+	// Batch display-only waits, including grouped tasks with no running worker.
+	rows, err = a.reads.QueryContext(ctx, `WITH waiting AS (
+	 SELECT coalesce(CAST(m.value AS INTEGER),j.id) AS task_id,j.log,j.not_before,
+	 row_number() OVER (PARTITION BY coalesce(CAST(m.value AS INTEGER),j.id) ORDER BY j.not_before,j.id) AS position
+	 FROM jobs j LEFT JOIN meta m ON m.key='task-member:'||j.id
+	 WHERE j.state='pending' AND j.log<>'' AND j.not_before>? AND j.not_before<>?
+	 AND coalesce(CAST(m.value AS INTEGER),j.id) IN (`+strings.Join(visibleIDs, ",")+`)
+	) SELECT task_id,log,not_before FROM waiting WHERE position=1`, time.Now().Unix(), heldUntil)
+	if err != nil {
+		return nil, 0, err
+	}
+	for rows.Next() {
+		var id int64
+		var info waitingInfo
+		if err = rows.Scan(&id, &info.reason, &info.retry); err != nil {
+			break
+		}
+		waiting[id] = info
+	}
+	if err == nil {
+		err = rows.Err()
+	}
+	rows.Close()
+	if err != nil {
+		return nil, 0, err
+	}
 	for i := range list {
 		task := &list[i]
+		if !runningRoots[task.ID] && (task.State == "pending" || task.State == "running") {
+			info := waiting[task.ID]
+			task.WaitingReason, task.RetryAt = info.reason, info.retry
+		}
 		if profile, found := profiles[task.ID]; found {
 			task.Profile = &profile
 		}

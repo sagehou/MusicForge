@@ -175,6 +175,7 @@ Endpoint: `POST /api/webhook/lidarr`.
 
 - The corresponding Navidrome library root is MusicForge's output root with identical album-relative paths.
 - Provide manual refresh.
+- Manual refresh uses saved settings and returns the queued result immediately, without waiting for a remote scan in the HTTP request. Reject enqueueing when the library is disabled or Navidrome is unconfigured. Deferred scans retain a readable reason and expected retry time instead of presenting an internal error.
 - Automatically refresh after conversion or bulk deletion, coalescing directories within a batch.
 - Navidrome 0.59.0+ supports `startScan` with `target` as `libraryID:relativeDirectory`.
 - Prefer targeted album scans when supported.
@@ -193,6 +194,7 @@ Endpoint: `POST /api/webhook/lidarr`.
 - The reverse proxy provides HTTPS and request forwarding.
 - Support multiple explicit access origins through startup `MUSICFORGE_ALLOWED_ORIGINS`; `MUSICFORGE_PUBLIC_URL` is the automatically allowed primary origin. Reject wildcards and subpaths.
 - Each domain has its own host-only login cookie and supports local login. Browser writes must match the allowed origin and current Host, with CSRF checks preserved.
+- Sessions retain a seven-day lifetime. Authentication checks renew valid sessions within their last day for another seven days without rotating the cookie token or CSRF, and never revive expired or revoked sessions. Foreground pages check every thirty minutes, on visibility return and browser-cache restoration. Temporary verification failures preserve the page; confirmed expiry locks it for reauthentication. Local reauthentication preserves mounted form drafts. Only reads may be retried once automatically; mutations require explicit resubmission.
 - OIDC started elsewhere first redirects to the primary URL; callbacks and completed logins stay there. Identity binding requires a local administrator session on the primary URL. Settings displays the primary and allowed origins read-only without changing persisted authentication formats.
 
 - Local login/setup allow ten credential failures per client in fifteen minutes and reset on success. OIDC starts have a separate budget, reset on successful OIDC login; local recovery and authenticated binding remain independent.
@@ -205,11 +207,14 @@ Use React, TypeScript, TailwindCSS and shadcn/ui.
 
 - Overview: source/output counts, build completion and recent jobs.
 - Library: browse Artist → Album → Track using source-relative directories, breadcrumbs, disc/track ordering, search and status filters. Select artists, albums or tracks for bulk actions with clear expired/rebuild status. Output keeps the source library’s relative hierarchy.
+- Library provides artist/all-album views, grid/list layouts, name/attention sorting, pagination and shareable hierarchy URLs. Albums show existing output `cover.jpg`; artist artwork is an album-cover mosaic, not an independent portrait. Missing or unreadable images use a fallback without blocking browsing. Album details expose durations, multi-disc groups, source/output paths and indeterminate partial-selection checkboxes.
 - Jobs: whole scan/build queue states, live track progress, human-readable details, queue controls and bulk history cleanup.
 - Settings: paths, encoding/mode/parameters, concurrency, scan interval, OIDC and integrations.
 - Login and first-run setup.
 - English and Simplified Chinese; initially use browser preference, falling back to English. Provide a selector and persist manual selection in the browser.
 - Localize copy, common API errors, dates and numbers. Switching preserves unsaved input and filters; tags, paths and raw diagnostics retain original content.
+- Light, dark and system appearance; system is the default and manual choices persist in the browser. Switching does not remount page state. Desktop cover grids adapt to container width and small/medium/large sizing; cover size and grid/list preferences persist in the browser. At 800px and below, retain two columns, hide cover sizing and place filtering/sorting in a keyboard-accessible menu that closes after selection; Escape closes it and restores focus. Artwork uses 8px corners; loading, selection and press states give brief feedback. Supporting browsers carry album artwork into its detail header with a shared-element transition; polling never replays entrances and all motion honors reduced motion.
+- Polling pauses in the background, resumes in the foreground and backs off during temporary failures while retaining loaded data. Foreground checks and reauthentication do not overwrite loaded Settings drafts. Errors retain request paths and IDs for correlation with server logs; failed-action notices remain until dismissed, while success notices expire after six seconds.
 
 ## Configuration and quality
 
@@ -217,6 +222,7 @@ Use React, TypeScript, TailwindCSS and shadcn/ui.
 - Store Web-editable paths, encoding and integration settings in SQLite.
 - Each setting has one authoritative source; file configuration and database must not overwrite each other.
 - Provide structured logging, health endpoint, migrations, README and single-service Compose example.
+- APIs return `X-Request-ID`, shared by failure and slow-request logs. Deferred work, SQLite busy errors and request timeouts use retryable 503 responses with `Retry-After`, never masquerading as invalid credentials. Optional response fields `artwork_url`, `waiting_reason` and `retry_at` (Unix seconds) are derived without persistence changes. The authenticated artwork endpoint serves only registered nonempty-signature JPEG covers inside the output root, never reading the remote source.
 - Support `linux/amd64` and `linux/arm64` images.
 
 ## Persistence compatibility and rollback

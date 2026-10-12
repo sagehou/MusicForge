@@ -26,12 +26,16 @@ func apiError(w http.ResponseWriter, status int, err error) {
 	}
 	message := err.Error()
 	var coded interface{ Code() int }
-	if errors.As(err, &coded) && (coded.Code()&255 == 5 || coded.Code()&255 == 6) {
+	var waiting *deferred
+	if errors.As(err, &waiting) {
+		status = 503
+		w.Header().Set("Retry-After", strconv.Itoa(max(1, waiting.seconds)))
+	} else if errors.As(err, &coded) && (coded.Code()&255 == 5 || coded.Code()&255 == 6) {
 		status, message = 503, "Database is busy; please retry"
 	} else if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
 		status, message = 503, "Request timed out; please retry"
 	}
-	if status == 503 {
+	if status == 503 && w.Header().Get("Retry-After") == "" {
 		w.Header().Set("Retry-After", "1")
 	}
 	respond(w, status, map[string]string{"error": message})
@@ -99,6 +103,7 @@ func (a *App) Handler() http.Handler {
 	mux.HandleFunc("POST /api/auth/password", a.auth(a.changePassword))
 	mux.HandleFunc("GET /api/dashboard", a.auth(a.dashboard))
 	mux.HandleFunc("GET /api/library", a.auth(a.library))
+	mux.HandleFunc("GET /api/library/{id}/artwork", a.auth(a.libraryArtwork))
 	mux.HandleFunc("GET /api/jobs", a.auth(a.jobs))
 	mux.HandleFunc("POST /api/jobs/retry", a.auth(a.retry))
 	mux.HandleFunc("POST /api/jobs/control", a.auth(a.controlJobs))
@@ -109,6 +114,15 @@ func (a *App) Handler() http.Handler {
 	mux.HandleFunc("POST /api/library/rebuild", a.auth(a.rebuild))
 	mux.HandleFunc("POST /api/library/delete", a.auth(a.requestDelete))
 	mux.HandleFunc("POST /api/navidrome/refresh", a.auth(func(w http.ResponseWriter, r *http.Request) {
+		s, err := a.settingsContext(r.Context())
+		if err != nil {
+			apiError(w, 500, err)
+			return
+		}
+		if !s.Enabled || s.NavURL == "" {
+			apiError(w, 409, errors.New("enable the library and configure Navidrome before refreshing"))
+			return
+		}
 		id, err := a.enqueue("refresh", "nav:refresh", map[string]bool{"manual": true}, true)
 		a.jobResult(w, id, err)
 	}))
@@ -144,6 +158,8 @@ func (a *App) Handler() http.Handler {
 		w.Header().Set("Referrer-Policy", "no-referrer")
 		w.Header().Set("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'")
 		if strings.HasPrefix(r.URL.Path, "/api/") {
+			requestID := randomToken()[:16]
+			w.Header().Set("X-Request-ID", requestID)
 			if r.Method == "GET" && !strings.HasPrefix(r.URL.Path, "/api/auth/oidc/") {
 				ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
 				defer cancel()
@@ -155,10 +171,10 @@ func (a *App) Handler() http.Handler {
 			defer func() {
 				if response.status >= 500 {
 					stats := a.reads.Stats()
-					a.logger.Error("API request failed", "method", r.Method, "path", r.URL.Path, "status", response.status, "duration_ms", time.Since(started).Milliseconds(), "error", response.err,
+					a.logger.Error("API request failed", "request_id", requestID, "method", r.Method, "path", r.URL.Path, "status", response.status, "duration_ms", time.Since(started).Milliseconds(), "error", response.err,
 						"db_read_in_use", stats.InUse, "db_read_open", stats.OpenConnections, "db_read_wait_count", stats.WaitCount, "db_read_wait_ms", stats.WaitDuration.Milliseconds())
 				} else if time.Since(started) >= 2*time.Second {
-					a.logger.Warn("slow API request", "method", r.Method, "path", r.URL.Path, "status", response.status, "duration_ms", time.Since(started).Milliseconds())
+					a.logger.Warn("slow API request", "request_id", requestID, "method", r.Method, "path", r.URL.Path, "status", response.status, "duration_ms", time.Since(started).Milliseconds())
 				}
 			}()
 			mux.ServeHTTP(response, r)
@@ -212,6 +228,10 @@ func (a *App) sourcesWithStatusContext(ctx context.Context) ([]Source, error) {
 func (a *App) library(w http.ResponseWriter, r *http.Request) {
 	list, err := a.sourcesWithStatusContext(r.Context())
 	if err != nil {
+		apiError(w, 500, err)
+		return
+	}
+	if err = a.libraryArtworkURLs(r.Context(), list); err != nil {
 		apiError(w, 500, err)
 		return
 	}

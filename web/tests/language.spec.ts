@@ -59,8 +59,9 @@ test("technical diagnostics remain available when switching language", async ({ 
     status: 503, contentType: "application/json", body: JSON.stringify({ error: "disk I/O error: /config/musicforge.db" }),
   }));
   await page.goto("/");
-  await expect(page.getByRole("alert")).toHaveText("disk I/O error: /config/musicforge.db");
+  await expect(page.getByRole("alert")).toContainText("disk I/O error: /config/musicforge.db");
+  await expect(page.getByRole("alert")).toContainText("Request: GET /api/auth/me");
   await page.getByRole("combobox", { name: "Language", exact: true }).selectOption("zh-CN");
-  await expect(page.getByRole("alert")).toHaveText("disk I/O error: /config/musicforge.db");
+  await expect(page.getByRole("alert")).toContainText("disk I/O error: /config/musicforge.db");
   await expect(page.getByRole("button", { name: "重新连接", exact: true })).toBeVisible();
 });

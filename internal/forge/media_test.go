@@ -198,6 +198,127 @@ func TestReferenceFLACRejectsLateIntegrityFailureAndRereadsOnRetry(t *testing.T)
 	}
 }
 
+func TestReferenceFLACRecoversOnlyVerifiedAudioWithTrailingData(t *testing.T) {
+	for _, tc := range []struct{ codec, samples string }{{"opus", "s16"}, {"opus", "s32"}, {"mp3", "s16"}} {
+		t.Run(tc.codec+tc.samples, func(t *testing.T) {
+			a, s := testApp(t)
+			s.Encoding.Codec = tc.codec
+			if err := a.saveSettings(s); err != nil {
+				t.Fatal(err)
+			}
+			rel := "Artist/Album/01.flac"
+			path := makeFLAC(t, a, s, rel, "Verified audio", true)
+			stereo := filepath.Join(t.TempDir(), "stereo.flac")
+			if _, err := runTool(context.Background(), "ffmpeg", "-v", "error", "-i", path, "-map", "0", "-c", "copy", "-c:a", "flac", "-sample_fmt", tc.samples, "-ac", "2", stereo); err != nil {
+				t.Fatal(err)
+			}
+			content, err := os.ReadFile(stereo)
+			if err != nil {
+				t.Fatal(err)
+			}
+			content = append(content, bytes.Repeat([]byte{0x55, 0xaa, 0x13, 0x37}, 64)...)
+			if err = os.WriteFile(path, content, 0600); err != nil {
+				t.Fatal(err)
+			}
+			if _, err = runTool(context.Background(), "flac", "--test", "--silent", path); err == nil {
+				t.Fatal("trailing-data fixture did not fail strict reference decoding")
+			}
+			quiet := time.Now().Add(-time.Minute)
+			if err = os.Chtimes(path, quiet, quiet); err != nil {
+				t.Fatal(err)
+			}
+			var logs bytes.Buffer
+			a.logger = slog.New(slog.NewJSONHandler(&logs, nil))
+			trace := filepath.Join(t.TempDir(), "source-reads")
+			t.Setenv("MUSICFORGE_TEST_SOURCE_TRACE", trace)
+			failNativeFLAC(t, a)
+			if err = a.scan(context.Background(), ScanRequest{}); err != nil {
+				t.Fatal(err)
+			}
+			drain(t, a, true)
+			source, err := a.sourceRel(rel)
+			if err != nil || source.Error != "" || !source.OutputPresent || source.BuiltHash != source.Hash {
+				t.Fatal("verified audio was not published", source, err)
+			}
+			p, err := a.probe(context.Background(), filepath.Join(s.Output, source.Output))
+			if err != nil || p.tags()["title"] != "Verified audio" || p.tags()["replaygain_track_gain"] != "-6.00 dB" {
+				t.Fatal("verified PCM lost metadata", p.tags(), err)
+			}
+			if _, err = os.Stat(filepath.Join(s.Output, "Artist/Album/cover.jpg")); err != nil {
+				t.Fatal("verified PCM lost external artwork", err)
+			}
+			current, _ := os.ReadFile(path)
+			reads, _ := os.ReadFile(trace)
+			if !bytes.Equal(current, content) || strings.Count(string(reads), "stage:"+rel+"\n") != 1 || !strings.Contains(logs.String(), "reference FLAC PCM verified") {
+				t.Fatal("recovery modified the source, reread it, or skipped verification", logs.String(), string(reads))
+			}
+			entries, err := os.ReadDir(a.stagingDir)
+			if err != nil || len(entries) != 0 || a.stagingBytes != 0 {
+				t.Fatal("recovery leaked staging resources", entries, err)
+			}
+		})
+	}
+}
+
+func TestReferenceFLACDoesNotTolerateErrorsWithoutIntegrityMetadata(t *testing.T) {
+	for _, field := range []string{"md5", "samples"} {
+		t.Run(field, func(t *testing.T) {
+			a, s := testApp(t)
+			rel := "Artist/Album/01.flac"
+			path := makeFLAC(t, a, s, rel, "Strict decoding", false)
+			content, err := os.ReadFile(path)
+			if err != nil || len(content) < 42 {
+				t.Fatal("missing STREAMINFO", err)
+			}
+			if field == "md5" {
+				clear(content[26:42])
+			} else {
+				content[21] &= 0xf0
+				clear(content[22:26])
+			}
+			content = append(content, bytes.Repeat([]byte{0x55, 0xaa, 0x13, 0x37}, 64)...)
+			if err = os.WriteFile(path, content, 0600); err != nil {
+				t.Fatal(err)
+			}
+			quiet := time.Now().Add(-time.Minute)
+			if err = os.Chtimes(path, quiet, quiet); err != nil {
+				t.Fatal(err)
+			}
+			p, err := a.probe(context.Background(), path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			hash, err := fileHash(context.Background(), path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			info, err := os.Stat(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			source, err := a.indexTags(rel, info, p, hash)
+			if err != nil {
+				t.Fatal(err)
+			}
+			failNativeFLAC(t, a)
+			if _, err = a.queueBuild(source, s.Encoding, false, true); err != nil {
+				t.Fatal(err)
+			}
+			j, err := a.claim(true)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err = a.execute(context.Background(), j); err == nil || !strings.Contains(err.Error(), "reference FLAC decoder failed") {
+				t.Fatal("missing integrity metadata allowed a tolerant conversion", err)
+			}
+			source, _ = a.sourceRel(rel)
+			if source.OutputPresent {
+				t.Fatal("unverified audio was published")
+			}
+		})
+	}
+}
+
 func TestReferenceFLACPipelineCancellationAndStall(t *testing.T) {
 	for _, interrupt := range []bool{false, true} {
 		t.Run(strconv.FormatBool(interrupt), func(t *testing.T) {

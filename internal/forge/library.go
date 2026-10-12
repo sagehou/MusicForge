@@ -1123,10 +1123,10 @@ func (a *App) buildStaged(ctx context.Context, j Job, r BuildRequest, staged *st
 }
 
 func (a *App) encode(ctx context.Context, id int64, duration float64, activity Activity, args []string) error {
-	return a.encodeMedia(ctx, id, duration, activity, args, "")
+	return a.encodeMedia(ctx, id, duration, activity, args, "", nil)
 }
 
-func (a *App) encodeMedia(ctx context.Context, id int64, duration float64, activity Activity, args []string, referenceInput string) error {
+func (a *App) encodeMedia(ctx context.Context, id int64, duration float64, activity Activity, args []string, referenceInput string, pcm *flacPCM) error {
 	encodeCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	stalled := time.AfterFunc(a.sourceTimeout(), cancel)
@@ -1147,6 +1147,8 @@ func (a *App) encodeMedia(ctx context.Context, id int64, duration float64, activ
 	var reference *exec.Cmd
 	var referenceLog boundedLog
 	var reader, writer *os.File
+	var decoded io.ReadCloser
+	var pcmDone chan error
 	if referenceInput != "" {
 		var err error
 		reader, writer, err = os.Pipe()
@@ -1157,9 +1159,23 @@ func (a *App) encodeMedia(ctx context.Context, id int64, duration float64, activ
 		defer reader.Close()
 		defer writer.Close()
 		cmd.Stdin = reader
-		reference = exec.CommandContext(encodeCtx, "flac", "--decode", "--stdout", "--silent", "--force-rf64-format", "--", referenceInput)
-		reference.Stdout, reference.Stderr = writer, &referenceLog
+		decodeArgs := []string{"--decode", "--stdout", "--silent", "--force-rf64-format"}
+		if pcm != nil {
+			decodeArgs = []string{"--decode", "--stdout", "--silent", "--decode-through-errors", "--force-raw-format", "--endian=little", "--sign=signed"}
+		}
+		reference = exec.CommandContext(encodeCtx, "flac", append(decodeArgs, "--", referenceInput)...)
+		reference.Stderr = &referenceLog
 		reference.WaitDelay = 2 * time.Second
+		if pcm == nil {
+			reference.Stdout = writer
+		} else {
+			decoded, err = reference.StdoutPipe()
+			if err != nil {
+				<-a.sourceSlots
+				return err
+			}
+			defer decoded.Close()
+		}
 	}
 	stdout, err := cmd.StdoutPipe()
 	if err == nil {
@@ -1173,9 +1189,22 @@ func (a *App) encodeMedia(ctx context.Context, id int64, duration float64, activ
 	var referenceStart error
 	if reference != nil {
 		referenceStart = reference.Start()
-		// Children own their pipe ends now; close parent copies so EOF propagates.
 		_ = reader.Close()
-		_ = writer.Close()
+		if referenceStart != nil || pcm == nil {
+			// Strict decoding connects child pipes directly.
+			_ = writer.Close()
+		} else {
+			pcmDone = make(chan error, 1)
+			go func() {
+				err := pcm.copyVerified(writer, decoded)
+				_ = writer.Close()
+				_ = decoded.Close()
+				if err != nil {
+					_ = reference.Process.Kill()
+				}
+				pcmDone <- err
+			}()
+		}
 	}
 	values := make(chan float64)
 	done := make(chan error, 1)
@@ -1206,15 +1235,26 @@ func (a *App) encodeMedia(ctx context.Context, id int64, duration float64, activ
 		encodeErr := cmd.Wait()
 		if reference != nil {
 			decodeErr := referenceStart
+			var pcmErr error
 			if referenceStart == nil {
 				if encodeErr != nil {
 					_ = reference.Process.Kill()
 				}
+				if pcmDone != nil {
+					pcmErr = <-pcmDone
+				}
 				decodeErr = reference.Wait()
+			}
+			if pcmErr != nil {
+				done <- fmt.Errorf("reference FLAC PCM verification failed: %w\n%s\nffmpeg: %v\n%s", pcmErr, referenceLog.String(), encodeErr, stderr.String())
+				return
 			}
 			if decodeErr != nil {
 				done <- fmt.Errorf("reference FLAC decoder failed: %w\n%s\nffmpeg: %v\n%s", decodeErr, referenceLog.String(), encodeErr, stderr.String())
 				return
+			}
+			if pcm != nil {
+				a.logger.Info("reference FLAC PCM verified", "task", a.taskID(id), "job", id, "path", activity.Path, "samples", pcm.Samples, "pcm_bytes", pcm.byteCount(), "pcm_md5", fmt.Sprintf("%x", pcm.MD5), "decoder_warnings", referenceLog.String())
 			}
 		}
 		if encodeErr != nil {

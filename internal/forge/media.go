@@ -91,22 +91,30 @@ func (a *App) encodeWithFallback(ctx context.Context, id int64, source Source, a
 	if nativeErr == nil || ctx.Err() != nil || !decodingFailure(nativeErr.Error()) || !nativeFLAC(input) {
 		return nativeErr
 	}
-	// Both attempts use the same complete local copy. The independent decoder
-	// must reach EOF and pass its CRC/MD5 checks before any artifact is published.
+	// Both attempts use the same complete local copy. Tolerant decoding is
+	// gated by an independent PCM sample-count and STREAMINFO MD5 check.
 	if err := os.Remove(output); err != nil && !os.IsNotExist(err) {
 		return errors.Join(nativeErr, fmt.Errorf("remove failed temporary output: %w", err))
 	}
 	a.logMediaVersions(ctx)
 	a.logger.Warn("trying reference FLAC decoder", "task", a.taskID(id), "job", id, "path", source.Rel, "input_sha256", source.Hash, "detail", nativeErr.Error())
+	pcm, err := readFLACPCM(input)
+	if err != nil {
+		return fmt.Errorf("FLAC fallback could not read integrity information\nNative decoder: %v\nFallback: %w", nativeErr, err)
+	}
+	inputArgs := []string{"-f", "wav"}
+	if pcm != nil {
+		inputArgs = pcm.inputArgs()
+	}
 	fallbackArgs := append([]string(nil), args...)
 	for i := 0; i+1 < len(fallbackArgs); i++ {
 		if fallbackArgs[i] == "-i" {
 			fallbackArgs[i+1] = "pipe:0"
-			fallbackArgs = append(fallbackArgs[:i], append([]string{"-f", "wav"}, fallbackArgs[i:]...)...)
+			fallbackArgs = append(fallbackArgs[:i], append(inputArgs, fallbackArgs[i:]...)...)
 			break
 		}
 	}
-	err := a.encodeMedia(ctx, id, source.Duration, activity, fallbackArgs, input)
+	err = a.encodeMedia(ctx, id, source.Duration, activity, fallbackArgs, input, pcm)
 	if err != nil {
 		if ctx.Err() != nil {
 			return ctx.Err()

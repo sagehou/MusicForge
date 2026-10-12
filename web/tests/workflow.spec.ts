@@ -47,6 +47,29 @@ test("bilingual setup, real incremental build, state preservation and login", as
   await page.getByRole("button", { name: "浏览专辑 CI Album", exact: true }).click();
   await expect(page.getByText("CI Track", { exact: true })).toBeVisible({ timeout: 30000 });
   await expect(page.getByRole("table").getByText("已就绪", { exact: true })).toBeVisible({ timeout: 30000 });
+  const cover = page.locator(".album-summary .cover img");
+  await expect(cover).toBeVisible();
+  await expect.poll(() => cover.evaluate((node: HTMLImageElement) => node.naturalWidth)).toBe(320);
+  const artwork = await page.request.get((await cover.getAttribute("src"))!);
+  expect(artwork.status()).toBe(200);
+  expect(artwork.headers()["content-type"]).toBe("image/jpeg");
+  expect(artwork.headers()["cache-control"]).toContain("private");
+  expect(artwork.headers()["x-request-id"]).toBeTruthy();
+  for (const language of ["zh-CN", "en"]) {
+    await page.locator(".language-selector select").selectOption(language);
+    for (const width of [1440, 390, 320]) {
+      await page.setViewportSize({ width, height: width > 800 ? 1000 : 844 });
+      for (const theme of ["light", "dark"]) {
+        await page.locator(".theme-selector select").selectOption(theme);
+        await expect(page.locator("html")).toHaveAttribute("data-theme", theme);
+        expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
+        await page.screenshot({ path: `test-results/real-artwork-${language}-${width}-${theme}.png`, fullPage: true, animations: "disabled" });
+      }
+    }
+  }
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.locator(".theme-selector select").selectOption("system");
+  await page.locator(".language-selector select").selectOption("zh-CN");
   await page.getByLabel("搜索音乐库", { exact: true }).fill("CI Track");
   await page.getByLabel("状态筛选", { exact: true }).selectOption("ready");
   await page.getByLabel("选择 CI Track", { exact: true }).check();

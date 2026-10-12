@@ -350,6 +350,7 @@ type Source struct {
 	OutputPresent bool              `json:"output_present"`
 	Error         string            `json:"error"`
 	Status        string            `json:"status"`
+	ArtworkURL    string            `json:"artwork_url,omitempty"`
 }
 
 type Job struct {

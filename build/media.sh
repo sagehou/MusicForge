@@ -36,7 +36,7 @@ cd "ffmpeg-$FFMPEG_VERSION"
     --enable-ffmpeg --enable-ffprobe --enable-static --disable-shared \
     --enable-libopus --enable-libmp3lame --pkg-config-flags=--static --extra-ldflags=-static \
     --enable-protocol=file,pipe --enable-indev=lavfi \
-    --enable-demuxer=flac,ogg,mp3,mov,aac,wav,aiff,asf,ape,wv,matroska,image2,png_pipe,jpeg_pipe \
+    --enable-demuxer=flac,ogg,mp3,mov,aac,wav,aiff,asf,ape,wv,matroska,image2,png_pipe,jpeg_pipe,pcm_s8,pcm_s16le,pcm_s24le,pcm_s32le \
     --enable-muxer=flac,ogg,opus,mp3,ipod,mp4,adts,wav,aiff,asf,wv,matroska,image2,null \
     --enable-decoder=flac,opus,mp3,mp3float,aac,alac,vorbis,wmav1,wmav2,wmapro,wmalossless,ape,wavpack,mjpeg,png,pcm_s8,pcm_u8,pcm_s16le,pcm_s16be,pcm_s24le,pcm_s24be,pcm_s32le,pcm_s32be,pcm_s64le,pcm_s64be,pcm_f32le,pcm_f32be,pcm_f64le,pcm_f64be,pcm_alaw,pcm_mulaw \
     --enable-encoder=flac,libopus,libmp3lame,aac,alac,vorbis,wmav2,wavpack,mjpeg,pcm_s16le,pcm_s24le,pcm_s24be \

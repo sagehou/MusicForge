@@ -45,7 +45,7 @@ func TestFLACPCMStreamInfoAndRawFormats(t *testing.T) {
 			case "samples":
 				binary.BigEndian.PutUint64(missing[18:26], packed & ^uint64((1<<36)-1))
 			case "rate":
-				binary.BigEndian.PutUint64(missing[18:26], packed & ((1<<44)-1))
+				binary.BigEndian.PutUint64(missing[18:26], packed&((1<<44)-1))
 			case "unaligned":
 				binary.BigEndian.PutUint64(missing[18:26], packed & ^(uint64(31)<<36) | 19<<36)
 			}

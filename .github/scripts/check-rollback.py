@@ -133,8 +133,21 @@ def verification_queued(rel):
         return db.execute("SELECT 1 FROM jobs WHERE kind='scan' AND dedup LIKE 'scan:prepare:%' AND json_extract(args,'$.dirs[0]')=? AND json_extract(args,'$.verify')=1 LIMIT 1", (rel,)).fetchone() is not None
 
 
+def library_record(track):
+    # Artwork URLs are derived UI data, absent in older API responses.
+    return {key: value for key, value in track.items() if key != "artwork_url"}
+
+
+def seed_refresh():
+    # Seed historical work while stopped; the live API rejects disabled refreshes.
+    now = int(time.time())
+    with sqlite3.connect(ROOT / "config/musicforge.db") as db:
+        return db.execute("INSERT INTO jobs(kind,dedup,args,created,updated) VALUES(?,?,?,?,?)",
+                          ("refresh", "nav:refresh", '{"manual":true}', now, now)).lastrowid
+
+
 def verify(api, expected_tracks, pending, stopped):
-    tracks = api("/api/library")
+    tracks = [library_record(track) for track in api("/api/library")]
     assert sorted(tracks, key=lambda track: track["id"]) == expected_tracks, "library/artifact records changed"
     settings = api("/api/settings")
     assert settings["configured"] == {"webhook": True, "nav_password": True, "oidc_secret": True}, "saved credentials lost"
@@ -176,15 +189,19 @@ def main():
         values["webhook_secret"] = "ci-rollback-webhook-secret-24-plus"
         save_settings(api, values)
         tracks = wait_for(lambda: api("/api/library"), lambda rows: len(rows) == 3 and all(row["status"] == "ready" for row in rows), "candidate mixed-source conversion")
-        tracks.sort(key=lambda track: track["id"])
+        tracks = sorted((library_record(track) for track in tracks), key=lambda track: track["id"])
         wait_for(lambda: api("/api/jobs")["jobs"], lambda rows: all(row["state"] == "success" for row in rows), "completed conversion jobs")
         values = api("/api/settings")["settings"]
         values.update(enabled=False, nav_url="https://navidrome.example.test", nav_user="admin", nav_password="ci-nav-secret",
                       oidc_issuer="https://issuer.example.test", oidc_client_id="client", oidc_secret="ci-oidc-secret")
         save_settings(api, values)
-        stopped = api("/api/navidrome/refresh", "POST", {})["job_id"]
+        stop()
+        stopped = seed_refresh()
+        api, _ = start(CANDIDATE)
         api("/api/jobs/control", "POST", {"action": "stop", "ids": [stopped]})
-        pending = api("/api/navidrome/refresh", "POST", {})["job_id"]
+        stop()
+        pending = seed_refresh()
+        api, _ = start(CANDIDATE)
         api("/api/jobs/control", "POST", {"action": "pause", "ids": [pending]})
         verify(api, tracks, pending, stopped)
         stop()
@@ -253,7 +270,7 @@ def main():
             stop()
             api, _ = start(CANDIDATE)
             restored = next(row for row in api("/api/library") if row["path"] == rel)
-            assert restored == row, "candidate cannot reopen older worker's completed artifact"
+            assert library_record(restored) == library_record(row), "candidate cannot reopen older worker's completed artifact"
             stop()
             pending_checks.append({"release": version, "pending_verify_then_old_worker_build": "passed", "source_hash": expected_hash})
         Path(".ci/rollback-evidence.json").write_text(json.dumps({"architecture": os.environ["ARCH"], "schema": 2, "checks": evidence, "pending_verification_checks": pending_checks}, indent=2) + "\n")

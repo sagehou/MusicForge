@@ -203,7 +203,7 @@ func TestReferenceFLACRejectsLateIntegrityFailureAndRereadsOnRetry(t *testing.T)
 func TestReferenceFLACRecoversOnlyVerifiedAudioWithTrailingData(t *testing.T) {
 	for _, tc := range []struct {
 		codec, samples string
-		extraFrames bool
+		extraFrames    bool
 	}{{"opus", "s16", false}, {"opus", "s32", false}, {"mp3", "s16", false}, {"opus", "s16", true}, {"opus", "s32", true}, {"mp3", "s16", true}} {
 		t.Run(tc.codec+tc.samples+strconv.FormatBool(tc.extraFrames), func(t *testing.T) {
 			a, s := testApp(t)

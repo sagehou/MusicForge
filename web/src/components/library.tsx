@@ -1,6 +1,6 @@
 import { useDeferredValue, useEffect, useMemo, useRef, useState, Fragment } from "react";
 import { flushSync } from "react-dom";
-import { ArrowLeft, ChevronLeft, ChevronRight, Clock3, Disc3, Grid2X2, List, Music2, RefreshCw, Search, ShieldCheck, Trash2, X } from "lucide-react";
+import { ArrowLeft, ChevronLeft, ChevronRight, Clock3, Disc3, Grid2X2, List, Music2, RefreshCw, Search, ShieldCheck, SlidersHorizontal, Trash2, X } from "lucide-react";
 import { api } from "../api";
 import { useI18n, type MessageKey } from "../i18n";
 import type { Source } from "../types";
@@ -63,17 +63,25 @@ export function Library({ notify }: { notify: Notice }) {
   });
   const transition = useRef<ViewTransition | null>(null);
   const navigation = useRef(0);
+  const [compact, setCompact] = useState(() => matchMedia("(max-width: 800px)").matches);
+  const [optionsOpen, setOptionsOpen] = useState(false);
   const [sort, setSort] = useState("name");
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [busy, setBusy] = useState(false);
   const [offset, setOffset] = useState(0);
   useEffect(() => {
-    const back = () => { navigation.current++; transition.current?.skipTransition(); setScope(readScope()); setOffset(0); };
+    const back = () => { navigation.current++; transition.current?.skipTransition(); setScope(readScope()); setOffset(0); setOptionsOpen(false); };
     window.addEventListener("popstate", back);
     window.addEventListener("route-changed", back);
     return () => { window.removeEventListener("popstate", back); window.removeEventListener("route-changed", back); };
   }, []);
   useEffect(() => () => transition.current?.skipTransition(), []);
+  useEffect(() => {
+    const media = matchMedia("(max-width: 800px)");
+    const change = () => { setCompact(media.matches); setOptionsOpen(false); };
+    media.addEventListener("change", change);
+    return () => media.removeEventListener("change", change);
+  }, []);
   useEffect(() => {
     const frame = requestAnimationFrame(() => document.getElementById("library-title")?.focus());
     return () => cancelAnimationFrame(frame);
@@ -142,7 +150,7 @@ export function Library({ notify }: { notify: Notice }) {
     history.pushState(null, "", `/library?${params}`);
     transition.current?.skipTransition();
     const revision = ++navigation.current;
-    const update = () => { if (navigation.current === revision) { setScope(next); setOffset(0); window.scrollTo(0, 0); } };
+    const update = () => { if (navigation.current === revision) { setScope(next); setOffset(0); setOptionsOpen(false); window.scrollTo(0, 0); } };
     const cover = origin?.closest(".library-group")?.querySelector<HTMLElement>(".cover");
     if (!next.album || !cover || !document.startViewTransition || matchMedia("(prefers-reduced-motion: reduce)").matches) {
       update(); return;
@@ -180,11 +188,11 @@ export function Library({ notify }: { notify: Notice }) {
       <div className="actions"><Button variant="outline" disabled={busy} onClick={() => void action("/library/scan", { verify: true }, "notice.verify")}><ShieldCheck size={16} />{t("library.verify")}</Button><Button disabled={busy} onClick={() => void action("/library/scan", {}, "notice.scan")}><RefreshCw size={16} className={busy ? "animate-spin" : ""} />{t("library.scan")}</Button></div>
     </div>
     {expired > 0 && <div className="banner amber"><Clock3 size={20} /><div><strong>{t("library.expiredCount", { count: expired })}</strong><p>{t("library.expiredHint")}</p></div><Button variant="destructive" size="sm" disabled={busy} onClick={() => deleteSelected(true)}><Trash2 size={14} />{t("library.deleteExpired")}</Button></div>}
-    <nav className="library-breadcrumbs" aria-label={t("library.hierarchy")}>
+    {(scope.artist || isAlbum) && <nav className="library-breadcrumbs" aria-label={t("library.hierarchy")}>
       <button onClick={() => navigate({ view: scope.view })} aria-current={!scope.artist ? "page" : undefined}>{t(scope.view === "artists" ? "library.artists" : "library.albums")}</button>
       {scope.artist && <><ChevronRight size={14} /><button onClick={() => navigate({ view: scope.view, artist: scope.artist })} aria-current={!isAlbum ? "page" : undefined}>{artist?.artist || scope.artist}</button></>}
       {isAlbum && <><ChevronRight size={14} /><span aria-current="page">{album?.album || scope.album}</span></>}
-    </nav>
+    </nav>}
     {isAlbum && <section className="album-summary">
       <Cover tracks={albumTracks} name={album?.album || t("library.unknownAlbum")} transition />
       <div><Button variant="ghost" size="sm" onClick={() => navigate({ view: scope.view, artist: scope.artist })}><ArrowLeft size={14} />{t("library.backToAlbums")}</Button>
@@ -201,11 +209,16 @@ export function Library({ notify }: { notify: Notice }) {
       </div></div>}
       <div className="table-toolbar library-toolbar">
         <div className="search"><Search size={17} aria-hidden="true" /><input type="search" aria-label={t("library.search")} placeholder={t("library.searchPlaceholder")} value={query} onChange={event => { setQuery(event.target.value); setOffset(0); }} />{query && <button aria-label={t("library.clearSearch")} title={t("library.clearSearch")} onClick={() => { setQuery(""); setOffset(0); }}><X size={16} /></button>}</div>
-        <select aria-label={t("library.filter")} value={filter} onChange={event => { setFilter(event.target.value); setOffset(0); }}><option value="all">{t("library.allStatuses")}</option>{priority.slice().reverse().map(state => <option value={state} key={state}>{statusLabel(state)}</option>)}</select>
-        {!isAlbum && <select aria-label={t("library.sort")} value={sort} onChange={event => { setSort(event.target.value); setOffset(0); }}><option value="name">{t("library.sortName")}</option><option value="attention">{t("library.sortAttention")}</option></select>}
-        {!isAlbum && layout === "grid" && <select aria-label={t("library.coverSize")} value={density} onChange={event => { const value = event.target.value as Density; setDensity(value); savePreference("density", value); }}>
-          <option value="compact">{t("library.coverCompact")}</option><option value="standard">{t("library.coverStandard")}</option><option value="large">{t("library.coverLarge")}</option>
-        </select>}
+        <details className="library-options" data-filtered={filter !== "all"} open={!compact || optionsOpen} onToggle={event => { if (compact) setOptionsOpen(event.currentTarget.open); }} onKeyDown={event => { if (event.key === "Escape") { setOptionsOpen(false); event.currentTarget.querySelector("summary")?.focus(); } }}>
+          <summary aria-label={t("library.options")} title={filter === "all" ? t("library.options") : `${t("library.options")}: ${statusLabel(filter)}`}><SlidersHorizontal size={17} /></summary>
+          <div className="library-options-body">
+            <select aria-label={t("library.filter")} value={filter} onChange={event => { setFilter(event.target.value); setOffset(0); setOptionsOpen(false); }}><option value="all">{t("library.allStatuses")}</option>{priority.slice().reverse().map(state => <option value={state} key={state}>{statusLabel(state)}</option>)}</select>
+            {!isAlbum && <select aria-label={t("library.sort")} value={sort} onChange={event => { setSort(event.target.value); setOffset(0); setOptionsOpen(false); }}><option value="name">{t("library.sortName")}</option><option value="attention">{t("library.sortAttention")}</option></select>}
+            {!isAlbum && !compact && layout === "grid" && <select aria-label={t("library.coverSize")} value={density} onChange={event => { const value = event.target.value as Density; setDensity(value); savePreference("density", value); setOptionsOpen(false); }}>
+              <option value="compact">{t("library.coverCompact")}</option><option value="standard">{t("library.coverStandard")}</option><option value="large">{t("library.coverLarge")}</option>
+            </select>}
+          </div>
+        </details>
         {!isAlbum && <div className="segmented layout-control" role="group" aria-label={t("library.layout")}>
           <button aria-label={t("library.grid")} title={t("library.grid")} aria-pressed={layout === "grid"} onClick={() => { setLayout("grid"); savePreference("layout", "grid"); }}><Grid2X2 size={17} /></button>
           <button aria-label={t("library.list")} title={t("library.list")} aria-pressed={layout === "list"} onClick={() => { setLayout("list"); savePreference("layout", "list"); }}><List size={17} /></button>

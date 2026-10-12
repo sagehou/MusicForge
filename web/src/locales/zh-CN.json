@@ -403,6 +403,7 @@
   "library.grid": "网格视图",
   "library.list": "列表视图",
   "library.coverSize": "封面大小",
+  "library.options": "筛选与显示选项",
   "library.coverCompact": "小封面",
   "library.coverStandard": "中封面",
   "library.coverLarge": "大封面",

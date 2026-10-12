@@ -159,6 +159,7 @@ test("a changed browser session refreshes CSRF without automatically replaying a
     return route.fulfill({ status: 202, json: { job_id: 1 } });
   });
   await page.goto("/library");
+  await expect(page.getByRole("heading", { name: "Library", exact: true })).toBeVisible();
   csrf = "renewed-in-another-tab";
   await page.getByRole("button", { name: "Scan", exact: true }).click();
   await expect(page.getByRole("alert")).toContainText("Session changed; please retry this action");
@@ -166,6 +167,29 @@ test("a changed browser session refreshes CSRF without automatically replaying a
   await page.getByRole("button", { name: "Scan", exact: true }).click();
   await expect(page.getByRole("status")).toContainText("Scan");
   expect(writes).toBe(2);
+});
+
+test("failed action diagnostics persist until dismissal while successful notices expire", async ({ page }) => {
+  await mockLibrary(page);
+  await page.clock.install();
+  let fail = true;
+  await page.route("**/api/library/scan", route => fail
+    ? route.fulfill({ status: 500, headers: { "X-Request-ID": "ci-persistent-error" }, json: { error: "Synthetic scan failure" } })
+    : route.fulfill({ status: 202, json: { job_id: 1 } }));
+  await page.goto("/library");
+  await page.getByRole("button", { name: "Scan", exact: true }).click();
+  const error = page.getByRole("alert");
+  await expect(error).toContainText("Synthetic scan failure");
+  await expect(error).toContainText("ci-persistent-error");
+  await page.clock.fastForward(6500);
+  await expect(error).toBeVisible();
+  await error.getByRole("button", { name: "Dismiss notification", exact: true }).click();
+  await expect(error).toHaveCount(0);
+  fail = false;
+  await page.getByRole("button", { name: "Scan", exact: true }).click();
+  await expect(page.getByRole("status")).toContainText("Scan");
+  await page.clock.fastForward(6500);
+  await expect(page.getByRole("status")).toHaveCount(0);
 });
 
 test("protected password changes recover authentication without replaying a write", async ({ page }) => {
@@ -207,7 +231,6 @@ test("system appearance follows the OS and reduced motion disables the toast ent
       return start(...args);
     };
   });
-  await page.getByRole("button", { name: "Artists", exact: false }).click();
   await page.getByRole("button", { name: "Browse artist River Ensemble", exact: true }).click();
   await page.getByRole("button", { name: "Browse album Night Studies", exact: true }).click();
   await expect(page.getByRole("table")).toBeVisible();
@@ -274,6 +297,37 @@ test("album artwork continuity is progressive and keyboard navigation remains fo
   expect(transitions).toBe(1);
 });
 
+test("narrow-screen filter and display menu stays usable and inside the viewport", async ({ page }) => {
+  await mockLibrary(page, collection);
+  await page.setViewportSize({ width: 320, height: 844 });
+  await page.goto("/library?view=albums");
+  const summary = page.locator(".library-options > summary");
+  await expect(summary).toBeVisible();
+  await summary.focus();
+  await page.keyboard.press("Enter");
+  await expect(page.getByLabel("Cover size", { exact: true })).toHaveCount(0);
+  await expect(page.getByLabel("Sort library", { exact: true })).toBeVisible();
+  const menu = await page.locator(".library-options-body").boundingBox();
+  expect(menu!.x).toBeGreaterThanOrEqual(0);
+  expect(menu!.x + menu!.width).toBeLessThanOrEqual(320);
+  await page.getByLabel("Sort library", { exact: true }).selectOption("attention");
+  await expect(page.locator(".library-options")).not.toHaveAttribute("open", "");
+  await summary.click();
+  await page.getByLabel("Filter by status", { exact: true }).selectOption("failed");
+  await expect(page.locator(".library-group")).toHaveCount(1);
+  await expect(page.locator(".library-options")).toHaveAttribute("data-filtered", "true");
+  await summary.click();
+  await page.getByLabel("Filter by status", { exact: true }).selectOption("all");
+  await expect(page.locator(".library-group")).toHaveCount(50);
+  await summary.click();
+  await page.getByLabel("Sort library", { exact: true }).focus();
+  await page.keyboard.press("Escape");
+  await expect(summary).toBeFocused();
+  await expect(page.locator(".library-options")).not.toHaveAttribute("open", "");
+  await page.getByRole("combobox", { name: "Language", exact: true }).selectOption("zh-CN");
+  await expect(summary).toHaveAttribute("aria-label", "筛选与显示选项");
+});
+
 test("Navidrome waiting is a localized non-error state", async ({ page }) => {
   await mockLibrary(page);
   await page.route("**/api/jobs?*", route => route.fulfill({ json: { jobs: [{
@@ -300,6 +354,11 @@ for (const width of [1920, 1440, 768, 390, 320]) {
     await expect(page.getByRole("heading", { name: "Library", exact: true })).toBeVisible();
     await expect(page.locator(".library-group")).toHaveCount(50);
     await expect.poll(() => page.locator(".cover img").first().evaluate((node: HTMLImageElement) => node.naturalWidth)).toBeGreaterThan(0);
+    if (width <= 800) {
+      const name = await page.getByRole("button", { name: "Field Notes", exact: true }).boundingBox();
+      const navigation = width <= 600 ? await page.locator(".sidebar").boundingBox() : null;
+      expect(name!.y + name!.height).toBeLessThan(navigation?.y ?? 844);
+    }
     for (const theme of ["light", "dark"]) {
       await page.getByRole("combobox", { name: "Appearance", exact: true }).selectOption(theme);
       await expect(page.locator("html")).toHaveAttribute("data-theme", theme);
@@ -310,7 +369,7 @@ for (const width of [1920, 1440, 768, 390, 320]) {
     await expect(page.getByRole("heading", { name: "音乐库", exact: true })).toBeVisible();
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
     await page.screenshot({ path: `test-results/library-${width}-dark-zh.png`, animations: "disabled" });
-    await page.getByRole("combobox", { name: "Language", exact: true }).selectOption("en");
+    await page.getByRole("combobox", { name: "语言", exact: true }).selectOption("en");
     await page.getByRole("button", { name: "List view", exact: true }).click();
     expect(await page.locator(".library-groups").evaluate(node => getComputedStyle(node).gridTemplateColumns.split(" ").length)).toBe(1);
     await page.screenshot({ path: `test-results/library-list-${width}-dark.png`, animations: "disabled" });

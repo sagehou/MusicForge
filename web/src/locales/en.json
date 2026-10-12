@@ -436,6 +436,7 @@
   "library.grid": "Grid view",
   "library.list": "List view",
   "library.coverSize": "Cover size",
+  "library.options": "Filter and display options",
   "library.coverCompact": "Small covers",
   "library.coverStandard": "Medium covers",
   "library.coverLarge": "Large covers",

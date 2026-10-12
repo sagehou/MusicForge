@@ -8,8 +8,8 @@
       "dark-primary": { "role": "primary", "displayName": "Pale Rose" }
     },
     "shadows": [
-      { "name": "toast-light", "value": "0 8px 24px #1e202514", "purpose": "Temporary feedback over the flat workspace." },
-      { "name": "toast-dark", "value": "0 8px 24px #00000038", "purpose": "Temporary feedback in dark appearance." }
+      { "name": "toast-light", "value": "0 8px 24px #1e202514", "purpose": "Dismissible operational feedback over the flat workspace." },
+      { "name": "toast-dark", "value": "0 8px 24px #00000038", "purpose": "Dismissible operational feedback in dark appearance." }
     ],
     "motion": [
       { "name": "ease-feedback", "value": "cubic-bezier(.16, 1, .3, 1)", "purpose": "Artwork continuity, loading, toast entrance and progress changes." },
@@ -93,7 +93,11 @@
       "Do preserve real artwork proportions and reserve media dimensions.",
       "Do use labels, keyboard focus and indeterminate partial-selection states.",
       "Do keep long translated text and file paths inside their layout.",
-      "Do retain state and provide recovery during temporary failures."
+      "Do retain state and provide recovery during temporary failures.",
+      "Do close compact library options on selection and restore summary focus on Escape.",
+      "Do keep density choices in desktop grids while preserving density and layout preferences.",
+      "Do retain error toasts until dismissal and expire success toasts after six seconds.",
+      "Do lead pipeline stages with headings, without redundant above-heading labels."
     ],
     "donts": [
       "Don't invent artist portraits or playback features.",

@@ -290,6 +290,10 @@ summary { font-size: 12px; color: var(--danger); cursor: pointer; margin-top: 6p
 .library-breadcrumbs button { color: var(--accent); padding: 6px 0; text-align: left; overflow-wrap: anywhere; }
 .library-breadcrumbs [aria-current="page"] { color: var(--ink); }
 .library-surface { border-top: 1px solid var(--line); }
+.library-options { min-width: 0; }
+.library-options > summary { display: none; }
+.library-options-body { display: flex; align-items: center; gap: 12px; }
+.library-options-body select { width: auto; max-width: 100%; min-width: 100px; }
 .library-navigation { display: flex; align-items: center; justify-content: space-between; padding: 18px 0 0; }
 .segmented { display: inline-flex; align-items: center; gap: 3px; border-radius: var(--radius-artwork); background: var(--subtle); padding: 3px; }
 .segmented button { min-height: 34px; padding: 7px 14px; font-size: 13px; border-radius: var(--radius-control); color: var(--muted); display: flex; align-items: center; justify-content: center; gap: 9px; transition: background 160ms, color 160ms, transform 100ms; }
@@ -380,6 +384,12 @@ summary { font-size: 12px; color: var(--danger); cursor: pointer; margin-top: 6p
   .task-progress, .task-details { padding-left: 0; }
   .task-actions { padding-left: 0; }
   .task > .task-waiting { margin-left: 0; }
+  .library-options { position: relative; }
+  .library-options > summary { display: grid; place-items: center; list-style: none; margin: 0; width: 40px; height: 40px; border: 1px solid var(--line); border-radius: var(--radius-control); background: var(--surface); color: var(--muted); }
+  .library-options > summary::-webkit-details-marker { display: none; }
+  .library-options[open] > summary, .library-options[data-filtered="true"] > summary { color: var(--accent); background: var(--accent-soft); border-color: var(--accent); }
+  .library-options-body { display: grid; position: absolute; top: calc(100% + 8px); left: 0; width: min(280px, calc(100vw - 32px)); gap: 10px; padding: 14px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-artwork); z-index: 8; }
+  .library-options-body select { width: 100%; }
   .library-groups, .library-groups[data-density] { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px 18px; }
   .library-list[data-density] { grid-template-columns: 1fr; gap: 0; }
   .track-artist { display: none; }
@@ -424,6 +434,7 @@ summary { font-size: 12px; color: var(--danger); cursor: pointer; margin-top: 6p
   .auth-layout > .appearance-controls { top: 16px; right: 16px; }
   .banner { padding: 16px; }
   .library-groups, .library-groups[data-density] { gap: 22px 14px; }
+  .library-options > summary { width: 44px; height: 44px; }
   .library-list[data-density] { gap: 0; }
   .library-group-body { grid-template-columns: 16px minmax(0, 1fr); gap: 8px; }
   .library-group-body .badge { font-size: 11px; }

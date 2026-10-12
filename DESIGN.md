@@ -116,6 +116,7 @@ only for paths, endpoints and diagnostics. Page headings use the headline role,
 section titles the title role, and compact metadata the label or smaller role.
 Mobile page headings use the implemented fixed size (25px), not viewport scaling.
 Counters and durations use tabular numerals. Long names and paths wrap.
+Pipeline stages lead with their headings, without repeated above-heading labels.
 
 ## Layout
 
@@ -126,9 +127,11 @@ The mobile header wraps when appearance controls cannot fit beside the brand.
 Page insets reduce from 36px to 24px to 16px.
 
 Library cover grids use square media and adaptive minimum tracks (144px small,
-180px medium, 232px large), then two equal columns below 800px. The medium
+180px medium, 232px large), then two equal columns at 800px and below. The medium
 layout shows five columns at 1440px and seven at 1920px; columns are never fixed
-to three. Cover size and grid/list preferences persist in browser storage.
+to three. Desktop grids retain small/medium/large density choices; compact
+two-column grids omit that inert control. Cover size and grid/list preferences
+persist in browser storage and remain available when returning to desktop.
 List view uses compact square artwork. Album details
 use cover/metadata columns and a fixed-layout track table. Smaller screens hide
 redundant artist/duration columns; file details remain accessible.
@@ -156,6 +159,10 @@ the accent, secondary buttons use a surface and stroke, and destructive buttons
 use danger tones. Focus uses a visible two-pixel accent outline. Controls retain
 loading/disabled states and mobile touch heights (44px).
 
+At 800px and below, library filter and sort controls use a native details
+disclosure with a localized icon summary. Choosing an option closes it; Escape
+closes it and restores focus to the summary. Desktop options stay inline.
+
 ### Navigation
 
 The active destination combines accent color, a tonal background and
@@ -176,6 +183,8 @@ Retain loaded data during polling failure and show a retryable warning.
 Distinguish waiting work from terminal failure. Confirmed session expiry locks
 the background with a focused reauthentication dialog; temporary verification
 errors do not remove the page. Technical diagnostics remain available.
+Error toasts remain until dismissed rather than timing out; success toasts
+expire after six seconds. Both retain an explicit dismiss control.
 
 The focal motion carries the clicked album cover into its detail header with a
 320ms native View Transition. It is progressively enhanced, never required for
@@ -191,6 +200,10 @@ shared artwork transitions and disables CSS animation without removing feedback.
 - Do use labels, keyboard focus and indeterminate partial-selection states.
 - Do keep long translated text and file paths inside their layout.
 - Do retain state and provide recovery during temporary failures.
+- Do close compact library options on selection and restore summary focus on Escape.
+- Do keep density choices in desktop grids while preserving density and layout preferences.
+- Do retain error toasts until dismissal and expire success toasts after six seconds.
+- Do lead pipeline stages with headings, without redundant above-heading labels.
 
 ### Don't:
 - Don't invent artist portraits or playback features.

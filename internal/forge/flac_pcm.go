@@ -69,7 +69,7 @@ func (p *flacPCM) copyVerified(dst io.Writer, src io.Reader) error {
 	// MD5 is the checksum defined by FLAC for signed, little-endian PCM.
 	h := md5.New()
 	expected := p.byteCount()
-	n, err := io.Copy(io.MultiWriter(dst, h), io.LimitReader(src, expected+1))
+	n, err := io.Copy(io.MultiWriter(dst, h), io.LimitReader(src, expected))
 	if err != nil {
 		return fmt.Errorf("copy FLAC PCM: %w", err)
 	}
@@ -78,6 +78,14 @@ func (p *flacPCM) copyVerified(dst io.Writer, src io.Reader) error {
 	}
 	if !bytes.Equal(h.Sum(nil), p.MD5[:]) {
 		return fmt.Errorf("FLAC PCM MD5 mismatch: expected %x, got %x", p.MD5, h.Sum(nil))
+	}
+	// The decoder is instructed to stop at Samples. Check that boundary without
+	// forwarding a probe byte to ffmpeg as an incomplete PCM sample.
+	var extra [1]byte
+	if n, err := io.ReadFull(src, extra[:]); n != 0 {
+		return fmt.Errorf("FLAC PCM sample count mismatch: decoder emitted data beyond the declared %d bytes (%d samples)", expected, p.Samples)
+	} else if err != io.EOF {
+		return fmt.Errorf("read FLAC PCM boundary: %w", err)
 	}
 	return nil
 }

@@ -3,6 +3,8 @@ package forge
 import (
 	"bytes"
 	"context"
+	"crypto/md5"
+	"encoding/binary"
 	"encoding/json"
 	"errors"
 	"log/slog"
@@ -199,8 +201,11 @@ func TestReferenceFLACRejectsLateIntegrityFailureAndRereadsOnRetry(t *testing.T)
 }
 
 func TestReferenceFLACRecoversOnlyVerifiedAudioWithTrailingData(t *testing.T) {
-	for _, tc := range []struct{ codec, samples string }{{"opus", "s16"}, {"opus", "s32"}, {"mp3", "s16"}} {
-		t.Run(tc.codec+tc.samples, func(t *testing.T) {
+	for _, tc := range []struct {
+		codec, samples string
+		extraFrames bool
+	}{{"opus", "s16", false}, {"opus", "s32", false}, {"mp3", "s16", false}, {"opus", "s16", true}, {"opus", "s32", true}, {"mp3", "s16", true}} {
+		t.Run(tc.codec+tc.samples+strconv.FormatBool(tc.extraFrames), func(t *testing.T) {
 			a, s := testApp(t)
 			s.Encoding.Codec = tc.codec
 			if err := a.saveSettings(s); err != nil {
@@ -216,12 +221,47 @@ func TestReferenceFLACRecoversOnlyVerifiedAudioWithTrailingData(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
+			if tc.extraFrames {
+				// Describe only the first half as the complete track, with its correct
+				// MD5, leaving additional decodable frames after the declared audio.
+				info, err := readFLACPCM(stereo)
+				if err != nil || info == nil {
+					t.Fatal("fixture has no integrity information", err)
+				}
+				rawPath := filepath.Join(t.TempDir(), "complete.raw")
+				if _, err = runTool(context.Background(), "flac", "--decode", "--silent", "--force-raw-format", "--endian=little", "--sign=signed", "--output-name="+rawPath, stereo); err != nil {
+					t.Fatal(err)
+				}
+				raw, err := os.ReadFile(rawPath)
+				if err != nil || int64(len(raw)) != info.byteCount() {
+					t.Fatal("invalid fixture PCM", len(raw), err)
+				}
+				info.Samples /= 2
+				checksum := md5.Sum(raw[:info.byteCount()])
+				packed := binary.BigEndian.Uint64(content[18:26])
+				binary.BigEndian.PutUint64(content[18:26], packed & ^uint64((1<<36)-1) | uint64(info.Samples))
+				copy(content[26:42], checksum[:])
+			}
 			content = append(content, bytes.Repeat([]byte{0x55, 0xaa, 0x13, 0x37}, 64)...)
 			if err = os.WriteFile(path, content, 0600); err != nil {
 				t.Fatal(err)
 			}
 			if _, err = runTool(context.Background(), "flac", "--test", "--silent", path); err == nil {
 				t.Fatal("trailing-data fixture did not fail strict reference decoding")
+			}
+			if tc.extraFrames {
+				unbounded := filepath.Join(t.TempDir(), "unbounded.raw")
+				if _, err = runTool(context.Background(), "flac", "--decode", "--silent", "--decode-through-errors", "--force-raw-format", "--endian=little", "--sign=signed", "--output-name="+unbounded, path); err != nil {
+					t.Fatal(err)
+				}
+				info, err := readFLACPCM(path)
+				if err != nil || info == nil {
+					t.Fatal(err)
+				}
+				decoded, err := os.Stat(unbounded)
+				if err != nil || decoded.Size() <= info.byteCount() {
+					t.Fatal("fixture did not produce extra PCM", decoded, err)
+				}
 			}
 			quiet := time.Now().Add(-time.Minute)
 			if err = os.Chtimes(path, quiet, quiet); err != nil {

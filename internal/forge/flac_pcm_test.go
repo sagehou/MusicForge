@@ -82,8 +82,11 @@ func TestFLACPCMRequiresExactLengthAndMD5(t *testing.T) {
 			} else if err == nil || !strings.Contains(err.Error(), tc.want) {
 				t.Fatal("invalid PCM was accepted", err)
 			}
-			if int64(output.Len()) > p.byteCount()+1 {
-				t.Fatal("decoder output exceeded the bounded verification read")
+			if int64(output.Len()) > p.byteCount() {
+				t.Fatal("boundary probe leaked into the encoder input")
+			}
+			if tc.name == "extra" && !bytes.Equal(output.Bytes(), content) {
+				t.Fatal("extra decoder output changed the declared PCM", output.Bytes())
 			}
 		})
 	}

@@ -188,9 +188,9 @@ jobs:
           docker exec musicforge-validation ffmpeg -v error -f lavfi -i sine=duration=1 -c:a flac /tmp/smoke.flac
           docker exec musicforge-validation flac --test --silent /tmp/smoke.flac
           docker exec musicforge-validation sh -c 'flac --decode --stdout --silent /tmp/smoke.flac | ffmpeg -v error -xerror -f wav -i pipe:0 -c:a libopus /tmp/reference.opus'
-          docker exec musicforge-validation sh -c 'flac --decode --stdout --silent --decode-through-errors --force-raw-format --endian=little --sign=signed /tmp/smoke.flac | ffmpeg -v error -xerror -f s16le -ar 44100 -ac 1 -i pipe:0 -c:a libopus /tmp/reference-raw.opus'
+          docker exec musicforge-validation sh -c 'flac --decode --stdout --silent --decode-through-errors --force-raw-format --endian=little --sign=signed --until=44100 /tmp/smoke.flac | ffmpeg -v error -xerror -f s16le -ar 44100 -ac 1 -i pipe:0 -c:a libopus /tmp/reference-raw.opus'
           docker exec musicforge-validation ffmpeg -v error -f lavfi -i sine=duration=1 -c:a flac -sample_fmt s32 /tmp/smoke24.flac
-          docker exec musicforge-validation sh -c 'flac --decode --stdout --silent --decode-through-errors --force-raw-format --endian=little --sign=signed /tmp/smoke24.flac | ffmpeg -v error -xerror -f s24le -ar 44100 -ac 1 -i pipe:0 -c:a libmp3lame /tmp/reference-raw24.mp3'
+          docker exec musicforge-validation sh -c 'flac --decode --stdout --silent --decode-through-errors --force-raw-format --endian=little --sign=signed --until=44100 /tmp/smoke24.flac | ffmpeg -v error -xerror -f s24le -ar 44100 -ac 1 -i pipe:0 -c:a libmp3lame /tmp/reference-raw24.mp3'
           docker exec musicforge-validation test -f /usr/share/doc/musicforge/media/media-versions.env
           curl --fail http://localhost:8787/api/auth/me
           docker stop musicforge-validation

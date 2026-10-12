@@ -1161,7 +1161,9 @@ func (a *App) encodeMedia(ctx context.Context, id int64, duration float64, activ
 		cmd.Stdin = reader
 		decodeArgs := []string{"--decode", "--stdout", "--silent", "--force-rf64-format"}
 		if pcm != nil {
-			decodeArgs = []string{"--decode", "--stdout", "--silent", "--decode-through-errors", "--force-raw-format", "--endian=little", "--sign=signed"}
+			// The declared audio is independently checked below. Do not decode
+			// extra frames past its end into the PCM that we hash and encode.
+			decodeArgs = []string{"--decode", "--stdout", "--silent", "--decode-through-errors", "--force-raw-format", "--endian=little", "--sign=signed", "--until=" + strconv.FormatInt(pcm.Samples, 10)}
 		}
 		reference = exec.CommandContext(encodeCtx, "flac", append(decodeArgs, "--", referenceInput)...)
 		reference.Stderr = &referenceLog

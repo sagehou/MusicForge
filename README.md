@@ -106,6 +106,8 @@ Navigation, forms, statuses, confirmations, notifications, common API errors, da
 
 ## Incremental builds and file lifecycle
 
+Settings are grouped into Library, Encoding, Integrations, and Account & security. Drafts stay intact when switching sections or language; Save settings applies the whole form, and Discard changes restores saved values. The Library page keeps its last snapshot in memory while revalidating, uses compressed responses, and skips transferring unchanged data. Signing out clears that snapshot. The Lidarr file-count comparison is at the top of Library.
+
 The source library is the source of truth. MusicForge manages generated audio and covers; use the Web UI to maintain output.
 
 | Trigger | Behavior |

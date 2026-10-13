@@ -1,13 +1,16 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { Activity, Disc3, Loader2, RefreshCw } from "lucide-react";
-import { api } from "../api";
+import { api, cachedResource } from "../api";
 import { useI18n, type MessageKey, type Params } from "../i18n";
 import { Button } from "./ui/button";
 
 export type Notice = (message: MessageKey | Error, error?: boolean, params?: Params) => void;
 
 export function useResource<T>(path: string, poll: boolean | number = false) {
-  const [result, setResult] = useState<{ path: string; data: T }>();
+  const [result, setResult] = useState<{ path: string; data: T } | undefined>(() => {
+    const data = cachedResource<T>(path);
+    return data === undefined ? undefined : { path, data };
+  });
   const [failure, setFailure] = useState<{ path: string; message: string }>();
   const [revision, setRevision] = useState(0);
   useEffect(() => {
@@ -24,7 +27,7 @@ export function useResource<T>(path: string, poll: boolean | number = false) {
       loading = true;
       try {
         const data = await api<T>(path, "GET", undefined, controller.signal);
-        if (alive) { loaded = true; setResult({ path, data }); setFailure(undefined); failures = 0; }
+        if (alive) { loaded = true; setResult(old => old?.path === path && old.data === data ? old : { path, data }); setFailure(undefined); failures = 0; }
       } catch (err) {
         if (alive && !controller.signal.aborted) {
           failures++;

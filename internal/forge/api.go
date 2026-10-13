@@ -254,7 +254,7 @@ func (a *App) library(w http.ResponseWriter, r *http.Request) {
 		apiError(w, 500, err)
 		return
 	}
-	respond(w, 200, list)
+	respondLibrary(w, r, list)
 }
 func (a *App) dashboard(w http.ResponseWriter, r *http.Request) {
 	list, err := a.sourcesWithStatusContext(r.Context())

@@ -514,5 +514,14 @@
   "error.lidarrArtist": "Lidarr 返回的歌手 ID 无效，核对未完成。",
   "error.lidarrLimit": "Lidarr 核对最多支持 200000 条文件记录。",
   "error.lidarrPathsChanged": "媒体库路径已变化，请重新核对。",
-  "error.lidarrFilePath": "Lidarr 返回的文件路径缺失或不是绝对路径，核对未完成。"
+  "error.lidarrFilePath": "Lidarr 返回的文件路径缺失或不是绝对路径，核对未完成。",
+  "settings.tabLibrary": "音乐库",
+  "settings.tabEncoding": "编码",
+  "settings.tabIntegrations": "集成",
+  "settings.tabSecurity": "账户安全",
+  "settings.sections": "设置分类",
+  "settings.discard": "放弃修改",
+  "settings.navSectionHint": "构建完成后刷新流媒体库。",
+  "settings.lidarrSectionHint": "接收源音乐库的导入与升级事件。",
+  "library.loadingHint": "正在加载歌手、专辑与曲目状态…"
 }

@@ -203,6 +203,7 @@ test("protected password changes recover authentication without replaying a writ
     return route.fulfill({ status: 401, json: { error: "login required" } });
   });
   await page.goto("/settings");
+  await page.getByRole("tab", { name: "Account & security", exact: true }).click();
   await page.getByLabel("Current password", { exact: true }).fill("test-admin-password");
   await page.getByLabel("New password", { exact: true }).fill("new-admin-password");
   await page.getByRole("button", { name: "Update password", exact: true }).click();

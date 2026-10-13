@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react";
-import { ChevronLeft, ChevronRight, RefreshCw } from "lucide-react";
+import { ListChecks, ChevronLeft, ChevronRight, RefreshCw } from "lucide-react";
 import { api } from "../api";
 import { useI18n } from "../i18n";
 import type { Source } from "../types";
@@ -19,7 +19,7 @@ export function LibraryComparison({ sources, notify }: { sources: Source[]; noti
   const [open, setOpen] = useState(false);
   const present = sources.filter(source => source.present);
   return <details className="library-comparison" onToggle={event => setOpen(event.currentTarget.open)}>
-    <summary>{t("compare.title")}</summary>
+    <summary><ListChecks size={18} /><span>{t("compare.title")}</span><ChevronRight size={16} /></summary>
     <p className="comparison-counts">{t("compare.localCounts", {
       sources: number(present.length), expired: number(sources.length - present.length),
       outputs: number(sources.filter(source => source.output_present).length), failed: number(present.filter(source => source.error).length),

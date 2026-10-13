@@ -164,7 +164,6 @@ test("bilingual setup, real incremental build, state preservation and login", as
   await page.getByRole("tab", { name: "Encoding", exact: true }).click();
   await expect(page.getByLabel("Concurrent conversions", { exact: true })).toHaveValue("2");
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
-  await page.getByRole("tab", { name: "Encoding", exact: true }).click();
   const encodingTitle = await page.getByRole("heading", { name: "Encoding profile", exact: true }).boundingBox();
   expect(encodingTitle?.width).toBeGreaterThan(120);
   await page.screenshot({ path: "test-results/mobile-settings-en.png", fullPage: true });
@@ -183,9 +182,7 @@ test("bilingual setup, real incremental build, state preservation and login", as
   await page.getByLabel("Enable library scanning and background jobs", { exact: true }).uncheck();
   await page.getByRole("tab", { name: "Integrations", exact: true }).click();
   await page.getByLabel("Navidrome URL", { exact: true }).fill("https://navidrome.example.test");
-  await page.getByRole("tab", { name: "Integrations", exact: true }).click();
   await page.getByLabel("Navidrome username", { exact: true }).fill("admin");
-  await page.getByRole("tab", { name: "Integrations", exact: true }).click();
   await page.getByLabel("Navidrome password", { exact: true }).fill("navidrome-test-secret");
   await page.getByRole("tab", { name: "Account & security", exact: true }).click();
   await page.getByLabel("Issuer URL", { exact: true }).fill("https://issuer.example.test");
@@ -195,7 +192,6 @@ test("bilingual setup, real incremental build, state preservation and login", as
   await expect(page.getByRole("status")).toContainText("Settings saved");
   await page.getByRole("tab", { name: "Integrations", exact: true }).click();
   await expect(page.getByLabel("Navidrome password", { exact: true })).toHaveValue("");
-  await page.getByRole("tab", { name: "Integrations", exact: true }).click();
   await expect(page.getByLabel("Delete the saved Navidrome password", { exact: true })).toBeDisabled();
   await page.getByRole("tab", { name: "Account & security", exact: true }).click();
   await expect(page.getByLabel("Delete the saved OIDC client secret", { exact: true })).toBeDisabled();
@@ -216,7 +212,6 @@ test("bilingual setup, real incremental build, state preservation and login", as
   await expect(page.getByRole("status")).toContainText("设置已保存");
   await page.getByRole("tab", { name: "集成", exact: true }).click();
   await expect(page.getByLabel("删除已保存的 Navidrome 密码", { exact: true })).toBeDisabled();
-  await page.getByRole("tab", { name: "集成", exact: true }).click();
   await expect(page.getByLabel("删除已保存的 Navidrome 密码", { exact: true })).not.toBeChecked();
   await page.getByRole("tab", { name: "账户安全", exact: true }).click();
   await expect(page.getByLabel("删除已保存的 OIDC 客户端密钥", { exact: true })).toBeDisabled();
@@ -237,7 +232,6 @@ test("bilingual setup, real incremental build, state preservation and login", as
   await aliasPage.getByRole("tab", { name: "Account & security", exact: true }).click();
   await expect(aliasPage.getByRole("textbox", { name: "Allowed access URLs", exact: true })).toHaveValue(`${primaryOrigin}\n${aliasOrigin}`);
   await expect(aliasPage.getByLabel("Callback URL", { exact: true })).toHaveValue(`${primaryOrigin}/api/auth/oidc/callback`);
-  await aliasPage.getByRole("tab", { name: "Account & security", exact: true }).click();
   await expect(aliasPage.getByRole("button", { name: "Bind your OIDC identity", exact: true })).toBeDisabled();
   await expect(aliasPage.getByRole("link", { name: "Open primary URL", exact: true })).toHaveAttribute("href", `${primaryOrigin}/settings`);
   const aliasCookie = (await page.context().cookies(aliasOrigin)).find(cookie => cookie.name === "musicforge_session")!;

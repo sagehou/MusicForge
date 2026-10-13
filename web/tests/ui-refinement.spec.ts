@@ -78,6 +78,10 @@ test("large library returns instantly from memory, revalidates with 304 and clea
   await page.route("**/api/auth/me", route => route.fulfill({ json: { ...me, authenticated } }));
   await page.route("**/api/auth/logout", route => { authenticated = false; return route.fulfill({ json: {} }); });
   await page.route("**/api/auth/login", route => { authenticated = true; return route.fulfill({ json: {} }); });
+  await page.route("**/api/library/scan", route => {
+    sources[0].status = "failed"; sources[0].error = "Synthetic changed status";
+    return route.fulfill({ status: 202, json: { job_id: 1 } });
+  });
   await page.route("**/api/library", async route => {
     reads++;
     const etag = route.request().headers()["if-none-match"];
@@ -107,18 +111,23 @@ test("large library returns instantly from memory, revalidates with 304 and clea
   await expect(page.getByRole("alert")).toBeVisible();
   await expect(page.locator(".library-group")).toHaveCount(50);
   fail = false;
-  await page.getByRole("button", { name: "Retry", exact: true }).click();
+  await page.getByRole("button", { name: "Try again", exact: true }).click();
   await expect(page.getByRole("alert")).toHaveCount(0);
   await expect(page.locator(".library-group")).toHaveCount(50);
   expect(conditionals.at(-1)).toBe('W/"library-test"');
+  await page.getByRole("button", { name: "Scan", exact: true }).click();
+  await expect(page.locator(".library-group").filter({ has: page.getByRole("button", { name: "Browse artist Artist 0", exact: true }) }).locator(".badge")).toHaveText("Failed");
+  expect(conditionals.at(-1)).toBeUndefined();
   await page.getByRole("button", { name: "Log out", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Welcome back", exact: true })).toBeVisible();
   hold = true;
+  const beforeLogin = reads;
   await page.getByLabel("Username", { exact: true }).fill("admin");
   await page.getByLabel("Password", { exact: true }).fill("test-password");
   await page.getByRole("button", { name: "Log in", exact: true }).click();
   await expect(page.getByRole("status", { name: "Loading" })).toBeVisible();
   await expect(page.locator(".library-group")).toHaveCount(0);
+  await expect.poll(() => reads).toBeGreaterThan(beforeLogin);
   expect(conditionals.at(-1)).toBeUndefined();
   hold = false; release!();
   await expect(page.locator(".library-group")).toHaveCount(50);

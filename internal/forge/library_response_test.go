@@ -26,22 +26,28 @@ func TestLibraryConditionalAndCompressedResponse(t *testing.T) {
 	respondLibrary(compressed, request, list)
 	compressedBytes := compressed.Body.Len()
 	reader, err := gzip.NewReader(compressed.Body)
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	decoded, err := io.ReadAll(reader)
 	reader.Close()
-	if err != nil || string(decoded) != plain.Body.String() || compressed.Header().Get("Content-Encoding") != "gzip" || compressedBytes >= plain.Body.Len() / 4 {
+	if err != nil || string(decoded) != plain.Body.String() || compressed.Header().Get("Content-Encoding") != "gzip" || compressedBytes >= plain.Body.Len()/4 {
 		t.Fatal("compression changed data or failed to reduce the library payload", err)
 	}
 	t.Logf("5000 tracks: JSON %d bytes, gzip %s bytes", plain.Body.Len(), compressed.Header().Get("Content-Length"))
 	request.Header.Set("If-None-Match", plain.Header().Get("ETag"))
 	cached := httptest.NewRecorder()
 	respondLibrary(cached, request, list)
-	if cached.Code != 304 || cached.Body.Len() != 0 { t.Fatal("unchanged library transferred again", cached.Code) }
+	if cached.Code != 304 || cached.Body.Len() != 0 {
+		t.Fatal("unchanged library transferred again", cached.Code)
+	}
 	list[0].Status = "failed"
 	list[0].Error = "Synthetic diagnostic"
 	changed := httptest.NewRecorder()
 	respondLibrary(changed, request, list)
-	if changed.Code != 200 || changed.Header().Get("ETag") == plain.Header().Get("ETag") { t.Fatal("status change was hidden by cache") }
+	if changed.Code != 200 || changed.Header().Get("ETag") == plain.Header().Get("ETag") {
+		t.Fatal("status change was hidden by cache")
+	}
 	for _, encoding := range []string{"gzip;q=0", "br", "gzip;q=bad", "gzip;q=2"} {
 		request.Header.Set("If-None-Match", "")
 		request.Header.Set("Accept-Encoding", encoding)
@@ -52,5 +58,7 @@ func TestLibraryConditionalAndCompressedResponse(t *testing.T) {
 			t.Fatal("ignored encoding preference", encoding)
 		}
 	}
-	if !acceptsLibraryGzip("br, gzip;q=0.5") || !strings.Contains(plain.Header().Get("Vary"), "Accept-Encoding") { t.Fatal("encoding negotiation") }
+	if !acceptsLibraryGzip("br, gzip;q=0.5") || !strings.Contains(plain.Header().Get("Vary"), "Accept-Encoding") {
+		t.Fatal("encoding negotiation")
+	}
 }

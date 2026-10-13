@@ -215,7 +215,9 @@ func TestLibraryArtworkIsAuthenticatedRegisteredAndOutputOnly(t *testing.T) {
 	if anonymous := send("/api/library", w.Header().Get("ETag"), false); anonymous.Code != 401 {
 		t.Fatal("library cache bypassed authentication", anonymous.Code)
 	}
-	if _, err = a.db.Exec("INSERT INTO sources(rel,artist,album,title) VALUES('Artist/Album/02.flac','Artist','Album','Second')"); err != nil { t.Fatal(err) }
+	if _, err = a.db.Exec("INSERT INTO sources(rel,artist,album,title) VALUES('Artist/Album/02.flac','Artist','Album','Second')"); err != nil {
+		t.Fatal(err)
+	}
 	updated := send("/api/library", w.Header().Get("ETag"), true)
 	var updatedSources []Source
 	if updated.Code != 200 || json.Unmarshal(updated.Body.Bytes(), &updatedSources) != nil || len(updatedSources) != 2 || updatedSources[0].ArtworkURL != updatedSources[1].ArtworkURL {

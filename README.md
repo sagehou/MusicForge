@@ -106,6 +106,8 @@ Navigation, forms, statuses, confirmations, notifications, common API errors, da
 
 ## Incremental builds and file lifecycle
 
+Settings are grouped into Library, Encoding, Integrations, and Account & security. Drafts stay intact when switching sections or language; Save settings applies the whole form, and Discard changes restores saved values. The Library page keeps its last snapshot in memory while revalidating, uses compressed responses, and skips transferring unchanged data. Signing out clears that snapshot. The Lidarr file-count comparison is at the top of Library.
+
 The source library is the source of truth. MusicForge manages generated audio and covers; use the Web UI to maintain output.
 
 | Trigger | Behavior |
@@ -170,8 +172,6 @@ The local administrator has access to all operations. You may additionally bind 
 2. Save the issuer URL, client ID and secret in Settings. Use the provider's exact issuer, including any trailing slash.
 3. Register `https://musicforge.example.com/api/auth/oidc/callback` as the redirect URI.
 4. While signed in locally at the primary URL, select **Bind your OIDC identity** and complete the provider flow.
-
-Settings are grouped into Library, Encoding, Integrations, and Account & security. Drafts stay intact when switching sections or language; Save settings applies the whole form, and Discard changes restores saved values. The Library page keeps its last snapshot in memory while revalidating, uses compressed responses, and skips transferring unchanged data. Signing out clears that snapshot. The Lidarr file-count comparison is at the top of Library.
 
 Only the bound `issuer + sub` can use OIDC. State, nonce, PKCE and server-side sessions are checked. UI mutations require CSRF tokens; API reads omit secret settings. Keep the local password for recovery.
 

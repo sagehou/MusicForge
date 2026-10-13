@@ -28,10 +28,15 @@ func (a *App) libraryArtworkURLs(ctx context.Context, list []Source) error {
 	if err = rows.Err(); err != nil {
 		return err
 	}
+	urls := map[string]string{}
 	for i := range list {
 		cover := filepath.Join(filepath.Dir(list[i].Rel), "cover.jpg")
 		if signature := covers[cover]; signature != "" {
-			list[i].ArtworkURL = fmt.Sprintf("/api/library/%d/artwork?v=%s", list[i].ID, digest(signature))
+			// All tracks using this cover share one browser cache entry.
+			if urls[cover] == "" {
+				urls[cover] = fmt.Sprintf("/api/library/%d/artwork?v=%s", list[i].ID, digest(signature))
+			}
+			list[i].ArtworkURL = urls[cover]
 		}
 	}
 	return nil

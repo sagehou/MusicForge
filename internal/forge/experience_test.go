@@ -209,6 +209,18 @@ func TestLibraryArtworkIsAuthenticatedRegisteredAndOutputOnly(t *testing.T) {
 	if err = json.Unmarshal(w.Body.Bytes(), &sources); err != nil || w.Code != 200 || len(sources) != 1 || sources[0].ID != id || sources[0].ArtworkURL == "" {
 		t.Fatal("library omitted existing artwork", w.Code, w.Body.String(), err)
 	}
+	if cached := send("/api/library", w.Header().Get("ETag"), true); cached.Code != 304 || cached.Body.Len() != 0 {
+		t.Fatal("library did not revalidate", cached.Code)
+	}
+	if anonymous := send("/api/library", w.Header().Get("ETag"), false); anonymous.Code != 401 {
+		t.Fatal("library cache bypassed authentication", anonymous.Code)
+	}
+	if _, err = a.db.Exec("INSERT INTO sources(rel,artist,album,title) VALUES('Artist/Album/02.flac','Artist','Album','Second')"); err != nil { t.Fatal(err) }
+	updated := send("/api/library", w.Header().Get("ETag"), true)
+	var updatedSources []Source
+	if updated.Code != 200 || json.Unmarshal(updated.Body.Bytes(), &updatedSources) != nil || len(updatedSources) != 2 || updatedSources[0].ArtworkURL != updatedSources[1].ArtworkURL {
+		t.Fatal("changed library was cached or album covers have separate URLs", updated.Code, updated.Body.String())
+	}
 	url := sources[0].ArtworkURL
 	if w = send(url, "", false); w.Code != 401 {
 		t.Fatal("anonymous artwork access", w.Code)

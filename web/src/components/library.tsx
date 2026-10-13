@@ -1,4 +1,4 @@
-import { useDeferredValue, useEffect, useMemo, useRef, useState, Fragment } from "react";
+import { useDeferredValue, useEffect, useMemo, useRef, useState, Fragment, memo } from "react";
 import { flushSync } from "react-dom";
 import { ArrowLeft, ChevronLeft, ChevronRight, Clock3, Disc3, Grid2X2, List, Music2, RefreshCw, Search, ShieldCheck, SlidersHorizontal, Trash2, X } from "lucide-react";
 import { api } from "../api";
@@ -11,7 +11,7 @@ import { LibraryComparison } from "./library-comparison";
 
 type Scope = { view: "artists" | "albums"; artist?: string; album?: string };
 type Identity = { artistKey: string; albumKey: string; artist: string; album: string };
-type Group = Identity & { key: string; name: string; tracks: Source[]; albums: Set<string> };
+type Group = Identity & { key: string; name: string; tracks: Source[]; albums: Set<string>; rank: number };
 type Density = "compact" | "standard" | "large";
 const priority = ["failed", "possibly_damaged", "expired", "missing", "changed", "needs_rebuild", "unverified", "ready"];
 function preference(key: string) {
@@ -33,7 +33,7 @@ function CoverImage({ url, failed }: { url: string; failed: () => void }) {
   const [ready, setReady] = useState(false);
   return <img src={url} alt="" loading="lazy" decoding="async" className={ready ? "cover-loaded" : ""} onLoad={() => setReady(true)} onError={failed} />;
 }
-function Cover({ tracks, name, artist = false, transition = false }: { tracks: Source[]; name: string; artist?: boolean; transition?: boolean }) {
+const Cover = memo(function Cover({ tracks, name, artist = false, transition = false }: { tracks: Source[]; name: string; artist?: boolean; transition?: boolean }) {
   const { t } = useI18n();
   const [failed, setFailed] = useState<Set<string>>(new Set());
   const covers = new Map<string, string>();
@@ -42,6 +42,7 @@ function Cover({ tracks, name, artist = false, transition = false }: { tracks: S
     if (url && !failed.has(url)) {
       const key = new URL(url, location.origin).searchParams.get("v") || url;
       if (!covers.has(key)) covers.set(key, url);
+      if (covers.size === (artist ? 4 : 1)) break;
     }
   }
   const urls = [...covers.values()].slice(0, artist ? 4 : 1);
@@ -49,7 +50,7 @@ function Cover({ tracks, name, artist = false, transition = false }: { tracks: S
     {urls.length ? urls.map(url => <CoverImage key={url} url={url} failed={() => setFailed(old => new Set([...old, url]))} />) :
       <span className="cover-fallback"><Disc3 size={40} strokeWidth={1} /><span>{name.slice(0, 1).toUpperCase()}</span></span>}
   </span>;
-}
+});
 
 export function Library({ notify }: { notify: Notice }) {
   const { t, status: statusLabel, locale, number } = useI18n();
@@ -106,7 +107,7 @@ export function Library({ notify }: { notify: Notice }) {
   const isAlbum = scope.album !== undefined;
   const showingArtists = !scope.artist && scope.view === "artists" && !isAlbum;
   const artist = indexed.find(item => item.identity.artistKey === scope.artist)?.identity;
-  const albumTracks = indexed.filter(item => item.identity.artistKey === scope.artist && item.identity.albumKey === scope.album).map(item => item.source);
+  const albumTracks = useMemo(() => indexed.filter(item => item.identity.artistKey === scope.artist && item.identity.albumKey === scope.album).map(item => item.source), [indexed, scope.artist, scope.album]);
   const album = indexed.find(item => item.identity.artistKey === scope.artist && item.identity.albumKey === scope.album)?.identity;
   const collator = useMemo(() => new Intl.Collator(locale, { numeric: true, sensitivity: "base" }), [locale]);
   const { rows, groups } = useMemo(() => {
@@ -122,21 +123,22 @@ export function Library({ notify }: { notify: Notice }) {
       const key = showingArtists ? identity.artistKey : `${identity.artistKey}\0${identity.albumKey}`;
       let group = map.get(key);
       if (!group) {
-        group = { ...identity, key, name: showingArtists ? identity.artist : identity.album, tracks: [], albums: new Set() };
+        group = { ...identity, key, name: showingArtists ? identity.artist : identity.album, tracks: [], albums: new Set(), rank: priority.length };
         map.set(key, group);
       }
       group.tracks.push(source);
       group.albums.add(identity.albumKey);
+      const rank = priority.indexOf(source.status);
+      if (rank >= 0) group.rank = Math.min(group.rank, rank);
     }
     const groups = [...map.values()].sort((a, b) => {
       if (sort === "attention") {
-        const rank = (group: Group) => Math.min(...group.tracks.map(track => priority.indexOf(track.status)));
-        const difference = rank(a) - rank(b);
+        const difference = a.rank - b.rank;
         if (difference) return difference;
       }
       return collator.compare(a.name, b.name) || collator.compare(a.artist, b.artist);
     });
-    rows.sort((a, b) => (a.disc || 1) - (b.disc || 1) || a.track - b.track || collator.compare(a.path, b.path));
+    if (isAlbum) rows.sort((a, b) => (a.disc || 1) - (b.disc || 1) || a.track - b.track || collator.compare(a.path, b.path));
     return { rows, groups };
   }, [indexed, scope.artist, scope.album, isAlbum, showingArtists, filter, search, sort, collator, locale]);
   const totals = useMemo(() => ({
@@ -172,7 +174,11 @@ export function Library({ notify }: { notify: Notice }) {
   function toggle(ids: number[], checked: boolean) {
     setSelected(old => { const next = new Set(old); ids.forEach(id => checked ? next.add(id) : next.delete(id)); return next; });
   }
-  if (!data) return <Loading error={error} retry={retry} />;
+  if (!data) return error ? <Loading error={error} retry={retry} /> : <div className="library-loading" role="status" aria-label={t("app.loading")}>
+    <div className="page-heading"><div><h1>{t("app.library")}</h1><p>{t("library.loadingHint")}</p></div></div>
+    <div className="skeleton-toolbar" aria-hidden="true" />
+    <div className="library-groups" aria-hidden="true">{Array.from({ length: 10 }, (_, index) => <div className="skeleton-card" key={index}><div /><span /><span /></div>)}</div>
+  </div>;
   const count = isAlbum ? rows.length : groups.length;
   const safeOffset = Math.min(offset, Math.max(0, Math.ceil(count / 50) - 1) * 50);
   const shown = rows.slice(safeOffset, safeOffset + 50);
@@ -193,6 +199,7 @@ export function Library({ notify }: { notify: Notice }) {
     <div className="page-heading"><div><h1 id="library-title" tabIndex={-1}>{t("app.library")}</h1><p>{t("library.description", { count: data.length })}</p></div>
       <div className="actions"><Button variant="outline" disabled={busy} onClick={() => void action("/library/scan", { verify: true }, "notice.verify")}><ShieldCheck size={16} />{t("library.verify")}</Button><Button disabled={busy} onClick={() => void action("/library/scan", {}, "notice.scan")}><RefreshCw size={16} className={busy ? "animate-spin" : ""} />{t("library.scan")}</Button></div>
     </div>
+    {!scope.artist && !isAlbum && <LibraryComparison sources={data} notify={notify} />}
     {expired > 0 && <div className="banner amber"><Clock3 size={20} /><div><strong>{t("library.expiredCount", { count: expired })}</strong><p>{t("library.expiredHint")}</p></div><Button variant="destructive" size="sm" disabled={busy} onClick={() => deleteSelected(true)}><Trash2 size={14} />{t("library.deleteExpired")}</Button></div>}
     {(scope.artist || isAlbum) && <nav className="library-breadcrumbs" aria-label={t("library.hierarchy")}>
       <button onClick={() => navigate({ view: scope.view })} aria-current={!scope.artist ? "page" : undefined}>{t(scope.view === "artists" ? "library.artists" : "library.albums")}</button>
@@ -236,7 +243,7 @@ export function Library({ notify }: { notify: Notice }) {
       {count > 0 ? <>
         {!isAlbum ? <div className={`library-groups library-${layout}`} data-density={density}>{visibleGroups.map(group => {
           const ready = group.tracks.filter(source => source.status === "ready").length;
-          const state = priority.find(value => group.tracks.some(source => source.status === value)) || "ready";
+          const state = priority[group.rank] || "ready";
           const open = (origin: HTMLElement) => showingArtists ? navigate({ view: scope.view, artist: group.artistKey }) : navigate({ view: scope.view, artist: group.artistKey, album: group.albumKey }, origin);
           return <article className="library-group" key={group.key} data-selected={group.tracks.some(source => selected.has(source.id))}>
             <button className="library-cover-open" aria-label={t(showingArtists ? "library.openArtist" : "library.openAlbum", { name: group.name })} onClick={event => open(event.currentTarget)}><Cover tracks={group.tracks} name={group.name} artist={showingArtists} /></button>
@@ -268,6 +275,5 @@ export function Library({ notify }: { notify: Notice }) {
         </div>
       </> : <Empty title={data.length ? t("library.noMatch") : t("library.empty")}>{data.length ? t("library.noMatchHint") : t("library.emptyHint")}</Empty>}
     </section>
-    {!scope.artist && !isAlbum && <LibraryComparison sources={data} notify={notify} />}
   </>;
 }

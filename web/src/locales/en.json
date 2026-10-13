@@ -547,5 +547,14 @@
   "error.lidarrArtist": "Lidarr returned an invalid artist ID; comparison incomplete",
   "error.lidarrLimit": "Lidarr comparison supports up to 200000 file records",
   "error.lidarrPathsChanged": "Library paths changed; run the comparison again",
-  "error.lidarrFilePath": "Lidarr returned a missing or non-absolute file path; comparison incomplete"
+  "error.lidarrFilePath": "Lidarr returned a missing or non-absolute file path; comparison incomplete",
+  "settings.tabLibrary": "Library",
+  "settings.tabEncoding": "Encoding",
+  "settings.tabIntegrations": "Integrations",
+  "settings.tabSecurity": "Account & security",
+  "settings.sections": "Settings sections",
+  "settings.discard": "Discard changes",
+  "settings.navSectionHint": "Refresh the streaming library after a build.",
+  "settings.lidarrSectionHint": "Receive import and upgrade events from your source library.",
+  "library.loadingHint": "Loading artists, albums and track status…"
 }

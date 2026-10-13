@@ -171,6 +171,8 @@ The local administrator has access to all operations. You may additionally bind 
 3. Register `https://musicforge.example.com/api/auth/oidc/callback` as the redirect URI.
 4. While signed in locally at the primary URL, select **Bind your OIDC identity** and complete the provider flow.
 
+Settings are grouped into Library, Encoding, Integrations, and Account & security. Drafts stay intact when switching sections or language; Save settings applies the whole form, and Discard changes restores saved values. The Library page keeps its last snapshot in memory while revalidating, uses compressed responses, and skips transferring unchanged data. Signing out clears that snapshot. The Lidarr file-count comparison is at the top of Library.
+
 Only the bound `issuer + sub` can use OIDC. State, nonce, PKCE and server-side sessions are checked. UI mutations require CSRF tokens; API reads omit secret settings. Keep the local password for recovery.
 
 Local login and setup allow ten credential failures per client in a fifteen-minute window; successful authentication clears that budget. OIDC starts use a separate budget, cleared on successful OIDC login; they cannot exhaust local recovery or authenticated binding. Behind a reverse proxy, configure `MUSICFORGE_TRUSTED_PROXIES` and its `X-Forwarded-For` handling as described in the [deployment guide](docs/deployment.md). Untrusted peers cannot choose their client IP through headers.

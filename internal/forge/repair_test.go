@@ -7,7 +7,6 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
-	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
@@ -22,10 +21,10 @@ func TestRepairPCMAllowsOnlyBoundedCompleteSamples(t *testing.T) {
 	content := make([]byte, pcm.byteCount())
 	pcm.MD5 = md5.Sum(content)
 	for _, tc := range []struct {
-		name string
-		data []byte
+		name     string
+		data     []byte
 		verified bool
-		failed bool
+		failed   bool
 	}{
 		{"verified", content, true, false},
 		{"short", content[:8], false, false},
@@ -45,12 +44,12 @@ func TestRepairPCMAllowsOnlyBoundedCompleteSamples(t *testing.T) {
 }
 
 func TestRepairReservationUsesRunningJobsNotWorkerSlot(t *testing.T) {
-	for _, kind := range []string{"convert", "prepare"} {
+	for _, kind := range []string{"convert", "prepare", "cancelled-but-active"} {
 		t.Run(kind, func(t *testing.T) {
 			a, _ := testApp(t)
 			var running int64
 			var err error
-			if kind == "convert" {
+			if kind != "prepare" {
 				running, err = a.enqueue("convert", "convert:occupied", BuildRequest{ID: 101}, false)
 			} else {
 				running, err = a.enqueue("scan", "scan:prepare:occupied", ScanRequest{Dirs: []string{"Occupied"}}, false)
@@ -60,6 +59,12 @@ func TestRepairReservationUsesRunningJobsNotWorkerSlot(t *testing.T) {
 			}
 			if _, err = a.db.Exec("UPDATE jobs SET state='running' WHERE id=?", running); err != nil {
 				t.Fatal(err)
+			}
+			if kind == "cancelled-but-active" {
+				if _, err = a.db.Exec("UPDATE jobs SET state='pending' WHERE id=?", running); err != nil {
+					t.Fatal(err)
+				}
+				a.activeJobs[running] = func() {}
 			}
 			pending, err := a.enqueue("convert", "convert:waiting", BuildRequest{ID: 102}, false)
 			if err != nil {
@@ -75,6 +80,7 @@ func TestRepairReservationUsesRunningJobsNotWorkerSlot(t *testing.T) {
 			if _, err = a.db.Exec("UPDATE jobs SET state='success' WHERE id=?", running); err != nil {
 				t.Fatal(err)
 			}
+			delete(a.activeJobs, running)
 			a.jobsMu.Lock()
 			job, err := a.claimWithRepairCapacity(true, 2)
 			a.jobsMu.Unlock()
@@ -85,9 +91,9 @@ func TestRepairReservationUsesRunningJobsNotWorkerSlot(t *testing.T) {
 	}
 }
 
-func failedRepairSource(t *testing.T, a *App, s Settings) (Source, string, []byte) {
+func failedRepairSource(t *testing.T, a *App, s Settings, keepOutput bool) (Source, string, []byte) {
 	t.Helper()
-	path := makeFLAC(t, a, s, "Artist/Album/01.flac", "Repair preview", false)
+	path := makeFLAC(t, a, s, "Artist/Album/01.flac", "Repair track", false)
 	if err := a.scan(context.Background(), ScanRequest{}); err != nil {
 		t.Fatal(err)
 	}
@@ -96,6 +102,11 @@ func failedRepairSource(t *testing.T, a *App, s Settings) (Source, string, []byt
 	output, err := os.ReadFile(filepath.Join(s.Output, source.Output))
 	if err != nil {
 		t.Fatal(err)
+	}
+	if !keepOutput {
+		if err = a.removeOwned(s, source.Output, source.ID); err != nil {
+			t.Fatal(err)
+		}
 	}
 	content, err := os.ReadFile(path)
 	if err != nil {
@@ -124,13 +135,22 @@ func failedRepairSource(t *testing.T, a *App, s Settings) (Source, string, []byt
 	return source, path, output
 }
 
-func awaitRepair(t *testing.T, a *App, source Source) *RepairPreview {
+func awaitRepair(t *testing.T, a *App, source Source) *RepairStatus {
 	t.Helper()
 	deadline := time.Now().Add(10 * time.Second)
 	for time.Now().Before(deadline) {
-		state := a.repairSnapshot(source)
-		if state != nil && state.State != "running" {
+		if state := a.repairSnapshot(source); state != nil && state.State != "running" {
 			return state
+		}
+		list, err := a.sourcesWithStatus()
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, current := range list {
+			if current.ID == source.ID && current.Repair != nil && current.Repair.State == "imported" {
+				a.repairWG.Wait()
+				return current.Repair
+			}
 		}
 		time.Sleep(20 * time.Millisecond)
 	}
@@ -138,7 +158,19 @@ func awaitRepair(t *testing.T, a *App, source Source) *RepairPreview {
 	return nil
 }
 
-func TestRepairPreviewDoesNotPublishOrAlterSchema2State(t *testing.T) {
+func assertNoRepairTemps(t *testing.T, a *App) {
+	t.Helper()
+	var temps int
+	if err := a.db.QueryRow("SELECT count(*) FROM managed WHERE kind='temp'").Scan(&temps); err != nil {
+		t.Fatal(err)
+	}
+	staged, err := os.ReadDir(a.stagingDir)
+	if err != nil || temps != 0 || len(staged) != 0 {
+		t.Fatal("repair scratch files leaked", temps, staged, err)
+	}
+}
+
+func TestRepairImportsNormalOutputWithPersistentDamageAnnotation(t *testing.T) {
 	for _, codec := range []string{"opus", "mp3"} {
 		t.Run(codec, func(t *testing.T) {
 			a, s := testApp(t)
@@ -146,70 +178,88 @@ func TestRepairPreviewDoesNotPublishOrAlterSchema2State(t *testing.T) {
 			if err := a.saveSettings(s); err != nil {
 				t.Fatal(err)
 			}
-			source, path, output := failedRepairSource(t, a, s)
-			before, _ := json.Marshal(source)
+			source, path, _ := failedRepairSource(t, a, s, false)
 			original, _ := os.ReadFile(path)
-			var jobs, managed, beforeDirty int
+			var jobs int
 			_ = a.db.QueryRow("SELECT count(*) FROM jobs").Scan(&jobs)
-			_ = a.db.QueryRow("SELECT count(*) FROM managed").Scan(&managed)
-			_ = a.db.QueryRow("SELECT count(*) FROM dirty_dirs").Scan(&beforeDirty)
-			state, err := a.startRepair(source, s)
-			if err != nil || state.State != "running" {
+			_, _ = a.db.Exec("DELETE FROM dirty_dirs")
+			if state, err := a.startRepair(source, s); err != nil || state.State != "running" {
 				t.Fatal(state, err)
 			}
-			state = awaitRepair(t, a, source)
-			if state.State != "ready" || state.DownloadURL == "" || !strings.Contains(state.Filename, "possibly-damaged") || state.DecodedSamples <= 0 || state.PCMVerified {
-				t.Fatal("invalid recovery result", state)
+			state := awaitRepair(t, a, source)
+			if state.State != "imported" || state.DecodedSamples <= 0 || state.PCMVerified || !strings.Contains(state.Diagnostics, source.Error) {
+				t.Fatal("invalid imported recovery report", state)
 			}
-			a.repairMu.Lock()
-			previewPath := a.repairs[source.ID].path
-			a.repairMu.Unlock()
-			probe, err := a.probe(context.Background(), previewPath)
-			if err != nil || probe.tags()["musicforge_recovery"] != "possibly_damaged" || probe.tags()["title"] != "Repair preview" {
-				t.Fatal("preview lost its warning or tags", probe.tags(), err)
+			current, err := a.source(source.ID)
+			target := outputRel(source.Rel, codec)
+			if err != nil || current.Output != target || !current.OutputPresent || current.BuiltHash != source.Hash || current.BuiltProfile != s.Encoding.Fingerprint() || current.Error != "" {
+				t.Fatal("repair was not published as normal managed audio", current, err)
 			}
-			current, _ := a.source(source.ID)
-			after, _ := json.Marshal(current)
-			if !bytes.Equal(before, after) {
-				t.Fatal("repair changed the source or its artifact record", string(before), string(after))
+			probe, err := a.probe(context.Background(), filepath.Join(s.Output, target))
+			if err != nil || probe.tags()["title"] != "Repair track" || probe.tags()["musicforge_recovery"] != "" {
+				t.Fatal("repair changed normal audio tags", probe.tags(), err)
 			}
 			sourceBytes, _ := os.ReadFile(path)
-			outputBytes, _ := os.ReadFile(filepath.Join(s.Output, source.Output))
-			if !bytes.Equal(original, sourceBytes) || !bytes.Equal(output, outputBytes) {
-				t.Fatal("repair replaced source or playable output")
+			if !bytes.Equal(original, sourceBytes) {
+				t.Fatal("repair modified source bytes")
 			}
-			var afterJobs, afterManaged, dirty int
+			var afterJobs, version, dirty int
 			_ = a.db.QueryRow("SELECT count(*) FROM jobs").Scan(&afterJobs)
-			_ = a.db.QueryRow("SELECT count(*) FROM managed").Scan(&afterManaged)
-			_ = a.db.QueryRow("SELECT count(*) FROM dirty_dirs").Scan(&dirty)
-			if jobs != afterJobs || managed != afterManaged || dirty != beforeDirty {
-				t.Fatal("repair changed the published job or artifact formats")
+			_ = a.db.QueryRow("PRAGMA user_version").Scan(&version)
+			_ = a.db.QueryRow("SELECT count(*) FROM dirty_dirs WHERE path='Artist/Album'").Scan(&dirty)
+			if jobs != afterJobs || version != 2 || dirty != 1 {
+				t.Fatal("repair changed schema/job semantics or missed Navidrome scan notification", jobs, afterJobs, version, dirty)
 			}
 			list, err := a.sourcesWithStatus()
-			if err != nil || len(list) != 1 || list[0].Status != "failed" || list[0].Repair == nil || !list[0].CanRepair {
+			if err != nil || len(list) != 1 || list[0].Status != "possibly_damaged" || !list[0].PossiblyDamaged || list[0].CanRepair {
 				t.Fatal("library lost the damage warning", list, err)
 			}
-			if err = a.removeRepair(source.ID); err != nil || a.repairSnapshot(source) != nil {
-				t.Fatal("preview removal failed", err)
+			if err = a.scan(context.Background(), ScanRequest{}); err != nil {
+				t.Fatal(err)
 			}
-			entries, _ := os.ReadDir(a.repairDir)
-			staged, _ := os.ReadDir(a.stagingDir)
-			if len(entries) != 0 || len(staged) != 0 {
-				t.Fatal("repair scratch files leaked")
+			list, _ = a.sourcesWithStatus()
+			if !list[0].PossiblyDamaged {
+				t.Fatal("scan erased imported damage annotation")
 			}
+			assertNoRepairTemps(t, a)
 		})
 	}
 }
 
-func TestRepairPreviewWithDamagedFLACFrame(t *testing.T) {
+func TestRepairPreservesExistingPlayableOutput(t *testing.T) {
 	a, s := testApp(t)
-	source, path, output := failedRepairSource(t, a, s)
+	source, path, output := failedRepairSource(t, a, s, true)
+	original, _ := os.ReadFile(path)
+	if canRepair(source) {
+		t.Fatal("existing playable audio should not offer destructive repair")
+	}
+	if _, err := a.startRepair(source, s); err != nil {
+		t.Fatal(err)
+	}
+	state := awaitRepair(t, a, source)
+	if state.State != "failed" || !strings.Contains(state.Diagnostics, "Existing output is preserved") {
+		t.Fatal("existing output was not protected", state)
+	}
+	current, _ := os.ReadFile(filepath.Join(s.Output, source.Output))
+	sourceBytes, _ := os.ReadFile(path)
+	if !bytes.Equal(output, current) || !bytes.Equal(original, sourceBytes) {
+		t.Fatal("repair replaced source or existing audio")
+	}
+	assertNoRepairTemps(t, a)
+}
+
+func TestRepairDamagedFrameKeepsStrictConversionStrict(t *testing.T) {
+	a, s := testApp(t)
+	source, path, _ := failedRepairSource(t, a, s, false)
 	raw, err := runTool(context.Background(), a.cfg.FFprobe, "-v", "error", "-select_streams", "a:0", "-show_packets", "-show_entries", "packet=pos,size", "-of", "json", path)
 	if err != nil {
 		t.Fatal(err)
 	}
 	var packets struct {
-		Packets []struct { Pos string `json:"pos"`; Size string `json:"size"` } `json:"packets"`
+		Packets []struct {
+			Pos  string `json:"pos"`
+			Size string `json:"size"`
+		} `json:"packets"`
 	}
 	if err = json.Unmarshal(raw, &packets); err != nil || len(packets.Packets) < 3 {
 		t.Fatal("fixture needs multiple frames", err)
@@ -221,72 +271,130 @@ func TestRepairPreviewWithDamagedFLACFrame(t *testing.T) {
 	if err != nil || pos < 0 || size < 2 || pos+size > len(content) {
 		t.Fatal("invalid frame fixture", err)
 	}
-	content[26] ^= 1 // Restore the original PCM checksum before damaging a frame.
+	content[26] ^= 1
+	valid := append([]byte{}, content...)
 	content[pos+size-1] ^= 1
 	if err = os.WriteFile(path, content, 0600); err != nil {
 		t.Fatal(err)
 	}
-	hash, err := fileHash(context.Background(), path)
-	if err != nil {
-		t.Fatal(err)
-	}
+	quiet := time.Now().Add(-time.Minute)
+	_ = os.Chtimes(path, quiet, quiet)
+	hash, _ := fileHash(context.Background(), path)
 	info, _ := os.Stat(path)
 	if _, err = a.db.Exec("UPDATE sources SET hash=?,mtime=? WHERE id=?", hash, info.ModTime().UnixNano(), source.ID); err != nil {
 		t.Fatal(err)
 	}
 	source, _ = a.source(source.ID)
+	build := BuildRequest{ID: source.ID, Hash: source.Hash, Profile: s.Encoding}
+	if err = a.build(context.Background(), Job{Kind: "convert"}, build); err == nil {
+		t.Fatal("strict conversion accepted the corrupt FLAC frame")
+	}
 	if _, err = a.startRepair(source, s); err != nil {
 		t.Fatal(err)
 	}
-	state := awaitRepair(t, a, source)
-	if state.State != "ready" || state.DecodedSamples == 0 || state.DownloadURL == "" {
+	if state := awaitRepair(t, a, source); state.State != "imported" || state.DecodedSamples <= 0 {
 		t.Fatal("damaged-frame recovery failed", state)
 	}
-	current, _ := os.ReadFile(filepath.Join(s.Output, source.Output))
-	if !bytes.Equal(output, current) {
-		t.Fatal("damaged-frame recovery replaced the validated output")
+	imported, _ := a.source(source.ID)
+	output, _ := os.ReadFile(filepath.Join(s.Output, imported.Output))
+	if err = a.build(context.Background(), Job{Kind: "convert", Attempts: 1}, build); err != nil {
+		t.Fatal("old automatic retry rejected an explicitly accepted import", err)
+	}
+	accepted, _ := a.source(source.ID)
+	if accepted.Error != "" {
+		t.Fatal("old automatic retry restored a cleared source failure")
+	}
+	if err = a.build(context.Background(), Job{Kind: "convert"}, build); err == nil {
+		t.Fatal("strict rebuild skipped validation of possibly damaged audio")
+	}
+	current, _ := os.ReadFile(filepath.Join(s.Output, imported.Output))
+	list, _ := a.sourcesWithStatus()
+	if !bytes.Equal(output, current) || !list[0].PossiblyDamaged {
+		t.Fatal("failed strict rebuild removed the imported artifact or warning")
+	}
+	if err = os.WriteFile(path, valid, 0600); err != nil {
+		t.Fatal(err)
+	}
+	_ = os.Chtimes(path, quiet, quiet)
+	if err = a.scan(context.Background(), ScanRequest{Verify: true}); err != nil {
+		t.Fatal(err)
+	}
+	drain(t, a, true)
+	list, _ = a.sourcesWithStatus()
+	if list[0].Status != "ready" || list[0].PossiblyDamaged || list[0].Repair != nil {
+		t.Fatal("strict conversion of the restored source did not clear the warning", list)
+	}
+	assertNoRepairTemps(t, a)
+}
+
+func TestRepairAnnotationSurvivesRestartMoveAndPromotionRecovery(t *testing.T) {
+	for _, recovery := range []bool{false, true} {
+		t.Run(strconv.FormatBool(recovery), func(t *testing.T) {
+			a, s := testApp(t)
+			source, path, _ := failedRepairSource(t, a, s, false)
+			if _, err := a.startRepair(source, s); err != nil {
+				t.Fatal(err)
+			}
+			if state := awaitRepair(t, a, source); state.State != "imported" {
+				t.Fatal(state)
+			}
+			imported, _ := a.source(source.ID)
+			artifactPath := filepath.Join(s.Output, imported.Output)
+			output, _ := os.ReadFile(artifactPath)
+			if recovery {
+				hash, _ := fileHash(context.Background(), artifactPath)
+				p := promotion{source.ID, "Artist/Album/.musicforge-crash.part", imported.Output, "", source.Hash, s.Encoding.Fingerprint(), hash}
+				raw, _ := json.Marshal(p)
+				if err := a.setMeta("promotion:"+strconv.FormatInt(source.ID, 10), string(raw)); err != nil {
+					t.Fatal(err)
+				}
+				_, _ = a.db.Exec("DELETE FROM managed WHERE path=?", imported.Output)
+				_, _ = a.db.Exec("UPDATE sources SET output='',built_hash='',built_profile='',output_present=0 WHERE id=?", source.ID)
+			}
+			a.Close()
+			reopened, err := New(a.cfg, a.logger, "test", a.assets)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer reopened.Close()
+			if err = reopened.ensureRecovery(context.Background(), s); err != nil {
+				t.Fatal(err)
+			}
+			list, err := reopened.sourcesWithStatus()
+			current, _ := os.ReadFile(artifactPath)
+			if err != nil || len(list) != 1 || list[0].Status != "possibly_damaged" || !list[0].PossiblyDamaged || !bytes.Equal(output, current) {
+				t.Fatal("restart/recovery lost imported audio or damage annotation", list, err)
+			}
+			next := "Artist/Album/02.flac"
+			if err = os.Rename(path, filepath.Join(s.Source, next)); err != nil {
+				t.Fatal(err)
+			}
+			if _, err = reopened.db.Exec("UPDATE sources SET rel=? WHERE id=?", next, source.ID); err != nil {
+				t.Fatal(err)
+			}
+			if err = reopened.build(context.Background(), Job{Kind: "move"}, BuildRequest{ID: source.ID, Hash: source.Hash, Profile: s.Encoding, Move: true}); err != nil {
+				t.Fatal(err)
+			}
+			list, _ = reopened.sourcesWithStatus()
+			if list[0].Output != outputRel(next, s.Encoding.Codec) || !list[0].PossiblyDamaged {
+				t.Fatal("normal audio move lost damage annotation", list)
+			}
+			assertNoRepairTemps(t, reopened)
+		})
 	}
 }
 
-func TestRepairPreviewIsDisposableOnRestart(t *testing.T) {
+func TestRepairAPIRequiresAuthenticationCSRFAndConsentHash(t *testing.T) {
 	a, s := testApp(t)
-	source, _, _ := failedRepairSource(t, a, s)
-	if _, err := a.startRepair(source, s); err != nil {
-		t.Fatal(err)
-	}
-	if state := awaitRepair(t, a, source); state.State != "ready" {
-		t.Fatal(state)
-	}
-	a.Close()
-	reopened, err := New(a.cfg, a.logger, "test", a.assets)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer reopened.Close()
-	if reopened.repairSnapshot(source) != nil {
-		t.Fatal("disposable repair survived restart")
-	}
-	entries, _ := os.ReadDir(reopened.repairDir)
-	if len(entries) != 0 {
-		t.Fatal("restart retained repair scratch files")
-	}
-	current, _ := reopened.source(source.ID)
-	if current.Hash != source.Hash || current.Error != source.Error || current.Output != source.Output {
-		t.Fatal("restart changed persistent source state", current)
-	}
-}
-
-func TestRepairAPIRequiresConsentHashAndAuthenticatedDownload(t *testing.T) {
-	a, s := testApp(t)
-	source, _, _ := failedRepairSource(t, a, s)
+	source, _, _ := failedRepairSource(t, a, s, false)
 	issued := httptest.NewRecorder()
 	if err := a.newSession(issued, httptest.NewRequest("GET", "/", nil), "local"); err != nil {
 		t.Fatal(err)
 	}
 	cookie := issued.Result().Cookies()[0]
-	send := func(method, suffix, hash string, authenticated, csrf bool) *httptest.ResponseRecorder {
+	send := func(method, hash string, authenticated, csrf bool) *httptest.ResponseRecorder {
 		raw, _ := json.Marshal(map[string]string{"hash": hash})
-		r := httptest.NewRequest(method, "/api/library/"+strconv.FormatInt(source.ID, 10)+"/repair"+suffix, bytes.NewReader(raw))
+		r := httptest.NewRequest(method, "/api/library/"+strconv.FormatInt(source.ID, 10)+"/repair", bytes.NewReader(raw))
 		if authenticated {
 			r.AddCookie(cookie)
 		}
@@ -297,41 +405,38 @@ func TestRepairAPIRequiresConsentHashAndAuthenticatedDownload(t *testing.T) {
 		a.Handler().ServeHTTP(w, r)
 		return w
 	}
-	if w := send("POST", "", source.Hash, false, false); w.Code != 401 {
+	if w := send("POST", source.Hash, false, false); w.Code != 401 {
 		t.Fatal(w.Code, w.Body.String())
 	}
-	if w := send("POST", "", source.Hash, true, false); w.Code != 403 {
+	if w := send("POST", source.Hash, true, false); w.Code != 403 {
 		t.Fatal(w.Code, w.Body.String())
 	}
-	if w := send("POST", "", "stale", true, true); w.Code != 409 {
+	if w := send("POST", "stale", true, true); w.Code != 409 {
 		t.Fatal(w.Code, w.Body.String())
 	}
-	if w := send("POST", "", source.Hash, true, true); w.Code != 202 {
+	if w := send("POST", source.Hash, true, true); w.Code != 202 {
 		t.Fatal(w.Code, w.Body.String())
 	}
-	state := awaitRepair(t, a, source)
-	if state.State != "ready" {
+	if state := awaitRepair(t, a, source); state.State != "imported" {
 		t.Fatal(state)
 	}
-	if w := send("GET", "/download", "", false, false); w.Code != 401 {
-		t.Fatal("anonymous preview download", w.Code)
+	if w := send("DELETE", "", true, false); w.Code != 403 {
+		t.Fatal("cancel bypassed CSRF", w.Code)
 	}
-	if w := send("GET", "/download", "", true, false); w.Code != http.StatusOK || w.Body.Len() == 0 || !strings.Contains(w.Header().Get("Content-Disposition"), "possibly-damaged") {
-		t.Fatal("preview download failed", w.Code, w.Header())
+	if w := send("DELETE", "", true, true); w.Code != 200 {
+		t.Fatal(w.Code, w.Body.String())
 	}
-	if _, err := a.db.Exec("UPDATE sources SET hash='changed' WHERE id=?", source.ID); err != nil {
-		t.Fatal(err)
-	}
-	if w := send("GET", "/download", "", true, false); w.Code != 404 {
-		t.Fatal("stale preview remained downloadable", w.Code)
+	list, _ := a.sourcesWithStatus()
+	if !list[0].PossiblyDamaged || !list[0].OutputPresent {
+		t.Fatal("cancel removed an already published output or warning")
 	}
 }
 
-func TestRepairCancellationAndInvalidPCMKeepOriginalOutput(t *testing.T) {
+func TestRepairCancellationAndInvalidPCMDoNotPublish(t *testing.T) {
 	for _, behavior := range []string{"empty", "partial", "hang"} {
 		t.Run(behavior, func(t *testing.T) {
 			a, s := testApp(t)
-			source, _, output := failedRepairSource(t, a, s)
+			source, _, _ := failedRepairSource(t, a, s, false)
 			tools := t.TempDir()
 			script := "#!/bin/sh\n"
 			switch behavior {
@@ -354,25 +459,27 @@ func TestRepairCancellationAndInvalidPCMKeepOriginalOutput(t *testing.T) {
 				if err := a.removeRepair(source.ID); err != nil {
 					t.Fatal(err)
 				}
-			} else if state := awaitRepair(t, a, source); state.State != "failed" || state.DownloadURL != "" {
-				t.Fatal("invalid PCM was made downloadable", state)
+			} else if state := awaitRepair(t, a, source); state.State != "failed" {
+				t.Fatal("invalid PCM was imported", state)
 			}
 			a.repairWG.Wait()
-			current, _ := os.ReadFile(filepath.Join(s.Output, source.Output))
-			staged, _ := os.ReadDir(a.stagingDir)
-			previews, _ := os.ReadDir(a.repairDir)
-			if !bytes.Equal(output, current) || len(staged) != 0 || len(previews) != 0 {
-				t.Fatal("failed or cancelled repair changed output or leaked files")
+			if _, err := os.Stat(filepath.Join(s.Output, outputRel(source.Rel, s.Encoding.Codec))); !os.IsNotExist(err) {
+				t.Fatal("failed or cancelled repair published audio", err)
 			}
+			current, _ := a.source(source.ID)
+			if current.Error != source.Error || current.OutputPresent {
+				t.Fatal("failed repair changed persistent source state", current)
+			}
+			assertNoRepairTemps(t, a)
 		})
 	}
 }
 
-func TestRepairShortPCMAndChangedSource(t *testing.T) {
-	for _, changed := range []bool{false, true} {
-		t.Run(strconv.FormatBool(changed), func(t *testing.T) {
+func TestRepairShortPCMAndChangedInputs(t *testing.T) {
+	for _, changed := range []string{"none", "source", "encoding"} {
+		t.Run(changed, func(t *testing.T) {
 			a, s := testApp(t)
-			source, _, output := failedRepairSource(t, a, s)
+			source, _, _ := failedRepairSource(t, a, s, false)
 			tools := t.TempDir()
 			started, release := filepath.Join(tools, "started"), filepath.Join(tools, "release")
 			script := "#!/bin/sh\nprintf started > " + strconv.Quote(started) +
@@ -395,8 +502,15 @@ func TestRepairShortPCMAndChangedSource(t *testing.T) {
 				}
 				time.Sleep(20 * time.Millisecond)
 			}
-			if changed {
+			switch changed {
+			case "source":
 				if _, err := a.db.Exec("UPDATE sources SET hash='changed' WHERE id=?", source.ID); err != nil {
+					t.Fatal(err)
+				}
+			case "encoding":
+				settings := s
+				settings.Encoding.Codec = "mp3"
+				if err := a.saveSettings(settings); err != nil {
 					t.Fatal(err)
 				}
 			}
@@ -404,21 +518,15 @@ func TestRepairShortPCMAndChangedSource(t *testing.T) {
 				t.Fatal(err)
 			}
 			state := awaitRepair(t, a, source)
-			if changed {
-				if state.State != "failed" || state.DownloadURL != "" || !strings.Contains(state.Diagnostics, "Source changed") {
-					t.Fatal("source change was not rejected", state)
+			if changed != "none" {
+				if state.State != "failed" || !strings.Contains(state.Diagnostics, "changed") {
+					t.Fatal("changed input was not rejected", state)
 				}
-			} else if state.State != "ready" || state.DecodedSamples != 22050 || state.PCMVerified || state.DecodedSamples >= state.DeclaredSamples {
+			} else if state.State != "imported" || state.DecodedSamples != 22050 || state.PCMVerified || state.DecodedSamples >= state.DeclaredSamples {
 				t.Fatal("short PCM was not marked as unverified", state)
 			}
-			if err := a.removeRepair(source.ID); err != nil {
-				t.Fatal(err)
-			}
-			current, _ := os.ReadFile(filepath.Join(s.Output, source.Output))
-			previews, _ := os.ReadDir(a.repairDir)
-			if !bytes.Equal(output, current) || len(previews) != 0 {
-				t.Fatal("repair changed the existing output or leaked a preview")
-			}
+			a.repairWG.Wait()
+			assertNoRepairTemps(t, a)
 		})
 	}
 }

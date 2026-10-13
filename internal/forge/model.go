@@ -352,7 +352,8 @@ type Source struct {
 	Status        string            `json:"status"`
 	ArtworkURL    string            `json:"artwork_url,omitempty"`
 	CanRepair     bool              `json:"can_repair,omitempty"`
-	Repair        *RepairPreview    `json:"repair,omitempty"`
+	Repair        *RepairStatus     `json:"repair,omitempty"`
+	PossiblyDamaged bool            `json:"possibly_damaged,omitempty"`
 }
 
 type Job struct {

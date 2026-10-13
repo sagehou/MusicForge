@@ -107,9 +107,7 @@ func New(cfg Runtime, logger *slog.Logger, version string, assets fs.FS) (*App, 
 	if err = a.initializeStaging(); err != nil {
 		return fail(err)
 	}
-	if err = a.initializeRepairs(); err != nil {
-		return fail(err)
-	}
+	a.repairs = make(map[int64]*repairEntry)
 	if _, err = a.settings(); err == sql.ErrNoRows {
 		err = a.saveSettings(DefaultSettings())
 	}

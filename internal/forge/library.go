@@ -922,11 +922,20 @@ func (a *App) buildStaged(ctx context.Context, j Job, r BuildRequest, staged *st
 		_, _ = a.enqueue("scan", "scan:periodic", ScanRequest{}, true)
 		return later("Source changed or is still being written", 10)
 	}
+	annotated := []Source{source}
+	if err = a.annotateRepairs(ctx, annotated); err != nil {
+		a.files.Unlock()
+		return err
+	}
+	source = annotated[0]
 	target := outputRel(source.Rel, r.Profile.Codec)
 	if r.Move {
 		target = outputRel(source.Rel, strings.TrimPrefix(filepath.Ext(source.Output), "."))
 	}
-	if !r.Move && source.OutputPresent && source.Output == target && source.BuiltHash == r.Hash && source.BuiltProfile == r.Profile.Fingerprint() {
+	// Old automatic retries may finish against a manually accepted import.
+	// A fresh strict rebuild, and its failed retries, still decode the source.
+	rebuildDamaged := source.PossiblyDamaged && (j.Attempts == 0 || source.Error != "")
+	if !r.Move && !rebuildDamaged && source.OutputPresent && source.Output == target && source.BuiltHash == r.Hash && source.BuiltProfile == r.Profile.Fingerprint() {
 		path, pathErr := safePath(s.Output, target)
 		if pathErr != nil {
 			a.files.Unlock()
@@ -1116,6 +1125,9 @@ func (a *App) buildStaged(ctx context.Context, j Job, r BuildRequest, staged *st
 		return err
 	}
 	if err = a.finalize(s, p); err != nil {
+		return err
+	}
+	if _, err = a.db.Exec("DELETE FROM meta WHERE key=?", repairArtifactKey(source.ID, hash)); err != nil {
 		return err
 	}
 	_, _ = a.db.Exec("UPDATE jobs SET progress=.95 WHERE id=?", j.ID)

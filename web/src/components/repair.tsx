@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { AlertTriangle, Download, Loader2, Wrench, X } from "lucide-react";
+import { AlertTriangle, Loader2, Wrench, X } from "lucide-react";
 import { api } from "../api";
 import { useI18n } from "../i18n";
 import type { Source } from "../types";
@@ -10,7 +10,7 @@ export function RepairControls({ source, notify, refresh }: { source: Source; no
   const { t, number } = useI18n();
   const [busy, setBusy] = useState(false);
   const repair = source.repair;
-  if (!source.can_repair && !repair) return null;
+  if (!source.can_repair && !repair && !source.possibly_damaged) return null;
   async function start() {
     if (!window.confirm(t("repair.confirm", { title: source.title || source.path }))) return;
     setBusy(true);
@@ -31,12 +31,10 @@ export function RepairControls({ source, notify, refresh }: { source: Source; no
   }
   return <div className="repair-controls">
     {repair?.state === "running" ? <><span className="repair-progress" role="status"><Loader2 size={14} className="animate-spin" />{t("repair.running")}</span><Button variant="ghost" size="icon" disabled={busy} aria-label={t("repair.cancel")} title={t("repair.cancel")} onClick={() => void remove()}><X size={15} /></Button></> :
-      repair?.state === "ready" ? <>
-        <span className="repair-warning"><AlertTriangle size={14} />{t("repair.damaged")}</span>
-        <Button variant="outline" size="sm" asChild><a href={repair.download_url} download={repair.filename}><Download size={14} />{t("repair.download")}</a></Button>
-        <Button variant="ghost" size="icon" disabled={busy} aria-label={t("repair.remove")} title={t("repair.remove")} onClick={() => void remove()}><X size={15} /></Button>
-        <small>{t("repair.previewOnly")}</small>
-        <details className="repair-diagnostic"><summary>{t("repair.details")}</summary><p>{t("repair.samples", { decoded: number(repair.decoded_samples || 0), declared: number(repair.declared_samples || 0) })}</p><pre>{repair.diagnostics}</pre></details>
+      source.possibly_damaged ? <>
+        {source.status !== "possibly_damaged" && <span className="repair-warning"><AlertTriangle size={14} />{t("repair.damaged")}</span>}
+        <small>{t("repair.imported")}</small>
+        {repair && <details className="repair-diagnostic"><summary>{t("repair.details")}</summary><p>{t("repair.samples", { decoded: number(repair.decoded_samples || 0), declared: number(repair.declared_samples || 0) })}</p><pre>{repair.diagnostics}</pre></details>}
       </> : <>
         {repair?.state === "failed" && <span className="repair-warning" role="status"><AlertTriangle size={14} />{t("repair.failed")}</span>}
         <Button variant="outline" size="sm" disabled={busy || !source.can_repair} onClick={() => void start()}>{busy ? <Loader2 size={14} className="animate-spin" /> : <Wrench size={14} />}{t("repair.start")}</Button>

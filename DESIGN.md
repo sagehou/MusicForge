@@ -186,14 +186,16 @@ errors do not remove the page. Technical diagnostics remain available.
 Error toasts remain until dismissed rather than timing out; success toasts
 expire after six seconds. Both retain an explicit dismiss control.
 
-Failed native FLAC tracks offer an individually confirmed best-effort repair
-preview in the album track table. Recovery is isolated from published artifacts:
-the original failed badge remains, while an amber icon and explicit "Possibly
-damaged" label identify the downloadable preview. Running previews expose cancel;
-completed previews expose download, diagnostics and removal. Confirmation names
-audio risks, unchanged originals and outputs, and restart cleanup. Controls wrap
-inside the existing artifact column, retain mobile touch targets, and use the
-same bilingual labels and theme tokens as neighboring actions.
+Failed native FLAC tracks without an existing playable output offer an
+individually confirmed best-effort repair in the album track table. Successful
+audio enters the normal output hierarchy and Navidrome scan flow, while an amber
+"Possibly damaged" badge remains filterable in MusicForge across scans, moves
+and restarts. Recovery diagnostics retain the original strict failure.
+Confirmation names audio risks, normal import and preserved originals/outputs.
+Running operations expose cancel; imported artifacts have no disposable-preview
+download or removal controls. Strict rebuild success clears the warning, not a
+UI dismissal. Controls wrap inside the existing artifact column, retain mobile
+touch targets, and use neighboring bilingual labels and theme tokens.
 
 The focal motion carries the clicked album cover into its detail header with a
 320ms native View Transition. It is progressively enhanced, never required for

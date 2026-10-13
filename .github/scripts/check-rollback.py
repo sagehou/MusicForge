@@ -218,6 +218,13 @@ def main():
             identity = db.execute("SELECT value FROM meta WHERE key='source_root'").fetchone()[0]
             witness = {"identity": identity, "signature": hashlib.sha256(b"rollback-remote:Library").hexdigest()}
             db.execute("INSERT INTO meta(key,value) VALUES('source_mount',?)", (json.dumps(witness),))
+            # An inactive historical repair annotation must survive older
+            # readers/writers without changing current artifact/API records.
+            repair = {"state": "imported", "decoded_samples": 44000, "declared_samples": 44100,
+                      "pcm_verified": False, "duration": 44000 / 44100,
+                      "diagnostics": "Possibly damaged: rollback annotation fixture"}
+            db.execute("INSERT INTO meta(key,value) VALUES(?,?)",
+                       ("repair-artifact:" + str(tracks[0]["id"]) + ":" + "0" * 64, json.dumps(repair)))
         expected = snapshot()
         held = next(row for row in expected["jobs"] if row[0] == pending)
         assert held[4] == "pending" and held[8] == 253402300799, "paused task changed schema-2 job semantics"

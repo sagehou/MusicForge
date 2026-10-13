@@ -161,7 +161,7 @@ input:disabled, select:disabled { opacity: .6; }
 .badge { display: inline-flex; gap: 6px; align-items: center; color: var(--muted); font-size: 11px; padding: 4px 0; line-height: 1.35; white-space: normal; }
 .badge > span { width: 5px; height: 5px; border-radius: 50%; background: currentColor; flex-shrink: 0; }
 .badge-ready, .badge-success { color: var(--success); }
-.badge-expired, .badge-needs_rebuild, .badge-changed, .badge-paused, .badge-waiting { color: var(--warning); }
+.badge-expired, .badge-needs_rebuild, .badge-changed, .badge-paused, .badge-waiting, .badge-possibly_damaged { color: var(--warning); }
 .badge-failed { color: var(--danger); }
 .badge-running { color: var(--info); }
 .badge-expired > span, .badge-stopped > span { background: none; border: 1px solid currentColor; width: 6px; height: 6px; }
@@ -351,6 +351,7 @@ summary { font-size: 12px; color: var(--danger); cursor: pointer; margin-top: 6p
 .repair-controls small, .repair-diagnostic { flex-basis: 100%; min-width: 0; }
 .repair-warning, .repair-progress { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; line-height: 1.5; color: var(--warning); }
 .repair-warning svg, .repair-progress svg { flex-shrink: 0; }
+.repair-diagnostic summary { color: var(--muted); }
 .repair-diagnostic pre { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 240px; overflow: auto; }
 .track-duration { color: var(--muted); font-variant-numeric: tabular-nums; }
 .disc-heading th { padding: 14px; width: auto !important; color: var(--ink); }

@@ -439,5 +439,21 @@
   "error.repairUnsupported": "仅支持没有现有产物的解码失败原生 FLAC 歌曲",
   "error.repairPCM": "修复需要包含已知样本数和 PCM 校验值的原生 FLAC",
   "error.repairExisting": "已保留现有产物，尽力修复不能替换它",
-  "error.repairSettings": "设置已变化，请按当前编码设置重新修复"
+  "error.repairSettings": "设置已变化，请按当前编码设置重新修复",
+  "repairTasks.title": "尽力修复任务",
+  "repairTasks.description": "手动修复在这里显示进度和历史，不参与自动重试或批量重试。",
+  "repairTasks.previous": "上一页修复任务",
+  "repairTasks.next": "下一页修复任务",
+  "repairTasks.filter": "筛选修复任务",
+  "repairTasks.stopping": "正在停止修复",
+  "repairTasks.deleted": "修复历史已删除。",
+  "repairTasks.progress": "修复进度：{title}",
+  "repairTasks.imported": "已导入输出库 · 可能损坏",
+  "repairTasks.library": "打开媒体库 · 查看或重新修复",
+  "repairTasks.empty": "当前筛选下没有修复任务。在媒体库启动的新修复会显示在这里，升级前的修复没有任务历史。",
+  "phase.publish": "发布修复结果",
+  "error.repairInterrupted": "修复因重启中断；重试前请在媒体库检查是否已有恢复的输出。",
+  "error.repairTaskStopped": "修复已停止；请在媒体库检查取消前是否已有完成发布的输出。",
+  "error.repairDeleteRunning": "请先停止修复并等待结束，再删除历史记录。",
+  "error.repairFinishing": "修复正在结束，请稍后刷新。"
 }

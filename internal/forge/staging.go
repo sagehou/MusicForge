@@ -94,7 +94,7 @@ func (a *App) stageSource(ctx context.Context, settings Settings, source Source,
 			return nil, later("Waiting for local source staging space", 1)
 		}
 		activity.Phase = "staging_wait"
-		a.reportProgress(job, activity, 0)
+		a.reportMediaProgress(ctx, job, activity, 0)
 		if !pause(ctx, time.Second) {
 			return nil, ctx.Err()
 		}
@@ -106,7 +106,7 @@ func (a *App) stageSource(ctx context.Context, settings Settings, source Source,
 	}
 	if err == nil {
 		activity.Phase, activity.ReadTotalBytes = "read", source.Size
-		a.reportProgress(job, activity, 0)
+		a.reportMediaProgress(ctx, job, activity, 0)
 		last := time.Time{}
 		err = a.sourceIO(ctx, "stage", settings.Source, source.Rel, func(event sourceEvent) error {
 			if event.Info != nil {
@@ -117,7 +117,7 @@ func (a *App) stageSource(ctx context.Context, settings Settings, source Source,
 			}
 			if time.Since(last) >= time.Second || event.Hash != "" {
 				activity.ReadBytes = event.Read
-				a.reportProgress(job, activity, float64(event.Read)/float64(source.Size)*.1)
+				a.reportMediaProgress(ctx, job, activity, float64(event.Read)/float64(source.Size)*.1)
 				if event.Read > 0 {
 					last = time.Now()
 				}

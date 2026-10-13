@@ -6,6 +6,7 @@ test("remote read progress is bilingual and proxy errors retain a usable task pa
   const activity = { phase: "read", path: "Artist/Album/36.flac", artist: "Remote Artist", album: "Remote Album", title: "Track 36", processed: 35, total: 40, percent: 0, read_bytes: 12 * 1048576, read_total_bytes: 40 * 1048576 };
   const job = { id: 1, kind: "scan", state: "running", attempts: 0, progress: 0.875, log: "", created: 1800000000, updated: 1800000000, args: {}, counts: { total: 35, done: 0, failed: 0, pending: 35, running: 0, cancelled: 0 }, scan: activity, current: [activity], scope: [], can_delete: false };
   await page.route("**/api/jobs?*", route => route.fulfill({ json: { jobs: [job], total: 1 } }));
+  await page.route("**/api/repair-tasks?*", route => route.fulfill({ json: { tasks: [], total: 0 } }));
   await page.goto("/jobs");
   await expect(page.locator(".task-activity")).toContainText("Read 12.0 / 40.0 MiB");
   await expect(page.locator(".task-activity")).toContainText("Track 36");
@@ -27,6 +28,7 @@ test("completed tag indexing does not show 100 percent while a source is being s
   const activity = { phase: "read", path: "Artist/Album/01.flac", artist: "Artist", album: "Album", title: "Still downloading", processed: 0, total: 0, percent: 0, read_bytes: 1048576, read_total_bytes: 40 * 1048576 };
   const job = { id: 1, kind: "scan", state: "running", attempts: 0, progress: 0.05, log: "", created: 1800000000, updated: 1800000000, args: {}, counts: { total: 40, done: 0, failed: 0, pending: 39, running: 1, cancelled: 0 }, scan: { ...activity, phase: "indexed", processed: 40, total: 40, percent: 100 }, current: [activity], scope: [], can_delete: false };
   await page.route("**/api/jobs?*", route => route.fulfill({ json: { jobs: [job], total: 1 } }));
+  await page.route("**/api/repair-tasks?*", route => route.fulfill({ json: { tasks: [], total: 0 } }));
   await page.goto("/jobs");
   await expect(page.getByRole("progressbar")).toHaveAttribute("aria-valuenow", "5");
   await expect(page.locator(".task-activity")).toContainText("Still downloading");
@@ -43,6 +45,7 @@ test("scan failure summaries show file paths and causes in both languages", asyn
     counts: { total: 0, done: 0, failed: 0, pending: 0, running: 0, cancelled: 0 }, current: [], scope: [], can_delete: true,
   }], total: 1 } }));
   await page.route("**/api/jobs/1/items?*", route => route.fulfill({ json: { items: [], total: 0 } }));
+  await page.route("**/api/repair-tasks?*", route => route.fulfill({ json: { tasks: [], total: 0 } }));
   await page.goto("/jobs");
   await page.getByRole("button", { name: "Details", exact: true }).click();
   await expect(page.locator(".task-outcome")).toContainText("1 unavailable source files and 0 invalid audio files");

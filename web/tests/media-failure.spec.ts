@@ -13,6 +13,7 @@ test("decode failures show a translated summary and retain full diagnostics", as
     output: "Artist/Album/01.opus", failure: "decode",
     log: "Audio decoding failed\nSource SHA-256: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n[dec:flac] Decoding error: Invalid data found when processing input\nreference FLAC decoder failed: MD5 signature mismatch",
   }], total: 1 } }));
+  await page.route("**/api/repair-tasks?*", route => route.fulfill({ json: { tasks: [], total: 0 } }));
   await page.goto("/jobs");
   await page.getByRole("button", { name: "Details", exact: true }).click();
   await expect(page.locator(".task-error-summary")).toContainText("decoder compatibility");

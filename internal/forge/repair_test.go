@@ -190,6 +190,15 @@ func TestRepairImportsNormalOutputWithPersistentDamageAnnotation(t *testing.T) {
 			if state.State != "imported" || state.DecodedSamples <= 0 || state.PCMVerified || !strings.Contains(state.Diagnostics, source.Error) {
 				t.Fatal("invalid imported recovery report", state)
 			}
+			history, total, err := a.repairTaskList(context.Background(), "success", 25, 0)
+			if err != nil || total != 1 || len(history) != 1 || history[0].SourceID != source.ID || history[0].Progress != 1 || history[0].Log != state.Diagnostics {
+				t.Fatal("successful repair missing from task history", history, total, err)
+			}
+			r := httptest.NewRequest("DELETE", "/", nil)
+			r.SetPathValue("id", history[0].ID)
+			w := httptest.NewRecorder()
+			a.controlRepairTask(w, r)
+			if w.Code != 200 { t.Fatal(w.Code, w.Body.String()) }
 			current, err := a.source(source.ID)
 			target := outputRel(source.Rel, codec)
 			if err != nil || current.Output != target || !current.OutputPresent || current.BuiltHash != source.Hash || current.BuiltProfile != s.Encoding.Fingerprint() || current.Error != "" {
@@ -463,6 +472,12 @@ func TestRepairCancellationAndInvalidPCMDoNotPublish(t *testing.T) {
 				t.Fatal("invalid PCM was imported", state)
 			}
 			a.repairWG.Wait()
+			history, total, err := a.repairTaskList(context.Background(), "all", 25, 0)
+			want := "failed"
+			if behavior == "hang" { want = "stopped" }
+			if err != nil || total != 1 || len(history) != 1 || history[0].State != want || history[0].Log == "" || history[0].Stopping {
+				t.Fatal("repair terminal history missing", history, total, err)
+			}
 			if _, err := os.Stat(filepath.Join(s.Output, outputRel(source.Rel, s.Encoding.Codec))); !os.IsNotExist(err) {
 				t.Fatal("failed or cancelled repair published audio", err)
 			}

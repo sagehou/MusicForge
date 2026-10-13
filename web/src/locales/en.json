@@ -472,5 +472,21 @@
   "error.repairUnsupported": "Only failed native FLAC tracks without an existing output can be repaired",
   "error.repairPCM": "Repair requires native FLAC with known samples and a PCM checksum",
   "error.repairExisting": "Existing output is preserved; best-effort repair cannot replace it",
-  "error.repairSettings": "Settings changed; retry the repair with the current encoding"
+  "error.repairSettings": "Settings changed; retry the repair with the current encoding",
+  "repairTasks.title": "Best-effort repair tasks",
+  "repairTasks.description": "Manual repairs have their own progress and history. They are not included in automatic or bulk retries.",
+  "repairTasks.previous": "Previous repair tasks page",
+  "repairTasks.next": "Next repair tasks page",
+  "repairTasks.filter": "Filter repair tasks",
+  "repairTasks.stopping": "Stopping repair",
+  "repairTasks.deleted": "Repair history deleted.",
+  "repairTasks.progress": "Repair progress: {title}",
+  "repairTasks.imported": "Imported into the output library · Possibly damaged",
+  "repairTasks.library": "Open Library · review or retry repair",
+  "repairTasks.empty": "No repair tasks match this filter. New repairs started in Library appear here. Earlier attempts have no task history.",
+  "phase.publish": "Publishing repaired output",
+  "error.repairInterrupted": "Repair interrupted by restart; check Library for any recovered output before retrying",
+  "error.repairTaskStopped": "Repair stopped; check Library for any output committed before cancellation",
+  "error.repairDeleteRunning": "Stop the repair and wait for it to finish before deleting history",
+  "error.repairFinishing": "Repair is finishing; refresh shortly"
 }

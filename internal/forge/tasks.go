@@ -84,6 +84,8 @@ type Task struct {
 	CanDelete     bool       `json:"can_delete"`
 	WaitingReason string     `json:"waiting_reason,omitempty"`
 	RetryAt       int64      `json:"retry_at,omitempty"`
+	RepairID      string     `json:"repair_id,omitempty"`
+	Stopping      bool       `json:"stopping,omitempty"`
 }
 
 // Aggregate before pagination so a scan with thousands of tracks remains one task.
@@ -121,11 +123,27 @@ func (a *App) taskList(state string, limit, offset int) ([]Task, int, error) {
 	return a.taskListContext(context.Background(), state, limit, offset)
 }
 func (a *App) taskListContext(ctx context.Context, state string, limit, offset int) ([]Task, int, error) {
+	return a.taskListSelected(ctx, state, limit, offset, nil)
+}
+
+func (a *App) taskListSelected(ctx context.Context, state string, limit, offset int, ids []int64) ([]Task, int, error) {
 	where := ""
 	args := []any{}
 	if state != "" && state != "all" {
 		where = " WHERE task_state=?"
 		args = append(args, state)
+	}
+	if ids != nil {
+		values := []string{"-1"}
+		for _, id := range ids {
+			values = append(values, strconv.FormatInt(id, 10))
+		}
+		if where == "" {
+			where = " WHERE "
+		} else {
+			where += " AND "
+		}
+		where += "task_id IN (" + strings.Join(values, ",") + ")"
 	}
 	var total int
 	columns := strings.Split(jobCols, ",")
@@ -328,6 +346,13 @@ type TaskItem struct {
 	Output   string    `json:"output"`
 	Profile  *Encoding `json:"profile,omitempty"`
 	Failure  string    `json:"failure,omitempty"`
+	RepairTarget *repairTarget `json:"repair_target,omitempty"`
+}
+
+type repairTarget struct {
+	ID int64 `json:"id"`
+	Hash string `json:"hash"`
+	CanRepair bool `json:"can_repair"`
 }
 
 func (a *App) taskItems(id int64, state string, limit, offset int) ([]TaskItem, int, error) {
@@ -350,7 +375,7 @@ func (a *App) taskItemsContext(ctx context.Context, id int64, state string, limi
 	}
 	order := " ORDER BY CASE j.state WHEN 'running' THEN 0 WHEN 'failed' THEN 1 WHEN 'pending' THEN 2 ELSE 3 END,j.id"
 	// Page jobs before joining tags, and use the source indexes separately.
-	rows, err := a.reads.QueryContext(ctx, "WITH page AS MATERIALIZED (SELECT j.* FROM jobs j LEFT JOIN meta m ON m.key='task-member:'||j.id"+where+order+" LIMIT ? OFFSET ?) SELECT "+strings.Join(columns, ",")+",coalesce(p.value,''),coalesce(s.rel,prepared.rel,''),coalesce(s.artist,prepared.artist,''),coalesce(s.album,prepared.album,''),coalesce(s.title,prepared.title,''),coalesce(s.output,prepared.output,'') FROM page j LEFT JOIN meta p ON p.key='task-progress:'||j.id LEFT JOIN sources s ON s.id=json_extract(j.args,'$.id') LEFT JOIN sources prepared ON j.dedup LIKE 'scan:prepare:%' AND prepared.rel=json_extract(j.args,'$.dirs[0]')"+order, append(args, limit, offset)...)
+	rows, err := a.reads.QueryContext(ctx, "WITH page AS MATERIALIZED (SELECT j.* FROM jobs j LEFT JOIN meta m ON m.key='task-member:'||j.id"+where+order+" LIMIT ? OFFSET ?) SELECT "+strings.Join(columns, ",")+",coalesce(p.value,''),coalesce(s.rel,prepared.rel,''),coalesce(s.artist,prepared.artist,''),coalesce(s.album,prepared.album,''),coalesce(s.title,prepared.title,''),coalesce(s.output,prepared.output,''),coalesce(s.id,prepared.id,0),coalesce(s.hash,prepared.hash,''),coalesce(s.present,prepared.present,0),coalesce(s.output_present,prepared.output_present,0),coalesce(s.error,prepared.error,'') FROM page j LEFT JOIN meta p ON p.key='task-progress:'||j.id LEFT JOIN sources s ON s.id=json_extract(j.args,'$.id') LEFT JOIN sources prepared ON j.dedup LIKE 'scan:prepare:%' AND prepared.rel=json_extract(j.args,'$.dirs[0]')"+order, append(args, limit, offset)...)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -359,13 +384,17 @@ func (a *App) taskItemsContext(ctx context.Context, id int64, state string, limi
 	for rows.Next() {
 		var item TaskItem
 		var raw, activity string
+		var source Source
 		err = rows.Scan(&item.ID, &item.Kind, &item.Key, &raw, &item.State, &item.Attempts, &item.Progress, &item.Log, &item.Created, &item.Updated,
-			&activity, &item.Activity.Path, &item.Activity.Artist, &item.Activity.Album, &item.Activity.Title, &item.Output)
+			&activity, &item.Activity.Path, &item.Activity.Artist, &item.Activity.Album, &item.Activity.Title, &item.Output,
+			&source.ID, &source.Hash, &source.Present, &source.OutputPresent, &source.Error)
 		if err != nil {
 			return nil, 0, err
 		}
 		item.Args = json.RawMessage(raw)
 		item.Failure = failureCategory(item.Log)
+		source.Rel = item.Activity.Path
+		if canRepair(source) { item.RepairTarget = &repairTarget{ID: source.ID, Hash: source.Hash, CanRepair: true} }
 		if activity != "" {
 			_ = json.Unmarshal([]byte(activity), &item.Activity)
 		}
@@ -410,6 +439,8 @@ func (a *App) controlJobs(w http.ResponseWriter, r *http.Request) {
 		selection
 		Action string `json:"action"`
 		State  string `json:"state"`
+		RepairIDs []string `json:"repair_ids"`
+		IncludeRepairs bool `json:"include_repairs"`
 	}
 	if !decode(w, r, &body) {
 		return
@@ -428,14 +459,22 @@ func (a *App) controlJobs(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	if body.All && body.State == "" && body.Action != "retry" || !body.All && len(body.IDs) == 0 || len(body.IDs) > 10000 {
+	if body.All && body.State == "" && body.Action != "retry" || !body.All && len(body.IDs)+len(body.RepairIDs) == 0 || len(body.IDs)+len(body.RepairIDs) > 10000 {
 		apiError(w, 400, errors.New("select tasks"))
 		return
+	}
+	for _, id := range body.RepairIDs {
+		if !validRepairTaskID(id) { apiError(w, 400, errors.New("invalid repair task ID")); return }
 	}
 	n, err := a.changeTasksFiltered(body.Action, body.selection, body.State)
 	if err != nil {
 		apiError(w, 409, err)
 		return
+	}
+	if len(body.RepairIDs) > 0 || body.All && body.IncludeRepairs && body.State != "" {
+		changed, err := a.changeRepairGroups(r.Context(), body.Action, body.RepairIDs, body.All && body.IncludeRepairs, body.State)
+		if err != nil { apiError(w, 409, err); return }
+		n += changed
 	}
 	respond(w, 202, map[string]int{"changed": n})
 }

@@ -11,12 +11,17 @@ test("file comparison explains count differences and queues only selected direct
   let state = "idle";
   let checks = 0;
   let selectedDirs: string[] = [];
-  await page.route("**/api/lidarr/connection", route => {
+  const settings = { enabled: true, source: "/music/source", output: "/music/output", encoding: { codec: "opus", mode: "vbr", bitrate: 192, quality: 2 }, concurrency: 1, scan_minutes: 60, lidarr_prefix: "/music", nav_url: "", nav_user: "", nav_library: 1, oidc_issuer: "", oidc_client_id: "" };
+  await page.route("**/api/settings", route => {
     if (route.request().method() === "PUT") {
-      expect(route.request().postDataJSON()).toEqual({ url: "http://lidarr:8686", api_key: "test-only-key" });
+      expect(route.request().postDataJSON().lidarr_connection).toEqual({ url: "http://lidarr:8686", api_key: "test-only-key" });
       connected = true;
-      return route.fulfill({ json: { saved: true } });
+      return route.fulfill({ json: { encoding_changed: false } });
     }
+    return route.fulfill({ json: { settings, lidarr: { url: connected ? "http://lidarr:8686" : "", key_configured: connected }, configured: { webhook: false, nav_password: false, oidc_secret: false }, public_url: "", allowed_origins: [] } });
+  });
+  await page.route("**/api/lidarr/connection", route => {
+    expect(route.request().method()).toBe("GET");
     return route.fulfill({ json: { url: connected ? "http://lidarr:8686" : "", key_configured: connected } });
   });
   await page.route("**/api/lidarr/check", route => {
@@ -39,10 +44,24 @@ test("file comparison explains count differences and queues only selected direct
   await page.getByText("File counts · compare with Lidarr", { exact: true }).click();
   const compare = page.getByRole("button", { name: "Compare file lists", exact: true });
   await expect(compare).toBeDisabled();
+  await expect(page.getByLabel("Lidarr URL", { exact: true })).toHaveCount(0);
+  await expect(page.getByLabel("Lidarr API key", { exact: true })).toHaveCount(0);
+  await page.getByRole("link", { name: "Lidarr settings", exact: true }).click();
+  await expect(page.getByRole("tab", { name: "Integrations", exact: true })).toHaveAttribute("aria-selected", "true");
   await page.getByLabel("Lidarr URL", { exact: true }).fill("http://lidarr:8686");
   await page.getByLabel("Lidarr API key", { exact: true }).fill("test-only-key");
-  await page.getByRole("button", { name: "Save connection", exact: true }).click();
+  await page.getByRole("tab", { name: "Encoding", exact: true }).click();
+  await page.getByRole("tab", { name: "Integrations", exact: true }).click();
+  await expect(page.getByLabel("Lidarr API key", { exact: true })).toHaveValue("test-only-key");
+  await page.getByRole("button", { name: "Discard changes", exact: true }).click();
+  await expect(page.getByLabel("Lidarr URL", { exact: true })).toHaveValue("");
   await expect(page.getByLabel("Lidarr API key", { exact: true })).toHaveValue("");
+  await page.getByLabel("Lidarr URL", { exact: true }).fill("http://lidarr:8686");
+  await page.getByLabel("Lidarr API key", { exact: true }).fill("test-only-key");
+  await page.getByRole("button", { name: "Save settings", exact: true }).click();
+  await expect(page.getByLabel("Lidarr API key", { exact: true })).toHaveValue("");
+  await page.getByRole("link", { name: "Library", exact: true }).click();
+  await page.getByText("File counts · compare with Lidarr", { exact: true }).click();
   await expect(compare).toBeEnabled();
   await compare.click();
   await expect(page.getByText("Some Lidarr paths are outside", { exact: false })).toBeVisible();

@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useState } from "react";
 import { ListChecks, ChevronLeft, ChevronRight, RefreshCw } from "lucide-react";
 import { api } from "../api";
 import { useI18n } from "../i18n";
@@ -34,26 +34,14 @@ function LidarrComparison({ notify }: { notify: Notice }) {
   const connection = useResource<{ url: string; key_configured: boolean }>("/lidarr/connection");
   const [poll, setPoll] = useState(false);
   const report = useResource<Report>("/lidarr/check", poll);
-  const [url, setURL] = useState("");
-  const [key, setKey] = useState("");
   const [busy, setBusy] = useState(false);
   const [filter, setFilter] = useState("all");
   const [query, setQuery] = useState("");
   const [page, setPage] = useState(0);
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  useEffect(() => { if (connection.data) setURL(connection.data.url); }, [connection.data]);
   useEffect(() => { setPoll(report.data?.state === "running"); }, [report.data?.state]);
   useEffect(() => { setSelected(new Set()); setPage(0); }, [report.data?.started]);
   const running = report.data?.state === "running";
-  const dirty = url.replace(/\/+$/, "") !== connection.data?.url || key !== "";
-  async function save(event: FormEvent) {
-    event.preventDefault(); setBusy(true);
-    try {
-      await api("/lidarr/connection", "PUT", { url, api_key: key });
-      setKey(""); connection.retry(); report.retry(); notify("compare.saved");
-    } catch (err) { notify(err as Error, true); }
-    finally { setBusy(false); }
-  }
   async function start() {
     setBusy(true);
     setSelected(new Set()); setPage(0);
@@ -82,16 +70,9 @@ function LidarrComparison({ notify }: { notify: Notice }) {
   const selectable = visible.filter(row => row.scan_dir).map(row => row.path);
   return <div className="comparison-body">
     <ResourceWarning error={connection.error} retry={connection.retry} />
-    <form onSubmit={event => void save(event)}>
-      <div className="form-grid">
-        <label className="field"><span>{t("compare.url")}</span><input type="url" value={url} onChange={event => setURL(event.target.value)} placeholder="http://lidarr:8686" disabled={busy || running} /></label>
-        <label className="field"><span>{t("compare.key")}</span><input type="password" value={key} onChange={event => setKey(event.target.value)} autoComplete="new-password" disabled={busy || running} placeholder={connection.data.key_configured ? t("settings.keepSecret") : ""} /></label>
-      </div>
-      <p>{t("compare.connectionHint")}</p>
-      <Button type="submit" variant="outline" size="sm" disabled={busy || running}>{t("compare.save")}</Button>
-    </form>
+    <div className="comparison-connection"><div><strong>{connection.data.url || t("compare.disconnected")}</strong><p>{t(connection.data.key_configured ? "compare.connected" : "compare.configureHint")}</p></div><Button type="button" variant="outline" size="sm" asChild><a href="/settings?section=integrations">{t("compare.configure")}</a></Button></div>
     <p>{t("compare.scopeHint")}</p>
-    <div className="actions"><Button disabled={busy || running || dirty || !connection.data.key_configured} onClick={() => void start()}><RefreshCw size={15} className={running ? "animate-spin" : ""} />{t("compare.start")}</Button>
+    <div className="actions"><Button disabled={busy || running || !connection.data.key_configured} onClick={() => void start()}><RefreshCw size={15} className={running ? "animate-spin" : ""} />{t("compare.start")}</Button>
       {running && <span role="status">{t("compare.progress", { done: number(data?.processed || 0), total: number(data?.total || 0) })}</span>}
     </div>
     <ResourceWarning error={report.error} retry={report.retry} />

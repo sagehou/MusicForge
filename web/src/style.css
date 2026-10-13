@@ -324,7 +324,7 @@ input[role="switch"]:checked::after { transform: translateX(16px); background: v
 .segmented button span { font-variant-numeric: tabular-nums; font-size: 11px; color: var(--muted); }
 .layout-control { flex-shrink: 0; }
 .layout-control button { padding: 7px 10px; width: 36px; }
-.library-selection { display: flex; justify-content: space-between; align-items: center; gap: 16px; color: var(--muted); font-size: 12px; padding: 4px 0; }
+.library-selection { display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; color: var(--muted); font-size: 12px; padding: 4px 0; }
 .library-selection .check-field { font-size: 12px; }
 .library-groups { --cover-min: 180px; display: grid; grid-template-columns: repeat(auto-fill, minmax(var(--cover-min), 1fr)); gap: 28px 20px; padding: 14px 0 28px; }
 .library-groups[data-density="compact"] { --cover-min: 140px; gap: 24px 16px; }
@@ -515,19 +515,6 @@ input[role="switch"]:checked::after { transform: translateX(16px); background: v
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
 }
-.repair-tasks { margin-bottom: 24px; }
-.repair-tasks .task-main { display: grid; grid-template-columns: 38px minmax(0, 1fr) auto auto; }
-.repair-tasks .task-path, .repair-tasks .task-progress > small { display: block; overflow-wrap: anywhere; }
-.repair-tasks .task-description { min-width: 0; overflow-wrap: anywhere; }
-.repair-tasks .task-diagnostic { margin-top: 16px; }
-.repair-tasks .task-diagnostic pre { max-height: 300px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; }
-.repair-tasks .task-facts { margin-top: 16px; }
-.repair-tasks-empty { padding: 16px 24px; color: var(--muted); }
-@media (max-width: 600px) {
-  .repair-tasks .task-main { grid-template-columns: 30px minmax(0, 1fr) auto; }
-  .repair-tasks .task-actions { grid-column: 2 / -1; }
-}
-
 /* A compact reconciliation entry above the library, expanded on demand. */
 .library-comparison { margin-bottom: 24px; border: 1px solid var(--line); border-radius: 12px; padding: 16px 20px; background: var(--surface); }
 .library-comparison > summary { display: flex; align-items: center; gap: 10px; list-style: none; margin: 0; color: var(--ink); cursor: pointer; font-size: 13px; font-weight: 600; }
@@ -536,6 +523,8 @@ input[role="switch"]:checked::after { transform: translateX(16px); background: v
 .library-comparison[open] > summary > svg:last-child { transform: rotate(90deg); }
 .library-comparison p { color: var(--muted); margin: 12px 0; overflow-wrap: anywhere; }
 .comparison-body { margin-top: 20px; }
+.comparison-connection { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.comparison-connection > div { min-width: 0; overflow-wrap: anywhere; }
 .comparison-counts { font-variant-numeric: tabular-nums; }
 .comparison-metrics { display: flex; flex-wrap: wrap; gap: 16px 28px; margin: 20px 0; }
 .comparison-metrics dt { color: var(--muted); font-size: 12px; }

@@ -109,6 +109,7 @@ func (a *App) Handler() http.Handler {
 	mux.HandleFunc("POST /api/lidarr/check", a.auth(a.startLidarrCheck))
 	mux.HandleFunc("GET /api/library/{id}/artwork", a.auth(a.libraryArtwork))
 	mux.HandleFunc("POST /api/library/{id}/repair", a.auth(a.requestRepair))
+	mux.HandleFunc("POST /api/library/repair", a.auth(a.requestRepairBatch))
 	mux.HandleFunc("DELETE /api/library/{id}/repair", a.auth(a.deleteRepair))
 	mux.HandleFunc("GET /api/jobs", a.auth(a.jobs))
 	mux.HandleFunc("GET /api/repair-tasks", a.auth(a.listRepairTasks))
@@ -313,7 +314,14 @@ func (a *App) jobs(w http.ResponseWriter, r *http.Request) {
 		apiError(w, 400, errors.New("invalid job state filter"))
 		return
 	}
-	list, total, err := a.taskListContext(r.Context(), state, limit, offset)
+	var list []Task
+	var total int
+	var err error
+	if r.URL.Query().Get("include_repairs") == "true" {
+		list, total, err = a.unifiedTaskList(r.Context(), state, limit, offset)
+	} else {
+		list, total, err = a.taskListContext(r.Context(), state, limit, offset)
+	}
 	if err != nil {
 		apiError(w, 500, err)
 		return
@@ -353,11 +361,13 @@ func (a *App) getSettings(w http.ResponseWriter, r *http.Request) {
 		apiError(w, 500, err)
 		return
 	}
+	connection, err := a.lidarrConnection(r.Context())
+	if err != nil { apiError(w, 500, err); return }
 	configured := map[string]bool{"webhook": s.WebhookHash != "", "nav_password": s.NavPassword != "", "oidc_secret": s.OIDCSecret != ""}
 	s.WebhookHash = ""
 	s.NavPassword = ""
 	s.OIDCSecret = ""
-	respond(w, 200, map[string]any{"settings": s, "configured": configured, "public_url": a.cfg.PublicURL, "allowed_origins": a.cfg.origins()})
+	respond(w, 200, map[string]any{"settings": s, "configured": configured, "lidarr": map[string]any{"url": connection.URL, "key_configured": connection.APIKey != ""}, "public_url": a.cfg.PublicURL, "allowed_origins": a.cfg.origins()})
 }
 func (a *App) putSettings(w http.ResponseWriter, r *http.Request) {
 	var body struct {
@@ -367,6 +377,7 @@ func (a *App) putSettings(w http.ResponseWriter, r *http.Request) {
 		ClearNavPassword bool   `json:"clear_nav_password"`
 		ClearOIDCSecret  bool   `json:"clear_oidc_secret"`
 		UnbindOIDC       bool   `json:"unbind_oidc"`
+		LidarrConnection *lidarrConnection `json:"lidarr_connection"`
 	}
 	if !decode(w, r, &body) {
 		return
@@ -443,6 +454,13 @@ func (a *App) putSettings(w http.ResponseWriter, r *http.Request) {
 		apiError(w, 400, errors.New("set MUSICFORGE_PUBLIC_URL before enabling OIDC"))
 		return
 	}
+	if body.LidarrConnection != nil {
+		a.lidarrMu.Lock()
+		defer a.lidarrMu.Unlock()
+		connection, err := a.prepareLidarrConnection(r.Context(), *body.LidarrConnection)
+		if err != nil { apiError(w, 400, err); return }
+		body.LidarrConnection = &connection
+	}
 	if s.Source != old.Source || s.Output != old.Output {
 		var count int
 		if err = a.reads.QueryRow("SELECT (SELECT count(*) FROM sources)+(SELECT count(*) FROM managed)+(SELECT count(*) FROM jobs WHERE state IN ('pending','running'))").Scan(&count); err != nil {
@@ -462,15 +480,12 @@ func (a *App) putSettings(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	if oidcChanged {
-		err = a.saveOIDCSettings(s)
-	} else {
-		err = a.saveSettings(s)
-	}
+	err = a.saveSettingsUpdate(s, oidcChanged, body.LidarrConnection)
 	if err != nil {
 		apiError(w, 500, err)
 		return
 	}
+	if body.LidarrConnection != nil { a.lidarrReport = nil }
 	if s.Enabled && !old.Enabled {
 		_, _ = a.enqueue("scan", "scan:periodic", ScanRequest{}, false)
 	}

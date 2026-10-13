@@ -6,6 +6,25 @@ import type { Source } from "../types";
 import type { Notice } from "./resource";
 import { Button } from "./ui/button";
 
+type RepairTarget = Pick<Source, "id" | "hash" | "can_repair" | "repair">;
+
+export function BatchRepairButton({ sources, notify, refresh, disabled = false }: { sources: RepairTarget[]; notify: Notice; refresh: () => void; disabled?: boolean }) {
+  const { t } = useI18n();
+  const [busy, setBusy] = useState(false);
+  const eligible = sources.filter(source => source.can_repair && source.hash && source.repair?.state !== "running");
+  async function start() {
+    if (!window.confirm(t("repair.bulkConfirm", { count: eligible.length }))) return;
+    setBusy(true);
+    try {
+      const result = await api<{ queued: number; skipped: number }>("/library/repair", "POST", { tracks: eligible.map(source => ({ id: source.id, hash: source.hash })) });
+      notify("repair.bulkStarted", false, { queued: result.queued, skipped: sources.length - eligible.length + result.skipped });
+      refresh();
+    } catch (err) { notify(err as Error, true); }
+    finally { setBusy(false); }
+  }
+  return <Button type="button" size="sm" variant="outline" disabled={disabled || busy || eligible.length === 0} onClick={() => void start()}>{busy ? <Loader2 size={14} className="animate-spin" /> : <Wrench size={14} />}{t("repair.bulkStart", { count: eligible.length })}</Button>;
+}
+
 export function RepairControls({ source, notify, refresh }: { source: Source; notify: Notice; refresh: () => void }) {
   const { t } = useI18n();
   const [busy, setBusy] = useState(false);

@@ -17,25 +17,27 @@ const repairTaskPrefix = "repair-task:"
 // Repair history is optional metadata, never an executable schema-2 job. Older
 // workers retain these records without accidentally running a strict conversion.
 type repairTask struct {
-	ID string `json:"id"`
-	SourceID int64 `json:"source_id"`
-	Hash string `json:"source_hash"`
-	State string `json:"state"`
+	ID       string   `json:"id"`
+	SourceID int64    `json:"source_id"`
+	Hash     string   `json:"source_hash"`
+	State    string   `json:"state"`
 	Activity Activity `json:"activity"`
-	Profile Encoding `json:"profile"`
-	Progress float64 `json:"progress"`
-	Created int64 `json:"created"`
-	Updated int64 `json:"updated"`
-	Output string `json:"output"`
-	Log string `json:"log"`
-	Stopping bool `json:"stopping"`
+	Profile  Encoding `json:"profile"`
+	Progress float64  `json:"progress"`
+	Created  int64    `json:"created"`
+	Updated  int64    `json:"updated"`
+	Output   string   `json:"output"`
+	Log      string   `json:"log"`
+	Stopping bool     `json:"stopping"`
 }
 
 type repairTaskKey struct{}
 
 func (a *App) saveRepairTask(task *repairTask) error {
 	raw, err := json.Marshal(task)
-	if err != nil { return err }
+	if err != nil {
+		return err
+	}
 	return a.setMeta(repairTaskPrefix+task.ID, string(raw))
 }
 
@@ -96,16 +98,24 @@ func (a *App) repairTaskList(ctx context.Context, state string, limit, offset in
 		args = append(args, state)
 	}
 	var total int
-	if err := a.reads.QueryRowContext(ctx, "SELECT count(*) FROM meta"+where, args...).Scan(&total); err != nil { return nil, 0, err }
+	if err := a.reads.QueryRowContext(ctx, "SELECT count(*) FROM meta"+where, args...).Scan(&total); err != nil {
+		return nil, 0, err
+	}
 	rows, err := a.reads.QueryContext(ctx, "SELECT value FROM meta"+where+" ORDER BY json_extract(value,'$.created') DESC,key DESC LIMIT ? OFFSET ?", append(args, limit, offset)...)
-	if err != nil { return nil, 0, err }
+	if err != nil {
+		return nil, 0, err
+	}
 	defer rows.Close()
 	list := []repairTask{}
 	for rows.Next() {
 		var raw string
 		var task repairTask
-		if err = rows.Scan(&raw); err != nil { return nil, 0, err }
-		if err = json.Unmarshal([]byte(raw), &task); err != nil { return nil, 0, err }
+		if err = rows.Scan(&raw); err != nil {
+			return nil, 0, err
+		}
+		if err = json.Unmarshal([]byte(raw), &task); err != nil {
+			return nil, 0, err
+		}
 		list = append(list, task)
 	}
 	return list, total, rows.Err()
@@ -116,38 +126,61 @@ func (a *App) listRepairTasks(w http.ResponseWriter, r *http.Request) {
 	switch state {
 	case "", "all", "running", "success", "failed", "stopped":
 	default:
-		apiError(w, 400, errors.New("invalid job state filter")); return
+		apiError(w, 400, errors.New("invalid job state filter"))
+		return
 	}
 	offset, _ := strconv.Atoi(r.URL.Query().Get("offset"))
 	list, total, err := a.repairTaskList(r.Context(), state, 25, max(0, offset))
-	if err != nil { apiError(w, 500, err); return }
+	if err != nil {
+		apiError(w, 500, err)
+		return
+	}
 	respond(w, 200, map[string]any{"tasks": list, "total": total})
 }
 
 func (a *App) controlRepairTask(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	if decoded, err := hex.DecodeString(id); err != nil || len(decoded) != 32 {
-		apiError(w, 400, errors.New("invalid repair task ID")); return
+		apiError(w, 400, errors.New("invalid repair task ID"))
+		return
 	}
 	a.repairMu.Lock()
 	defer a.repairMu.Unlock()
 	raw, err := a.metaContext(r.Context(), repairTaskPrefix+id)
-	if errors.Is(err, sql.ErrNoRows) { apiError(w, 404, errors.New("repair task not found")); return }
-	if err != nil { apiError(w, 500, err); return }
+	if errors.Is(err, sql.ErrNoRows) {
+		apiError(w, 404, errors.New("repair task not found"))
+		return
+	}
+	if err != nil {
+		apiError(w, 500, err)
+		return
+	}
 	var task repairTask
-	if err = json.Unmarshal([]byte(raw), &task); err != nil { apiError(w, 500, err); return }
+	if err = json.Unmarshal([]byte(raw), &task); err != nil {
+		apiError(w, 500, err)
+		return
+	}
 	if r.Method == http.MethodDelete {
-		if task.State == "running" { apiError(w, 409, errors.New("Stop the repair and wait for it to finish before deleting history")); return }
+		if task.State == "running" {
+			apiError(w, 409, errors.New("Stop the repair and wait for it to finish before deleting history"))
+			return
+		}
 		_, err = a.db.ExecContext(r.Context(), "DELETE FROM meta WHERE key=?", repairTaskPrefix+id)
 	} else if task.State == "running" {
 		entry := a.repairs[task.SourceID]
 		if entry == nil || entry.task == nil || entry.task.ID != id {
-			apiError(w, 409, errors.New("Repair is finishing; refresh shortly")); return
+			apiError(w, 409, errors.New("Repair is finishing; refresh shortly"))
+			return
 		}
 		entry.task.Stopping, entry.task.Updated = true, time.Now().Unix()
 		err = a.saveRepairTask(entry.task)
-		if err == nil { entry.cancel() }
+		if err == nil {
+			entry.cancel()
+		}
 	}
-	if err != nil { apiError(w, 500, err); return }
+	if err != nil {
+		apiError(w, 500, err)
+		return
+	}
 	respond(w, 200, map[string]bool{"ok": true})
 }

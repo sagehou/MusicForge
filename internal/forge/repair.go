@@ -233,7 +233,9 @@ func (a *App) removeRepair(id int64) error {
 	if entry := a.repairs[id]; entry != nil {
 		if entry.task != nil && entry.task.State == "running" {
 			entry.task.Stopping, entry.task.Updated = true, time.Now().Unix()
-			if err := a.saveRepairTask(entry.task); err != nil { return err }
+			if err := a.saveRepairTask(entry.task); err != nil {
+				return err
+			}
 		}
 		entry.cancel()
 		delete(a.repairs, id)

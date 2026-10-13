@@ -198,7 +198,9 @@ func TestRepairImportsNormalOutputWithPersistentDamageAnnotation(t *testing.T) {
 			r.SetPathValue("id", history[0].ID)
 			w := httptest.NewRecorder()
 			a.controlRepairTask(w, r)
-			if w.Code != 200 { t.Fatal(w.Code, w.Body.String()) }
+			if w.Code != 200 {
+				t.Fatal(w.Code, w.Body.String())
+			}
 			current, err := a.source(source.ID)
 			target := outputRel(source.Rel, codec)
 			if err != nil || current.Output != target || !current.OutputPresent || current.BuiltHash != source.Hash || current.BuiltProfile != s.Encoding.Fingerprint() || current.Error != "" {
@@ -474,7 +476,9 @@ func TestRepairCancellationAndInvalidPCMDoNotPublish(t *testing.T) {
 			a.repairWG.Wait()
 			history, total, err := a.repairTaskList(context.Background(), "all", 25, 0)
 			want := "failed"
-			if behavior == "hang" { want = "stopped" }
+			if behavior == "hang" {
+				want = "stopped"
+			}
 			if err != nil || total != 1 || len(history) != 1 || history[0].State != want || history[0].Log == "" || history[0].Stopping {
 				t.Fatal("repair terminal history missing", history, total, err)
 			}

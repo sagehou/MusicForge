@@ -33,7 +33,7 @@ export function RepairTasks({ notify }: { notify: Notice }) {
   return <section className="panel repair-tasks" aria-labelledby="repair-tasks-title">
     <div className="panel-heading"><div><h2 id="repair-tasks-title">{t("repairTasks.title")}</h2><p>{t("repairTasks.description")}</p></div></div>
     <div className="table-toolbar"><div className="filter-tabs" role="group" aria-label={t("repairTasks.filter")}>{["all", "running", "success", "failed", "stopped"].map(state => <button key={state} className={filter === state ? "active" : ""} aria-pressed={filter === state} onClick={() => { setFilter(state); setOffset(0); }}>{state === "all" ? t("jobs.all") : status(state)}</button>)}</div></div>
-    <ResourceWarning error={error} retry={retry} />
+    {data && <ResourceWarning error={error} retry={retry} />}
     {!data ? <Loading error={error} retry={retry} /> : <>
       {data.tasks.length ? <div className="task-list">{data.tasks.map(task => {
         const activity = task.activity;

@@ -117,7 +117,8 @@ test("an existing playable artifact is preserved without offering best-effort re
 test("Jobs shows repair progress, durable outcomes and safe controls in both languages", async ({ page }) => {
   await page.addInitScript(() => localStorage.setItem("musicforge.language", "en"));
   await page.route("**/api/auth/me", route => route.fulfill({ json: { initialized: true, authenticated: true, username: "admin", method: "local", csrf: "test" } }));
-  await page.route("**/api/jobs?*", route => route.fulfill({ json: { jobs: [], total: 0 } }));
+  let jobsUnavailable = true;
+  await page.route("**/api/jobs?*", route => jobsUnavailable ? route.fulfill({ status: 500, json: { error: "Internal Server Error" } }) : route.fulfill({ json: { jobs: [], total: 0 } }));
   const activity = { phase: "read", path: "Artist/Album/01.flac", artist: "Artist", album: "Album", title: "Repair track", processed: 0, total: 0, percent: 0, read_bytes: 12 * 1048576, read_total_bytes: 40 * 1048576 };
   const task = { id: "a".repeat(64), source_id: 77, source_hash: "b".repeat(64), state: "running", activity, profile: { codec: "opus", mode: "vbr", bitrate: 192, quality: 0 }, progress: .03, created: 1800000000, updated: 1800000001, output: "", log: "", stopping: false };
   let tasks = [task];
@@ -141,6 +142,7 @@ test("Jobs shows repair progress, durable outcomes and safe controls in both lan
   await page.goto("/jobs");
   const section = page.getByRole("region", { name: "Best-effort repair tasks" });
   await expect(section.getByText("Repair track", { exact: true })).toBeVisible();
+  jobsUnavailable = false;
   await expect(section).toContainText("Read 12.0 / 40.0 MiB");
   await expect(section.getByRole("progressbar")).toHaveAttribute("aria-valuenow", "3");
   await expect(section.getByRole("button", { name: "Delete history", exact: true })).toHaveCount(0);

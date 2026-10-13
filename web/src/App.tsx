@@ -169,10 +169,9 @@ function Jobs({ notify }: { notify: Notice }) {
     }
     catch (err) { notify(err as Error, true); } finally { setBusy(false); }
   }
-  if (!data) return <Loading error={error} retry={retryResource} />;
-  const chosen = data.jobs.filter(job => selected.has(job.id));
-  const selectedCount = allSelected ? data.total : chosen.length;
-  const pageChecked = data.jobs.length > 0 && (allSelected || chosen.length === data.jobs.length);
+  const chosen = (data?.jobs || []).filter(job => selected.has(job.id));
+  const selectedCount = allSelected ? (data?.total || 0) : chosen.length;
+  const pageChecked = !!data?.jobs.length && (allSelected || chosen.length === data.jobs.length);
   function canBulk(action: Action) {
     if (!allSelected) return chosen.some(job => eligible(job, action));
     const states = { pause: ["all", "pending", "running"], resume: ["all", "paused"], stop: ["all", "pending", "running", "paused", "failed"], retry: ["all", "failed", "stopped"], delete: ["all", "success", "failed", "stopped"] };
@@ -180,10 +179,10 @@ function Jobs({ notify }: { notify: Notice }) {
   }
   function bulk(action: Action) { void control(action, allSelected ? undefined : chosen.filter(job => eligible(job, action)).map(job => job.id), allSelected); }
   return <>
-    <ResourceWarning error={error} retry={retryResource} />
+    {data && <ResourceWarning error={error} retry={retryResource} />}
     <div className="page-heading"><div><h1>{t("jobs.title")}</h1><p>{t("jobs.description")}</p></div><Button variant="outline" disabled={busy} onClick={() => void control("retry")}><RefreshCw size={16} />{t("jobs.retryAll")}</Button></div>
     <RepairTasks notify={notify} />
-    <div className="panel"><div className="table-toolbar"><div className="filter-tabs">{["all", "pending", "running", "paused", "success", "failed", "stopped"].map(state => <button key={state} className={filter === state ? "active" : ""} aria-pressed={filter === state} onClick={() => { setFilter(state); setOffset(0); clearSelection(); setExpanded(undefined); }}>{state === "all" ? t("jobs.all") : status(state)}</button>)}</div></div>
+    {!data ? <Loading error={error} retry={retryResource} /> : <div className="panel"><div className="table-toolbar"><div className="filter-tabs">{["all", "pending", "running", "paused", "success", "failed", "stopped"].map(state => <button key={state} className={filter === state ? "active" : ""} aria-pressed={filter === state} onClick={() => { setFilter(state); setOffset(0); clearSelection(); setExpanded(undefined); }}>{state === "all" ? t("jobs.all") : status(state)}</button>)}</div></div>
       {data.jobs.length > 0 && <div className="selection-bar"><label className="check-field"><input type="checkbox" checked={pageChecked} ref={node => { if (node) node.indeterminate = !pageChecked && chosen.length > 0; }} disabled={busy} onChange={event => { setAllSelected(false); setSelected(event.target.checked ? new Set(data.jobs.map(job => job.id)) : new Set()); }} /><span>{t("jobs.selectPage")}</span></label><Button variant="ghost" size="sm" disabled={busy || allSelected} onClick={() => { setAllSelected(true); setSelected(new Set()); }}>{t("jobs.selectMatching", { count: data.total })}</Button>{selectedCount > 0 && <Button variant="ghost" size="sm" disabled={busy} onClick={clearSelection}>{t("library.clearSelection")}</Button>}</div>}
       {selectedCount > 0 && <div className="selection-bar"><span>{t(allSelected ? "jobs.allSelected" : "library.selected", { count: selectedCount })}</span><Button size="sm" disabled={busy || !canBulk("pause")} onClick={() => bulk("pause")}>{t("jobs.pause")}</Button><Button size="sm" disabled={busy || !canBulk("resume")} onClick={() => bulk("resume")}>{t("jobs.resume")}</Button><Button size="sm" variant="outline" disabled={busy || !canBulk("stop")} onClick={() => bulk("stop")}>{t("jobs.stop")}</Button><Button size="sm" variant="outline" disabled={busy || !canBulk("retry")} onClick={() => bulk("retry")}>{t("jobs.retry")}</Button><Button size="sm" variant="destructive" disabled={busy || !canBulk("delete")} onClick={() => bulk("delete")}>{t("jobs.delete")}</Button><small className="selection-hint">{t("jobs.bulkHint")}</small></div>}
       {data.jobs.length ? <div className="task-list">{data.jobs.map(job => {
@@ -196,7 +195,7 @@ function Jobs({ notify }: { notify: Notice }) {
         </div>;
       })}</div> : <Empty title={t("jobs.empty")}>{t("jobs.emptyHint")}</Empty>}
       <div className="pagination"><span>{t("jobs.total", { count: data.total })}</span><Button variant="ghost" size="icon" aria-label={t("jobs.previous")} disabled={offset === 0} onClick={() => paginate(Math.max(0, offset - 100))}><ChevronLeft size={16} /></Button><Button variant="ghost" size="icon" aria-label={t("jobs.next")} disabled={offset + 100 >= data.total} onClick={() => paginate(offset + 100)}><ChevronRight size={16} /></Button></div>
-    </div>
+    </div>}
   </>;
 }
 

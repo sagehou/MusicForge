@@ -208,7 +208,7 @@ test("filtered failed tracks can be selected across pages and repaired with one 
   await expect(page.locator(".toast")).toContainText("Queued 60 tracks for best-effort repair; skipped 5");
   await expect(repair).toHaveCount(0); expect(starts).toBe(1);
   await page.getByRole("combobox", { name: "Language", exact: true }).selectOption("zh-CN");
-  await page.getByRole("checkbox", { name: "全选本页", exact: true }).check();
+  await page.getByRole("checkbox", { name: "选择当前页", exact: true }).check();
   await page.getByRole("button", { name: "选择筛选结果中的全部 65 首曲目", exact: true }).click();
   await expect(page.getByRole("button", { name: "尽力修复所选曲目（60 首）", exact: true })).toBeVisible();
   await page.setViewportSize({ width: 320, height: 900 });

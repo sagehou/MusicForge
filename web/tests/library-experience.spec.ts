@@ -317,9 +317,12 @@ test("narrow-screen filter and display menu stays usable and inside the viewport
   await page.getByLabel("Filter by status", { exact: true }).selectOption("failed");
   await expect(page.locator(".library-group")).toHaveCount(1);
   await expect(page.locator(".library-options")).toHaveAttribute("data-filtered", "true");
-  await summary.click();
-  await page.getByLabel("Filter by status", { exact: true }).selectOption("all");
-  await expect(page.locator(".library-group")).toHaveCount(50);
+  for (const state of ["all", "failed", "all"]) {
+    await summary.click();
+    await page.getByLabel("Filter by status", { exact: true }).selectOption(state);
+    await expect(page.locator(".library-group")).toHaveCount(state === "failed" ? 1 : 50);
+    await expect(page.locator(".library-options")).not.toHaveAttribute("open", "");
+  }
   await summary.click();
   await page.getByLabel("Sort library", { exact: true }).focus();
   await page.keyboard.press("Escape");

@@ -7,6 +7,7 @@ import type { Source } from "../types";
 import { Badge, Empty, Loading, ResourceWarning, useResource, type Notice } from "./resource";
 import { Button } from "./ui/button";
 import { RepairControls, RepairDiagnostics } from "./repair";
+import { LibraryComparison } from "./library-comparison";
 
 type Scope = { view: "artists" | "albums"; artist?: string; album?: string };
 type Identity = { artistKey: string; albumKey: string; artist: string; album: string };
@@ -267,5 +268,6 @@ export function Library({ notify }: { notify: Notice }) {
         </div>
       </> : <Empty title={data.length ? t("library.noMatch") : t("library.empty")}>{data.length ? t("library.noMatchHint") : t("library.emptyHint")}</Empty>}
     </section>
+    {!scope.artist && !isAlbum && <LibraryComparison sources={data} notify={notify} />}
   </>;
 }

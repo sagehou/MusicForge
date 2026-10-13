@@ -143,6 +143,8 @@ Container root paths cannot change after indexing. Relocate storage through host
 
 ## Lidarr integration
 
+To explain different file counts, open **Library → File counts · compare with Lidarr**, save Lidarr's URL and API key, and select **Compare file lists**. The comparison uses the source-prefix mapping from Settings and exact relative paths. It separates imported files, unmapped files, files outside the configured source scope, unindexed/expired sources, and processing failures. Select unindexed or expired paths to re-scan their directories through the existing queue. This reads API lists and the current index without downloading audio or changing Lidarr; an incomplete API response does not produce a difference list. Results are snapshots and are cleared on restart. An unindexed file is not proof of a missing file. A blank API key preserves it for the same URL; clearing the URL clears the saved connection.
+
 Create a native **Webhook** connection in Lidarr:
 
 | Field | Value |

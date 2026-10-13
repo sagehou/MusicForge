@@ -56,6 +56,7 @@ test("HTML proxy 401 and generic 500 preserve the task page and identify the fai
     counts: { total: 2, done: 1, failed: 0, pending: 0, running: 1, cancelled: 0 }, scope: [], can_delete: false,
     current: [{ phase: "read", path: "Artist/Album/01.flac", title: "Still readable" }],
   }], total: 1 } }));
+  await page.route("**/api/repair-tasks?*", route => route.fulfill({ json: { tasks: [], total: 0 } }));
   await page.goto("/jobs");
   await expect(page.locator(".task-activity")).toContainText("Still readable");
   status = 401;

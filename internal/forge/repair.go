@@ -37,6 +37,7 @@ type repairEntry struct {
 	rel     string
 	created time.Time
 	cancel  context.CancelFunc
+	task    *repairTask
 }
 
 type repairPCM struct {
@@ -191,7 +192,14 @@ func (a *App) startRepair(source Source, settings Settings) (*RepairStatus, erro
 		delete(a.repairs, oldest)
 	}
 	ctx, cancel := context.WithCancel(a.ioContext)
-	entry := &repairEntry{RepairStatus: RepairStatus{State: "running"}, hash: source.Hash, rel: source.Rel, created: time.Now(), cancel: cancel}
+	task := &repairTask{ID: randomToken(), SourceID: source.ID, Hash: source.Hash, State: "running", Profile: settings.Encoding,
+		Created: time.Now().Unix(), Updated: time.Now().Unix(), Activity: Activity{Phase: "storage", Path: source.Rel, Artist: source.Artist, Album: source.Album, Title: source.Title}}
+	if err = a.saveRepairTask(task); err != nil {
+		cancel()
+		return nil, err
+	}
+	ctx = context.WithValue(ctx, repairTaskKey{}, task)
+	entry := &repairEntry{RepairStatus: RepairStatus{State: "running"}, hash: source.Hash, rel: source.Rel, created: time.Now(), cancel: cancel, task: task}
 	a.repairs[source.ID] = entry
 	a.repairRunning = true
 	a.repairWG.Add(1)
@@ -202,6 +210,7 @@ func (a *App) startRepair(source Source, settings Settings) (*RepairStatus, erro
 		a.repairMu.Lock()
 		defer a.repairMu.Unlock()
 		a.repairRunning = false
+		a.finishRepairTask(task, source, result, err, ctx.Err() != nil)
 		if a.repairs[source.ID] != entry || ctx.Err() != nil {
 			delete(a.repairs, source.ID)
 			return
@@ -222,6 +231,12 @@ func (a *App) removeRepair(id int64) error {
 	a.repairMu.Lock()
 	defer a.repairMu.Unlock()
 	if entry := a.repairs[id]; entry != nil {
+		if entry.task != nil && entry.task.State == "running" {
+			entry.task.Stopping, entry.task.Updated = true, time.Now().Unix()
+			if err := a.saveRepairTask(entry.task); err != nil {
+				return err
+			}
+		}
 		entry.cancel()
 		delete(a.repairs, id)
 	}
@@ -279,6 +294,8 @@ func (a *App) reserveRepairTemp(ctx context.Context, settings Settings, source S
 
 func (a *App) makeRepair(ctx context.Context, source Source, settings Settings) (RepairStatus, error) {
 	fail := func(err error) (RepairStatus, error) { return RepairStatus{}, err }
+	activity := Activity{Phase: "storage", Path: source.Rel, Artist: source.Artist, Album: source.Album, Title: source.Title}
+	a.reportMediaProgress(ctx, 0, activity, 0)
 	target := outputRel(source.Rel, settings.Encoding.Codec)
 	tempRel, path, err := a.reserveRepairTemp(ctx, settings, source, target)
 	if err != nil {
@@ -295,7 +312,8 @@ func (a *App) makeRepair(ctx context.Context, source Source, settings Settings) 
 	if !sameStat(info, source) {
 		return fail(errors.New("Source changed; scan it again before repairing"))
 	}
-	staged, err := a.stageSource(ctx, settings, source, 0, Activity{Phase: "read", Path: source.Rel})
+	activity.Phase = "read"
+	staged, err := a.stageSource(ctx, settings, source, 0, activity)
 	if err != nil {
 		return fail(err)
 	}
@@ -323,11 +341,15 @@ func (a *App) makeRepair(ctx context.Context, source Source, settings Settings) 
 	args = append(args, settings.Encoding.Args()...)
 	args = append(args, path)
 	var report repairPCM
-	if err = a.encodeMediaAttempt(ctx, 0, source.Duration, Activity{Phase: "convert", Path: source.Rel}, args, staged.Path, pcm, &report); err != nil {
+	activity.Phase = "convert"
+	a.reportMediaProgress(ctx, 0, activity, .1)
+	if err = a.encodeMediaAttempt(ctx, 0, source.Duration, activity, args, staged.Path, pcm, &report); err != nil {
 		return fail(err)
 	}
 	samples := report.Bytes / int64(pcm.Channels*(pcm.Bits/8))
 	duration := float64(samples) / float64(pcm.Rate)
+	activity.Phase = "validate"
+	a.reportMediaProgress(ctx, 0, activity, .9)
 	if err = a.validateArtifact(ctx, path, settings.Encoding, duration); err != nil {
 		return fail(fmt.Errorf("Repair output validation failed: %w", err))
 	}
@@ -375,6 +397,8 @@ func (a *App) makeRepair(ctx context.Context, source Source, settings Settings) 
 	if err = a.repairTargetAvailable(settings, current, target); err != nil {
 		return fail(err)
 	}
+	activity.Phase = "publish"
+	a.reportMediaProgress(ctx, 0, activity, .95)
 	result := RepairStatus{State: "imported", DecodedSamples: samples, DeclaredSamples: pcm.Samples, PCMVerified: report.Verified, Duration: duration, Diagnostics: report.Log + "\nOriginal strict conversion failure:\n" + source.Error}
 	p := promotion{source.ID, tempRel, target, current.Output, source.Hash, settings.Encoding.Fingerprint(), artifactHash}
 	annotation, _ := json.Marshal(result)

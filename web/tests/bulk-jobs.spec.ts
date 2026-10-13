@@ -21,6 +21,7 @@ test("jobs support page and filtered selection, mixed states and accurate bulk r
     return route.fulfill({ status: 202, json: { changed } });
   });
   page.on("dialog", dialog => dialog.accept());
+  await page.route("**/api/repair-tasks?*", route => route.fulfill({ json: { tasks: [], total: 0 } }));
   await page.goto("/jobs");
   const pageSelection = page.getByRole("checkbox", { name: "Select this page", exact: true });
   await pageSelection.check();
@@ -47,7 +48,7 @@ test("jobs support page and filtered selection, mixed states and accurate bulk r
   expect(requests[1]).toEqual({ action: "stop", all: true, state: "all" });
   await expect(page.locator(".toast")).toContainText("Stopped 1 task; completed audio kept");
 
-  await page.locator(".filter-tabs").getByRole("button", { name: "Failed", exact: true }).click();
+  await page.locator(".panel:not(.repair-tasks) .filter-tabs").getByRole("button", { name: "Failed", exact: true }).click();
   await expect(pageSelection).not.toBeChecked();
   await page.getByRole("button", { name: "Select all 203 matching tasks", exact: true }).click();
   await page.getByRole("combobox", { name: "Language", exact: true }).selectOption("zh-CN");

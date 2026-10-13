@@ -113,3 +113,75 @@ test("an existing playable artifact is preserved without offering best-effort re
   await expect(page.getByText("Existing artifact is still playable", { exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "Best-effort repair", exact: true })).toHaveCount(0);
 });
+
+test("Jobs shows repair progress, durable outcomes and safe controls in both languages", async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem("musicforge.language", "en"));
+  await page.route("**/api/auth/me", route => route.fulfill({ json: { initialized: true, authenticated: true, username: "admin", method: "local", csrf: "test" } }));
+  let jobsUnavailable = true;
+  await page.route("**/api/jobs?*", route => jobsUnavailable ? route.fulfill({ status: 500, json: { error: "Internal Server Error" } }) : route.fulfill({ json: { jobs: [], total: 0 } }));
+  const activity = { phase: "read", path: "Artist/Album/01.flac", artist: "Artist", album: "Album", title: "Repair track", processed: 0, total: 0, percent: 0, read_bytes: 12 * 1048576, read_total_bytes: 40 * 1048576 };
+  const task = { id: "a".repeat(64), source_id: 77, source_hash: "b".repeat(64), state: "running", activity, profile: { codec: "opus", mode: "vbr", bitrate: 192, quality: 0 }, progress: .03, created: 1800000000, updated: 1800000001, output: "", log: "", stopping: false };
+  let tasks = [task];
+  let stops = 0;
+  let deletions = 0;
+  await page.route("**/api/repair-tasks?*", route => {
+    const state = new URL(route.request().url()).searchParams.get("state");
+    const filtered = tasks.filter(value => state === "all" || value.state === state);
+    return route.fulfill({ json: { tasks: filtered, total: filtered.length } });
+  });
+  await page.route(`**/api/repair-tasks/${task.id}/stop`, route => {
+    expect(route.request().method()).toBe("POST");
+    stops++; task.stopping = true;
+    return route.fulfill({ json: { ok: true } });
+  });
+  await page.route(`**/api/repair-tasks/${task.id}`, route => {
+    expect(route.request().method()).toBe("DELETE");
+    deletions++; tasks = [];
+    return route.fulfill({ json: { ok: true } });
+  });
+  await page.goto("/jobs");
+  const section = page.getByRole("region", { name: "Best-effort repair tasks" });
+  await expect(section.getByText("Repair track", { exact: true })).toBeVisible();
+  jobsUnavailable = false;
+  await expect(section).toContainText("Read 12.0 / 40.0 MiB");
+  await expect(section.getByRole("progressbar")).toHaveAttribute("aria-valuenow", "3");
+  await expect(section.getByRole("button", { name: "Delete history", exact: true })).toHaveCount(0);
+  task.activity = { ...activity, phase: "convert", percent: 60 };
+  task.progress = .55;
+  await expect(section.getByRole("progressbar")).toHaveAttribute("aria-valuenow", "55");
+  page.once("dialog", dialog => dialog.dismiss());
+  await section.getByRole("button", { name: "Stop", exact: true }).click();
+  expect(stops).toBe(0);
+  page.once("dialog", dialog => dialog.accept());
+  await section.getByRole("button", { name: "Stop", exact: true }).click();
+  await expect(section.getByRole("button", { name: "Stopping repair" })).toBeDisabled();
+  expect(stops).toBe(1);
+  task.state = "stopped"; task.stopping = false;
+  task.log = "Repair stopped; check Library for any output committed before cancellation";
+  await expect(section.locator(".badge")).toHaveText("Stopped");
+  await section.locator("summary").click();
+  await expect(section.locator("pre")).toContainText("Repair stopped");
+  await expect(section.getByRole("link")).toHaveAttribute("href", /album=Artist%2FAlbum/);
+  task.state = "success"; task.output = "Artist/Album/01.opus"; task.progress = 1;
+  task.log = "Possibly damaged: imported using best-effort decoding\nPCM bytes: 100 of 120\nOriginal strict conversion failure: MD5 mismatch";
+  await page.reload();
+  await expect(section.locator(".badge")).toHaveText("Success");
+  await expect(section).toContainText("Possibly damaged");
+  await section.locator("summary").click();
+  await expect(section.locator("pre")).toContainText("Original strict conversion failure");
+  for (const width of [1440, 768, 390, 320]) {
+    await page.setViewportSize({ width, height: 900 });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  }
+  await page.getByRole("combobox", { name: "Language", exact: true }).selectOption("zh-CN");
+  const chinese = page.getByRole("region", { name: "尽力修复任务" });
+  await expect(chinese).toContainText("已导入输出库 · 可能损坏");
+  await page.screenshot({ path: "test-results/repair-tasks-320-zh.png", fullPage: true, animations: "disabled" });
+  await chinese.getByRole("button", { name: "失败", exact: true }).click();
+  await expect(chinese).toContainText("当前筛选下没有修复任务");
+  await chinese.getByRole("button", { name: "全部", exact: true }).click();
+  page.once("dialog", dialog => dialog.accept());
+  await chinese.getByRole("button", { name: "删除记录", exact: true }).click();
+  await expect(chinese).toContainText("当前筛选下没有修复任务");
+  expect(deletions).toBe(1);
+});

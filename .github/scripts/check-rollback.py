@@ -227,6 +227,11 @@ def main():
                       "diagnostics": "Possibly damaged: rollback annotation fixture"}
             db.execute("INSERT INTO meta(key,value) VALUES(?,?)",
                        ("repair-artifact:" + str(tracks[0]["id"]) + ":" + "0" * 64, json.dumps(repair)))
+            history = {"id": "a" * 64, "source_id": tracks[0]["id"], "source_hash": tracks[0]["hash"],
+                       "state": "failed", "activity": {"phase": "convert", "path": "Album/01.flac"},
+                       "profile": values["encoding"], "progress": 0.4, "created": 1800000000,
+                       "updated": 1800000001, "output": "", "log": "Repair history rollback fixture", "stopping": False}
+            db.execute("INSERT INTO meta(key,value) VALUES(?,?)", ("repair-task:" + history["id"], json.dumps(history)))
         expected = snapshot()
         held = next(row for row in expected["jobs"] if row[0] == pending)
         assert held[4] == "pending" and held[8] == 253402300799, "paused task changed schema-2 job semantics"

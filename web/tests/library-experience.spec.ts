@@ -335,6 +335,7 @@ test("Navidrome waiting is a localized non-error state", async ({ page }) => {
     counts: { total: 0, done: 0, failed: 0, pending: 0, running: 0, cancelled: 0 }, current: [], scope: [], can_delete: false,
     waiting_reason: "Waiting for Navidrome scan completion", retry_at: 1800000060,
   }], total: 1 } }));
+  await page.route("**/api/repair-tasks?*", route => route.fulfill({ json: { tasks: [], total: 0 } }));
   await page.goto("/jobs");
   await expect(page.locator(".task-waiting")).toContainText("Waiting for Navidrome scan completion");
   await expect(page.getByRole("alert")).toHaveCount(0);

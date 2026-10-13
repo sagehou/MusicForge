@@ -1307,7 +1307,7 @@ func (a *App) encodeMediaAttempt(ctx context.Context, id int64, duration float64
 				continue
 			}
 			activity.Percent = math.Max(0, math.Min(100, microseconds/duration/10000))
-			a.reportProgress(id, activity, activity.Percent/100*.85)
+			a.reportMediaProgress(ctx, id, activity, activity.Percent/100*.85)
 			last = time.Now()
 		case err := <-done:
 			if ctx.Err() != nil {

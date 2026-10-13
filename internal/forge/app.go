@@ -21,6 +21,7 @@ import (
 
 type App struct {
 	repairState
+	lidarrCheckState
 	cfg       Runtime
 	db        *sql.DB
 	reads     *sql.DB
@@ -151,6 +152,9 @@ func (a *App) Close() {
 		a.repairMu.Unlock()
 	}
 	a.repairWG.Wait()
+	a.lidarrMu.Lock()
+	a.lidarrMu.Unlock()
+	a.lidarrWG.Wait()
 	if a.db != nil {
 		if a.reads != nil {
 			a.reads.Close()

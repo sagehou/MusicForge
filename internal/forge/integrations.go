@@ -20,6 +20,17 @@ import (
 )
 
 func mapLidarr(s Settings, path string) (string, error) {
+	rel, err := mapLidarrPath(s, path)
+	if err != nil {
+		return "", err
+	}
+	if !audioSourcePath(rel) {
+		return "", errors.New("Lidarr track path must use a supported audio extension")
+	}
+	return rel, nil
+}
+
+func mapLidarrPath(s Settings, path string) (string, error) {
 	path = filepath.Clean(path)
 	if s.LidarrPrefix != "" {
 		prefix := filepath.Clean(s.LidarrPrefix)
@@ -42,9 +53,6 @@ func mapLidarr(s Settings, path string) (string, error) {
 	// The worker resolves symlinks on the mount; webhook handling only queues paths.
 	if err = validRelativePath(rel); err != nil {
 		return "", err
-	}
-	if !audioSourcePath(rel) {
-		return "", errors.New("Lidarr track path must use a supported audio extension")
 	}
 	return rel, nil
 }

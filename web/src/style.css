@@ -485,3 +485,20 @@ summary { font-size: 12px; color: var(--danger); cursor: pointer; margin-top: 6p
   .repair-tasks .task-main { grid-template-columns: 30px minmax(0, 1fr) auto; }
   .repair-tasks .task-actions { grid-column: 2 / -1; }
 }
+
+/* File-count reconciliation stays separate from album browsing. */
+.library-comparison { margin-bottom: 24px; border: 1px solid var(--line); border-radius: 8px; padding: 16px; background: var(--surface); }
+.library-comparison > summary { cursor: pointer; font-weight: 650; }
+.library-comparison p { color: var(--muted); margin: 12px 0; overflow-wrap: anywhere; }
+.comparison-body { margin-top: 20px; }
+.comparison-counts { font-variant-numeric: tabular-nums; }
+.comparison-metrics { display: flex; flex-wrap: wrap; gap: 16px 28px; margin: 20px 0; }
+.comparison-metrics dt { color: var(--muted); font-size: 12px; }
+.comparison-metrics dd { margin: 4px 0 0; font-size: 20px; font-weight: 650; font-variant-numeric: tabular-nums; }
+.comparison-paths code, .comparison-results code { overflow-wrap: anywhere; white-space: pre-wrap; }
+.comparison-filters { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 16px 0; }
+.comparison-results { list-style: none; padding: 0; margin: 16px 0; }
+.comparison-results > li { padding: 16px 0; border-top: 1px solid var(--line); }
+.comparison-result-heading { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
+.comparison-results pre { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 240px; overflow-y: auto; }
+@media (max-width: 600px) { .comparison-filters { grid-template-columns: 1fr; } .library-comparison { padding: 12px; } }

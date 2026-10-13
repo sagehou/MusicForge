@@ -161,6 +161,8 @@ Reference FLAC tolerant decoding records actual/declared samples and PCM MD5. Mi
 
 At most one repair runs at a time within the existing conversion concurrency limit. Unfinished operations do not automatically resume after restart. Temporary outputs retain the existing `managed.kind='temp'` registration; publication reuses unchanged promotion journals, artifact SHA-256 signatures and ownership rules. Optional `meta` keys `repair-artifact:<source_id>:<artifact_sha256>` store JSON diagnostics (state, actual/declared samples, PCM verification, actual duration in seconds and diagnostics including the original error) in the transaction that records the promotion journal. Only annotations matching the currently owned audio signature show a warning. Scans, restarts, normal moves and older promotion recovery retain that relationship. Previously queued automatic retries accept a completed manual import without restoring a source failure when no new source error exists. Explicit strict rebuilding does not skip marked artifacts merely because build hashes match; success clears the current warning while failure and its retries preserve the playable output and warning. Historical annotations do not mark a new normal artifact. Older applications do not display the new warning but retain optional annotations while reading/writing standard artifacts.
 
+Jobs displays separate best-effort repair progress and history, with filters, pagination, stop controls and deletion of finished history. Optional `meta` keys `repair-task:<random 64-character hex ID>` store JSON history: source ID/hash, track details, encoding profile, progress (0–1), creation/update timestamps in Unix seconds, output path, diagnostics and stop-request status. States are `running`, `success`, `failed` and `stopped`; read counters reuse Activity byte units. Startup marks leftover running records interrupted, without resuming or including them in automatic/bulk retries. History is not executable work and adds no job kind; older versions ignore and retain it. Deleting history does not remove standard artifacts or `repair-artifact` annotations. Attempts made before this feature cannot be reconstructed.
+
 Generation/cancellation require administrator authentication and CSRF protection. Optional `can_repair`, `repair`, `possibly_damaged` API fields and the `possibly_damaged` status support library display and filtering. No schema-2 tables/columns, Settings, existing job arguments, source metadata, published recovery-journal formats or artifact-signature meanings change.
 
 ## Scan triggers
@@ -180,6 +182,14 @@ Endpoint: `POST /api/webhook/lidarr`.
 - Support one source-prefix mapping for different container mount paths; nonempty prefixes must be absolute container paths, checked when saving.
 - Confine mapped paths to MusicForge's configured source root.
 - Use Lidarr's native Username/Password fields for HTTP Basic webhook credentials.
+
+### File-count reconciliation
+
+Library provides a manual Lidarr comparison using authenticated GET requests for imported files per artist and unmapped files. Compare deduplicated, exactly mapped relative paths against the current source index. Keep cover files, track listings and output counts separate. Count other source roots separately and explain unsupported, unindexed, expired, unimported, unmapped and failed files without treating an absent index entry as proof of a missing disk file.
+
+One background comparison runs at a time; API calls return immediately and polling reads in-memory progress. Each remote request times out after 20 seconds; a comparison is limited to 10 minutes. Do not redirect API keys or accept partial lists as complete. Comparison does not read audio, reserve conversion capacity or create persistent jobs. Selected difference directories use the existing coalesced scan queue. It never writes to Lidarr or automatically deletes sources/artifacts. Results are snapshots cleared on restart.
+
+The optional `meta` key `lidarr:connection` holds JSON `url`/`api_key`. A blank key preserves the key for the same URL; changing the URL requires a new key; clearing the URL clears both. Responses expose only the URL and whether a key is configured. Require administrator authentication and CSRF for writes. Older versions retain this optional key. Settings, schema 2, job arguments, recovery journals and artifact formats remain unchanged; rollback CI checks connection retention through older writers.
 
 ## Navidrome integration
 

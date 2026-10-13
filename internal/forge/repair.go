@@ -188,19 +188,29 @@ func (a *App) startRepairs(sources []Source, settings Settings, waitCapacity boo
 	}
 	if !waitCapacity {
 		running, err := a.runningConversions()
-		if err != nil { return "", err }
+		if err != nil {
+			return "", err
+		}
 		if running >= settings.Concurrency {
 			return "", errors.New("Conversion workers are busy; retry the repair shortly")
 		}
 	}
 	tx, err := a.db.Begin()
-	if err != nil { return "", err }
+	if err != nil {
+		return "", err
+	}
 	defer tx.Rollback()
 	entries := make([]*repairEntry, 0, len(sources))
 	contexts := make([]context.Context, 0, len(sources))
 	group := ""
 	committed := false
-	defer func() { if !committed { for _, entry := range entries { entry.cancel() } } }()
+	defer func() {
+		if !committed {
+			for _, entry := range entries {
+				entry.cancel()
+			}
+		}
+	}()
 	for _, source := range sources {
 		ctx, cancel := context.WithCancel(a.ioContext)
 		task := &repairTask{ID: randomToken(), SourceID: source.ID, Hash: source.Hash, State: "running", Profile: settings.Encoding,
@@ -208,17 +218,29 @@ func (a *App) startRepairs(sources []Source, settings Settings, waitCapacity boo
 		entry := &repairEntry{RepairStatus: RepairStatus{State: "running"}, hash: source.Hash, rel: source.Rel, created: time.Now(), cancel: cancel, task: task}
 		entries = append(entries, entry)
 		contexts = append(contexts, context.WithValue(ctx, repairTaskKey{}, task))
-		if group == "" { group = task.ID }
+		if group == "" {
+			group = task.ID
+		}
 		raw, marshalErr := json.Marshal(task)
-		if marshalErr != nil { return "", marshalErr }
-		if _, err = tx.Exec("INSERT INTO meta(key,value) VALUES(?,?)", repairTaskPrefix+task.ID, string(raw)); err != nil { return "", err }
+		if marshalErr != nil {
+			return "", marshalErr
+		}
+		if _, err = tx.Exec("INSERT INTO meta(key,value) VALUES(?,?)", repairTaskPrefix+task.ID, string(raw)); err != nil {
+			return "", err
+		}
 		if len(sources) > 1 {
-			if _, err = tx.Exec("INSERT INTO meta(key,value) VALUES(?,?)", repairMemberPrefix+task.ID, group); err != nil { return "", err }
+			if _, err = tx.Exec("INSERT INTO meta(key,value) VALUES(?,?)", repairMemberPrefix+task.ID, group); err != nil {
+				return "", err
+			}
 		}
 	}
-	if err = tx.Commit(); err != nil { return "", err }
+	if err = tx.Commit(); err != nil {
+		return "", err
+	}
 	committed = true
-	for i, source := range sources { a.repairs[source.ID] = entries[i] }
+	for i, source := range sources {
+		a.repairs[source.ID] = entries[i]
+	}
 	a.repairRunning = true
 	a.repairWG.Add(1)
 	go func() {
@@ -244,10 +266,16 @@ func (a *App) startRepairs(sources []Source, settings Settings, waitCapacity boo
 			// Retain only a bounded number of failed in-memory diagnostics; durable
 			// history retains every result and queued entries must never be evicted.
 			failures := []*repairEntry{}
-			for _, item := range a.repairs { if item.State == "failed" { failures = append(failures, item) } }
+			for _, item := range a.repairs {
+				if item.State == "failed" {
+					failures = append(failures, item)
+				}
+			}
 			if len(failures) > repairMaxFailures {
 				sort.Slice(failures, func(i, j int) bool { return failures[i].created.Before(failures[j].created) })
-				for _, old := range failures[:len(failures)-repairMaxFailures] { delete(a.repairs, old.task.SourceID) }
+				for _, old := range failures[:len(failures)-repairMaxFailures] {
+					delete(a.repairs, old.task.SourceID)
+				}
 			}
 			a.repairMu.Unlock()
 			entry.cancel()
@@ -263,13 +291,21 @@ func (a *App) startRepairs(sources []Source, settings Settings, waitCapacity boo
 
 func (a *App) waitRepairCapacity(ctx context.Context, concurrency int) error {
 	for {
-		if err := ctx.Err(); err != nil { return err }
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		a.jobsMu.Lock()
 		running, err := a.runningConversions()
 		a.jobsMu.Unlock()
-		if err != nil { return err }
-		if running < concurrency { return nil }
-		if !pause(ctx, 100*time.Millisecond) { return ctx.Err() }
+		if err != nil {
+			return err
+		}
+		if running < concurrency {
+			return nil
+		}
+		if !pause(ctx, 100*time.Millisecond) {
+			return ctx.Err()
+		}
 	}
 }
 
@@ -545,32 +581,61 @@ func (a *App) requestRepair(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *App) requestRepairBatch(w http.ResponseWriter, r *http.Request) {
-	var body struct { Tracks []struct { ID int64 `json:"id"`; Hash string `json:"hash"` } `json:"tracks"` }
-	if !decode(w, r, &body) { return }
+	var body struct {
+		Tracks []struct {
+			ID   int64  `json:"id"`
+			Hash string `json:"hash"`
+		} `json:"tracks"`
+	}
+	if !decode(w, r, &body) {
+		return
+	}
 	if len(body.Tracks) == 0 || len(body.Tracks) > 10000 {
-		apiError(w, 400, errors.New("select tracks")); return
+		apiError(w, 400, errors.New("select tracks"))
+		return
 	}
 	settings, err := a.settingsContext(r.Context())
-	if err != nil { apiError(w, 500, err); return }
-	if !settings.Enabled { apiError(w, 409, errors.New("library is disabled")); return }
+	if err != nil {
+		apiError(w, 500, err)
+		return
+	}
+	if !settings.Enabled {
+		apiError(w, 409, errors.New("library is disabled"))
+		return
+	}
 	selected, hashes, ids := []Source{}, map[int64]string{}, []string{}
 	for _, track := range body.Tracks {
-		if track.ID < 1 || track.Hash == "" { continue }
-		if _, ok := hashes[track.ID]; ok { continue }
+		if track.ID < 1 || track.Hash == "" {
+			continue
+		}
+		if _, ok := hashes[track.ID]; ok {
+			continue
+		}
 		hashes[track.ID] = track.Hash
 		ids = append(ids, strconv.FormatInt(track.ID, 10))
 	}
 	if len(ids) > 0 {
 		sources, err := a.sourcesWhereContext(r.Context(), " WHERE id IN ("+strings.Join(ids, ",")+")")
-		if err != nil { apiError(w, 500, err); return }
+		if err != nil {
+			apiError(w, 500, err)
+			return
+		}
 		for _, source := range sources {
-			if hashes[source.ID] == source.Hash && canRepair(source) { selected = append(selected, source) }
+			if hashes[source.ID] == source.Hash && canRepair(source) {
+				selected = append(selected, source)
+			}
 		}
 	}
-	if len(selected) == 0 { respond(w, 202, map[string]int{"queued": 0, "skipped": len(body.Tracks)}); return }
+	if len(selected) == 0 {
+		respond(w, 202, map[string]int{"queued": 0, "skipped": len(body.Tracks)})
+		return
+	}
 	id, err := a.startRepairs(selected, settings, true)
-	if err != nil { apiError(w, 409, err); return }
-	respond(w, 202, map[string]any{"repair_id": id, "queued": len(selected), "skipped": len(body.Tracks)-len(selected)})
+	if err != nil {
+		apiError(w, 409, err)
+		return
+	}
+	respond(w, 202, map[string]any{"repair_id": id, "queued": len(selected), "skipped": len(body.Tracks) - len(selected)})
 }
 
 func (a *App) deleteRepair(w http.ResponseWriter, r *http.Request) {

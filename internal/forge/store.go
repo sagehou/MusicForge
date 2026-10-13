@@ -345,19 +345,33 @@ func (a *App) saveSettings(s Settings) error {
 
 func (a *App) saveSettingsUpdate(s Settings, oidcChanged bool, connection *lidarrConnection) error {
 	raw, err := json.Marshal(s)
-	if err != nil { return err }
+	if err != nil {
+		return err
+	}
 	tx, err := a.db.Begin()
-	if err != nil { return err }
+	if err != nil {
+		return err
+	}
 	defer tx.Rollback()
-	if _, err = tx.Exec("INSERT INTO settings(id,data) VALUES(1,?) ON CONFLICT(id) DO UPDATE SET data=excluded.data", string(raw)); err != nil { return err }
+	if _, err = tx.Exec("INSERT INTO settings(id,data) VALUES(1,?) ON CONFLICT(id) DO UPDATE SET data=excluded.data", string(raw)); err != nil {
+		return err
+	}
 	if oidcChanged {
-		if _, err = tx.Exec("DELETE FROM sessions WHERE method='oidc'"); err != nil { return err }
-		if _, err = tx.Exec("DELETE FROM oidc_flows"); err != nil { return err }
+		if _, err = tx.Exec("DELETE FROM sessions WHERE method='oidc'"); err != nil {
+			return err
+		}
+		if _, err = tx.Exec("DELETE FROM oidc_flows"); err != nil {
+			return err
+		}
 	}
 	if connection != nil {
 		raw, err = json.Marshal(connection)
-		if err != nil { return err }
-		if _, err = tx.Exec("INSERT INTO meta(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", lidarrConnectionKey, string(raw)); err != nil { return err }
+		if err != nil {
+			return err
+		}
+		if _, err = tx.Exec("INSERT INTO meta(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", lidarrConnectionKey, string(raw)); err != nil {
+			return err
+		}
 	}
 	return tx.Commit()
 }

@@ -203,6 +203,12 @@ func (a *App) lockFiles(ctx context.Context) error {
 
 // Interval scans wait for the whole library queue, including paused members.
 func (a *App) scheduleScan(s Settings, lastScan time.Time) (time.Time, error) {
+	a.repairMu.Lock()
+	repairing := a.repairRunning
+	a.repairMu.Unlock()
+	if repairing {
+		return time.Now(), nil
+	}
 	var busy bool
 	err := a.reads.QueryRow("SELECT EXISTS(SELECT 1 FROM jobs WHERE state IN ('pending','running') AND kind IN ('scan','convert','move','delete','upgrade'))").Scan(&busy)
 	if err != nil {

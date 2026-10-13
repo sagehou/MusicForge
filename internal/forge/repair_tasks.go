@@ -102,29 +102,43 @@ func (a *App) unifiedTaskList(ctx context.Context, state string, limit, offset i
 		 (SELECT value FROM repair_members m WHERE m.task_id=g.task_id
 		 ORDER BY (state='running' AND coalesce(phase,'')<>'repair_wait') DESC,json_extract(value,'$.updated') DESC,key DESC LIMIT 1)
 		 FROM repair_groups g WHERE task_id IN (`+strings.Join(repairIDs, ",")+")", repairArgs...)
-		if err != nil { return nil, 0, err }
+		if err != nil {
+			return nil, 0, err
+		}
 		for rows.Next() {
 			var task Task
 			var raw string
 			var stopping int
 			err = rows.Scan(&task.RepairID, &task.State, &task.Counts.Total, &task.Counts.Done, &task.Counts.Failed,
 				&task.Counts.Pending, &task.Counts.Running, &task.Counts.Cancelled, &task.Created, &task.Updated, &task.Progress, &stopping, &raw)
-			if err != nil { break }
+			if err != nil {
+				break
+			}
 			var repair repairTask
-			if err = json.Unmarshal([]byte(raw), &repair); err != nil { break }
+			if err = json.Unmarshal([]byte(raw), &repair); err != nil {
+				break
+			}
 			task.Kind, task.Args = "repair", json.RawMessage(`{}`)
 			task.CanDelete = task.Counts.Pending+task.Counts.Running == 0
 			task.Stopping, task.Profile = stopping != 0, &repair.Profile
 			task.Current, task.Scope = []Activity{}, []string{repair.Activity.Path}
-			if !task.CanDelete { task.Current = append(task.Current, repair.Activity) }
+			if !task.CanDelete {
+				task.Current = append(task.Current, repair.Activity)
+			}
 			byKey["repair:"+task.RepairID] = task
 		}
-		if err == nil { err = rows.Err() }
+		if err == nil {
+			err = rows.Err()
+		}
 		rows.Close()
-		if err != nil { return nil, 0, err }
+		if err != nil {
+			return nil, 0, err
+		}
 	}
 	for _, key := range keys {
-		if task, ok := byKey[key]; ok { list = append(list, task) }
+		if task, ok := byKey[key]; ok {
+			list = append(list, task)
+		}
 	}
 	return list, total, nil
 }
@@ -254,9 +268,14 @@ func (a *App) listRepairTasks(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	group := r.URL.Query().Get("group")
-	if group != "" && !validRepairTaskID(group) { apiError(w, 400, errors.New("invalid repair task ID")); return }
+	if group != "" && !validRepairTaskID(group) {
+		apiError(w, 400, errors.New("invalid repair task ID"))
+		return
+	}
 	limit := 25
-	if n, err := strconv.Atoi(r.URL.Query().Get("limit")); err == nil && n > 0 && n <= 500 { limit = n }
+	if n, err := strconv.Atoi(r.URL.Query().Get("limit")); err == nil && n > 0 && n <= 500 {
+		limit = n
+	}
 	offset, _ := strconv.Atoi(r.URL.Query().Get("offset"))
 	list, total, err := a.repairTaskListGroup(r.Context(), state, limit, max(0, offset), group)
 	if err != nil {
@@ -315,56 +334,95 @@ func (a *App) controlRepairTask(w http.ResponseWriter, r *http.Request) {
 
 func (a *App) changeRepairGroups(ctx context.Context, action string, ids []string, all bool, state string) (int, error) {
 	// A strict retry must never grant consent for best-effort decoding.
-	if action != "stop" && action != "delete" { return 0, nil }
+	if action != "stop" && action != "delete" {
+		return 0, nil
+	}
 	a.repairMu.Lock()
 	defer a.repairMu.Unlock()
 	where, args := " WHERE ", []any{}
-	if action == "stop" { where += "pending+running>0" } else { where += "pending+running=0" }
-	if all {
-		if state != "" && state != "all" { where += " AND task_state=?"; args = append(args, state) }
+	if action == "stop" {
+		where += "pending+running>0"
 	} else {
-		if len(ids) == 0 { return 0, nil }
+		where += "pending+running=0"
+	}
+	if all {
+		if state != "" && state != "all" {
+			where += " AND task_state=?"
+			args = append(args, state)
+		}
+	} else {
+		if len(ids) == 0 {
+			return 0, nil
+		}
 		marks := make([]string, len(ids))
-		for i, id := range ids { marks[i] = "?"; args = append(args, id) }
-		where += " AND task_id IN ("+strings.Join(marks, ",")+")"
+		for i, id := range ids {
+			marks[i] = "?"
+			args = append(args, id)
+		}
+		where += " AND task_id IN (" + strings.Join(marks, ",") + ")"
 	}
 	rows, err := a.reads.QueryContext(ctx, repairGroups+"SELECT task_id,key,value FROM repair_members WHERE task_id IN (SELECT task_id FROM repair_groups"+where+")", args...)
-	if err != nil { return 0, err }
+	if err != nil {
+		return 0, err
+	}
 	groups := map[string][]repairTask{}
 	for rows.Next() {
 		var id, key, raw string
 		var task repairTask
-		if err = rows.Scan(&id, &key, &raw); err != nil { break }
-		if err = json.Unmarshal([]byte(raw), &task); err != nil { break }
+		if err = rows.Scan(&id, &key, &raw); err != nil {
+			break
+		}
+		if err = json.Unmarshal([]byte(raw), &task); err != nil {
+			break
+		}
 		groups[id] = append(groups[id], task)
 	}
-	if err == nil { err = rows.Err() }
+	if err == nil {
+		err = rows.Err()
+	}
 	rows.Close()
-	if err != nil { return 0, err }
+	if err != nil {
+		return 0, err
+	}
 	changed := 0
 	for _, members := range groups {
 		if action == "delete" {
 			tx, err := a.db.BeginTx(ctx, nil)
-			if err != nil { return changed, err }
+			if err != nil {
+				return changed, err
+			}
 			for _, task := range members {
 				_, err = tx.ExecContext(ctx, "DELETE FROM meta WHERE key IN (?,?)", repairTaskPrefix+task.ID, repairMemberPrefix+task.ID)
-				if err != nil { break }
+				if err != nil {
+					break
+				}
 			}
-			if err != nil { tx.Rollback(); return changed, err }
-			if err = tx.Commit(); err != nil { return changed, err }
+			if err != nil {
+				tx.Rollback()
+				return changed, err
+			}
+			if err = tx.Commit(); err != nil {
+				return changed, err
+			}
 			changed++
 			continue
 		}
 		stopped := false
 		for _, task := range members {
 			entry := a.repairs[task.SourceID]
-			if task.State != "running" || entry == nil || entry.task == nil || entry.task.ID != task.ID || entry.task.Stopping { continue }
+			if task.State != "running" || entry == nil || entry.task == nil || entry.task.ID != task.ID || entry.task.Stopping {
+				continue
+			}
 			entry.task.Stopping, entry.task.Updated = true, time.Now().Unix()
-			if err := a.saveRepairTask(entry.task); err != nil { return changed, err }
+			if err := a.saveRepairTask(entry.task); err != nil {
+				return changed, err
+			}
 			entry.cancel()
 			stopped = true
 		}
-		if stopped { changed++ }
+		if stopped {
+			changed++
+		}
 	}
 	return changed, nil
 }

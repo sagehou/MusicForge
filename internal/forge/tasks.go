@@ -342,17 +342,17 @@ func (a *App) taskListSelected(ctx context.Context, state string, limit, offset 
 
 type TaskItem struct {
 	Job
-	Activity Activity  `json:"activity"`
-	Output   string    `json:"output"`
-	Profile  *Encoding `json:"profile,omitempty"`
-	Failure  string    `json:"failure,omitempty"`
+	Activity     Activity      `json:"activity"`
+	Output       string        `json:"output"`
+	Profile      *Encoding     `json:"profile,omitempty"`
+	Failure      string        `json:"failure,omitempty"`
 	RepairTarget *repairTarget `json:"repair_target,omitempty"`
 }
 
 type repairTarget struct {
-	ID int64 `json:"id"`
-	Hash string `json:"hash"`
-	CanRepair bool `json:"can_repair"`
+	ID        int64  `json:"id"`
+	Hash      string `json:"hash"`
+	CanRepair bool   `json:"can_repair"`
 }
 
 func (a *App) taskItems(id int64, state string, limit, offset int) ([]TaskItem, int, error) {
@@ -394,7 +394,9 @@ func (a *App) taskItemsContext(ctx context.Context, id int64, state string, limi
 		item.Args = json.RawMessage(raw)
 		item.Failure = failureCategory(item.Log)
 		source.Rel = item.Activity.Path
-		if canRepair(source) { item.RepairTarget = &repairTarget{ID: source.ID, Hash: source.Hash, CanRepair: true} }
+		if canRepair(source) {
+			item.RepairTarget = &repairTarget{ID: source.ID, Hash: source.Hash, CanRepair: true}
+		}
 		if activity != "" {
 			_ = json.Unmarshal([]byte(activity), &item.Activity)
 		}
@@ -437,10 +439,10 @@ func (a *App) jobItems(w http.ResponseWriter, r *http.Request) {
 func (a *App) controlJobs(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		selection
-		Action string `json:"action"`
-		State  string `json:"state"`
-		RepairIDs []string `json:"repair_ids"`
-		IncludeRepairs bool `json:"include_repairs"`
+		Action         string   `json:"action"`
+		State          string   `json:"state"`
+		RepairIDs      []string `json:"repair_ids"`
+		IncludeRepairs bool     `json:"include_repairs"`
 	}
 	if !decode(w, r, &body) {
 		return
@@ -464,7 +466,10 @@ func (a *App) controlJobs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	for _, id := range body.RepairIDs {
-		if !validRepairTaskID(id) { apiError(w, 400, errors.New("invalid repair task ID")); return }
+		if !validRepairTaskID(id) {
+			apiError(w, 400, errors.New("invalid repair task ID"))
+			return
+		}
 	}
 	n, err := a.changeTasksFiltered(body.Action, body.selection, body.State)
 	if err != nil {
@@ -473,7 +478,10 @@ func (a *App) controlJobs(w http.ResponseWriter, r *http.Request) {
 	}
 	if len(body.RepairIDs) > 0 || body.All && body.IncludeRepairs && body.State != "" {
 		changed, err := a.changeRepairGroups(r.Context(), body.Action, body.RepairIDs, body.All && body.IncludeRepairs, body.State)
-		if err != nil { apiError(w, 409, err); return }
+		if err != nil {
+			apiError(w, 409, err)
+			return
+		}
 		n += changed
 	}
 	respond(w, 202, map[string]int{"changed": n})

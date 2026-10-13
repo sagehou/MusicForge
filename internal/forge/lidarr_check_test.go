@@ -237,32 +237,63 @@ func TestLidarrConnectionAndAsyncCheckAuthenticationAndDeduplication(t *testing.
 func TestSettingsSaveLidarrConnectionAtomicallyWithoutExposingOrChangingPersistence(t *testing.T) {
 	a, s := testApp(t)
 	issued := httptest.NewRecorder()
-	if err := a.newSession(issued, httptest.NewRequest("GET", "/", nil), "local"); err != nil { t.Fatal(err) }
+	if err := a.newSession(issued, httptest.NewRequest("GET", "/", nil), "local"); err != nil {
+		t.Fatal(err)
+	}
 	cookie := issued.Result().Cookies()[0]
 	send := func(method string, body any) *httptest.ResponseRecorder {
 		raw, _ := json.Marshal(body)
 		r := httptest.NewRequest(method, "/api/settings", bytes.NewReader(raw))
-		r.AddCookie(cookie); r.Header.Set("X-CSRF-Token", digest(cookie.Value+":csrf"))
-		w := httptest.NewRecorder(); a.Handler().ServeHTTP(w, r); return w
+		r.AddCookie(cookie)
+		r.Header.Set("X-CSRF-Token", digest(cookie.Value+":csrf"))
+		w := httptest.NewRecorder()
+		a.Handler().ServeHTTP(w, r)
+		return w
 	}
 	payload := func(s Settings, url, key string) map[string]any {
-		raw, _ := json.Marshal(s); values := map[string]any{}; _ = json.Unmarshal(raw, &values)
-		values["lidarr_connection"] = lidarrConnection{URL: url, APIKey: key}; return values
+		raw, _ := json.Marshal(s)
+		values := map[string]any{}
+		_ = json.Unmarshal(raw, &values)
+		values["lidarr_connection"] = lidarrConnection{URL: url, APIKey: key}
+		return values
 	}
 	secret := "test-only-private-key"
-	if w := send("PUT", payload(s, "http://lidarr:8686/", secret)); w.Code != 200 { t.Fatal(w.Code, w.Body.String()) }
-	if w := send("GET", nil); w.Code != 200 || strings.Contains(w.Body.String(), secret) || !strings.Contains(w.Body.String(), `"key_configured":true`) { t.Fatal(w.Code, w.Body.String()) }
-	changed := s; changed.Concurrency = 2
-	if w := send("PUT", payload(changed, "http://another-lidarr:8686", "")); w.Code != 400 { t.Fatal(w.Code) }
-	current, _ := a.settings(); connection, _ := a.lidarrConnection(context.Background())
-	if current.Concurrency != s.Concurrency || connection.URL != "http://lidarr:8686" || connection.APIKey != secret { t.Fatal("invalid connection partially saved settings", current.Concurrency, connection.URL) }
-	if w := send("PUT", payload(changed, "http://lidarr:8686", "")); w.Code != 200 { t.Fatal(w.Code, w.Body.String()) }
-	current, _ = a.settings(); connection, _ = a.lidarrConnection(context.Background())
-	if current.Concurrency != 2 || connection.APIKey != secret { t.Fatal("blank key did not retain saved connection", current.Concurrency) }
-	var raw string
-	if err := a.reads.QueryRow("SELECT data FROM settings WHERE id=1").Scan(&raw); err != nil { t.Fatal(err) }
-	if strings.Contains(raw, "lidarr_connection") || strings.Contains(raw, "api_key") || strings.Contains(raw, secret) { t.Fatal("credentials changed Settings persistence") }
-	if w := send("PUT", payload(changed, "", "")); w.Code != 200 { t.Fatal(w.Code) }
+	if w := send("PUT", payload(s, "http://lidarr:8686/", secret)); w.Code != 200 {
+		t.Fatal(w.Code, w.Body.String())
+	}
+	if w := send("GET", nil); w.Code != 200 || strings.Contains(w.Body.String(), secret) || !strings.Contains(w.Body.String(), `"key_configured":true`) {
+		t.Fatal(w.Code, w.Body.String())
+	}
+	changed := s
+	changed.Concurrency = 2
+	if w := send("PUT", payload(changed, "http://another-lidarr:8686", "")); w.Code != 400 {
+		t.Fatal(w.Code)
+	}
+	current, _ := a.settings()
+	connection, _ := a.lidarrConnection(context.Background())
+	if current.Concurrency != s.Concurrency || connection.URL != "http://lidarr:8686" || connection.APIKey != secret {
+		t.Fatal("invalid connection partially saved settings", current.Concurrency, connection.URL)
+	}
+	if w := send("PUT", payload(changed, "http://lidarr:8686", "")); w.Code != 200 {
+		t.Fatal(w.Code, w.Body.String())
+	}
+	current, _ = a.settings()
 	connection, _ = a.lidarrConnection(context.Background())
-	if connection.URL != "" || connection.APIKey != "" { t.Fatal("disconnect retained credentials") }
+	if current.Concurrency != 2 || connection.APIKey != secret {
+		t.Fatal("blank key did not retain saved connection", current.Concurrency)
+	}
+	var raw string
+	if err := a.reads.QueryRow("SELECT data FROM settings WHERE id=1").Scan(&raw); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(raw, "lidarr_connection") || strings.Contains(raw, "api_key") || strings.Contains(raw, secret) {
+		t.Fatal("credentials changed Settings persistence")
+	}
+	if w := send("PUT", payload(changed, "", "")); w.Code != 200 {
+		t.Fatal(w.Code)
+	}
+	connection, _ = a.lidarrConnection(context.Background())
+	if connection.URL != "" || connection.APIKey != "" {
+		t.Fatal("disconnect retained credentials")
+	}
 }

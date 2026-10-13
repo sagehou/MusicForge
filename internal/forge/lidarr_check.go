@@ -92,7 +92,10 @@ func (a *App) putLidarrConnection(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	body, err := a.prepareLidarrConnection(r.Context(), body)
-	if err != nil { apiError(w, 400, err); return }
+	if err != nil {
+		apiError(w, 400, err)
+		return
+	}
 	raw, _ := json.Marshal(body)
 	if err = a.setMeta(lidarrConnectionKey, string(raw)); err != nil {
 		apiError(w, 500, err)
@@ -103,7 +106,9 @@ func (a *App) putLidarrConnection(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *App) prepareLidarrConnection(ctx context.Context, body lidarrConnection) (lidarrConnection, error) {
-	if a.lidarrReport != nil && a.lidarrReport.State == "running" { return body, errors.New("Lidarr comparison is running") }
+	if a.lidarrReport != nil && a.lidarrReport.State == "running" {
+		return body, errors.New("Lidarr comparison is running")
+	}
 	body.URL = strings.TrimRight(strings.TrimSpace(body.URL), "/")
 	body.APIKey = strings.TrimSpace(body.APIKey)
 	if body.URL != "" {

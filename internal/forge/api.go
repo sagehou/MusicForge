@@ -362,7 +362,10 @@ func (a *App) getSettings(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	connection, err := a.lidarrConnection(r.Context())
-	if err != nil { apiError(w, 500, err); return }
+	if err != nil {
+		apiError(w, 500, err)
+		return
+	}
 	configured := map[string]bool{"webhook": s.WebhookHash != "", "nav_password": s.NavPassword != "", "oidc_secret": s.OIDCSecret != ""}
 	s.WebhookHash = ""
 	s.NavPassword = ""
@@ -372,11 +375,11 @@ func (a *App) getSettings(w http.ResponseWriter, r *http.Request) {
 func (a *App) putSettings(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		Settings
-		WebhookSecret    string `json:"webhook_secret"`
-		ClearWebhook     bool   `json:"clear_webhook"`
-		ClearNavPassword bool   `json:"clear_nav_password"`
-		ClearOIDCSecret  bool   `json:"clear_oidc_secret"`
-		UnbindOIDC       bool   `json:"unbind_oidc"`
+		WebhookSecret    string            `json:"webhook_secret"`
+		ClearWebhook     bool              `json:"clear_webhook"`
+		ClearNavPassword bool              `json:"clear_nav_password"`
+		ClearOIDCSecret  bool              `json:"clear_oidc_secret"`
+		UnbindOIDC       bool              `json:"unbind_oidc"`
 		LidarrConnection *lidarrConnection `json:"lidarr_connection"`
 	}
 	if !decode(w, r, &body) {
@@ -458,7 +461,10 @@ func (a *App) putSettings(w http.ResponseWriter, r *http.Request) {
 		a.lidarrMu.Lock()
 		defer a.lidarrMu.Unlock()
 		connection, err := a.prepareLidarrConnection(r.Context(), *body.LidarrConnection)
-		if err != nil { apiError(w, 400, err); return }
+		if err != nil {
+			apiError(w, 400, err)
+			return
+		}
 		body.LidarrConnection = &connection
 	}
 	if s.Source != old.Source || s.Output != old.Output {
@@ -485,7 +491,9 @@ func (a *App) putSettings(w http.ResponseWriter, r *http.Request) {
 		apiError(w, 500, err)
 		return
 	}
-	if body.LidarrConnection != nil { a.lidarrReport = nil }
+	if body.LidarrConnection != nil {
+		a.lidarrReport = nil
+	}
 	if s.Enabled && !old.Enabled {
 		_, _ = a.enqueue("scan", "scan:periodic", ScanRequest{}, false)
 	}

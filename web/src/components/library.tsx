@@ -110,7 +110,7 @@ export function Library({ notify }: { notify: Notice }) {
     for (const item of indexed) {
       const { source, identity } = item;
       if (scope.artist && identity.artistKey !== scope.artist || isAlbum && identity.albumKey !== scope.album) continue;
-      if (filter !== "all" && source.status !== filter) continue;
+      if (filter !== "all" && (filter === "possibly_damaged" ? !source.possibly_damaged : source.status !== filter)) continue;
       if (search && !`${identity.artist} ${source.artist} ${identity.album} ${source.title} ${source.path}`.toLocaleLowerCase(locale).includes(search)) continue;
       rows.push(source);
       if (isAlbum) continue;

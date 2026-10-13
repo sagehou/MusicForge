@@ -13,8 +13,10 @@ test("best-effort repair requires consent and imports normal audio with a persis
   let failStart = false;
   let removes = 0;
   let imported = false;
+  let strictRebuildFailed = false;
   await page.route("**/api/library", route => route.fulfill({ json: [{ ...source, repair, ...(imported ? {
-    output: "Artist/Album/01.opus", output_present: true, status: "possibly_damaged", possibly_damaged: true, error: "", can_repair: false,
+    output: "Artist/Album/01.opus", output_present: true, status: strictRebuildFailed ? "failed" : "possibly_damaged", possibly_damaged: true,
+    error: strictRebuildFailed ? "Audio decoding failed after strict rebuild" : "", can_repair: false,
   } : {}) }] }));
   await page.route("**/api/library/77/repair", route => {
     if (route.request().method() === "DELETE") {
@@ -86,6 +88,12 @@ test("best-effort repair requires consent and imports normal audio with a persis
   await page.reload();
   await expect(page.locator(".badge-possibly_damaged")).toBeVisible();
   await expect(page.getByRole("link", { name: "Download preview", exact: true })).toHaveCount(0);
+  strictRebuildFailed = true;
+  await page.reload();
+  await page.locator(".library-options-body select").first().selectOption("possibly_damaged");
+  await expect(page.getByText("Dear My Friend", { exact: true })).toBeVisible();
+  await expect(page.locator(".badge-failed")).toBeVisible();
+  await expect(page.locator(".repair-warning")).toHaveText("Possibly damaged");
 });
 
 test("an existing playable artifact is preserved without offering best-effort replacement", async ({ page }) => {

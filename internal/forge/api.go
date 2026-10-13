@@ -104,6 +104,8 @@ func (a *App) Handler() http.Handler {
 	mux.HandleFunc("GET /api/dashboard", a.auth(a.dashboard))
 	mux.HandleFunc("GET /api/library", a.auth(a.library))
 	mux.HandleFunc("GET /api/library/{id}/artwork", a.auth(a.libraryArtwork))
+	mux.HandleFunc("POST /api/library/{id}/repair", a.auth(a.requestRepair))
+	mux.HandleFunc("DELETE /api/library/{id}/repair", a.auth(a.deleteRepair))
 	mux.HandleFunc("GET /api/jobs", a.auth(a.jobs))
 	mux.HandleFunc("POST /api/jobs/retry", a.auth(a.retry))
 	mux.HandleFunc("POST /api/jobs/control", a.auth(a.controlJobs))
@@ -206,6 +208,14 @@ func (a *App) sourcesWithStatusContext(ctx context.Context) ([]Source, error) {
 	}
 	for i := range list {
 		source := &list[i]
+		source.CanRepair = canRepair(*source)
+		source.Repair = a.repairSnapshot(*source)
+	}
+	if err = a.annotateRepairs(ctx, list); err != nil {
+		return nil, err
+	}
+	for i := range list {
+		source := &list[i]
 		switch {
 		case !source.Present:
 			source.Status = "expired"
@@ -219,6 +229,8 @@ func (a *App) sourcesWithStatusContext(ctx context.Context) ([]Source, error) {
 			source.Status = "changed"
 		case source.BuiltProfile != s.Encoding.Fingerprint():
 			source.Status = "needs_rebuild"
+		case source.PossiblyDamaged:
+			source.Status = "possibly_damaged"
 		default:
 			source.Status = "ready"
 		}
@@ -500,6 +512,10 @@ func (a *App) rebuild(w http.ResponseWriter, r *http.Request) {
 		apiError(w, 500, err)
 		return
 	}
+	if err = a.annotateRepairs(r.Context(), list); err != nil {
+		apiError(w, 500, err)
+		return
+	}
 	selected := map[int64]bool{}
 	for _, id := range body.IDs {
 		selected[id] = true
@@ -512,7 +528,7 @@ func (a *App) rebuild(w http.ResponseWriter, r *http.Request) {
 		if !source.Present || source.Hash == "" || (!body.All && !selected[source.ID]) {
 			continue
 		}
-		if source.BuiltHash == source.Hash && source.BuiltProfile == s.Encoding.Fingerprint() && source.OutputPresent && source.Output == outputRel(source.Rel, s.Encoding.Codec) {
+		if !source.PossiblyDamaged && source.BuiltHash == source.Hash && source.BuiltProfile == s.Encoding.Fingerprint() && source.OutputPresent && source.Output == outputRel(source.Rel, s.Encoding.Codec) {
 			continue
 		}
 		var id int64

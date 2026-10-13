@@ -20,6 +20,7 @@ NAME = "musicforge-rollback"
 CANDIDATE = "musicforge:validation"
 PASSWORD = "ci-rollback-password"
 LEGACY = {
+    "v0.2.15": "sha256:630410106ee4ac8177030e9342ca4533d7e633f59190aa627078fb06b2326842",
     "v0.2.14": "sha256:85cfdf9d9d471b89ade90b965e2831075f6f318a9ee49c8e536734ff01dc6815",
     "v0.2.13": "sha256:e351e2de6da05db882e498f089fff061c593145f07d21e2b98ffc814c692d162",
     "v0.2.12": "sha256:1a56218b0eb03a305715900093500d2e4b7200b944445281f7cce23b80e2dc34",
@@ -217,6 +218,13 @@ def main():
             identity = db.execute("SELECT value FROM meta WHERE key='source_root'").fetchone()[0]
             witness = {"identity": identity, "signature": hashlib.sha256(b"rollback-remote:Library").hexdigest()}
             db.execute("INSERT INTO meta(key,value) VALUES('source_mount',?)", (json.dumps(witness),))
+            # An inactive historical repair annotation must survive older
+            # readers/writers without changing current artifact/API records.
+            repair = {"state": "imported", "decoded_samples": 44000, "declared_samples": 44100,
+                      "pcm_verified": False, "duration": 44000 / 44100,
+                      "diagnostics": "Possibly damaged: rollback annotation fixture"}
+            db.execute("INSERT INTO meta(key,value) VALUES(?,?)",
+                       ("repair-artifact:" + str(tracks[0]["id"]) + ":" + "0" * 64, json.dumps(repair)))
         expected = snapshot()
         held = next(row for row in expected["jobs"] if row[0] == pending)
         assert held[4] == "pending" and held[8] == 253402300799, "paused task changed schema-2 job semantics"

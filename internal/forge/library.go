@@ -922,11 +922,20 @@ func (a *App) buildStaged(ctx context.Context, j Job, r BuildRequest, staged *st
 		_, _ = a.enqueue("scan", "scan:periodic", ScanRequest{}, true)
 		return later("Source changed or is still being written", 10)
 	}
+	annotated := []Source{source}
+	if err = a.annotateRepairs(ctx, annotated); err != nil {
+		a.files.Unlock()
+		return err
+	}
+	source = annotated[0]
 	target := outputRel(source.Rel, r.Profile.Codec)
 	if r.Move {
 		target = outputRel(source.Rel, strings.TrimPrefix(filepath.Ext(source.Output), "."))
 	}
-	if !r.Move && source.OutputPresent && source.Output == target && source.BuiltHash == r.Hash && source.BuiltProfile == r.Profile.Fingerprint() {
+	// Old automatic retries may finish against a manually accepted import.
+	// A fresh strict rebuild, and its failed retries, still decode the source.
+	rebuildDamaged := source.PossiblyDamaged && (j.Attempts == 0 || source.Error != "")
+	if !r.Move && !rebuildDamaged && source.OutputPresent && source.Output == target && source.BuiltHash == r.Hash && source.BuiltProfile == r.Profile.Fingerprint() {
 		path, pathErr := safePath(s.Output, target)
 		if pathErr != nil {
 			a.files.Unlock()
@@ -1118,6 +1127,9 @@ func (a *App) buildStaged(ctx context.Context, j Job, r BuildRequest, staged *st
 	if err = a.finalize(s, p); err != nil {
 		return err
 	}
+	if _, err = a.db.Exec("DELETE FROM meta WHERE key=?", repairArtifactKey(source.ID, hash)); err != nil {
+		return err
+	}
 	_, _ = a.db.Exec("UPDATE jobs SET progress=.95 WHERE id=?", j.ID)
 	return nil
 }
@@ -1127,6 +1139,10 @@ func (a *App) encode(ctx context.Context, id int64, duration float64, activity A
 }
 
 func (a *App) encodeMedia(ctx context.Context, id int64, duration float64, activity Activity, args []string, referenceInput string, pcm *flacPCM) error {
+	return a.encodeMediaAttempt(ctx, id, duration, activity, args, referenceInput, pcm, nil)
+}
+
+func (a *App) encodeMediaAttempt(ctx context.Context, id int64, duration float64, activity Activity, args []string, referenceInput string, pcm *flacPCM, repair *repairPCM) error {
 	encodeCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	stalled := time.AfterFunc(a.sourceTimeout(), cancel)
@@ -1198,7 +1214,12 @@ func (a *App) encodeMedia(ctx context.Context, id int64, duration float64, activ
 		} else {
 			pcmDone = make(chan error, 1)
 			go func() {
-				err := pcm.copyVerified(writer, decoded)
+				var err error
+				if repair == nil {
+					err = pcm.copyVerified(writer, decoded)
+				} else {
+					err = pcm.copyRepairPCM(writer, decoded, repair)
+				}
 				_ = writer.Close()
 				_ = decoded.Close()
 				if err != nil {
@@ -1251,12 +1272,16 @@ func (a *App) encodeMedia(ctx context.Context, id int64, duration float64, activ
 				done <- fmt.Errorf("reference FLAC PCM verification failed: %w\n%s\nffmpeg: %v\n%s", pcmErr, referenceLog.String(), encodeErr, stderr.String())
 				return
 			}
-			if decodeErr != nil {
+			if decodeErr != nil && !(repair != nil && repair.Bytes > 0 && repairDecoderExit(decodeErr)) {
 				done <- fmt.Errorf("reference FLAC decoder failed: %w\n%s\nffmpeg: %v\n%s", decodeErr, referenceLog.String(), encodeErr, stderr.String())
 				return
 			}
 			if pcm != nil {
-				a.logger.Info("reference FLAC PCM verified", "task", a.taskID(id), "job", id, "path", activity.Path, "samples", pcm.Samples, "pcm_bytes", pcm.byteCount(), "pcm_md5", fmt.Sprintf("%x", pcm.MD5), "decoder_warnings", referenceLog.String())
+				if repair != nil {
+					repair.Log += "\n" + referenceLog.String()
+				} else {
+					a.logger.Info("reference FLAC PCM verified", "task", a.taskID(id), "job", id, "path", activity.Path, "samples", pcm.Samples, "pcm_bytes", pcm.byteCount(), "pcm_md5", fmt.Sprintf("%x", pcm.MD5), "decoder_warnings", referenceLog.String())
+				}
 			}
 		}
 		if encodeErr != nil {
@@ -1294,6 +1319,10 @@ func (a *App) encodeMedia(ctx context.Context, id int64, duration float64, activ
 			return err
 		case <-encodeCtx.Done():
 			_ = cmd.Process.Kill()
+			if repair != nil {
+				// Finish both children before deleting cancelled repair scratch files.
+				<-done
+			}
 			if ctx.Err() != nil {
 				return ctx.Err()
 			}

@@ -161,7 +161,7 @@ input:disabled, select:disabled { opacity: .6; }
 .badge { display: inline-flex; gap: 6px; align-items: center; color: var(--muted); font-size: 11px; padding: 4px 0; line-height: 1.35; white-space: normal; }
 .badge > span { width: 5px; height: 5px; border-radius: 50%; background: currentColor; flex-shrink: 0; }
 .badge-ready, .badge-success { color: var(--success); }
-.badge-expired, .badge-needs_rebuild, .badge-changed, .badge-paused, .badge-waiting { color: var(--warning); }
+.badge-expired, .badge-needs_rebuild, .badge-changed, .badge-paused, .badge-waiting, .badge-possibly_damaged { color: var(--warning); }
 .badge-failed { color: var(--danger); }
 .badge-running { color: var(--info); }
 .badge-expired > span, .badge-stopped > span { background: none; border: 1px solid currentColor; width: 6px; height: 6px; }
@@ -346,6 +346,21 @@ summary { font-size: 12px; color: var(--danger); cursor: pointer; margin-top: 6p
 .track-table th:nth-child(2) { width: 42%; }
 .track-table th.track-duration { width: 64px; }
 .track-table th:last-child { width: 140px; }
+.repair-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 10px; min-width: 0; }
+.repair-controls .ui-button { max-width: 100%; height: auto; min-height: 32px; white-space: normal; overflow-wrap: anywhere; }
+.repair-warning, .repair-progress { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; line-height: 1.5; color: var(--warning); }
+.repair-warning svg, .repair-progress svg { flex-shrink: 0; }
+.repair-detail-row:hover { background: transparent; }
+.repair-detail-row td:first-child { width: auto; padding: 0 14px 14px; border-top: 0; }
+.repair-details { min-width: 0; }
+.repair-details > small { margin-top: 0; }
+.repair-diagnostic { min-width: 0; }
+.repair-diagnostic summary { display: flex; align-items: center; gap: 6px; color: var(--muted); min-height: 36px; width: fit-content; max-width: 100%; margin-top: 0; }
+.repair-diagnostic summary svg { flex-shrink: 0; }
+.repair-diagnostic[open] summary svg { transform: rotate(90deg); }
+.repair-diagnostic summary::-webkit-details-marker { display: none; }
+.repair-diagnostic p { color: var(--muted); font-size: 12px; margin-bottom: 8px; }
+.repair-diagnostic pre { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 240px; overflow: auto; }
 .track-duration { color: var(--muted); font-variant-numeric: tabular-nums; }
 .disc-heading th { padding: 14px; width: auto !important; color: var(--ink); }
 .disc-heading svg { display: inline-block; vertical-align: middle; margin-right: 8px; }
@@ -451,6 +466,9 @@ summary { font-size: 12px; color: var(--danger); cursor: pointer; margin-top: 6p
   .track-cell { gap: 5px; }
   .track-number { width: 20px; }
   .track-table td .badge { font-size: 11px; }
+  .repair-controls .ui-button { min-height: 44px; }
+  .repair-detail-row td:first-child { padding: 0 8px 12px; }
+  .repair-diagnostic summary { min-height: 44px; }
 }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }

@@ -7,6 +7,7 @@ import type { Source } from "../types";
 import { Badge, Empty, Loading, ResourceWarning, useResource, type Notice } from "./resource";
 import { Button } from "./ui/button";
 import { RepairControls, RepairDiagnostics } from "./repair";
+import { LibraryComparison } from "./library-comparison";
 
 type Scope = { view: "artists" | "albums"; artist?: string; album?: string };
 type Identity = { artistKey: string; albumKey: string; artist: string; album: string };
@@ -192,6 +193,7 @@ export function Library({ notify }: { notify: Notice }) {
     <div className="page-heading"><div><h1 id="library-title" tabIndex={-1}>{t("app.library")}</h1><p>{t("library.description", { count: data.length })}</p></div>
       <div className="actions"><Button variant="outline" disabled={busy} onClick={() => void action("/library/scan", { verify: true }, "notice.verify")}><ShieldCheck size={16} />{t("library.verify")}</Button><Button disabled={busy} onClick={() => void action("/library/scan", {}, "notice.scan")}><RefreshCw size={16} className={busy ? "animate-spin" : ""} />{t("library.scan")}</Button></div>
     </div>
+    {!scope.artist && !isAlbum && <LibraryComparison sources={data} notify={notify} />}
     {expired > 0 && <div className="banner amber"><Clock3 size={20} /><div><strong>{t("library.expiredCount", { count: expired })}</strong><p>{t("library.expiredHint")}</p></div><Button variant="destructive" size="sm" disabled={busy} onClick={() => deleteSelected(true)}><Trash2 size={14} />{t("library.deleteExpired")}</Button></div>}
     {(scope.artist || isAlbum) && <nav className="library-breadcrumbs" aria-label={t("library.hierarchy")}>
       <button onClick={() => navigate({ view: scope.view })} aria-current={!scope.artist ? "page" : undefined}>{t(scope.view === "artists" ? "library.artists" : "library.albums")}</button>

@@ -181,6 +181,14 @@ Endpoint: `POST /api/webhook/lidarr`.
 - Confine mapped paths to MusicForge's configured source root.
 - Use Lidarr's native Username/Password fields for HTTP Basic webhook credentials.
 
+### File-count reconciliation
+
+Library provides a manual Lidarr comparison using authenticated GET requests for imported files per artist and unmapped files. Compare deduplicated, exactly mapped relative paths against the current source index. Keep cover files, track listings and output counts separate. Count other source roots separately and explain unsupported, unindexed, expired, unimported, unmapped and failed files without treating an absent index entry as proof of a missing disk file.
+
+One background comparison runs at a time; API calls return immediately and polling reads in-memory progress. Each remote request times out after 20 seconds; a comparison is limited to 10 minutes. Do not redirect API keys or accept partial lists as complete. Comparison does not read audio, reserve conversion capacity or create persistent jobs. Selected difference directories use the existing coalesced scan queue. It never writes to Lidarr or automatically deletes sources/artifacts. Results are snapshots cleared on restart.
+
+The optional `meta` key `lidarr:connection` holds JSON `url`/`api_key`. A blank key preserves the key for the same URL; changing the URL requires a new key; clearing the URL clears both. Responses expose only the URL and whether a key is configured. Require administrator authentication and CSRF for writes. Older versions retain this optional key. Settings, schema 2, job arguments, recovery journals and artifact formats remain unchanged; rollback CI checks connection retention through older writers.
+
 ## Navidrome integration
 
 - The corresponding Navidrome library root is MusicForge's output root with identical album-relative paths.

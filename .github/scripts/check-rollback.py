@@ -20,6 +20,7 @@ NAME = "musicforge-rollback"
 CANDIDATE = "musicforge:validation"
 PASSWORD = "ci-rollback-password"
 LEGACY = {
+    "v0.2.16": "sha256:8d29e7f8e589786eb9ac2c6e0e3b40c43b4fbc8aac4c122ab82f70c40dc20ce7",
     "v0.2.15": "sha256:630410106ee4ac8177030e9342ca4533d7e633f59190aa627078fb06b2326842",
     "v0.2.14": "sha256:85cfdf9d9d471b89ade90b965e2831075f6f318a9ee49c8e536734ff01dc6815",
     "v0.2.13": "sha256:e351e2de6da05db882e498f089fff061c593145f07d21e2b98ffc814c692d162",
@@ -193,6 +194,7 @@ def main():
         tracks = sorted((library_record(track) for track in tracks), key=lambda track: track["id"])
         wait_for(lambda: api("/api/jobs")["jobs"], lambda rows: all(row["state"] == "success" for row in rows), "completed conversion jobs")
         values = api("/api/settings")["settings"]
+        api("/api/lidarr/connection", "PUT", {"url": "http://lidarr.example.test:8686", "api_key": "ci-only-lidarr-key"})
         values.update(enabled=False, nav_url="https://navidrome.example.test", nav_user="admin", nav_password="ci-nav-secret",
                       oidc_issuer="https://issuer.example.test", oidc_client_id="client", oidc_secret="ci-oidc-secret")
         save_settings(api, values)

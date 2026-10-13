@@ -1320,7 +1320,7 @@ func (a *App) encodeMediaAttempt(ctx context.Context, id int64, duration float64
 		case <-encodeCtx.Done():
 			_ = cmd.Process.Kill()
 			if repair != nil {
-				// Finish both children before deleting a cancelled preview's files.
+				// Finish both children before deleting cancelled repair scratch files.
 				<-done
 			}
 			if ctx.Err() != nil {

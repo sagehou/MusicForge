@@ -331,29 +331,29 @@ func validRelativePath(rel string) error {
 }
 
 type Source struct {
-	ID            int64             `json:"id"`
-	Rel           string            `json:"path"`
-	Hash          string            `json:"hash"`
-	Size          int64             `json:"size"`
-	Mtime         int64             `json:"mtime"`
-	Artist        string            `json:"artist"`
-	Album         string            `json:"album"`
-	Title         string            `json:"title"`
-	Track         int               `json:"track"`
-	Disc          int               `json:"disc"`
-	Duration      float64           `json:"duration"`
-	Metadata      map[string]string `json:"metadata"`
-	Present       bool              `json:"present"`
-	Output        string            `json:"output"`
-	BuiltHash     string            `json:"built_hash"`
-	BuiltProfile  string            `json:"built_profile"`
-	OutputPresent bool              `json:"output_present"`
-	Error         string            `json:"error"`
-	Status        string            `json:"status"`
-	ArtworkURL    string            `json:"artwork_url,omitempty"`
-	CanRepair     bool              `json:"can_repair,omitempty"`
-	Repair        *RepairStatus     `json:"repair,omitempty"`
-	PossiblyDamaged bool            `json:"possibly_damaged,omitempty"`
+	ID              int64             `json:"id"`
+	Rel             string            `json:"path"`
+	Hash            string            `json:"hash"`
+	Size            int64             `json:"size"`
+	Mtime           int64             `json:"mtime"`
+	Artist          string            `json:"artist"`
+	Album           string            `json:"album"`
+	Title           string            `json:"title"`
+	Track           int               `json:"track"`
+	Disc            int               `json:"disc"`
+	Duration        float64           `json:"duration"`
+	Metadata        map[string]string `json:"metadata"`
+	Present         bool              `json:"present"`
+	Output          string            `json:"output"`
+	BuiltHash       string            `json:"built_hash"`
+	BuiltProfile    string            `json:"built_profile"`
+	OutputPresent   bool              `json:"output_present"`
+	Error           string            `json:"error"`
+	Status          string            `json:"status"`
+	ArtworkURL      string            `json:"artwork_url,omitempty"`
+	CanRepair       bool              `json:"can_repair,omitempty"`
+	Repair          *RepairStatus     `json:"repair,omitempty"`
+	PossiblyDamaged bool              `json:"possibly_damaged,omitempty"`
 }
 
 type Job struct {

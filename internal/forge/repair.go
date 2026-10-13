@@ -434,7 +434,9 @@ func (a *App) requestRepair(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	var body struct { Hash string `json:"hash"` }
+	var body struct {
+		Hash string `json:"hash"`
+	}
 	if !decode(w, r, &body) {
 		return
 	}
@@ -487,8 +489,8 @@ func (a *App) deleteRepair(w http.ResponseWriter, r *http.Request) {
 // Only in-flight operations are transient. Imported warnings live in optional
 // artifact annotations, not Settings, job arguments or promotion journals.
 type repairState struct {
-	repairMu  sync.Mutex
-	repairWG  sync.WaitGroup
-	repairs   map[int64]*repairEntry
+	repairMu      sync.Mutex
+	repairWG      sync.WaitGroup
+	repairs       map[int64]*repairEntry
 	repairRunning bool
 }

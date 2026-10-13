@@ -194,8 +194,10 @@ and restarts. Recovery diagnostics retain the original strict failure.
 Confirmation names audio risks, normal import and preserved originals/outputs.
 Running operations expose cancel; imported artifacts have no disposable-preview
 download or removal controls. Strict rebuild success clears the warning, not a
-UI dismissal. Controls wrap inside the existing artifact column, retain mobile
-touch targets, and use neighboring bilingual labels and theme tokens.
+UI dismissal. Controls wrap inside the existing artifact column, while repair
+diagnostics expand across the full track table below their track rather than
+wrapping hashes inside the narrow status column. Both retain mobile touch
+targets and use neighboring bilingual labels and theme tokens.
 
 The focal motion carries the clicked album cover into its detail header with a
 320ms native View Transition. It is progressively enhanced, never required for

@@ -72,11 +72,15 @@ test("best-effort repair requires consent and imports normal audio with a persis
   await page.getByRole("combobox", { name: "外观", exact: true }).selectOption("dark");
   await page.setViewportSize({ width: 390, height: 844 });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
-  await page.screenshot({ path: "test-results/repair-import-390-dark-zh.png", fullPage: true });
+  expect(await page.locator(".repair-diagnostic").evaluate(element => element.getBoundingClientRect().width / element.closest("table")!.getBoundingClientRect().width)).toBeGreaterThan(0.8);
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await page.screenshot({ path: "test-results/repair-import-390-dark-zh.png", fullPage: true, animations: "disabled" });
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.getByRole("combobox", { name: "语言", exact: true }).selectOption("en");
   await page.getByRole("combobox", { name: "Appearance", exact: true }).selectOption("light");
-  await page.screenshot({ path: "test-results/repair-import-1440-light.png", fullPage: true });
+  expect(await page.locator(".repair-diagnostic").evaluate(element => element.getBoundingClientRect().width / element.closest("table")!.getBoundingClientRect().width)).toBeGreaterThan(0.8);
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await page.screenshot({ path: "test-results/repair-import-1440-light.png", fullPage: true, animations: "disabled" });
   await page.locator(".library-options-body select").first().selectOption("possibly_damaged");
   await expect(page.locator(".badge-possibly_damaged")).toBeVisible();
   await page.reload();

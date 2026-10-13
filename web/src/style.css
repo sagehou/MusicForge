@@ -346,6 +346,12 @@ summary { font-size: 12px; color: var(--danger); cursor: pointer; margin-top: 6p
 .track-table th:nth-child(2) { width: 42%; }
 .track-table th.track-duration { width: 64px; }
 .track-table th:last-child { width: 140px; }
+.repair-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 10px; min-width: 0; }
+.repair-controls .ui-button { max-width: 100%; height: auto; min-height: 32px; white-space: normal; overflow-wrap: anywhere; }
+.repair-controls small, .repair-diagnostic { flex-basis: 100%; min-width: 0; }
+.repair-warning, .repair-progress { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; line-height: 1.5; color: var(--warning); }
+.repair-warning svg, .repair-progress svg { flex-shrink: 0; }
+.repair-diagnostic pre { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 240px; overflow: auto; }
 .track-duration { color: var(--muted); font-variant-numeric: tabular-nums; }
 .disc-heading th { padding: 14px; width: auto !important; color: var(--ink); }
 .disc-heading svg { display: inline-block; vertical-align: middle; margin-right: 8px; }
@@ -451,6 +457,7 @@ summary { font-size: 12px; color: var(--danger); cursor: pointer; margin-top: 6p
   .track-cell { gap: 5px; }
   .track-number { width: 20px; }
   .track-table td .badge { font-size: 11px; }
+  .repair-controls .ui-button { min-height: 44px; }
 }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }

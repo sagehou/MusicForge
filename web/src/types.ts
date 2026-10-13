@@ -5,7 +5,8 @@ export type Settings = {
   oidc_issuer: string; oidc_client_id: string; oidc_secret?: string; bound_issuer?: string; bound_subject?: string;
   bound_username?: string; bound_email?: string;
 };
-export type Source = { id: number; path: string; artist: string; album: string; title: string; track: number; disc: number; duration?: number; artwork_url?: string; present: boolean; output: string; output_present: boolean; status: string; error: string; size: number; metadata: Record<string, string> };
+export type RepairPreview = { state: "running" | "ready" | "failed"; filename?: string; download_url?: string; decoded_samples?: number; declared_samples?: number; pcm_verified: boolean; duration?: number; diagnostics?: string };
+export type Source = { id: number; path: string; hash?: string; artist: string; album: string; title: string; track: number; disc: number; duration?: number; artwork_url?: string; present: boolean; output: string; output_present: boolean; status: string; error: string; size: number; metadata: Record<string, string>; can_repair?: boolean; repair?: RepairPreview };
 export type Activity = { phase: string; path: string; artist: string; album: string; title: string; processed: number; total: number; percent: number; read_bytes?: number; read_total_bytes?: number };
 export type Job = { id: number; kind: string; state: string; attempts: number; progress: number; log?: string; waiting_reason?: string; retry_at?: number; created: number; updated: number; args: { id?: number; dirs?: string[]; verify?: boolean }; counts: { total: number; done: number; failed: number; pending: number; running: number; cancelled: number }; scan?: Activity; current: Activity[]; scope: string[]; profile?: Encoding; can_delete: boolean };
 export type TaskItem = Pick<Job, "id" | "kind" | "state" | "attempts" | "progress" | "log" | "updated" | "profile"> & { activity: Activity; output: string; failure?: "read" | "decode" | "encode" | "validate" };

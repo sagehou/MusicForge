@@ -6,6 +6,7 @@ import { useI18n, type MessageKey } from "../i18n";
 import type { Source } from "../types";
 import { Badge, Empty, Loading, ResourceWarning, useResource, type Notice } from "./resource";
 import { Button } from "./ui/button";
+import { RepairControls } from "./repair";
 
 type Scope = { view: "artists" | "albums"; artist?: string; album?: string };
 type Identity = { artistKey: string; albumKey: string; artist: string; album: string };
@@ -238,6 +239,7 @@ export function Library({ notify }: { notify: Notice }) {
               <div><button className="library-open" title={group.name} onClick={event => open(event.currentTarget)}><strong>{group.name}</strong></button>
                 <small>{showingArtists ? t("library.albumCount", { count: group.albums.size }) : group.artist}</small>
                 <small>{t("library.groupCounts", { ready, total: group.tracks.length })}</small>
+                {group.tracks.some(source => source.repair?.state === "ready") && <small className="repair-warning">{t("repair.damaged")}</small>}
               </div>
               <Badge status={state} />
             </div>
@@ -252,7 +254,7 @@ export function Library({ notify }: { notify: Notice }) {
             </div></div></td>
             <td className="track-artist"><strong>{source.artist || t("library.unknownArtist")}</strong><small>{source.album || t("library.unknownAlbum")}</small></td>
             <td className="track-duration">{duration(source.duration || 0)}</td>
-            <td><Badge status={source.status} />{source.output_present && source.status !== "ready" && <small>{t("library.stillPlayable")}</small>}{source.error && <details><summary>{t("library.errorDetails")}</summary><pre>{source.error}</pre></details>}</td>
+            <td><Badge status={source.status} />{source.output_present && source.status !== "ready" && <small>{t("library.stillPlayable")}</small>}<RepairControls source={source} notify={notify} refresh={retry} />{source.error && <details><summary>{t("library.errorDetails")}</summary><pre>{source.error}</pre></details>}</td>
           </tr></Fragment>;
         })}</tbody></table></div>}
         <div className="pagination"><span>{t(isAlbum ? "library.pagination" : "library.groupPagination", { start: safeOffset + 1, end: Math.min(safeOffset + 50, count), total: count })}</span>

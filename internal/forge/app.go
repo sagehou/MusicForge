@@ -20,6 +20,7 @@ import (
 )
 
 type App struct {
+	repairState
 	cfg       Runtime
 	db        *sql.DB
 	reads     *sql.DB
@@ -106,6 +107,9 @@ func New(cfg Runtime, logger *slog.Logger, version string, assets fs.FS) (*App, 
 	if err = a.initializeStaging(); err != nil {
 		return fail(err)
 	}
+	if err = a.initializeRepairs(); err != nil {
+		return fail(err)
+	}
 	if _, err = a.settings(); err == sql.ErrNoRows {
 		err = a.saveSettings(DefaultSettings())
 	}
@@ -141,8 +145,11 @@ func New(cfg Runtime, logger *slog.Logger, version string, assets fs.FS) (*App, 
 }
 func (a *App) Close() {
 	if a.ioCancel != nil {
+		a.repairMu.Lock()
 		a.ioCancel()
+		a.repairMu.Unlock()
 	}
+	a.repairWG.Wait()
 	if a.db != nil {
 		if a.reads != nil {
 			a.reads.Close()
@@ -245,7 +252,7 @@ func (a *App) worker(ctx context.Context, conversion bool, slot int) {
 			continue
 		}
 		a.jobsMu.Lock()
-		j, err := a.claim(conversion)
+		j, err := a.claimWithRepairCapacity(conversion, s.Concurrency)
 		jobCtx, cancel := context.WithCancel(ctx)
 		if err == nil {
 			a.activeJobs[j.ID] = cancel

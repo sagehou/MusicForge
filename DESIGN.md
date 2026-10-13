@@ -186,6 +186,15 @@ errors do not remove the page. Technical diagnostics remain available.
 Error toasts remain until dismissed rather than timing out; success toasts
 expire after six seconds. Both retain an explicit dismiss control.
 
+Failed native FLAC tracks offer an individually confirmed best-effort repair
+preview in the album track table. Recovery is isolated from published artifacts:
+the original failed badge remains, while an amber icon and explicit "Possibly
+damaged" label identify the downloadable preview. Running previews expose cancel;
+completed previews expose download, diagnostics and removal. Confirmation names
+audio risks, unchanged originals and outputs, and restart cleanup. Controls wrap
+inside the existing artifact column, retain mobile touch targets, and use the
+same bilingual labels and theme tokens as neighboring actions.
+
 The focal motion carries the clicked album cover into its detail header with a
 320ms native View Transition. It is progressively enhanced, never required for
 navigation, and not replayed for polling, search or sorting. Supporting feedback

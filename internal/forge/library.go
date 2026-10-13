@@ -1127,6 +1127,10 @@ func (a *App) encode(ctx context.Context, id int64, duration float64, activity A
 }
 
 func (a *App) encodeMedia(ctx context.Context, id int64, duration float64, activity Activity, args []string, referenceInput string, pcm *flacPCM) error {
+	return a.encodeMediaAttempt(ctx, id, duration, activity, args, referenceInput, pcm, nil)
+}
+
+func (a *App) encodeMediaAttempt(ctx context.Context, id int64, duration float64, activity Activity, args []string, referenceInput string, pcm *flacPCM, repair *repairPCM) error {
 	encodeCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	stalled := time.AfterFunc(a.sourceTimeout(), cancel)
@@ -1198,7 +1202,12 @@ func (a *App) encodeMedia(ctx context.Context, id int64, duration float64, activ
 		} else {
 			pcmDone = make(chan error, 1)
 			go func() {
-				err := pcm.copyVerified(writer, decoded)
+				var err error
+				if repair == nil {
+					err = pcm.copyVerified(writer, decoded)
+				} else {
+					err = pcm.copyRepairPCM(writer, decoded, repair)
+				}
 				_ = writer.Close()
 				_ = decoded.Close()
 				if err != nil {
@@ -1251,12 +1260,16 @@ func (a *App) encodeMedia(ctx context.Context, id int64, duration float64, activ
 				done <- fmt.Errorf("reference FLAC PCM verification failed: %w\n%s\nffmpeg: %v\n%s", pcmErr, referenceLog.String(), encodeErr, stderr.String())
 				return
 			}
-			if decodeErr != nil {
+			if decodeErr != nil && !(repair != nil && repair.Bytes > 0 && repairDecoderExit(decodeErr)) {
 				done <- fmt.Errorf("reference FLAC decoder failed: %w\n%s\nffmpeg: %v\n%s", decodeErr, referenceLog.String(), encodeErr, stderr.String())
 				return
 			}
 			if pcm != nil {
-				a.logger.Info("reference FLAC PCM verified", "task", a.taskID(id), "job", id, "path", activity.Path, "samples", pcm.Samples, "pcm_bytes", pcm.byteCount(), "pcm_md5", fmt.Sprintf("%x", pcm.MD5), "decoder_warnings", referenceLog.String())
+				if repair != nil {
+					repair.Log += "\n" + referenceLog.String()
+				} else {
+					a.logger.Info("reference FLAC PCM verified", "task", a.taskID(id), "job", id, "path", activity.Path, "samples", pcm.Samples, "pcm_bytes", pcm.byteCount(), "pcm_md5", fmt.Sprintf("%x", pcm.MD5), "decoder_warnings", referenceLog.String())
+				}
 			}
 		}
 		if encodeErr != nil {
@@ -1294,6 +1307,10 @@ func (a *App) encodeMedia(ctx context.Context, id int64, duration float64, activ
 			return err
 		case <-encodeCtx.Done():
 			_ = cmd.Process.Kill()
+			if repair != nil {
+				// Finish both children before deleting a cancelled preview's files.
+				<-done
+			}
 			if ctx.Err() != nil {
 				return ctx.Err()
 			}

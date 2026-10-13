@@ -104,6 +104,9 @@ func (a *App) Handler() http.Handler {
 	mux.HandleFunc("GET /api/dashboard", a.auth(a.dashboard))
 	mux.HandleFunc("GET /api/library", a.auth(a.library))
 	mux.HandleFunc("GET /api/library/{id}/artwork", a.auth(a.libraryArtwork))
+	mux.HandleFunc("POST /api/library/{id}/repair", a.auth(a.requestRepair))
+	mux.HandleFunc("DELETE /api/library/{id}/repair", a.auth(a.deleteRepair))
+	mux.HandleFunc("GET /api/library/{id}/repair/download", a.auth(a.downloadRepair))
 	mux.HandleFunc("GET /api/jobs", a.auth(a.jobs))
 	mux.HandleFunc("POST /api/jobs/retry", a.auth(a.retry))
 	mux.HandleFunc("POST /api/jobs/control", a.auth(a.controlJobs))
@@ -206,6 +209,8 @@ func (a *App) sourcesWithStatusContext(ctx context.Context) ([]Source, error) {
 	}
 	for i := range list {
 		source := &list[i]
+		source.CanRepair = canRepair(*source)
+		source.Repair = a.repairSnapshot(*source)
 		switch {
 		case !source.Present:
 			source.Status = "expired"

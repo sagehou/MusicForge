@@ -517,5 +517,19 @@
   "compare.kind.possibly_damaged": "Imported with a damage warning",
   "compare.help.possibly_damaged": "The output was imported by best-effort repair. It counts as an output but remains marked possibly damaged.",
   "compare.kind.no_output": "Indexed, no output yet",
-  "compare.help.no_output": "Both applications list the source. Check its verification or conversion queue in MusicForge."
+  "compare.help.no_output": "Both applications list the source. Check its verification or conversion queue in MusicForge.",
+  "compare.kind.outside_scope": "Outside the configured source scope",
+  "compare.help.outside_scope": "This Lidarr path does not map to the configured source root. It is excluded from the comparable Lidarr count. Check other Lidarr root folders and the path prefix in MusicForge Settings.",
+  "error.lidarrURL": "Invalid Lidarr URL; use HTTP(S) without credentials, query or fragment",
+  "error.lidarrKey": "Invalid Lidarr API key",
+  "error.lidarrRunning": "Lidarr comparison is running",
+  "error.lidarrNewKey": "Enter the Lidarr API key when configuring or changing the URL",
+  "error.lidarrConfigure": "Configure the Lidarr connection first",
+  "error.lidarrTimeout": "Lidarr comparison timed out or was cancelled",
+  "error.lidarrRequest": "Lidarr request failed; check the URL, connection and TLS certificate",
+  "error.lidarrList": "Lidarr returned an invalid or oversized file list; comparison incomplete",
+  "error.lidarrArtist": "Lidarr returned an invalid artist ID; comparison incomplete",
+  "error.lidarrLimit": "Lidarr comparison supports up to 200000 file records",
+  "error.lidarrPathsChanged": "Library paths changed; run the comparison again",
+  "error.lidarrFilePath": "Lidarr returned a missing or non-absolute file path; comparison incomplete"
 }

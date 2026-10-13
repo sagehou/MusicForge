@@ -27,11 +27,11 @@ type lidarrConnection struct {
 }
 
 type lidarrDifference struct {
-	Path       string `json:"path"`
-	Kind       string `json:"kind"`
-	SourceID   int64  `json:"source_id,omitempty"`
-	Error      string `json:"error,omitempty"`
-	ScanDir    string `json:"scan_dir,omitempty"`
+	Path     string `json:"path"`
+	Kind     string `json:"kind"`
+	SourceID int64  `json:"source_id,omitempty"`
+	Error    string `json:"error,omitempty"`
+	ScanDir  string `json:"scan_dir,omitempty"`
 }
 
 type lidarrReport struct {
@@ -223,7 +223,9 @@ func lidarrGET(ctx context.Context, client *http.Client, c lidarrConnection, end
 
 func (a *App) compareLidarr(ctx context.Context, c lidarrConnection, s Settings, progress func(int, int)) (lidarrReport, error) {
 	client := &http.Client{Timeout: 20 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
-	var artists []struct { ID int64 `json:"id"` }
+	var artists []struct {
+		ID int64 `json:"id"`
+	}
 	var files, unmapped []lidarrFile
 	if err := lidarrGET(ctx, client, c, "artist", &artists); err != nil {
 		return lidarrReport{}, err
@@ -282,6 +284,9 @@ func compareLidarrFiles(s Settings, sources []Source, files, unmapped []lidarrFi
 		}
 	}
 	r.LidarrCount, r.Unmapped, r.OutsideScope = len(imported), len(unassigned), len(outside)
+	for path := range outside {
+		r.Differences = append(r.Differences, lidarrDifference{Path: path, Kind: "outside_scope"})
+	}
 	indexed := make(map[string]Source, len(sources))
 	for _, source := range sources {
 		indexed[source.Rel] = source

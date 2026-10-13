@@ -6,7 +6,7 @@ import type { Source } from "../types";
 import { Button } from "./ui/button";
 import { Loading, ResourceWarning, useResource, type Notice } from "./resource";
 
-type DifferenceKind = "not_indexed" | "expired" | "unsupported" | "not_in_lidarr" | "unmapped" | "failed" | "possibly_damaged" | "no_output";
+type DifferenceKind = "not_indexed" | "expired" | "unsupported" | "not_in_lidarr" | "unmapped" | "failed" | "possibly_damaged" | "no_output" | "outside_scope";
 type Difference = { path: string; kind: DifferenceKind; source_id?: number; error?: string; scan_dir?: string };
 type Report = {
   state: "idle" | "running" | "failed" | "complete"; error?: string; started: number; finished: number; processed: number; total: number;
@@ -30,9 +30,10 @@ export function LibraryComparison({ sources, notify }: { sources: Source[]; noti
 }
 
 function LidarrComparison({ notify }: { notify: Notice }) {
-  const { t, number, date } = useI18n();
+  const { t, number, date, errorMessage } = useI18n();
   const connection = useResource<{ url: string; key_configured: boolean }>("/lidarr/connection");
-  const report = useResource<Report>("/lidarr/check", true);
+  const [poll, setPoll] = useState(false);
+  const report = useResource<Report>("/lidarr/check", poll);
   const [url, setURL] = useState("");
   const [key, setKey] = useState("");
   const [busy, setBusy] = useState(false);
@@ -41,6 +42,7 @@ function LidarrComparison({ notify }: { notify: Notice }) {
   const [page, setPage] = useState(0);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   useEffect(() => { if (connection.data) setURL(connection.data.url); }, [connection.data]);
+  useEffect(() => { setPoll(report.data?.state === "running"); }, [report.data?.state]);
   useEffect(() => { setSelected(new Set()); setPage(0); }, [report.data?.started]);
   const running = report.data?.state === "running";
   const dirty = url.replace(/\/+$/, "") !== connection.data?.url || key !== "";
@@ -54,6 +56,7 @@ function LidarrComparison({ notify }: { notify: Notice }) {
   }
   async function start() {
     setBusy(true);
+    setSelected(new Set()); setPage(0);
     try { await api("/lidarr/check", "POST", {}); report.retry(); }
     catch (err) { notify(err as Error, true); }
     finally { setBusy(false); }
@@ -92,7 +95,7 @@ function LidarrComparison({ notify }: { notify: Notice }) {
       {running && <span role="status">{t("compare.progress", { done: number(data?.processed || 0), total: number(data?.total || 0) })}</span>}
     </div>
     <ResourceWarning error={report.error} retry={report.retry} />
-    {data?.state === "failed" && <div className="error-box" role="alert"><strong>{t("compare.failed")}</strong><p>{data.error}</p></div>}
+    {data?.state === "failed" && <div className="error-box" role="alert"><strong>{t("compare.failed")}</strong><p>{errorMessage(data.error || "")}</p></div>}
     {data?.state === "complete" && <>
       <p>{t("compare.snapshot", { time: date(data.finished) })}</p>
       <p className="comparison-paths"><code>{data.prefix || data.source}</code><span aria-hidden="true"> → </span><code>{data.source}</code></p>
@@ -104,7 +107,7 @@ function LidarrComparison({ notify }: { notify: Notice }) {
       <p>{t("compare.snapshotHint")}</p>
       <div className="comparison-filters">
         <label className="field"><span>{t("compare.search")}</span><input value={query} onChange={event => { setQuery(event.target.value); setPage(0); }} /></label>
-        <label className="field"><span>{t("compare.filter")}</span><select value={filter} onChange={event => { setFilter(event.target.value); setPage(0); }}><option value="all">{t("library.allStatuses")}</option>{(["not_indexed", "expired", "unsupported", "not_in_lidarr", "unmapped", "failed", "possibly_damaged", "no_output"] as const).map(kind => <option key={kind} value={kind}>{t(`compare.kind.${kind}`)}</option>)}</select></label>
+        <label className="field"><span>{t("compare.filter")}</span><select aria-label={t("compare.filter")} value={filter} onChange={event => { setFilter(event.target.value); setPage(0); }}><option value="all">{t("library.allStatuses")}</option>{(["not_indexed", "expired", "unsupported", "not_in_lidarr", "unmapped", "failed", "possibly_damaged", "no_output", "outside_scope"] as const).map(kind => <option key={kind} value={kind}>{t(`compare.kind.${kind}`)}</option>)}</select></label>
       </div>
       <div className="actions"><label className="check-field"><input type="checkbox" checked={selectable.length > 0 && selectable.every(path => selected.has(path))} disabled={!selectable.length || busy} onChange={event => toggle(selectable, event.target.checked)} />{t("compare.selectPage")}</label>
         <Button variant="outline" disabled={busy || !selected.size} onClick={() => void scan()}>{t("compare.scan", { count: number(selected.size) })}</Button>

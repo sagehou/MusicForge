@@ -484,5 +484,19 @@
   "compare.kind.possibly_damaged": "已导入，存在损坏警示",
   "compare.help.possibly_damaged": "输出由尽力修复导入，计入输出文件数，并保留“可能损坏”标记。",
   "compare.kind.no_output": "已索引，尚无输出",
-  "compare.help.no_output": "双方都记录了源文件，请在 MusicForge 中检查校验或转换队列。"
+  "compare.help.no_output": "双方都记录了源文件，请在 MusicForge 中检查校验或转换队列。",
+  "compare.kind.outside_scope": "不在当前源目录范围内",
+  "compare.help.outside_scope": "此 Lidarr 路径无法映射到当前源根目录，不计入可比较的 Lidarr 文件数。请检查 Lidarr 的其他根目录，以及 MusicForge 设置中的路径前缀。",
+  "error.lidarrURL": "Lidarr 地址无效，请使用 HTTP(S)，不要包含登录信息、查询参数或片段。",
+  "error.lidarrKey": "Lidarr API Key 无效。",
+  "error.lidarrRunning": "Lidarr 核对正在运行。",
+  "error.lidarrNewKey": "首次配置或更改地址时，请重新填写 Lidarr API Key。",
+  "error.lidarrConfigure": "请先配置 Lidarr 连接。",
+  "error.lidarrTimeout": "Lidarr 核对超时或已取消。",
+  "error.lidarrRequest": "Lidarr 请求失败，请检查地址、网络连接和 TLS 证书。",
+  "error.lidarrList": "Lidarr 返回的文件清单无效或过大，核对未完成。",
+  "error.lidarrArtist": "Lidarr 返回的歌手 ID 无效，核对未完成。",
+  "error.lidarrLimit": "Lidarr 核对最多支持 200000 条文件记录。",
+  "error.lidarrPathsChanged": "媒体库路径已变化，请重新核对。",
+  "error.lidarrFilePath": "Lidarr 返回的文件路径缺失或不是绝对路径，核对未完成。"
 }

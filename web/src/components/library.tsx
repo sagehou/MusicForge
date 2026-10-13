@@ -65,6 +65,8 @@ export function Library({ notify }: { notify: Notice }) {
   const transition = useRef<ViewTransition | null>(null);
   const navigation = useRef(0);
   const [compact, setCompact] = useState(() => matchMedia("(max-width: 800px)").matches);
+  const [phone, setPhone] = useState(() => matchMedia("(max-width: 600px)").matches);
+  const trackColumns = phone ? 3 : compact ? 4 : 5;
   const [optionsOpen, setOptionsOpen] = useState(false);
   const [sort, setSort] = useState("name");
   const [selected, setSelected] = useState<Set<number>>(new Set());
@@ -79,9 +81,11 @@ export function Library({ notify }: { notify: Notice }) {
   useEffect(() => () => transition.current?.skipTransition(), []);
   useEffect(() => {
     const media = matchMedia("(max-width: 800px)");
-    const change = () => { setCompact(media.matches); setOptionsOpen(false); };
+    const small = matchMedia("(max-width: 600px)");
+    const change = () => { setCompact(media.matches); setPhone(small.matches); setOptionsOpen(false); };
     media.addEventListener("change", change);
-    return () => media.removeEventListener("change", change);
+    small.addEventListener("change", change);
+    return () => { media.removeEventListener("change", change); small.removeEventListener("change", change); };
   }, []);
   useEffect(() => {
     const frame = requestAnimationFrame(() => document.getElementById("library-title")?.focus());
@@ -247,7 +251,7 @@ export function Library({ notify }: { notify: Notice }) {
         })}</div> : <div className="table-scroll"><table className="track-table"><thead><tr><th aria-label={t("library.selectedTracks")} /><th>{t("library.trackFile")}</th><th className="track-artist">{t("library.artistAlbum")}</th><th className="track-duration"><Clock3 size={15} aria-label={t("library.duration")} /></th><th>{t("library.artifact")}</th></tr></thead><tbody>{shown.map((source, index) => {
           const disc = source.disc || 1;
           const heading = discs.size > 1 && (index === 0 || disc !== (shown[index - 1].disc || 1));
-          return <Fragment key={source.id}>{heading && <tr className="disc-heading"><th colSpan={5} scope="rowgroup"><Disc3 size={15} />{t("library.disc", { number: disc })}</th></tr>}<tr className={selected.has(source.id) ? "selected" : ""}>
+          return <Fragment key={source.id}>{heading && <tr className="disc-heading"><th colSpan={trackColumns} scope="rowgroup"><Disc3 size={15} />{t("library.disc", { number: disc })}</th></tr>}<tr className={selected.has(source.id) ? "selected" : ""}>
             <td><input type="checkbox" aria-label={t("library.selectTrack", { title: source.title || source.path })} checked={selected.has(source.id)} disabled={busy} onChange={event => toggle([source.id], event.target.checked)} /></td>
             <td><div className="track-cell"><span className="track-number">{source.track || <Music2 size={15} />}</span><div><strong>{source.title || source.path.split("/").pop()}</strong><small className={source.present ? "source-present" : "source-missing"}>{source.present ? t("library.sourceOnline", { format: source.path.split(".").pop()?.toUpperCase() || "--" }) : t("library.sourceDeleted")}</small>
               <details className="track-file"><summary>{t("library.fileDetails")}</summary><dl><dt>{t("library.source")}</dt><dd>{source.path}</dd>{source.output && <><dt>{t("library.artifact")}</dt><dd>{source.output}</dd></>}</dl></details>
@@ -255,7 +259,7 @@ export function Library({ notify }: { notify: Notice }) {
             <td className="track-artist"><strong>{source.artist || t("library.unknownArtist")}</strong><small>{source.album || t("library.unknownAlbum")}</small></td>
             <td className="track-duration">{duration(source.duration || 0)}</td>
             <td><Badge status={source.status} />{source.output_present && source.status !== "ready" && source.status !== "possibly_damaged" && <small>{t("library.stillPlayable")}</small>}<RepairControls source={source} notify={notify} refresh={retry} />{source.error && <details><summary>{t("library.errorDetails")}</summary><pre>{source.error}</pre></details>}</td>
-          </tr>{(source.possibly_damaged || source.repair?.diagnostics) && <tr className="repair-detail-row"><td colSpan={5}><RepairDiagnostics source={source} /></td></tr>}</Fragment>;
+          </tr>{(source.possibly_damaged || source.repair?.diagnostics) && <tr className="repair-detail-row"><td colSpan={trackColumns}><RepairDiagnostics source={source} /></td></tr>}</Fragment>;
         })}</tbody></table></div>}
         <div className="pagination"><span>{t(isAlbum ? "library.pagination" : "library.groupPagination", { start: safeOffset + 1, end: Math.min(safeOffset + 50, count), total: count })}</span>
           <Button variant="ghost" size="icon" aria-label={t("library.previous")} title={t("library.previous")} disabled={safeOffset === 0} onClick={() => setOffset(Math.max(0, safeOffset - 50))}><ChevronLeft size={16} /></Button>

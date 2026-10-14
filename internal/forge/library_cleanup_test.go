@@ -28,7 +28,11 @@ func TestForgetMissingRecordsPreservesFilesOwnershipWorkAndHistory(t *testing.T)
 			t.Fatal(err)
 		}
 	}
-	jobs := []struct{ kind, key string; args any; source int64 }{
+	jobs := []struct {
+		kind, key string
+		args      any
+		source    int64
+	}{
 		{"convert", "convert:5", BuildRequest{ID: 5}, 5},
 		{"move", "move:6", BuildRequest{ID: 6}, 6},
 		{"scan", "scan:prepare:7", ScanRequest{Dirs: []string{"Artist/Album/7.flac"}, Verify: true}, 7},
@@ -80,8 +84,12 @@ func TestForgetMissingRecordsPreservesFilesOwnershipWorkAndHistory(t *testing.T)
 	send := func(body selection, auth, csrf bool) *httptest.ResponseRecorder {
 		raw, _ := json.Marshal(body)
 		r := httptest.NewRequest("POST", "/api/library/forget", bytes.NewReader(raw))
-		if auth { r.AddCookie(cookie) }
-		if csrf { r.Header.Set("X-CSRF-Token", digest(cookie.Value+":csrf")) }
+		if auth {
+			r.AddCookie(cookie)
+		}
+		if csrf {
+			r.Header.Set("X-CSRF-Token", digest(cookie.Value+":csrf"))
+		}
 		w := httptest.NewRecorder()
 		a.Handler().ServeHTTP(w, r)
 		return w

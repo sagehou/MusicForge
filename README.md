@@ -104,6 +104,8 @@ Navigation, forms, statuses, confirmations, notifications, common API errors, da
 | Jobs | Queue progress, page/filter selection, bulk pause/resume/stop/retry and history cleanup |
 | Settings | Paths, encoding, scans, concurrency, integrations, OIDC and password |
 
+The desktop sidebar can collapse to icons with the top-left toggle and remembers the choice in the browser. Overview shows actual profile completion in a circular meter, encoding settings and recent jobs. Compact task cards use state colors, live track details and progress bars; mobile navigation and reduced-motion preferences remain supported.
+
 ## Incremental builds and file lifecycle
 
 Settings are grouped into Library, Encoding, Integrations, and Account & security. Drafts stay intact when switching sections or language; Save settings applies the whole form, and Discard changes restores saved values. The Library page keeps its last snapshot in memory while revalidating, uses compressed responses, and skips transferring unchanged data. Signing out clears that snapshot. The Lidarr file-count comparison is at the top of Library.
@@ -126,6 +128,8 @@ Source scratch files live in `/config/source-staging`, shared by all workers. `M
 Sources must stay unchanged for 30 seconds before conversion. Changes during encoding discard the temporary output and trigger a re-scan without consuming a failed attempt. Replacements must pass codec, duration, stream and full decoding checks before publication. Failure preserves playable output.
 
 Expired artifacts remain in the output and Navidrome until explicit deletion. **Delete all expired** and **Delete selected expired artifacts** schedule deletion and a playback-library refresh. Unregistered files are never overwritten or deleted; path conflicts fail visibly.
+
+After scanning establishes that a source is missing, **Remove record**, **Remove selected records** and **Remove missing records** can clear index entries with no artifacts. Clean retained artifacts first using the deletion workflow above. Record removal only changes the library index, preserves files and task history, and skips active or paused work, registered ownership and recovery journals. It also works with offline mounts; scanning rediscovers a restored source.
 
 Tags and ReplayGain are preserved. Each album gets one external `cover.jpg`, using source external artwork first, then an embedded cover in disc/track order. External artwork changes update the cover independently of audio encoding.
 

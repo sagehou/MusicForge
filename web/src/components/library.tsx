@@ -187,12 +187,23 @@ export function Library({ notify }: { notify: Notice }) {
   const chosen = data.filter(source => selected.has(source.id));
   const selectedExpired = chosen.filter(source => !source.present && source.output).length;
   const expired = data.filter(source => !source.present && source.output).length;
+  const removable = data.filter(source => !source.present && !source.output && !source.output_present);
+  const selectedRemovable = chosen.filter(source => !source.present && !source.output && !source.output_present);
   const albumDuration = albumTracks.reduce((total, source) => total + (source.duration || 0), 0);
   const discs = new Set(albumTracks.map(source => source.disc || 1));
   function deleteSelected(all: boolean) {
     if (window.confirm(all ? t("library.deleteAllConfirm", { count: expired }) : t("library.deleteSelectedConfirm"))) {
       void action("/library/delete", { all, ids: [...selected] }, "notice.delete");
     }
+  }
+  async function forget(ids: number[], all = false) {
+    if (!window.confirm(t("library.forgetConfirm", { count: all ? removable.length : ids.length }))) return;
+    setBusy(true);
+    try {
+      const result = await api<{ removed: number; skipped: number }>("/library/forget", "POST", all ? { all: true } : { ids });
+      notify("notice.forgotten", false, { count: result.removed, skipped: result.skipped });
+      setSelected(new Set()); retry();
+    } catch (err) { notify(err as Error, true); } finally { setBusy(false); }
   }
   return <>
     <ResourceWarning error={error} retry={retry} />
@@ -201,6 +212,7 @@ export function Library({ notify }: { notify: Notice }) {
     </div>
     {!scope.artist && !isAlbum && <LibraryComparison sources={data} notify={notify} />}
     {expired > 0 && <div className="banner amber"><Clock3 size={20} /><div><strong>{t("library.expiredCount", { count: expired })}</strong><p>{t("library.expiredHint")}</p></div><Button variant="destructive" size="sm" disabled={busy} onClick={() => deleteSelected(true)}><Trash2 size={14} />{t("library.deleteExpired")}</Button></div>}
+    {removable.length > 0 && <div className="library-cleanup"><Trash2 size={17} /><div><strong>{t("library.removableCount", { count: removable.length })}</strong><small>{t("library.forgetHint")}</small></div><Button variant="outline" size="sm" disabled={busy} onClick={() => void forget([], true)}>{t("library.forgetAll")}</Button></div>}
     {(scope.artist || isAlbum) && <nav className="library-breadcrumbs" aria-label={t("library.hierarchy")}>
       <button onClick={() => navigate({ view: scope.view })} aria-current={!scope.artist ? "page" : undefined}>{t(scope.view === "artists" ? "library.artists" : "library.albums")}</button>
       {scope.artist && <><ChevronRight size={14} /><button onClick={() => navigate({ view: scope.view, artist: scope.artist })} aria-current={!isAlbum ? "page" : undefined}>{artist?.artist || scope.artist}</button></>}
@@ -239,7 +251,7 @@ export function Library({ notify }: { notify: Notice }) {
         <Button variant="outline" size="sm" disabled={busy} onClick={() => void action("/library/rebuild", { all: true }, "notice.rebuild")}><RefreshCw size={14} />{t("library.startRebuild")}</Button>
       </div>
       {count > 0 && <div className="library-selection"><label className="check-field"><input type="checkbox" aria-label={t("library.selectPage")} checked={pageTracks.length > 0 && pageTracks.every(source => selected.has(source.id))} ref={node => { if (node) node.indeterminate = pageTracks.some(source => selected.has(source.id)) && !pageTracks.every(source => selected.has(source.id)); }} disabled={busy} onChange={event => toggle(pageTracks.map(source => source.id), event.target.checked)} /><span>{t("library.selectPage")}</span></label><span>{t(isAlbum ? "library.trackCount" : showingArtists ? "library.artistCount" : "library.albumCount", { count })}</span></div>}
-      {chosen.length > 0 && <div className="selection-bar"><span>{t("library.selected", { count: chosen.length })}</span>{rows.length > pageTracks.length && <Button type="button" size="sm" variant="ghost" disabled={busy} onClick={() => setSelected(new Set(rows.map(source => source.id)))}>{t("library.selectMatching", { count: rows.length })}</Button>}<Button size="sm" variant="outline" disabled={busy} onClick={() => void action("/library/rebuild", { ids: [...selected] }, "notice.selectedBuild")}><RefreshCw size={14} />{t("library.buildSelected")}</Button><BatchRepairButton sources={chosen} notify={notify} disabled={busy} refresh={() => { setSelected(new Set()); retry(); }} /><Button size="sm" variant="destructive" disabled={busy || selectedExpired === 0} onClick={() => deleteSelected(false)}><Trash2 size={14} />{t("library.deleteSelected")}</Button><Button size="sm" variant="ghost" onClick={() => setSelected(new Set())}><X size={14} />{t("library.clearSelection")}</Button></div>}
+      {chosen.length > 0 && <div className="selection-bar"><span>{t("library.selected", { count: chosen.length })}</span>{rows.length > pageTracks.length && <Button type="button" size="sm" variant="ghost" disabled={busy} onClick={() => setSelected(new Set(rows.map(source => source.id)))}>{t("library.selectMatching", { count: rows.length })}</Button>}<Button size="sm" variant="outline" disabled={busy} onClick={() => void action("/library/rebuild", { ids: [...selected] }, "notice.selectedBuild")}><RefreshCw size={14} />{t("library.buildSelected")}</Button><BatchRepairButton sources={chosen} notify={notify} disabled={busy} refresh={() => { setSelected(new Set()); retry(); }} /><Button size="sm" variant="destructive" disabled={busy || selectedExpired === 0} onClick={() => deleteSelected(false)}><Trash2 size={14} />{t("library.deleteSelected")}</Button>{selectedRemovable.length > 0 && <Button size="sm" variant="outline" disabled={busy} onClick={() => void forget(selectedRemovable.map(source => source.id))}><Trash2 size={14} />{t("library.forgetSelected", { count: selectedRemovable.length })}</Button>}<Button size="sm" variant="ghost" onClick={() => setSelected(new Set())}><X size={14} />{t("library.clearSelection")}</Button></div>}
       {count > 0 ? <>
         {!isAlbum ? <div className={`library-groups library-${layout}`} data-density={density}>{visibleGroups.map(group => {
           const ready = group.tracks.filter(source => source.status === "ready").length;
@@ -266,7 +278,7 @@ export function Library({ notify }: { notify: Notice }) {
             </div></div></td>
             <td className="track-artist"><strong>{source.artist || t("library.unknownArtist")}</strong><small>{source.album || t("library.unknownAlbum")}</small></td>
             <td className="track-duration">{duration(source.duration || 0)}</td>
-            <td><Badge status={source.status} />{source.output_present && source.status !== "ready" && source.status !== "possibly_damaged" && <small>{t("library.stillPlayable")}</small>}<RepairControls source={source} notify={notify} refresh={retry} />{source.error && <details><summary>{t("library.errorDetails")}</summary><pre>{source.error}</pre></details>}</td>
+            <td><Badge status={source.status} />{source.output_present && source.status !== "ready" && source.status !== "possibly_damaged" && <small>{t("library.stillPlayable")}</small>}<RepairControls source={source} notify={notify} refresh={retry} />{!source.present && !source.output && !source.output_present && <Button className="forget-record" size="sm" variant="ghost" disabled={busy} onClick={() => void forget([source.id])}><Trash2 size={13} />{t("library.forgetRecord")}</Button>}{source.error && <details><summary>{t("library.errorDetails")}</summary><pre>{source.error}</pre></details>}</td>
           </tr>{(source.possibly_damaged || source.repair?.diagnostics) && <tr className="repair-detail-row"><td colSpan={trackColumns}><RepairDiagnostics source={source} /></td></tr>}</Fragment>;
         })}</tbody></table></div>}
         <div className="pagination"><span>{t(isAlbum ? "library.pagination" : "library.groupPagination", { start: safeOffset + 1, end: Math.min(safeOffset + 50, count), total: count })}</span>

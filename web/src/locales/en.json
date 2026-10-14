@@ -570,5 +570,22 @@
   "compare.configure": "Lidarr settings",
   "compare.configureHint": "Configure the Lidarr URL and API key in Settings → Integrations → Lidarr.",
   "compare.connected": "API key configured · edit the connection in Settings.",
-  "compare.disconnected": "Lidarr is not connected"
+  "compare.disconnected": "Lidarr is not connected",
+  "app.collapseSidebar": "Collapse sidebar",
+  "app.expandSidebar": "Expand sidebar",
+  "overview.profileReady": "Profile matched",
+  "overview.checkingShort": "Checking storage",
+  "library.removableCount": {
+    "one": "{count} missing source record without an artifact",
+    "other": "{count} missing source records without artifacts"
+  },
+  "library.forgetHint": "Remove these index records after a completed scan. Restored files are rediscovered on the next scan.",
+  "library.forgetAll": "Remove missing records",
+  "library.forgetSelected": "Remove {count} selected records",
+  "library.forgetRecord": "Remove record",
+  "library.forgetConfirm": "Remove {count} missing library records without artifacts? Only the index changes; no files or task history are deleted. Active work, ownership and recovery journals are skipped. A restored source can be indexed again by scanning.",
+  "notice.forgotten": "Library records removed: {count}; protected records skipped: {skipped}",
+  "error.forgetBusy": "Library file operation in progress; try removing records again shortly",
+  "error.forgetLimit": "Select at most 10000 library records at a time",
+  "error.forgetIDs": "Library record IDs must be positive"
 }

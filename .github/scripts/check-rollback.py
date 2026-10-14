@@ -20,6 +20,7 @@ NAME = "musicforge-rollback"
 CANDIDATE = "musicforge:validation"
 PASSWORD = "ci-rollback-password"
 LEGACY = {
+    "v0.2.18": "sha256:62b9d4871cd0cf8cf3b0670925d745c00c6ba169c564676c18023c2b6855a389",
     "v0.2.16": "sha256:8d29e7f8e589786eb9ac2c6e0e3b40c43b4fbc8aac4c122ab82f70c40dc20ce7",
     "v0.2.17": "sha256:87c36fd544fa805b45cca66a1052bf1f1030a8553cd961353b00ecdc89cd9b0d",
     "v0.2.15": "sha256:630410106ee4ac8177030e9342ca4533d7e633f59190aa627078fb06b2326842",
@@ -233,6 +234,10 @@ def main():
                        "profile": values["encoding"], "progress": 0.4, "created": 1800000000,
                        "updated": 1800000001, "output": "", "log": "Repair history rollback fixture", "stopping": False}
             db.execute("INSERT INTO meta(key,value) VALUES(?,?)", ("repair-task:" + history["id"], json.dumps(history)))
+            db.execute("INSERT INTO meta(key,value) VALUES(?,?)", ("repair-member:" + history["id"], history["id"]))
+            member = {**history, "id": "b" * 64, "source_id": tracks[1]["id"], "source_hash": tracks[1]["hash"], "state": "stopped"}
+            db.execute("INSERT INTO meta(key,value) VALUES(?,?)", ("repair-task:" + member["id"], json.dumps(member)))
+            db.execute("INSERT INTO meta(key,value) VALUES(?,?)", ("repair-member:" + member["id"], history["id"]))
         expected = snapshot()
         held = next(row for row in expected["jobs"] if row[0] == pending)
         assert held[4] == "pending" and held[8] == 253402300799, "paused task changed schema-2 job semantics"

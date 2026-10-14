@@ -340,12 +340,40 @@ func (a *App) settingsContext(ctx context.Context) (Settings, error) {
 	return s, err
 }
 func (a *App) saveSettings(s Settings) error {
-	b, err := json.Marshal(s)
+	return a.saveSettingsUpdate(s, false, nil)
+}
+
+func (a *App) saveSettingsUpdate(s Settings, oidcChanged bool, connection *lidarrConnection) error {
+	raw, err := json.Marshal(s)
 	if err != nil {
 		return err
 	}
-	_, err = a.db.Exec("INSERT INTO settings(id,data) VALUES(1,?) ON CONFLICT(id) DO UPDATE SET data=excluded.data", string(b))
-	return err
+	tx, err := a.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if _, err = tx.Exec("INSERT INTO settings(id,data) VALUES(1,?) ON CONFLICT(id) DO UPDATE SET data=excluded.data", string(raw)); err != nil {
+		return err
+	}
+	if oidcChanged {
+		if _, err = tx.Exec("DELETE FROM sessions WHERE method='oidc'"); err != nil {
+			return err
+		}
+		if _, err = tx.Exec("DELETE FROM oidc_flows"); err != nil {
+			return err
+		}
+	}
+	if connection != nil {
+		raw, err = json.Marshal(connection)
+		if err != nil {
+			return err
+		}
+		if _, err = tx.Exec("INSERT INTO meta(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", lidarrConnectionKey, string(raw)); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
 }
 
 // Full scans dominate scoped scans; verification cannot be lost while coalescing requests.

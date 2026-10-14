@@ -85,40 +85,16 @@ func (a *App) putLidarrConnection(w http.ResponseWriter, r *http.Request) {
 	if !decode(w, r, &body) {
 		return
 	}
-	body.URL = strings.TrimRight(strings.TrimSpace(body.URL), "/")
-	body.APIKey = strings.TrimSpace(body.APIKey)
-	if body.URL != "" {
-		u, err := url.Parse(body.URL)
-		if err != nil || u.Hostname() == "" || (u.Scheme != "http" && u.Scheme != "https") || u.User != nil || strings.ContainsAny(body.URL, "?#") || len(body.URL) > 2048 {
-			apiError(w, 400, errors.New("Invalid Lidarr URL; use HTTP(S) without credentials, query or fragment"))
-			return
-		}
-	}
-	if len(body.APIKey) > 512 || strings.ContainsAny(body.APIKey, "\r\n") {
-		apiError(w, 400, errors.New("Invalid Lidarr API key"))
-		return
-	}
 	a.lidarrMu.Lock()
 	defer a.lidarrMu.Unlock()
 	if a.lidarrReport != nil && a.lidarrReport.State == "running" {
 		apiError(w, 409, errors.New("Lidarr comparison is running"))
 		return
 	}
-	old, err := a.lidarrConnection(r.Context())
+	body, err := a.prepareLidarrConnection(r.Context(), body)
 	if err != nil {
-		apiError(w, 500, err)
+		apiError(w, 400, err)
 		return
-	}
-	if body.URL == "" {
-		body.APIKey = ""
-	} else {
-		if body.APIKey == "" && body.URL == old.URL {
-			body.APIKey = old.APIKey
-		}
-		if body.APIKey == "" {
-			apiError(w, 400, errors.New("Enter the Lidarr API key when configuring or changing the URL"))
-			return
-		}
 	}
 	raw, _ := json.Marshal(body)
 	if err = a.setMeta(lidarrConnectionKey, string(raw)); err != nil {
@@ -127,6 +103,38 @@ func (a *App) putLidarrConnection(w http.ResponseWriter, r *http.Request) {
 	}
 	a.lidarrReport = nil
 	respond(w, 200, map[string]bool{"saved": true})
+}
+
+func (a *App) prepareLidarrConnection(ctx context.Context, body lidarrConnection) (lidarrConnection, error) {
+	if a.lidarrReport != nil && a.lidarrReport.State == "running" {
+		return body, errors.New("Lidarr comparison is running")
+	}
+	body.URL = strings.TrimRight(strings.TrimSpace(body.URL), "/")
+	body.APIKey = strings.TrimSpace(body.APIKey)
+	if body.URL != "" {
+		u, err := url.Parse(body.URL)
+		if err != nil || u.Hostname() == "" || (u.Scheme != "http" && u.Scheme != "https") || u.User != nil || strings.ContainsAny(body.URL, "?#") || len(body.URL) > 2048 {
+			return body, errors.New("Invalid Lidarr URL; use HTTP(S) without credentials, query or fragment")
+		}
+	}
+	if len(body.APIKey) > 512 || strings.ContainsAny(body.APIKey, "\r\n") {
+		return body, errors.New("Invalid Lidarr API key")
+	}
+	old, err := a.lidarrConnection(ctx)
+	if err != nil {
+		return body, err
+	}
+	if body.URL == "" {
+		body.APIKey = ""
+	} else {
+		if body.APIKey == "" && body.URL == old.URL {
+			body.APIKey = old.APIKey
+		}
+		if body.APIKey == "" {
+			return body, errors.New("Enter the Lidarr API key when configuring or changing the URL")
+		}
+	}
+	return body, nil
 }
 
 func (a *App) getLidarrCheck(w http.ResponseWriter, r *http.Request) {

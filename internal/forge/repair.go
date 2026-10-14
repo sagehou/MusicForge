@@ -164,67 +164,149 @@ func (a *App) claimWithRepairCapacity(conversion bool, concurrency int) (Job, er
 }
 
 func (a *App) startRepair(source Source, settings Settings) (*RepairStatus, error) {
+	if _, err := a.startRepairs([]Source{source}, settings, false); err != nil {
+		return nil, err
+	}
+	return &RepairStatus{State: "running"}, nil
+}
+
+// A batch is transient work with compatible per-track history, processed in
+// order using one existing conversion slot. Interrupted work is never replayed.
+func (a *App) startRepairs(sources []Source, settings Settings, waitCapacity bool) (string, error) {
 	a.jobsMu.Lock()
 	defer a.jobsMu.Unlock()
 	a.repairMu.Lock()
 	defer a.repairMu.Unlock()
 	if err := a.ioContext.Err(); err != nil {
-		return nil, err
+		return "", err
 	}
 	if a.repairRunning {
-		return nil, errors.New("A best-effort repair is already running")
+		return "", errors.New("A best-effort repair is already running")
 	}
-	running, err := a.runningConversions()
+	if len(sources) == 0 {
+		return "", errors.New("Only failed native FLAC tracks without an existing output can be repaired")
+	}
+	if !waitCapacity {
+		running, err := a.runningConversions()
+		if err != nil {
+			return "", err
+		}
+		if running >= settings.Concurrency {
+			return "", errors.New("Conversion workers are busy; retry the repair shortly")
+		}
+	}
+	tx, err := a.db.Begin()
 	if err != nil {
-		return nil, err
+		return "", err
 	}
-	if running >= settings.Concurrency {
-		return nil, errors.New("Conversion workers are busy; retry the repair shortly")
-	}
-	delete(a.repairs, source.ID)
-	if len(a.repairs) >= repairMaxFailures {
-		var oldest int64
-		for id, entry := range a.repairs {
-			if oldest == 0 || entry.created.Before(a.repairs[oldest].created) {
-				oldest = id
+	defer tx.Rollback()
+	entries := make([]*repairEntry, 0, len(sources))
+	contexts := make([]context.Context, 0, len(sources))
+	group := ""
+	committed := false
+	defer func() {
+		if !committed {
+			for _, entry := range entries {
+				entry.cancel()
 			}
 		}
-		delete(a.repairs, oldest)
+	}()
+	for _, source := range sources {
+		ctx, cancel := context.WithCancel(a.ioContext)
+		task := &repairTask{ID: randomToken(), SourceID: source.ID, Hash: source.Hash, State: "running", Profile: settings.Encoding,
+			Created: time.Now().Unix(), Updated: time.Now().Unix(), Activity: Activity{Phase: "repair_wait", Path: source.Rel, Artist: source.Artist, Album: source.Album, Title: source.Title}}
+		entry := &repairEntry{RepairStatus: RepairStatus{State: "running"}, hash: source.Hash, rel: source.Rel, created: time.Now(), cancel: cancel, task: task}
+		entries = append(entries, entry)
+		contexts = append(contexts, context.WithValue(ctx, repairTaskKey{}, task))
+		if group == "" {
+			group = task.ID
+		}
+		raw, marshalErr := json.Marshal(task)
+		if marshalErr != nil {
+			return "", marshalErr
+		}
+		if _, err = tx.Exec("INSERT INTO meta(key,value) VALUES(?,?)", repairTaskPrefix+task.ID, string(raw)); err != nil {
+			return "", err
+		}
+		if len(sources) > 1 {
+			if _, err = tx.Exec("INSERT INTO meta(key,value) VALUES(?,?)", repairMemberPrefix+task.ID, group); err != nil {
+				return "", err
+			}
+		}
 	}
-	ctx, cancel := context.WithCancel(a.ioContext)
-	task := &repairTask{ID: randomToken(), SourceID: source.ID, Hash: source.Hash, State: "running", Profile: settings.Encoding,
-		Created: time.Now().Unix(), Updated: time.Now().Unix(), Activity: Activity{Phase: "storage", Path: source.Rel, Artist: source.Artist, Album: source.Album, Title: source.Title}}
-	if err = a.saveRepairTask(task); err != nil {
-		cancel()
-		return nil, err
+	if err = tx.Commit(); err != nil {
+		return "", err
 	}
-	ctx = context.WithValue(ctx, repairTaskKey{}, task)
-	entry := &repairEntry{RepairStatus: RepairStatus{State: "running"}, hash: source.Hash, rel: source.Rel, created: time.Now(), cancel: cancel, task: task}
-	a.repairs[source.ID] = entry
+	committed = true
+	for i, source := range sources {
+		a.repairs[source.ID] = entries[i]
+	}
 	a.repairRunning = true
 	a.repairWG.Add(1)
 	go func() {
 		defer a.repairWG.Done()
-		defer cancel()
-		result, err := a.makeRepair(ctx, source, settings)
-		a.repairMu.Lock()
-		defer a.repairMu.Unlock()
-		a.repairRunning = false
-		a.finishRepairTask(task, source, result, err, ctx.Err() != nil)
-		if a.repairs[source.ID] != entry || ctx.Err() != nil {
-			delete(a.repairs, source.ID)
-			return
-		}
-		if err != nil {
-			entry.State, entry.Diagnostics = "failed", err.Error()
-			a.logger.Warn("best-effort repair failed", "source", source.Rel, "input_sha256", source.Hash, "detail", err.Error())
-		} else {
-			delete(a.repairs, source.ID)
-			a.logger.Warn("possibly damaged audio imported", "source", source.Rel, "input_sha256", source.Hash, "decoded_samples", result.DecodedSamples, "declared_samples", result.DeclaredSamples, "pcm_verified", result.PCMVerified)
+		defer func() { a.repairMu.Lock(); a.repairRunning = false; a.repairMu.Unlock() }()
+		for i, source := range sources {
+			ctx, entry := contexts[i], entries[i]
+			var result RepairStatus
+			err := a.waitRepairCapacity(ctx, settings.Concurrency)
+			if err == nil {
+				a.reportMediaProgress(ctx, 0, Activity{Phase: "storage", Path: source.Rel, Artist: source.Artist, Album: source.Album, Title: source.Title}, 0)
+				result, err = a.makeRepair(ctx, source, settings)
+			}
+			a.repairMu.Lock()
+			a.finishRepairTask(entry.task, source, result, err, ctx.Err() != nil)
+			if a.repairs[source.ID] == entry {
+				if err == nil || ctx.Err() != nil {
+					delete(a.repairs, source.ID)
+				} else {
+					entry.State, entry.Diagnostics = "failed", err.Error()
+				}
+			}
+			// Retain only a bounded number of failed in-memory diagnostics; durable
+			// history retains every result and queued entries must never be evicted.
+			failures := []*repairEntry{}
+			for _, item := range a.repairs {
+				if item.State == "failed" {
+					failures = append(failures, item)
+				}
+			}
+			if len(failures) > repairMaxFailures {
+				sort.Slice(failures, func(i, j int) bool { return failures[i].created.Before(failures[j].created) })
+				for _, old := range failures[:len(failures)-repairMaxFailures] {
+					delete(a.repairs, old.task.SourceID)
+				}
+			}
+			a.repairMu.Unlock()
+			entry.cancel()
+			if err != nil {
+				a.logger.Warn("best-effort repair failed", "source", source.Rel, "input_sha256", source.Hash, "detail", err.Error())
+			} else {
+				a.logger.Warn("possibly damaged audio imported", "source", source.Rel, "input_sha256", source.Hash, "decoded_samples", result.DecodedSamples, "declared_samples", result.DeclaredSamples, "pcm_verified", result.PCMVerified)
+			}
 		}
 	}()
-	snapshot := entry.RepairStatus
-	return &snapshot, nil
+	return group, nil
+}
+
+func (a *App) waitRepairCapacity(ctx context.Context, concurrency int) error {
+	for {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		a.jobsMu.Lock()
+		running, err := a.runningConversions()
+		a.jobsMu.Unlock()
+		if err != nil {
+			return err
+		}
+		if running < concurrency {
+			return nil
+		}
+		if !pause(ctx, 100*time.Millisecond) {
+			return ctx.Err()
+		}
+	}
 }
 
 func (a *App) removeRepair(id int64) error {
@@ -496,6 +578,64 @@ func (a *App) requestRepair(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	respond(w, 202, status)
+}
+
+func (a *App) requestRepairBatch(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Tracks []struct {
+			ID   int64  `json:"id"`
+			Hash string `json:"hash"`
+		} `json:"tracks"`
+	}
+	if !decode(w, r, &body) {
+		return
+	}
+	if len(body.Tracks) == 0 || len(body.Tracks) > 10000 {
+		apiError(w, 400, errors.New("select tracks"))
+		return
+	}
+	settings, err := a.settingsContext(r.Context())
+	if err != nil {
+		apiError(w, 500, err)
+		return
+	}
+	if !settings.Enabled {
+		apiError(w, 409, errors.New("library is disabled"))
+		return
+	}
+	selected, hashes, ids := []Source{}, map[int64]string{}, []string{}
+	for _, track := range body.Tracks {
+		if track.ID < 1 || track.Hash == "" {
+			continue
+		}
+		if _, ok := hashes[track.ID]; ok {
+			continue
+		}
+		hashes[track.ID] = track.Hash
+		ids = append(ids, strconv.FormatInt(track.ID, 10))
+	}
+	if len(ids) > 0 {
+		sources, err := a.sourcesWhereContext(r.Context(), " WHERE id IN ("+strings.Join(ids, ",")+")")
+		if err != nil {
+			apiError(w, 500, err)
+			return
+		}
+		for _, source := range sources {
+			if hashes[source.ID] == source.Hash && canRepair(source) {
+				selected = append(selected, source)
+			}
+		}
+	}
+	if len(selected) == 0 {
+		respond(w, 202, map[string]int{"queued": 0, "skipped": len(body.Tracks)})
+		return
+	}
+	id, err := a.startRepairs(selected, settings, true)
+	if err != nil {
+		apiError(w, 409, err)
+		return
+	}
+	respond(w, 202, map[string]any{"repair_id": id, "queued": len(selected), "skipped": len(body.Tracks) - len(selected)})
 }
 
 func (a *App) deleteRepair(w http.ResponseWriter, r *http.Request) {

@@ -448,10 +448,22 @@
   "library.backToAlbums": "Back to albums",
   "library.albumArtwork": "Album cover: {name}",
   "library.artistArtwork": "Album artwork from {name}",
-  "library.trackCount": { "one": "{count} track", "other": "{count} tracks" },
-  "library.albumCount": { "one": "{count} album", "other": "{count} albums" },
-  "library.artistCount": { "one": "{count} artist", "other": "{count} artists" },
-  "library.discCount": { "one": "{count} disc", "other": "{count} discs" },
+  "library.trackCount": {
+    "one": "{count} track",
+    "other": "{count} tracks"
+  },
+  "library.albumCount": {
+    "one": "{count} album",
+    "other": "{count} albums"
+  },
+  "library.artistCount": {
+    "one": "{count} artist",
+    "other": "{count} artists"
+  },
+  "library.discCount": {
+    "one": "{count} disc",
+    "other": "{count} discs"
+  },
   "library.disc": "Disc {number}",
   "library.duration": "Duration",
   "library.selectedTracks": "Track selection",
@@ -473,17 +485,10 @@
   "error.repairPCM": "Repair requires native FLAC with known samples and a PCM checksum",
   "error.repairExisting": "Existing output is preserved; best-effort repair cannot replace it",
   "error.repairSettings": "Settings changed; retry the repair with the current encoding",
-  "repairTasks.title": "Best-effort repair tasks",
-  "repairTasks.description": "Manual repairs have their own progress and history. They are not included in automatic or bulk retries.",
-  "repairTasks.previous": "Previous repair tasks page",
-  "repairTasks.next": "Next repair tasks page",
-  "repairTasks.filter": "Filter repair tasks",
+  "repairTasks.description": "Manually confirmed repairs run in sequence. Ordinary retry actions use strict conversion; try best-effort repair again from Library.",
   "repairTasks.stopping": "Stopping repair",
-  "repairTasks.deleted": "Repair history deleted.",
-  "repairTasks.progress": "Repair progress: {title}",
   "repairTasks.imported": "Imported into the output library · Possibly damaged",
   "repairTasks.library": "Open Library · review or retry repair",
-  "repairTasks.empty": "No repair tasks match this filter. New repairs started in Library appear here. Earlier attempts have no task history.",
   "phase.publish": "Publishing repaired output",
   "error.repairInterrupted": "Repair interrupted by restart; check Library for any recovered output before retrying",
   "error.repairTaskStopped": "Repair stopped; check Library for any output committed before cancellation",
@@ -495,8 +500,6 @@
   "compare.url": "Lidarr URL",
   "compare.key": "Lidarr API key",
   "compare.connectionHint": "Use the URL reachable from MusicForge. Find the API key in Lidarr Settings → General. A blank key keeps the saved key for the same URL; an empty URL disconnects and clears the key.",
-  "compare.save": "Save connection",
-  "compare.saved": "Lidarr connection saved.",
   "compare.scopeHint": "Comparison uses the Lidarr path prefix in Settings to map the same source directory. It only reads API file lists and the MusicForge index; audio is not downloaded.",
   "compare.start": "Compare file lists",
   "compare.progress": "Reading file lists: {done} / {total}",
@@ -555,6 +558,17 @@
   "settings.sections": "Settings sections",
   "settings.discard": "Discard changes",
   "settings.navSectionHint": "Refresh the streaming library after a build.",
-  "settings.lidarrSectionHint": "Receive import and upgrade events from your source library.",
-  "library.loadingHint": "Loading artists, albums and track status…"
+  "settings.lidarrSectionHint": "Configure file-list comparison and source import or upgrade events.",
+  "library.loadingHint": "Loading artists, albums and track status…",
+  "kind.repair": "Best-effort repair queue",
+  "phase.repair_wait": "Waiting for repair",
+  "library.selectMatching": "Select all {count} matching tracks",
+  "repair.bulkStart": "Best-effort repair selected ({count})",
+  "repair.selectPage": "Select repairable tracks on this page",
+  "repair.bulkConfirm": "Try best-effort repair on {count} selected tracks?\n\nThe audio may contain missing sections, silence or sudden loud noise. Repairs run in sequence as one task. Successful audio uses normal output paths and appears in Navidrome after scanning, with a possibly damaged warning in MusicForge.\n\nThe source is unchanged and existing outputs will not be replaced. Listen at low volume first.",
+  "repair.bulkStarted": "Queued {queued} tracks for best-effort repair; skipped {skipped}. Follow progress in Jobs.",
+  "compare.configure": "Lidarr settings",
+  "compare.configureHint": "Configure the Lidarr URL and API key in Settings → Integrations → Lidarr.",
+  "compare.connected": "API key configured · edit the connection in Settings.",
+  "compare.disconnected": "Lidarr is not connected"
 }

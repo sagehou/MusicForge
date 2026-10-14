@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/subtle"
 	"database/sql"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net"
@@ -559,23 +558,5 @@ func (a *App) verifyPassword(ctx context.Context, password string) (bool, error)
 
 // Caller holds authMu so a callback cannot issue a session for the previous binding.
 func (a *App) saveOIDCSettings(s Settings) error {
-	raw, err := json.Marshal(s)
-	if err != nil {
-		return err
-	}
-	tx, err := a.db.Begin()
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback()
-	if _, err = tx.Exec("UPDATE settings SET data=? WHERE id=1", string(raw)); err != nil {
-		return err
-	}
-	if _, err = tx.Exec("DELETE FROM sessions WHERE method='oidc'"); err != nil {
-		return err
-	}
-	if _, err = tx.Exec("DELETE FROM oidc_flows"); err != nil {
-		return err
-	}
-	return tx.Commit()
+	return a.saveSettingsUpdate(s, true, nil)
 }

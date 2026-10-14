@@ -98,6 +98,7 @@ Generate a temporary file and validate before replacement. Failed conversion pre
 - Keep it in the output directory and Navidrome until manual deletion.
 - Provide bulk deletion of expired artifacts, limited to registered application-owned files.
 - Refresh Navidrome after deletion so it removes the entries.
+- Manually remove missing-source index records without artifacts, individually or in bulk. Preserve files, task history and optional annotations; skip records referenced by pending/running/paused work, registered ownership or recovery journals. The authenticated, CSRF-protected operation accesses SQLite only, returns removed/skipped counts and rejects cleanup during a file operation. A restored source is indexed again on scanning. Artifact deletion remains a separate worker operation with its existing persisted arguments.
 
 ### Lidarr upgrades
 
@@ -226,6 +227,7 @@ Edit the Lidarr URL and API key in Settings → Integrations → Lidarr, saving 
 Use React, TypeScript, TailwindCSS and shadcn/ui.
 
 - Overview: source/output counts, build completion and recent jobs.
+- Desktop navigation supports a browser-persisted icon-only sidebar. Overview uses actual current-profile counts in its circular completion meter, encoding settings and recent task summaries; decorative waveform art carries no statistical meaning. Jobs use compact state-colored cards and progress bars with accessible percentages, retaining live source paths and existing controls. Small-screen navigation and reduced-motion support remain available.
 - Library: browse Artist → Album → Track using source-relative directories, breadcrumbs, disc/track ordering, search and status filters. Select artists, albums or tracks for bulk actions with clear expired/rebuild status. Output keeps the source library’s relative hierarchy.
 - Library provides artist/all-album views, grid/list layouts, name/attention sorting, pagination and shareable hierarchy URLs. Albums show existing output `cover.jpg`; artist artwork is an album-cover mosaic, not an independent portrait. Missing or unreadable images use a fallback without blocking browsing. Album details expose durations, multi-disc groups, source/output paths and indeterminate partial-selection checkboxes.
 - Jobs: whole scan/build queue states, live track progress, human-readable details, queue controls and bulk history cleanup.

@@ -525,5 +525,22 @@
   "compare.configure": "Lidarr 设置",
   "compare.configureHint": "请在设置 → 集成 → Lidarr 配置地址与 API Key。",
   "compare.connected": "API Key 已配置，可在设置中修改连接。",
-  "compare.disconnected": "尚未连接 Lidarr"
+  "compare.disconnected": "尚未连接 Lidarr",
+  "app.collapseSidebar": "收起侧栏",
+  "app.expandSidebar": "展开侧栏",
+  "overview.profileReady": "符合当前配置",
+  "overview.checkingShort": "正在检查存储",
+  "library.removableCount": {
+    "one": "{count} 条源已缺失且没有产物的记录",
+    "other": "{count} 条源已缺失且没有产物的记录"
+  },
+  "library.forgetHint": "完整扫描确认源已缺失后，可移除这些库记录；文件恢复后，下次扫描会重新发现。",
+  "library.forgetAll": "移除缺失记录",
+  "library.forgetSelected": "移除所选 {count} 条记录",
+  "library.forgetRecord": "移除记录",
+  "library.forgetConfirm": "移除 {count} 条源已缺失且没有产物的库记录？仅清理索引，不删除文件或任务历史。正在处理、仍有产物登记或恢复日志的记录会跳过；文件恢复后可通过扫描重新入库。",
+  "notice.forgotten": "已移除 {count} 条库记录；跳过 {skipped} 条受保护的记录",
+  "error.forgetBusy": "媒体库正在处理文件，请稍后重试移除记录",
+  "error.forgetLimit": "一次最多选择 10,000 条库记录",
+  "error.forgetIDs": "库记录 ID 必须为正整数"
 }

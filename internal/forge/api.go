@@ -123,6 +123,7 @@ func (a *App) Handler() http.Handler {
 	mux.HandleFunc("POST /api/library/scan", a.auth(a.requestScan))
 	mux.HandleFunc("POST /api/library/rebuild", a.auth(a.rebuild))
 	mux.HandleFunc("POST /api/library/delete", a.auth(a.requestDelete))
+	mux.HandleFunc("POST /api/library/forget", a.auth(a.forgetSources))
 	mux.HandleFunc("POST /api/navidrome/refresh", a.auth(func(w http.ResponseWriter, r *http.Request) {
 		s, err := a.settingsContext(r.Context())
 		if err != nil {

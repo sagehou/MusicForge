@@ -140,17 +140,7 @@ input:disabled, select:disabled { opacity: .6; }
 .online > span { width: 6px; height: 6px; background: var(--warning); border-radius: 50%; }
 .online.is-online { color: var(--success); }
 .online.is-online > span { background: var(--success); }
-.pipeline-flow { display: flex; align-items: center; padding: 6px 0 24px; gap: 22px; }
-.pipeline-flow > div { flex: 1; min-width: 0; padding: 16px 0; }
-.pipeline-flow > div > svg { color: var(--muted); width: 23px; height: 23px; margin-bottom: 12px; }
-.pipeline-flow small { font-size: 12px; margin-bottom: 7px; }
-.pipeline-flow h3 { margin-bottom: 7px; }
-.pipeline-flow code, .pipeline-flow div > span { color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }
-.pipeline-flow .pipeline-forge > svg { color: var(--accent); }
-.flow-arrow { color: var(--muted); flex-shrink: 0; width: 18px; }
-.build-progress { border-top: 1px solid var(--line); padding: 18px 0; display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
-.build-progress > div { width: 100%; height: 4px; background: var(--line); border-radius: 4px; overflow: hidden; }
-.build-progress > div > span, .task-meter > span { display: block; height: 100%; background: var(--accent); transition: width 400ms var(--ease); }
+.task-meter > span { display: block; height: 100%; background: var(--accent); transition: width 400ms var(--ease); }
 .job-row { display: flex; align-items: center; gap: 14px; padding: 16px 0; border-bottom: 1px solid var(--line); }
 .job-row:last-child { border: 0; }
 .job-row > div { flex: 1; min-width: 0; }
@@ -402,7 +392,6 @@ input[role="switch"]:checked::after { transform: translateX(16px); background: v
 .skeleton-card > span { display: block; height: 12px; width: 75%; background: var(--line); border-radius: 4px; margin-top: 14px; }
 .skeleton-card > span:last-child { width: 45%; margin-top: 8px; }
 @keyframes skeleton-pulse { to { opacity: .4; } }
-.sidebar, .main { transition: width 180ms var(--ease), margin-left 180ms var(--ease); }
 .sidebar-toggle { width: 34px; min-height: 34px; padding: 0; }
 @media (min-width: 801px) {
   .app-shell[data-sidebar-collapsed="true"] { --sidebar-width: 76px; }
@@ -619,6 +608,8 @@ input[role="switch"]:checked::after { transform: translateX(16px); background: v
   .jobs-panel .job-symbol { width: 28px; height: 28px; }
   .jobs-panel .task-actions { grid-column: 1 / -1; }
   .jobs-panel .task-actions .ui-button { min-height: 44px; padding: 8px; }
+  .jobs-panel .task-delete { width: 44px; }
+  .jobs-panel .task-delete-label { display: none; }
   .jobs-panel .task-main > .badge { max-width: 70px; text-align: center; }
   .jobs-panel .task-progress { padding: 0 10px 10px; }
   .jobs-panel .task-progress-label { flex-wrap: nowrap; align-items: flex-start; }
@@ -633,9 +624,6 @@ input[role="switch"]:checked::after { transform: translateX(16px); background: v
   .metric strong { font-size: 28px; }
   .metric > div { font-size: 12px; }
   .metric svg { display: none; }
-  .pipeline-flow { flex-direction: column; align-items: stretch; gap: 0; }
-  .pipeline-flow > div { padding: 14px 0; }
-  .pipeline-flow .flow-arrow { transform: rotate(90deg); margin: 0 auto; }
   .panel-heading { flex-wrap: wrap; gap: 12px; }
   .settings-title { flex-wrap: wrap; }
   .settings-title > div { flex-basis: calc(100% - 56px); }

@@ -81,6 +81,7 @@ test("sidebar collapse persists and icon navigation stays accessible across lang
   await expect(page.locator(".app-shell")).toHaveAttribute("data-sidebar-collapsed", "true");
   await expect.poll(async () => (await page.locator(".sidebar").boundingBox())?.width).toBe(76);
   await expect(page.locator(".sidebar .nav-label").first()).toBeHidden();
+  await expect(page.getByRole("link", { name: "MusicForge", exact: true })).toBeVisible();
   await page.reload();
   await expect(page.getByRole("button", { name: "Expand sidebar", exact: true })).toHaveAttribute("aria-expanded", "false");
   await page.getByRole("link", { name: "Jobs", exact: true }).click();
@@ -137,6 +138,11 @@ for (const width of [1440, 1024, 768, 390, 320]) {
     await expect(page.locator('.task[data-state="running"] [role="progressbar"]')).toHaveAttribute("aria-valuenow", "44");
     const colors = await page.locator(".task-meter > span").evaluateAll(nodes => nodes.map(node => getComputedStyle(node).backgroundImage));
     expect(new Set(colors).size).toBeGreaterThanOrEqual(4);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
+    // A breakpoint change must settle immediately, without layout overflow.
+    await page.setViewportSize({ width: 390, height: 844 });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
+    await page.setViewportSize({ width, height: width > 800 ? 1000 : 844 });
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
     if (width >= 1440) {
       const success = await page.locator('.task[data-state="success"]').boundingBox();

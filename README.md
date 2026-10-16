@@ -20,7 +20,7 @@ One container, one administrator, one source library and one output library. Ima
 
 Scan FLAC, MP3, AAC/ALAC in M4A/M4B/MP4, raw AAC, PCM WAV/AIFF, Ogg/Vorbis/Opus, WMA, APE, WavPack and MKA. Extensions are case-insensitive; ffprobe checks actual audio and rejects ordinary video streams while allowing attached artwork. Source formats can coexist in one library. All tracks are re-encoded with the selected Opus/MP3 profile, including lossy inputs; another lossy encode can reduce quality.
 
-Keep the existing source-relative output names. `01.flac` and `01.mp3` map to the same output; the existing registered owner is preserved and the conflicting build fails with the source path in Library and Jobs. Rename the conflicting source to resolve it. Unsupported extensions are skipped. `FLAC_DIR` remains the Compose source-path variable for deployment compatibility; it may point to a mixed audio library.
+Keep the existing source-relative output names. Coexisting `01.flac` and `01.mp3` map to the same output; the existing registered owner is preserved and the conflicting build fails with the source path in Library and Jobs. Rename the conflicting source to resolve it. If the old source is gone and only its extension changes, the new source inherits the registered output and rebuilds it, preserving playable audio until the replacement validates. This applies to replacements between any supported source formats in either direction, such as MP3 → FLAC, AAC/ALAC → WavPack or FLAC → MP3. Retry an existing failed task or rebuild the selected new source after updating. Unsupported extensions are skipped. `FLAC_DIR` remains the Compose source-path variable for deployment compatibility; it may point to a mixed audio library.
 
 ## Features
 

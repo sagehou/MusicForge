@@ -742,6 +742,81 @@ func (a *App) targetAvailable(s Settings, rel string, id int64) error {
 	return a.owned(rel, id)
 }
 
+// A source format change keeps the same output path. Carry the registered
+// playable output forward before rebuilding, just as for an in-place change.
+// Keep the new source ID so existing build requests remain retryable.
+// The caller holds files and has recovered pending promotions.
+func (a *App) inheritReplacedOutput(ctx context.Context, s Settings, source Source, target string) (Source, error) {
+	if source.Hash == "" || source.Output != "" || source.BuiltHash != "" {
+		return source, nil
+	}
+	var owner int64
+	err := a.db.QueryRow("SELECT source_id FROM managed WHERE path=? AND kind='audio'", target).Scan(&owner)
+	if err == sql.ErrNoRows || err == nil && owner == source.ID {
+		return source, nil
+	}
+	if err != nil {
+		return source, err
+	}
+	old, err := a.source(owner)
+	if err != nil {
+		return source, err
+	}
+	if old.Output != target || outputRel(old.Rel, "") != outputRel(source.Rel, "") {
+		return source, nil
+	}
+	if _, err = a.sourceStat(ctx, s.Source, old.Rel); err == nil {
+		return source, nil // Coexisting formats are different sources, not an upgrade.
+	} else if !os.IsNotExist(err) {
+		return source, err
+	}
+	if _, err = a.meta("deletion:" + strconv.FormatInt(old.ID, 10) + ":" + digest(target)); err == nil {
+		// Finish an explicitly requested deletion before changing its owner.
+		return source, a.recoverDeletions(s)
+	} else if err != sql.ErrNoRows {
+		return source, err
+	}
+	if err = a.targetAvailable(s, target, old.ID); err != nil {
+		return source, err
+	}
+	path, err := safePath(s.Output, target)
+	if err != nil {
+		return source, err
+	}
+	_, err = os.Lstat(path)
+	present := err == nil
+	if err != nil && !os.IsNotExist(err) {
+		return source, err
+	}
+	tx, err := a.db.Begin()
+	if err != nil {
+		return source, err
+	}
+	defer tx.Rollback()
+	// Preserve a warning attached to the inherited playable file until a strict
+	// rebuild succeeds. Older schema-2 applications can read all of this state.
+	if _, err = tx.Exec(`INSERT OR IGNORE INTO meta(key,value)
+	 SELECT 'repair-artifact:'||?||':'||m.signature,r.value FROM managed m
+	 JOIN meta r ON r.key='repair-artifact:'||m.source_id||':'||m.signature
+	 WHERE m.path=? AND m.kind='audio'`, source.ID, target); err != nil {
+		return source, err
+	}
+	if _, err = tx.Exec("UPDATE managed SET source_id=? WHERE path=? AND source_id=? AND kind='audio'", source.ID, target, old.ID); err != nil {
+		return source, err
+	}
+	if _, err = tx.Exec("UPDATE sources SET output=?,built_hash=?,built_profile=?,output_present=? WHERE id=?", target, old.BuiltHash, old.BuiltProfile, present, source.ID); err != nil {
+		return source, err
+	}
+	if _, err = tx.Exec("UPDATE sources SET present=0,output='',built_hash='',built_profile='',output_present=0 WHERE id=?", old.ID); err != nil {
+		return source, err
+	}
+	if err = tx.Commit(); err != nil {
+		return source, err
+	}
+	source.Output, source.BuiltHash, source.BuiltProfile, source.OutputPresent = target, old.BuiltHash, old.BuiltProfile, present
+	return source, nil
+}
+
 type promotion struct {
 	ID           int64  `json:"id"`
 	Temp         string `json:"temp"`
@@ -954,6 +1029,13 @@ func (a *App) buildStaged(ctx context.Context, j Job, r BuildRequest, staged *st
 		activity.Phase = "read"
 	}
 	a.reportProgress(j.ID, activity, 0)
+	if !r.Move {
+		source, err = a.inheritReplacedOutput(ctx, s, source, target)
+		if err != nil {
+			a.files.Unlock()
+			return a.buildError(ctx, s, source, err)
+		}
+	}
 	if err = a.targetAvailable(s, target, source.ID); err != nil {
 		a.files.Unlock()
 		a.recordSourceError(source.ID, err)

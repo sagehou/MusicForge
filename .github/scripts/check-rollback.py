@@ -20,6 +20,7 @@ NAME = "musicforge-rollback"
 CANDIDATE = "musicforge:validation"
 PASSWORD = "ci-rollback-password"
 LEGACY = {
+    "v0.2.20": "sha256:7be864ae3641fbe0c6d4192c956f49b431cfe5aef908a391b5b5d1f5fe4f74b1",
     "v0.2.19": "sha256:6055f1a63afc31f99c9c54488995611b91b3ba6451e900231e5d7fa7e7be0017",
     "v0.2.18": "sha256:62b9d4871cd0cf8cf3b0670925d745c00c6ba169c564676c18023c2b6855a389",
     "v0.2.16": "sha256:8d29e7f8e589786eb9ac2c6e0e3b40c43b4fbc8aac4c122ab82f70c40dc20ce7",
@@ -194,8 +195,31 @@ def main():
         values["webhook_secret"] = "ci-rollback-webhook-secret-24-plus"
         save_settings(api, values)
         tracks = wait_for(lambda: api("/api/library"), lambda rows: len(rows) == 3 and all(row["status"] == "ready" for row in rows), "candidate mixed-source conversion")
+        wait_for(lambda: api("/api/jobs")["jobs"], lambda rows: all(row["state"] == "success" for row in rows), "completed initial conversion jobs")
+        # A format replacement must retain a single owned output and leave state
+        # that every published schema-2 reader/writer can reopen unchanged.
+        retired_paths = set()
+        for old_name, new_name, codec in (("02.mp3", "02.flac", "flac"),
+                                          ("03.m4a", "03.wv", "wavpack"),
+                                          ("02.flac", "02.opus", "libopus")):
+            old_rel, new_rel = "Album/" + old_name, "Album/" + new_name
+            previous = next(row for row in tracks if row["path"] == old_rel)
+            (ROOT / "source" / old_rel).unlink()
+            docker(*media, "-f", "lavfi", "-i", "sine=frequency=880:duration=1", "-c:a", codec, "-metadata", "title=Replaced source format", "/fixture/" + new_rel)
+            os.utime(ROOT / "source" / new_rel, (stable, stable))
+            retired_paths.add(old_rel)
+            count = len(tracks) + 1
+            api("/api/library/scan", "POST", {})
+            tracks = wait_for(lambda: api("/api/library"),
+                              lambda rows: len(rows) == count and all(row["status"] == ("expired" if row["path"] in retired_paths else "ready") for row in rows),
+                              "candidate source format replacement " + old_name + " -> " + new_name)
+            retired = next(row for row in tracks if row["id"] == previous["id"])
+            successor = next(row for row in tracks if row["path"] == new_rel)
+            assert not retired["output"] and not retired["output_present"], "retired source still claims the replacement"
+            assert successor["output"] == previous["output"] and successor["built_hash"] == successor["hash"], "format replacement did not rebuild the same output"
+            assert successor["hash"] == hashlib.sha256((ROOT / "source" / new_rel).read_bytes()).hexdigest(), "format replacement lost complete source identity"
+            wait_for(lambda: api("/api/jobs")["jobs"], lambda rows: all(row["state"] == "success" for row in rows), "completed source format replacement jobs")
         tracks = sorted((library_record(track) for track in tracks), key=lambda track: track["id"])
-        wait_for(lambda: api("/api/jobs")["jobs"], lambda rows: all(row["state"] == "success" for row in rows), "completed conversion jobs")
         values = api("/api/settings")["settings"]
         api("/api/lidarr/connection", "PUT", {"url": "http://lidarr.example.test:8686", "api_key": "ci-only-lidarr-key"})
         values.update(enabled=False, nav_url="https://navidrome.example.test", nav_user="admin", nav_password="ci-nav-secret",
@@ -295,7 +319,7 @@ def main():
             assert library_record(restored) == library_record(row), "candidate cannot reopen older worker's completed artifact"
             stop()
             pending_checks.append({"release": version, "pending_verify_then_old_worker_build": "passed", "source_hash": expected_hash})
-        Path(".ci/rollback-evidence.json").write_text(json.dumps({"architecture": os.environ["ARCH"], "schema": 2, "checks": evidence, "pending_verification_checks": pending_checks}, indent=2) + "\n")
+        Path(".ci/rollback-evidence.json").write_text(json.dumps({"architecture": os.environ["ARCH"], "schema": 2, "source_format_replacement": "passed", "checks": evidence, "pending_verification_checks": pending_checks}, indent=2) + "\n")
     finally:
         subprocess.run(["docker", "rm", "-f", NAME], capture_output=True)
 

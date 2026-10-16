@@ -191,6 +191,156 @@ func TestMixedSourceOutputConflictPreservesExistingArtifact(t *testing.T) {
 	}
 }
 
+func TestSourceFormatReplacementPreservesOutputAndRetries(t *testing.T) {
+	for _, fixture := range []struct {
+		oldExt, oldCodec, newExt, newCodec, entry string
+	}{
+		{"mp3", "libmp3lame", "flac", "flac", "scan"},
+		{"mp3", "libmp3lame", "flac", "flac", "retry"},
+		{"m4a", "aac", "flac", "flac", "rebuild"},
+		{"wav", "pcm_s24le", "m4a", "alac", "missing-output"},
+		{"flac", "flac", "MP3", "libmp3lame", "scan"},
+		{"m4a", "alac", "wv", "wavpack", "retry"},
+		{"ogg", "vorbis", "opus", "libopus", "rebuild"},
+		{"aiff", "pcm_s24be", "m4a", "aac", "scan"},
+	} {
+		t.Run(fixture.oldExt+"-to-"+fixture.newExt+"/"+fixture.entry, func(t *testing.T) {
+			entry := fixture.entry
+			a, s := testApp(t)
+			ctx := context.Background()
+			oldRel, newRel := "Artist/Album/01."+fixture.oldExt, "Artist/Album/01."+fixture.newExt
+			oldPath := makeAudioSource(t, a, s, oldRel, "Original", fixture.oldCodec, false)
+			if err := a.scan(ctx, ScanRequest{}); err != nil {
+				t.Fatal(err)
+			}
+			drain(t, a, true)
+			original, err := a.sourceRel(oldRel)
+			if err != nil {
+				t.Fatal(err)
+			}
+			artifact := filepath.Join(s.Output, original.Output)
+			before, err := fileHash(ctx, artifact)
+			if err != nil {
+				t.Fatal(err)
+			}
+			// An inherited best-effort import must retain its warning on failure.
+			if err = a.setMeta(repairArtifactKey(original.ID, before), `{"state":"imported","diagnostics":"Original warning"}`); err != nil {
+				t.Fatal(err)
+			}
+			makeAudioSource(t, a, s, newRel, "Replaced", fixture.newCodec, false)
+			if entry == "scan" || entry == "missing-output" {
+				if err = os.Remove(oldPath); err != nil {
+					t.Fatal(err)
+				}
+			}
+			wantPresent := entry != "missing-output"
+			if !wantPresent {
+				if err = os.Remove(artifact); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if err = a.scan(ctx, ScanRequest{}); err != nil {
+				t.Fatal(err)
+			}
+			j, err := a.claim(true)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if entry == "retry" || entry == "rebuild" {
+				// Reproduce an already failed conflict, then remove the old source.
+				failure := a.execute(ctx, j)
+				if failure == nil || !strings.Contains(failure.Error(), "output path conflict") {
+					t.Fatal("coexisting sources did not conflict", failure)
+				}
+				if err = a.completeJob(j, "failed", 3, 0, failure.Error(), 0); err != nil {
+					t.Fatal(err)
+				}
+				if err = os.Remove(oldPath); err != nil {
+					t.Fatal(err)
+				}
+				if entry == "retry" {
+					if _, err = a.changeTasks("retry", selection{IDs: []int64{j.ID}}); err != nil {
+						t.Fatal(err)
+					}
+				} else {
+					source, readErr := a.sourceRel(newRel)
+					if readErr != nil {
+						t.Fatal(readErr)
+					}
+					if _, err = a.queueBuild(source, s.Encoding, false, true); err != nil {
+						t.Fatal(err)
+					}
+				}
+				if j, err = a.claim(true); err != nil {
+					t.Fatal(err)
+				}
+			}
+			ffmpeg := a.cfg.FFmpeg
+			a.cfg.FFmpeg = "/bin/false"
+			failure := a.execute(ctx, j)
+			a.cfg.FFmpeg = ffmpeg
+			if failure == nil || strings.Contains(failure.Error(), "output path conflict") {
+				t.Fatal("replacement did not reach the encoder", failure)
+			}
+			if err = a.completeJob(j, "failed", 3, 0, failure.Error(), 0); err != nil {
+				t.Fatal(err)
+			}
+			current, err := a.sourceRel(newRel)
+			if err != nil || current.Output != original.Output || current.OutputPresent != wantPresent || current.BuiltHash != original.BuiltHash || current.Hash == original.Hash || current.Hash == "" || current.Error == "" {
+				t.Fatal("failed format replacement lost playable output or content identity", current, err)
+			}
+			if wantPresent {
+				if after, err := fileHash(ctx, artifact); err != nil || after != before {
+					t.Fatal("failed format replacement changed playable audio", after, err)
+				}
+			} else if _, err = os.Stat(artifact); !os.IsNotExist(err) {
+				t.Fatal("failed encoding published a missing output", err)
+			}
+			if err = a.owned(original.Output, current.ID); err != nil {
+				t.Fatal("new source did not inherit output ownership", err)
+			}
+			inherited := []Source{current}
+			if err = a.annotateRepairs(ctx, inherited); err != nil || inherited[0].PossiblyDamaged != wantPresent {
+				t.Fatal("inherited output lost its damage flag", inherited, err)
+			}
+			warning, err := a.meta(repairArtifactKey(current.ID, before))
+			if err != nil || !strings.Contains(warning, "Original warning") {
+				t.Fatal("inherited output lost its damage warning", warning, err)
+			}
+			retired, err := a.source(original.ID)
+			if err != nil || retired.Present || retired.Output != "" || retired.OutputPresent || retired.BuiltHash != "" {
+				t.Fatal("old source still claims the output", retired, err)
+			}
+			if _, err = a.changeTasks("retry", selection{IDs: []int64{j.ID}}); err != nil {
+				t.Fatal(err)
+			}
+			drain(t, a, true)
+			rebuilt, err := a.sourceRel(newRel)
+			if err != nil || rebuilt.ID != current.ID || rebuilt.BuiltHash != current.Hash || rebuilt.BuiltProfile != s.Encoding.Fingerprint() || rebuilt.Error != "" {
+				t.Fatal("retry did not finish the format replacement", rebuilt, err)
+			}
+			p, err := a.probe(ctx, artifact)
+			if err != nil || p.tags()["title"] != "Replaced" {
+				t.Fatal("old output was not replaced by the validated new source", p.tags(), err)
+			}
+			list := []Source{rebuilt}
+			if err = a.annotateRepairs(ctx, list); err != nil || list[0].PossiblyDamaged {
+				t.Fatal("strict rebuild retained the inherited damage warning", list, err)
+			}
+			// Old delete/upgrade work must not remove the successor's artifact.
+			if err = a.deleteExpired([]int64{original.ID}); err != nil {
+				t.Fatal(err)
+			}
+			if err = a.finishUpgrade(ctx, UpgradeRequest{New: []string{newRel}, Old: []string{oldRel}}); err != nil {
+				t.Fatal(err)
+			}
+			if err = a.owned(rebuilt.Output, rebuilt.ID); err != nil {
+				t.Fatal(err)
+			}
+		})
+	}
+}
+
 func TestInvalidMixedAudioAndVideoDoNotExpireKnownSources(t *testing.T) {
 	a, s := testApp(t)
 	old := makeAudioSource(t, a, s, "Retained/01.mp3", "Retained", "libmp3lame", false)

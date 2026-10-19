@@ -88,11 +88,11 @@ client = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(jar))
 csrf = ""
 
 
-def api(path, body=None, method=None):
+def api(path, body=None, method=None, headers=None):
     request = urllib.request.Request(
         ORIGIN + path, data=None if body is None else json.dumps(body).encode(),
         method=method or ("GET" if body is None else "POST"),
-        headers={"Content-Type": "application/json", "Origin": ORIGIN, "X-CSRF-Token": csrf},
+        headers={"Content-Type": "application/json", "Origin": ORIGIN, "X-CSRF-Token": csrf, **(headers or {})},
     )
     with client.open(request, timeout=5) as response:
         return json.load(response)
@@ -160,7 +160,7 @@ def run():
         api("/api/auth/setup", {"code": code, "username": "admin", "password": "ci-rclone-password"})
         csrf = api("/api/auth/me")["csrf"]
         settings = api("/api/settings")["settings"]
-        settings.update(enabled=True, source=str(ROOT / "mount"), output=str(ROOT / "output"), scan_minutes=60)
+        settings.update(enabled=True, source=str(ROOT / "mount"), output=str(ROOT / "output"), scan_minutes=60, lidarr_prefix="/lidarr/music", webhook_secret="ci-lidarr-secret")
         api("/api/settings", settings, "PUT")
         root = wait_for(lambda: api("/api/jobs")["jobs"], lambda jobs: any(job["kind"] == "scan" for job in jobs))[0]["id"]
         reading = wait_for(lambda: task(root), lambda job: BLOCKED.is_set() and any(activity["phase"] == "read" and activity["path"].endswith("36.flac") and activity.get("read_bytes", 0) > 0 for activity in job["current"]), timeout=45)
@@ -205,13 +205,22 @@ def run():
         wait_for(lambda: task(second), lambda job: job["state"] == "success", timeout=30)
         assert all(source["status"] == "ready" for source in api("/api/library"))
         single = ROOT / "source/Artist/Single"
+        # Lidarr can notify before the album becomes visible through the mount.
+        third = api("/api/webhook/lidarr", {
+            "eventType": "Download", "isUpgrade": False,
+            "trackFiles": [{"path": "/lidarr/music/Artist/Single/42.flac"}],
+        }, headers={"Authorization": "Bearer ci-lidarr-secret"})["job_id"]
+        delayed = wait_for(lambda: task(third), lambda job: "Waiting for imported source" in job.get("waiting_reason", ""), timeout=15)
+        assert delayed["state"] in ("pending", "running") and not delayed["can_delete"]
+        assert str(ROOT / "mount/Artist/Single/42.flac") in delayed["waiting_reason"]
+        assert delayed["scan"]["total"] == 0, "fixture did not exercise an empty initial import scan"
         single.mkdir()
         shutil.copyfile(album / "36.flac", single / "42.flac")
         os.utime(single / "42.flac", (time.time() - 120, time.time() - 120))
         time.sleep(1.1)
         subprocess.run(["rclone", "rc", "vfs/forget", "--url", "http://127.0.0.1:19093"], check=True, capture_output=True)
-        third = api("/api/library/scan", {"dirs": ["Artist/Single"]})["job_id"]
-        wait_for(lambda: task(third), lambda job: job["state"] == "success", timeout=30)
+        wait_for(lambda: task(third), lambda job: job["state"] == "success" and job["counts"]["done"] == 1, timeout=30)
+        assert any(source["path"] == "Artist/Single/42.flac" and source["status"] == "ready" for source in api("/api/library")), "delayed import required a manual scan"
         with TRANSFER_LOCK:
             single_bytes = sum(count for path, count in TRANSFERRED.items() if path.endswith("/42.flac"))
         single_size = (single / "42.flac").stat().st_size
@@ -260,6 +269,7 @@ def run():
         wait_for(lambda: api("/api/jobs")["jobs"], lambda jobs: all(job["state"] == "success" for job in jobs), timeout=45)
         assert all(source["status"] == "ready" for source in api("/api/library"))
         evidence = {"source_reconnect": {"missing_mount_blocked": True, "wrong_remote_blocked": True, "same_remote_resumed_without_settings_save": True, "restart_reconnect_without_settings_save": True, "device_identity_changed": True, "outputs_unchanged": True, "attempts": 0}, "coalesced_scan_requests": 5, "vfs_cache_mode": "off", "single_pass_source_bytes": single_size, "single_pass_remote_bytes": single_bytes, "metadata_overhead_budget": 512 * 1024, "rclone_version": subprocess.check_output(["rclone", "version"], text=True).splitlines()[0], "tracks": 42, "source_formats": ["flac", "mp3", "m4a"], "read_bytes_before_pause": max(activity.get("read_bytes", 0) for activity in reading["current"]), "api_response_seconds_while_stalled": response_times, "pause_attempts": 0, "timeout_attempts_before_recovery": 1, "full_content_hash_preserved": True}
+        evidence["delayed_lidarr_import"] = {"initial_files": 0, "automatically_rescanned": True, "same_task": True, "attempts": task(third)["attempts"]}
         (ROOT / "evidence.json").write_text(json.dumps(evidence, indent=2) + "\n")
         print(json.dumps(evidence))
     finally:

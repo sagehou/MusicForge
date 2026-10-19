@@ -179,6 +179,7 @@ Endpoint: `POST /api/webhook/lidarr`.
 - Authenticate with a separate integration secret, scoped to source-library scan/build triggers.
 - Accept native import/upgrade payloads: `eventType=Download`, with `isUpgrade` identifying upgrades.
 - Use `trackFiles[].path` and upgrade `deletedFiles[].path` to locate directories; no extra album-path field is required.
+- Validate every notified track through the existing `upgrade` job and New/Old arguments. Ordinary imports use empty Old, preserve old artifacts and do not repeat full source reads. If the mount has not exposed a file, rescan its directory within the same task, retaining the wait across restarts and displaying the expected source path. An empty scan does not complete an import; ordinary deletion scans retain their empty-directory semantics.
 - Accept connection-test events without creating real conversion work.
 - Support one source-prefix mapping for different container mount paths; nonempty prefixes must be absolute container paths, checked when saving.
 - Confine mapped paths to MusicForge's configured source root.

@@ -127,23 +127,26 @@ func (a *App) webhook(w http.ResponseWriter, r *http.Request) {
 		upgrade.Old = append(upgrade.Old, rel)
 		dirs[filepath.Dir(rel)] = true
 	}
+	if !body.Upgrade {
+		upgrade.Old = nil
+	}
 	scan := ScanRequest{}
 	for dir := range dirs {
 		scan.Dirs = append(scan.Dirs, dir)
 	}
 	sort.Strings(scan.Dirs)
 	b, _ := json.Marshal(scan)
+	// Keep the scan active until its imported-track check has joined the task.
+	a.jobsMu.Lock()
 	id, err := a.enqueue("scan", "lidarr:scan:"+digest(string(b)), scan, true)
+	if err == nil {
+		b, _ := json.Marshal(upgrade)
+		_, err = a.enqueueTask("upgrade", "lidarr:upgrade:"+digest(string(b)), upgrade, true, id)
+	}
+	a.jobsMu.Unlock()
 	if err != nil {
 		apiError(w, 500, err)
 		return
-	}
-	if body.Upgrade && len(upgrade.Old) > 0 {
-		b, _ := json.Marshal(upgrade)
-		if _, err = a.enqueueTask("upgrade", "lidarr:upgrade:"+digest(string(b)), upgrade, true, id); err != nil {
-			apiError(w, 500, err)
-			return
-		}
 	}
 	respond(w, 202, map[string]int64{"job_id": id})
 }
@@ -163,34 +166,69 @@ func (a *App) finishUpgrade(ctx context.Context, r UpgradeRequest) error {
 	if len(r.New) == 0 {
 		return errors.New("upgrade has no replacement files")
 	}
-	newPaths := map[string]bool{}
+	// A webhook can arrive before the source mount exposes the imported files.
+	// Ordinary scoped scans must still accept removed albums for expiration.
+	sources := map[string]Source{}
+	missingDirs := map[string]bool{}
+	waitingPath := ""
 	for _, rel := range r.New {
 		source, err := a.sourceRel(rel)
-		if err != nil {
-			return later("Waiting for upgraded tracks to be indexed", 10)
+		if err != nil && err != sql.ErrNoRows {
+			return err
 		}
-		if !source.Present || !source.OutputPresent || source.Error != "" || source.Hash == "" || source.BuiltHash != source.Hash || source.BuiltProfile != s.Encoding.Fingerprint() {
-			return later("Waiting for all upgraded tracks to validate; failed tracks require manual retry", 10)
+		if err == sql.ErrNoRows || !source.Present {
+			missingDirs[filepath.Dir(rel)] = true
+			if waitingPath == "" {
+				waitingPath = filepath.Join(s.Source, rel)
+			}
 		}
-		info, err := a.sourceStat(ctx, s.Source, rel)
-		if err != nil || !sameStat(info, source) || time.Since(info.ModTime()) < 30*time.Second {
-			return later("Waiting for upgraded sources to be stable and indexed", 10)
+		sources[rel] = source
+	}
+	if len(missingDirs) > 0 {
+		scan := ScanRequest{}
+		for dir := range missingDirs {
+			scan.Dirs = append(scan.Dirs, dir)
 		}
-		// Cleanup is destructive and infrequent: verify current bytes, not just cached state.
-		hash, err := a.sourceHash(ctx, s.Source, rel, nil)
+		sort.Strings(scan.Dirs)
+		b, _ := json.Marshal(scan)
+		a.jobsMu.Lock()
+		err = ctx.Err()
+		if err == nil {
+			_, err = a.enqueue("scan", "lidarr:scan:"+digest(string(b)), scan, true)
+		}
+		a.jobsMu.Unlock()
 		if err != nil {
 			return err
 		}
-		after, err := a.sourceStat(ctx, s.Source, rel)
-		if err != nil || !sameStat(after, source) || hash != source.Hash {
-			return later("Waiting for the current upgraded source content to validate", 10)
+		return later(fmt.Sprintf("Waiting for imported source; rescanning its directory. Check the source mount and Lidarr source path prefix if it remains unavailable: %q", waitingPath), 10)
+	}
+	newPaths := map[string]bool{}
+	for _, rel := range r.New {
+		source := sources[rel]
+		if !source.Present || !source.OutputPresent || source.Error != "" || source.Hash == "" || source.BuiltHash != source.Hash || source.BuiltProfile != s.Encoding.Fingerprint() {
+			return later("Waiting for all imported tracks to validate; failed tracks require manual retry", 10)
+		}
+		info, err := a.sourceStat(ctx, s.Source, rel)
+		if err != nil || !sameStat(info, source) || time.Since(info.ModTime()) < 30*time.Second {
+			return later("Waiting for imported sources to be stable and indexed", 10)
+		}
+		if len(r.Old) > 0 {
+			// Destructive cleanup independently verifies bytes; ordinary imports keep one full read.
+			hash, err := a.sourceHash(ctx, s.Source, rel, nil)
+			if err != nil {
+				return err
+			}
+			after, err := a.sourceStat(ctx, s.Source, rel)
+			if err != nil || !sameStat(after, source) || hash != source.Hash {
+				return later("Waiting for the current upgraded source content to validate", 10)
+			}
 		}
 		out, err := safePath(s.Output, source.Output)
 		if err != nil {
 			return err
 		}
 		if info, err := os.Stat(out); err != nil || !info.Mode().IsRegular() {
-			return later("Waiting for missing upgraded artifacts", 10)
+			return later("Waiting for missing imported artifacts", 10)
 		}
 		if err = a.owned(source.Output, source.ID); err != nil {
 			return err

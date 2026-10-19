@@ -162,6 +162,8 @@ Create a native **Webhook** connection in Lidarr:
 
 The connection test creates no conversion work. Native `Download` events use `trackFiles[].path`, `isUpgrade` and `deletedFiles[].path`. Set **Lidarr source path prefix** to an absolute container path if Lidarr sees a different source root. Mapped paths must remain within MusicForge's source root. Custom clients may use Bearer authentication with the same secret.
 
+Import tasks wait for every notified track to be indexed and encoded. If the source mount initially exposes an empty or missing album directory, the same task retries its scan automatically, including after a restart. A persistent wait shows the expected MusicForge source path; check the mount and prefix mapping against that path. Ordinary imports preserve expired artifacts; only upgrade events authorize cleanup of their explicitly replaced files after validation. Historical empty scans that already finished before this fix need a manual source scan or file-list comparison and rescan.
+
 ## Navidrome integration
 
 Save the URL, username, password and library ID in Settings. Automatic refresh combines changed album directories after conversion/deletion batches. Changes remain queued until Navidrome reports scan completion; interrupted refreshes resume after restart. Navidrome 0.59.0+ receives targeted `startScan` requests; older versions receive regular scans. Removed directories use the nearest surviving parent. **Refresh Navidrome manually** uses saved settings.

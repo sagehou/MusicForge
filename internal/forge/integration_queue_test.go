@@ -3,6 +3,7 @@ package forge
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -174,6 +175,131 @@ func TestNativeLidarrDownloadUpgradeAndStrictPayload(t *testing.T) {
 	}
 	if _, err = os.Stat(filepath.Join(s.Output, previous.Output)); !os.IsNotExist(err) {
 		t.Fatal("explicit upgrade did not remove old output", err)
+	}
+}
+
+func TestLidarrImportRetriesEmptyScanAfterRestart(t *testing.T) {
+	for _, emptyDirectory := range []bool{false, true} {
+		name := "missing album"
+		if emptyDirectory {
+			name = "empty album"
+		}
+		t.Run(name, func(t *testing.T) {
+			a, s := testApp(t)
+			s.LidarrPrefix = "/lidarr/music"
+			s.WebhookHash = digest("integration-secret")
+			if err := a.saveSettings(s); err != nil {
+				t.Fatal(err)
+			}
+			oldPath := makeAudioSource(t, a, s, "Previous/old.mp3", "Old", "libmp3lame", false)
+			if err := a.scan(context.Background(), ScanRequest{}); err != nil {
+				t.Fatal(err)
+			}
+			drain(t, a, true)
+			old, err := a.sourceRel("Previous/old.mp3")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err = os.Remove(oldPath); err != nil {
+				t.Fatal(err)
+			}
+			if emptyDirectory {
+				if err = os.MkdirAll(filepath.Join(s.Source, "Imported"), 0755); err != nil {
+					t.Fatal(err)
+				}
+			}
+			// A webhook joins an existing manual task even when the dedup keys differ.
+			root, err := a.enqueue("scan", "scan:manual", ScanRequest{Dirs: []string{"Previous"}}, true)
+			if err != nil {
+				t.Fatal(err)
+			}
+			payload := `{"eventType":"Download","isUpgrade":false,"trackFiles":[{"path":"/lidarr/music/Imported/new.m4a"},{"path":"/lidarr/music/Other/new.flac"}],"deletedFiles":[{"path":"/lidarr/music/Previous/old.mp3"}]}`
+			for i := 0; i < 2; i++ {
+				r := httptest.NewRequest("POST", "/api/webhook/lidarr", strings.NewReader(payload))
+				r.SetBasicAuth("musicforge", "integration-secret")
+				w := httptest.NewRecorder()
+				a.Handler().ServeHTTP(w, r)
+				var response struct {
+					ID int64 `json:"job_id"`
+				}
+				if err = json.Unmarshal(w.Body.Bytes(), &response); err != nil || w.Code != 202 || response.ID != root {
+					t.Fatal("webhook did not reuse the manual task", w.Body.String(), err)
+				}
+			}
+			scan, err := a.claim(false)
+			if err != nil || scan.ID != root {
+				t.Fatal("missing import scan", scan, err)
+			}
+			if err = a.execute(context.Background(), scan); err != nil {
+				t.Fatal(err)
+			}
+			if err = a.completeJob(scan, "success", 0, 1, "", 0); err != nil {
+				t.Fatal(err)
+			}
+			tasks, total, err := a.taskListSelected(context.Background(), "all", 10, 0, []int64{root})
+			if err != nil || total != 1 || tasks[0].State == "success" || tasks[0].Scan == nil || tasks[0].Scan.Total != 0 {
+				t.Fatal("empty scan falsely completed the import", tasks, err)
+			}
+			check, err := a.claim(false)
+			if err != nil || check.Kind != "upgrade" {
+				t.Fatal("missing imported-track check", check, err)
+			}
+			var request UpgradeRequest
+			if err = json.Unmarshal(check.Args, &request); err != nil || len(request.New) != 2 || len(request.Old) != 0 {
+				t.Fatal("ordinary import enabled destructive cleanup", request, err)
+			}
+			var waiting *deferred
+			err = a.execute(context.Background(), check)
+			if !errors.As(err, &waiting) || !strings.Contains(err.Error(), filepath.Join(s.Source, "Imported/new.m4a")) {
+				t.Fatal("missing actionable import wait", err)
+			}
+			if err = a.completeJob(check, "pending", 0, 0, waiting.Error(), 0); err != nil {
+				t.Fatal(err)
+			}
+			rescan, err := readJob(a.reads.QueryRow("SELECT "+jobCols+" FROM jobs WHERE id=?", root))
+			var scope ScanRequest
+			if err != nil || rescan.State != "pending" || json.Unmarshal(rescan.Args, &scope) != nil || !reflect.DeepEqual(scope.Dirs, []string{"Imported", "Other"}) {
+				t.Fatal("missing albums were not scheduled on the original task", rescan, scope, err)
+			}
+			var checks int
+			if err = a.db.QueryRow("SELECT count(*) FROM jobs WHERE kind='upgrade'").Scan(&checks); err != nil || checks != 1 {
+				t.Fatal("duplicate webhook duplicated the import check", checks, err)
+			}
+			cfg, logger, assets := a.cfg, a.logger, a.assets
+			a.Close()
+			restored, err := New(cfg, logger, "test", assets)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer restored.Close()
+			makeAudioSource(t, restored, s, "Imported/new.m4a", "Imported", "aac", false)
+			makeAudioSource(t, restored, s, "Other/new.flac", "Other", "flac", false)
+			// Indexing always precedes per-track work; the check finishes after conversion.
+			scan, err = restored.claim(false)
+			if err != nil || scan.ID != root {
+				t.Fatal("restart lost the original scan", scan, err)
+			}
+			if err = restored.execute(context.Background(), scan); err != nil {
+				t.Fatal(err)
+			}
+			if err = restored.completeJob(scan, "success", 0, 1, "", 0); err != nil {
+				t.Fatal(err)
+			}
+			drain(t, restored, true)
+			tasks, total, err = restored.taskListSelected(context.Background(), "all", 10, 0, []int64{root})
+			if err != nil || total != 1 || tasks[0].ID != root || tasks[0].State != "success" {
+				t.Fatal("import did not finish on its original task", tasks, err)
+			}
+			for _, rel := range request.New {
+				source, err := restored.sourceRel(rel)
+				if err != nil || !source.OutputPresent || source.Hash == "" || source.BuiltHash != source.Hash {
+					t.Fatal("delayed import was not encoded", source, err)
+				}
+			}
+			if _, err = os.Stat(filepath.Join(s.Output, old.Output)); err != nil {
+				t.Fatal("ordinary import deleted an old playable artifact", err)
+			}
+		})
 	}
 }
 

@@ -18,6 +18,7 @@ import urllib.request
 
 ROOT = Path(".ci/rclone").resolve()
 ORIGIN = "http://127.0.0.1:19094"
+WEBHOOK_SECRET = "ci-lidarr-delayed-import-secret"
 RELEASE = threading.Event()
 BLOCKED = threading.Event()
 fault_path = "/36.flac"
@@ -160,7 +161,7 @@ def run():
         api("/api/auth/setup", {"code": code, "username": "admin", "password": "ci-rclone-password"})
         csrf = api("/api/auth/me")["csrf"]
         settings = api("/api/settings")["settings"]
-        settings.update(enabled=True, source=str(ROOT / "mount"), output=str(ROOT / "output"), scan_minutes=60, lidarr_prefix="/lidarr/music", webhook_secret="ci-lidarr-secret")
+        settings.update(enabled=True, source=str(ROOT / "mount"), output=str(ROOT / "output"), scan_minutes=60, lidarr_prefix="/lidarr/music", webhook_secret=WEBHOOK_SECRET)
         api("/api/settings", settings, "PUT")
         root = wait_for(lambda: api("/api/jobs")["jobs"], lambda jobs: any(job["kind"] == "scan" for job in jobs))[0]["id"]
         reading = wait_for(lambda: task(root), lambda job: BLOCKED.is_set() and any(activity["phase"] == "read" and activity["path"].endswith("36.flac") and activity.get("read_bytes", 0) > 0 for activity in job["current"]), timeout=45)
@@ -209,7 +210,7 @@ def run():
         third = api("/api/webhook/lidarr", {
             "eventType": "Download", "isUpgrade": False,
             "trackFiles": [{"path": "/lidarr/music/Artist/Single/42.flac"}],
-        }, headers={"Authorization": "Bearer ci-lidarr-secret"})["job_id"]
+        }, headers={"Authorization": "Bearer " + WEBHOOK_SECRET})["job_id"]
         delayed = wait_for(lambda: task(third), lambda job: "Waiting for imported source" in job.get("waiting_reason", ""), timeout=15)
         assert delayed["state"] in ("pending", "running") and not delayed["can_delete"]
         assert str(ROOT / "mount/Artist/Single/42.flac") in delayed["waiting_reason"]

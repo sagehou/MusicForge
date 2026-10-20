@@ -76,7 +76,7 @@ func TestLyricsProviderPriorityAndFallback(t *testing.T) {
 						t.Error("QQ search lost Unicode or its anonymous session")
 					}
 					if provider == "qq" {
-						lyricsJSON(w, `{"code":0,"request":{"code":0,"data":{"body":{"item_song":[{"id":123,"mid":"song-mid","title":"夜に駆ける","interval":261,"album":{"name":"THE BOOK"},"singer":[{"name":"YOASOBI"}]}]}}}}`)
+						lyricsJSON(w, `{"code":0,"request":{"code":0,"data":{"body":{"item_song":[{"id":123,"mid":"song-mid","title":"夜に駆ける (向夜晚奔去)","name":"夜に駆ける","interval":261,"album":{"name":"THE BOOK"},"singer":[{"name":"YOASOBI"}]}]}}}}`)
 					} else {
 						lyricsJSON(w, `{"code":0,"request":{"code":0,"data":{"body":{"song":{"list":[]}}}}}`)
 					}

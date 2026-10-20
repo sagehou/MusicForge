@@ -334,6 +334,7 @@ func (a *App) qqCandidates(ctx context.Context, query string) ([]lyricsCandidate
 		ID       int64   `json:"id"`
 		Mid      string  `json:"mid"`
 		Title    string  `json:"title"`
+		Name     string  `json:"name"`
 		Subtitle string  `json:"subtitle"`
 		Interval float64 `json:"interval"`
 		Album    struct {
@@ -371,7 +372,7 @@ func (a *App) qqCandidates(ctx context.Context, query string) ([]lyricsCandidate
 		if song.Subtitle != "" && !strings.Contains(strings.ToLower(title), strings.ToLower(song.Subtitle)) {
 			title += " (" + song.Subtitle + ")"
 		}
-		result = append(result, lyricsCandidate{Title: title, Artist: strings.Join(artists, " / "), Album: song.Album.Name, Duration: song.Interval, remoteID: strconv.FormatInt(song.ID, 10), mid: song.Mid, titleAliases: []string{song.Title}})
+		result = append(result, lyricsCandidate{Title: title, Artist: strings.Join(artists, " / "), Album: song.Album.Name, Duration: song.Interval, remoteID: strconv.FormatInt(song.ID, 10), mid: song.Mid, titleAliases: []string{song.Title, song.Name}})
 	}
 	return result, nil
 }

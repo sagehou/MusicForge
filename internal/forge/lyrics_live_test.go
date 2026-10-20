@@ -1,7 +1,12 @@
 package forge
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
+	"fmt"
+	"io"
+	"net/http"
 	"testing"
 	"time"
 )
@@ -21,6 +26,26 @@ func TestLyricsProvidersOnline(t *testing.T) {
 		t.Run(provider, func(t *testing.T) {
 			t.Parallel()
 			app := &App{version: "lyrics-provider-check"}
+			app.lyricsHTTP = &http.Client{Timeout: 10 * time.Second, Transport: lyricsTransport(func(request *http.Request) (*http.Response, error) {
+				response, err := http.DefaultTransport.RoundTrip(request)
+				if err != nil {
+					return response, err
+				}
+				raw, err := io.ReadAll(io.LimitReader(response.Body, 8*maxLyricsBytes+1))
+				response.Body.Close()
+				if err != nil {
+					return nil, err
+				}
+				response.Body = io.NopCloser(bytes.NewReader(raw))
+				var value any
+				decodeErr := json.Unmarshal(raw, &value)
+				shape, _ := json.Marshal(liveLyricsShape(value, "", 8))
+				if len(shape) > 5000 {
+					shape = shape[:5000]
+				}
+				t.Logf("%s%s HTTP %d type=%q JSON=%v schema=%s", request.URL.Host, request.URL.Path, response.StatusCode, response.Header.Get("Content-Type"), decodeErr, shape)
+				return response, nil
+			})}
 			for _, track := range tracks {
 				t.Run(track.language, func(t *testing.T) {
 					ctx, cancel := context.WithTimeout(context.Background(), 35*time.Second)
@@ -50,5 +75,35 @@ func TestLyricsProvidersOnline(t *testing.T) {
 				})
 			}
 		})
+	}
+}
+
+func liveLyricsShape(value any, key string, depth int) any {
+	if depth == 0 {
+		return fmt.Sprintf("%T", value)
+	}
+	switch value := value.(type) {
+	case map[string]any:
+		result := map[string]any{}
+		for key, child := range value {
+			result[key] = liveLyricsShape(child, key, depth-1)
+		}
+		return result
+	case []any:
+		result := map[string]any{"count": len(value)}
+		if len(value) > 0 {
+			result["first"] = liveLyricsShape(value[0], "", depth-1)
+		}
+		return result
+	case string:
+		if key == "message" || key == "msg" || key == "errmsg" || key == "code" {
+			if len(value) > 160 {
+				return value[:160]
+			}
+			return value
+		}
+		return fmt.Sprintf("string(%d)", len(value))
+	default:
+		return value
 	}
 }

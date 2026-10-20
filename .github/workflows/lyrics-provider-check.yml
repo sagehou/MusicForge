@@ -18,4 +18,4 @@ jobs:
           go-version-file: go.mod
           cache: false
       - name: Search and preview English, Chinese and Japanese recordings
-        run: go test -mod=readonly -count=1 -v -timeout=6m -run '^TestLyricsProvidersOnline$' ./internal/forge
+        run: go test -mod=readonly -count=1 -v -timeout=6m -run '^(TestLyricsProvidersOnline|TestLyricsProviderPriorityAndFallback|TestNetEaseVerificationIsReported)$' ./internal/forge

@@ -18,9 +18,9 @@ func TestLyricsProvidersOnline(t *testing.T) {
 		language string
 		Source
 	}{
+		{"Japanese", Source{Title: "夜に駆ける", Artist: "YOASOBI", Duration: 261.12}},
 		{"English", Source{Title: "Imagine", Artist: "John Lennon", Duration: 183}},
 		{"Chinese", Source{Title: "晴天", Artist: "周杰伦", Duration: 269}},
-		{"Japanese", Source{Title: "夜に駆ける", Artist: "YOASOBI", Duration: 261.12}},
 	}
 	for _, provider := range lyricsProviders {
 		t.Run(provider, func(t *testing.T) {

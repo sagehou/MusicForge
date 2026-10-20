@@ -72,7 +72,7 @@ func TestLyricsProviderPriorityAndFallback(t *testing.T) {
 						lyricsJSON(w, `{"code":0,"request":{"code":0,"data":{"session":{"uid":"0","sid":"guest-session","userip":"127.0.0.1"}}}}`)
 						return
 					}
-					if body.Request.Method != "DoSearchForQQMusicLite" || body.Comm.SID != "guest-session" || !strings.Contains(body.Request.Param.Query, track.Title) {
+					if body.Request.Method != "DoSearchForQQMusicMobile" || body.Comm.SID != "guest-session" || !strings.Contains(body.Request.Param.Query, track.Title) {
 						t.Error("QQ search lost Unicode or its anonymous session")
 					}
 					if provider == "qq" {

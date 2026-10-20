@@ -626,5 +626,6 @@
   "error.lyricsProviderCooldown": "{provider} 正在等待限流恢复，请稍后重试",
   "error.lyricsProviderHTTP": "{provider} 返回 HTTP {status}，请稍后重试",
   "error.lyricsProviderData": "{provider} 返回的歌词数据无效或过大",
+  "error.lyricsNetEaseVerification": "网易云要求账号验证（错误码 -462），请尝试其他歌词来源",
   "error.lyricsPreviewChanged": "歌词预览已切换，请重新选择候选"
 }

@@ -674,5 +674,6 @@
   "error.lyricsProviderCooldown": "{provider} is cooling down; retry later",
   "error.lyricsProviderHTTP": "{provider} returned HTTP {status}; retry later",
   "error.lyricsProviderData": "{provider} returned invalid or oversized lyrics data",
+  "error.lyricsNetEaseVerification": "NetEase requires account verification (code -462); try another lyrics provider",
   "error.lyricsPreviewChanged": "Lyrics preview changed; select the candidate again"
 }

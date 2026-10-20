@@ -37,17 +37,21 @@ func lyricsSession(t *testing.T, a *App) func(string, string, any) *httptest.Res
 func previewTestLyrics(t *testing.T, a *App, request func(string, string, any) *httptest.ResponseRecorder) (string, int) {
 	t.Helper()
 	mockLyricsServices(t, a, func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Host != "music.163.com" {
+		if r.URL.Host != "interface.music.163.com" {
 			t.Error("unexpected provider", r.URL.Host)
 		}
 		switch r.URL.Path {
-		case "/api/search/pc":
-			lyricsJSON(w, `{"code":200,"result":{"songs":[{"id":321,"name":"別名","duration":183000,"artists":[{"name":"Artist"}],"album":{"name":"Album"}}]}}`)
-		case "/api/song/lyric":
-			if r.URL.Query().Get("id") != "321" {
+		case "/eapi/register/anonimous":
+			readNetEaseParams(t, r)
+			guestNetEaseResponse(w)
+		case "/eapi/search/song/list/page":
+			readNetEaseParams(t, r)
+			encryptedNetEaseResponse(w, `{"code":200,"data":{"resources":[{"baseInfo":{"simpleSongData":{"id":321,"name":"別名","dt":183000,"ar":[{"name":"Artist"}],"al":{"name":"Album"}}}}]}}`)
+		case "/eapi/song/lyric/v1":
+			if params := readNetEaseParams(t, r); params["id"] != float64(321) {
 				t.Error("download did not use server candidate identity")
 			}
-			lyricsJSON(w, `{"code":200,"lrc":{"lyric":"[00:01.00]Original"},"tlyric":{"lyric":"[00:01.00]译文"},"romalrc":{"lyric":"[00:01.00]romanization"}}`)
+			encryptedNetEaseResponse(w, `{"code":200,"lrc":{"lyric":"[00:01.00]Original"},"tlyric":{"lyric":"[00:01.00]译文"},"romalrc":{"lyric":"[00:01.00]romanization"}}`)
 		default:
 			t.Error("unexpected endpoint", r.URL.Path)
 			w.WriteHeader(500)

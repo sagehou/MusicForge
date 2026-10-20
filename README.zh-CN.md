@@ -239,6 +239,8 @@ MUSICFORGE_ALLOWED_ORIGINS=https://musicforge.home.example.com,https://musicforg
 
 [CI](.github/workflows/ci.yml) 构建前后端，使用真实 ffmpeg 运行带竞态检测的 Go 测试，在 Chromium 中测试实际应用，并验证两个架构的原生容器。需要时从 `canonical-source` 获取 CI 生成的锁文件和格式化的 Go 源码。
 
+相对上一已发布稳定版本，全部持久化格式与语义未变时，可以跳过完整回滚验证；schema 编号未变本身不够。CI 仅对纯文档、前端展示和测试改动自动跳过，在 `rollback-scope` 中记录基线及判定，其余情况仍在双架构运行旧镜像往返验证。常规测试和镜像检查始终执行，详见[兼容规范](AGENTS.md#persistence-compatibility-and-rollback)。
+
 PR 和 `main` 提交仅验证，不发布。版本标签（如 `v0.1.0`）验证成功后发布对应 GHCR 镜像。稳定版本更新 `latest`，预发布版本不更新。
 
 翻译位于 [web/src/locales](web/src/locales)，各语言保持一致的键和插值占位符。浏览器测试覆盖语言识别、切换记忆和双语流程。许可信息见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。

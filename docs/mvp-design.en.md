@@ -265,7 +265,8 @@ Use React, TypeScript, TailwindCSS and shadcn/ui.
 
 - Schema 2 is the stable MVP baseline. The `0.2.x` series keeps this structure and the published table/column meanings.
 - Compatibility includes Settings JSON, job kinds/arguments, metadata/recovery journals, ownership markers and artifact paths/signatures. Keeping the schema number while changing formats or units is incompatible.
-- Same-series releases must support older compatible readers and writers. On both architectures, CI opens the candidate's same volumes with published older images, checks library, credentials, jobs and artifacts, then returns to the candidate.
+- Same-series releases must support older compatible readers and writers. Full rollback validation may be skipped only when the entire persistence compatibility surface is unchanged from the most recent published stable release, excluding the version under test. An unchanged schema number alone is insufficient; new optional metadata and artifact maintenance are persistence changes too.
+- CI records the baseline and decision, automatically skipping full rollback only for documentation, frontend presentation and test changes. Backend, dependency, deployment, workflow or unclassified changes, and missing or unrelated baselines, still require validation. Normal tests and both architecture image checks always run. When required, CI opens the candidate's same volumes with published older images on both architectures, checks library, credentials, jobs and artifacts, then returns to the candidate.
 - Incompatible changes require a clearly identified breaking release with an upgrade backup procedure and a verified restore-and-rollback path. Preserve historical migrations; do not force a lower database version.
 - Complete state rollback requires matching stopped `/config` and output snapshots. Switching images cannot undo completed replacements, moves or deletions. Published version tags and images are immutable.
 

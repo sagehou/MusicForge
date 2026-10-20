@@ -18,8 +18,25 @@ jobs:
   validate:
     runs-on: ubuntu-24.04
     timeout-minutes: 40
+    outputs:
+      rollback_required: ${{ steps.rollback.outputs.required }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - name: Rollback policy regression checks
+        run: python3 -m unittest discover -s .github/scripts -p 'test_rollback_scope.py' -v
+      - name: Determine persistence rollback scope
+        id: rollback
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: python3 .github/scripts/check-rollback-scope.py
+      - name: Rollback scope evidence
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: rollback-scope
+          path: .ci/rollback-scope.json
+          retention-days: 14
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version-file: .node-version
@@ -243,10 +260,12 @@ jobs:
           docker compose exec -T musicforge musicforge -healthcheck
           docker compose exec -T musicforge sh -c 'test "$MUSICFORGE_NETEASE_COOKIE_FILE" = /run/secrets/musicforge/netease.cookie && test -r "$MUSICFORGE_NETEASE_COOKIE_FILE" && test ! -w "$MUSICFORGE_NETEASE_COOKIE_FILE"'
       - name: Same-schema rollback with published releases
+        if: needs.validate.outputs.rollback_required != 'false'
         env:
           ARCH: ${{ matrix.arch }}
         run: python3 .github/scripts/check-rollback.py
       - name: Rollback evidence
+        if: needs.validate.outputs.rollback_required != 'false'
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: rollback-${{ matrix.arch }}

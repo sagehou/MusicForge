@@ -73,6 +73,11 @@ func TestLyricsProvidersOnline(t *testing.T) {
 				return response, nil
 			})}
 			for _, track := range tracks {
+				if provider == "netease" && track.language == "Chinese" {
+					// This catalog currently returns only covers for 晴天. Keep the
+					// recording guard intact and exercise a licensed original here.
+					track.Source = Source{Title: "十年", Artist: "陈奕迅", Duration: 205}
+				}
 				t.Run(track.language, func(t *testing.T) {
 					ctx, cancel := context.WithTimeout(context.Background(), 35*time.Second)
 					defer cancel()

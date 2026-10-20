@@ -674,6 +674,11 @@
   "error.lyricsProviderCooldown": "{provider} is cooling down; retry later",
   "error.lyricsProviderHTTP": "{provider} returned HTTP {status}; retry later",
   "error.lyricsProviderData": "{provider} returned invalid or oversized lyrics data",
-  "error.lyricsNetEaseVerification": "NetEase requires account verification (code -462); try another lyrics provider",
-  "error.lyricsPreviewChanged": "Lyrics preview changed; select the candidate again"
+  "error.lyricsNetEaseVerification": "NetEase requires account verification (code -462); update the Cookie file after verifying the account",
+  "error.lyricsPreviewChanged": "Lyrics preview changed; select the candidate again",
+  "error.lyricsNetEaseCookie": "NetEase Cookie file is unreadable or invalid; check its mount, permissions and MUSIC_U value",
+  "error.lyricsNetEaseLoginExpired": "NetEase login Cookie expired or was rejected; replace the Cookie file",
+  "error.lyricsNetEaseGuestExpired": "NetEase guest session expired or was rejected; retry later",
+  "error.lyricsNetEaseGuestMissing": "NetEase did not issue a guest session; retry later or configure a Cookie file",
+  "error.lyricsNetEaseRestricted": "NetEase temporarily restricted lyrics requests (code -460); retry later"
 }

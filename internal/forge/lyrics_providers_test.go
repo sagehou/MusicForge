@@ -105,13 +105,21 @@ func TestLyricsProviderPriorityAndFallback(t *testing.T) {
 						t.Error("Kugou accepted a different duration or format")
 					}
 					respond(w, 200, map[string]any{"status": 200, "content": base64.StdEncoding.EncodeToString([]byte("[00:01.00]夜の歌"))})
-				case "music.163.com/api/search/pc":
-					if r.URL.Query().Get("s") != track.Title+" "+track.Artist {
-						t.Error("NetEase search corrupted metadata")
+				case "interface.music.163.com/eapi/register/anonimous":
+					readNetEaseParams(t, r)
+					guestNetEaseResponse(w)
+				case "interface.music.163.com/eapi/search/song/list/page":
+					params := readNetEaseParams(t, r)
+					if params["keyword"] != track.Title+" "+track.Artist || netEaseRequestCookie(r, "MUSIC_A") != "guest-session" {
+						t.Error("NetEase search lost metadata or guest credentials")
 					}
-					lyricsJSON(w, `{"code":200,"result":{"songs":[{"id":456,"name":"夜に駆ける","duration":261120,"artists":[{"name":"YOASOBI"}],"album":{"name":"THE BOOK"}}]}}`)
-				case "music.163.com/api/song/lyric":
-					lyricsJSON(w, `{"code":200,"lrc":{"lyric":"[00:01.00]夜の歌"},"tlyric":{"lyric":"[00:01.00]夜晚的歌"},"romalrc":{"lyric":"[00:01.00]yoru no uta"}}`)
+					encryptedNetEaseResponse(w, `{"code":200,"data":{"resources":[{"baseInfo":{"simpleSongData":{"id":456,"name":"夜に駆ける","dt":261120,"ar":[{"name":"YOASOBI"}],"al":{"name":"THE BOOK"}}}}]}}`)
+				case "interface.music.163.com/eapi/song/lyric/v1":
+					params := readNetEaseParams(t, r)
+					if params["id"] != float64(456) || params["yv"] != "-1" {
+						t.Error("NetEase downloaded wrong recording or format")
+					}
+					encryptedNetEaseResponse(w, `{"code":200,"lrc":{"lyric":"[00:01.00]夜の歌"},"tlyric":{"lyric":"[00:01.00]夜晚的歌"},"romalrc":{"lyric":"[00:01.00]yoru no uta"}}`)
 				default:
 					t.Error("unexpected lyrics request", r.URL.Host+r.URL.Path)
 					w.WriteHeader(500)
@@ -139,12 +147,19 @@ func TestLyricsProviderPriorityAndFallback(t *testing.T) {
 
 func TestNetEaseVerificationIsReported(t *testing.T) {
 	a, _ := testApp(t)
+	calls := 0
 	mockLyricsServices(t, a, func(w http.ResponseWriter, r *http.Request) {
+		calls++
 		lyricsJSON(w, `{"code":-462,"message":"请绑定手机后再试哦~"}`)
 	})
-	candidates, err := a.neteaseCandidates(context.Background(), "晴天 周杰伦")
-	if len(candidates) != 0 || err == nil || !strings.Contains(err.Error(), "verification") || !strings.Contains(err.Error(), "-462") {
-		t.Fatal("account verification was reported as missing lyrics", candidates, err)
+	for i := 0; i < 2; i++ {
+		candidates, err := a.neteaseCandidates(context.Background(), "晴天 周杰伦")
+		if len(candidates) != 0 || err == nil || !strings.Contains(err.Error(), "verification") || !strings.Contains(err.Error(), "-462") {
+			t.Fatal("account verification was reported as missing lyrics", candidates, err)
+		}
+	}
+	if calls != 1 || time.Until(a.netease.retryAt) < 29*time.Minute {
+		t.Fatal("account verification did not pause the provider", calls)
 	}
 }
 

@@ -227,6 +227,21 @@ jobs:
           docker compose exec -T musicforge sh -c 'test "$(id -u)" = 12001 && test "$(stat -c %a /config)" = 700 && test -w /music/output && test ! -w /music/source'
           docker compose exec -T musicforge sh -c 'if touch /music/source/should-not-exist; then exit 1; fi'
           test ! -e "$FLAC_DIR/should-not-exist"
+          # Exercise the optional credential mount with a synthetic value only.
+          export NETEASE_SECRETS_DIR="$PWD/.ci/compose-secrets"
+          mkdir -p "$NETEASE_SECRETS_DIR"
+          printf 'MUSIC_U=ci-only-fake-cookie\n' > "$NETEASE_SECRETS_DIR/netease.cookie"
+          chmod 700 "$NETEASE_SECRETS_DIR"
+          chmod 600 "$NETEASE_SECRETS_DIR/netease.cookie"
+          sudo chown -R 12001:12001 "$NETEASE_SECRETS_DIR"
+          docker compose -f docker-compose.yml -f docker-compose.netease.yml config --quiet
+          docker compose -f docker-compose.yml -f docker-compose.netease.yml up -d --no-build --pull never
+          for i in $(seq 1 30); do
+            if docker compose exec -T musicforge musicforge -healthcheck; then break; fi
+            sleep 1
+          done
+          docker compose exec -T musicforge musicforge -healthcheck
+          docker compose exec -T musicforge sh -c 'test "$MUSICFORGE_NETEASE_COOKIE_FILE" = /run/secrets/musicforge/netease.cookie && test -r "$MUSICFORGE_NETEASE_COOKIE_FILE" && test ! -w "$MUSICFORGE_NETEASE_COOKIE_FILE"'
       - name: Same-schema rollback with published releases
         env:
           ARCH: ${{ matrix.arch }}

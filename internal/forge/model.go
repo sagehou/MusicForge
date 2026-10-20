@@ -25,6 +25,7 @@ type Runtime struct {
 	TrustedProxies       []netip.Prefix `json:"trusted_proxies,omitempty"`
 	SourceTimeoutSeconds int            `json:"source_timeout_seconds,omitempty"`
 	StagingMaxBytes      int64          `json:"staging_max_bytes,omitempty"`
+	NetEaseCookieFile    string         `json:"-"`
 }
 
 func LoadRuntime(dir string) (Runtime, error) {
@@ -37,10 +38,13 @@ func LoadRuntime(dir string) (Runtime, error) {
 	} else if !os.IsNotExist(err) {
 		return c, err
 	}
-	for key, target := range map[string]*string{"LISTEN": &c.Listen, "PUBLIC_URL": &c.PublicURL, "LOG_LEVEL": &c.LogLevel, "FFMPEG": &c.FFmpeg, "FFPROBE": &c.FFprobe} {
+	for key, target := range map[string]*string{"LISTEN": &c.Listen, "PUBLIC_URL": &c.PublicURL, "LOG_LEVEL": &c.LogLevel, "FFMPEG": &c.FFmpeg, "FFPROBE": &c.FFprobe, "NETEASE_COOKIE_FILE": &c.NetEaseCookieFile} {
 		if value := os.Getenv("MUSICFORGE_" + key); value != "" {
 			*target = value
 		}
+	}
+	if c.NetEaseCookieFile != "" && !filepath.IsAbs(c.NetEaseCookieFile) {
+		return c, errors.New("netease_cookie_file must be an absolute path")
 	}
 	if value, ok := os.LookupEnv("MUSICFORGE_SOURCE_TIMEOUT_SECONDS"); ok {
 		c.SourceTimeoutSeconds, err = strconv.Atoi(value)

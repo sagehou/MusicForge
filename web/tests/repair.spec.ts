@@ -96,7 +96,7 @@ test("best-effort repair requires consent and imports normal audio with a persis
   strictRebuildFailed = true;
   await page.reload();
   await page.locator(".library-options-body select").first().selectOption("possibly_damaged");
-  await expect(page.getByText("Dear My Friend", { exact: true })).toBeVisible();
+  await expect(page.locator(".track-cell strong").filter({ hasText: /^Dear My Friend$/ })).toBeVisible();
   await expect(page.locator(".badge-failed")).toBeVisible();
   await expect(page.locator(".repair-warning")).toHaveText("Possibly damaged");
 });

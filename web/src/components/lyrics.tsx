@@ -123,6 +123,11 @@ type CandidateGroup = { provider: OnlineProvider; token?: string; candidates: Ca
 type CandidateText = { original: string; translation?: string; romanization?: string; script?: string; translation_script?: string };
 type CandidateChoice = { token: string; candidate: Candidate };
 
+function candidateDuration(value: number) {
+  const seconds = Math.round(value);
+  return seconds > 0 ? `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}` : "—";
+}
+
 function LyricsPicker({ source, notify, close, saved }: { source: Source; notify: Notice; close: () => void; saved: () => void }) {
   const { t, errorMessage, locale } = useI18n();
   const dialog = useRef<HTMLDialogElement>(null);
@@ -214,7 +219,7 @@ function LyricsPicker({ source, notify, close, saved }: { source: Source; notify
       {!group.loading && !group.error && group.candidates.length === 0 && <p>{t("lyrics.noCandidates")}</p>}
       {group.candidates.map(candidate => <label className="lyrics-candidate" key={candidate.index}>
         <input type="radio" name={`lyrics-candidate-${source.id}`} aria-label={t("lyrics.previewCandidate", { title: candidate.title, artist: candidate.artist, provider: t(`lyrics.name.${candidate.provider}`) })} checked={!!selected && selected.token === group.token && selected.candidate.index === candidate.index} onChange={() => group.token && void choose({ token: group.token, candidate })} />
-        <span><strong dir="auto">{candidate.title}{recommended && recommended.token === group.token && recommended.candidate.index === candidate.index && <em className="lyrics-recommended">{t("lyrics.recommended")}</em>}</strong><span dir="auto">{candidate.artist} · {candidate.album || "—"} · {candidate.duration > 0 ? `${Math.floor(candidate.duration / 60)}:${String(Math.floor(candidate.duration % 60)).padStart(2, "0")}` : "—"}</span><small>{t(candidate.high_confidence ? "lyrics.matchHigh" : "lyrics.matchReview")}{candidate.match_score !== undefined && <> · {t("lyrics.matchScore", { score: candidate.match_score })}</>}{candidate.duration_delta !== undefined && <> · {t("lyrics.durationDelta", { seconds: Math.round(candidate.duration_delta * 100) / 100 })}</>}</small>
+        <span><strong dir="auto">{candidate.title}{recommended && recommended.token === group.token && recommended.candidate.index === candidate.index && <em className="lyrics-recommended">{t("lyrics.recommended")}</em>}</strong><span dir="auto">{candidate.artist} · {candidate.album || "—"} · {candidateDuration(candidate.duration)}</span><small>{t(candidate.high_confidence ? "lyrics.matchHigh" : "lyrics.matchReview")}{candidate.match_score !== undefined && <> · {t("lyrics.matchScore", { score: candidate.match_score })}</>}{candidate.duration_delta !== undefined && <> · {t("lyrics.durationDelta", { seconds: Math.round(candidate.duration_delta * 100) / 100 })}</>}</small>
           {candidate.script === "simplified" && <small>{t("lyrics.simplified")}</small>}{candidate.script === "traditional" && <small>{t("lyrics.traditional")}</small>}{candidate.translation_script === "simplified" && <small>{t("lyrics.simplifiedTranslation")}</small>}</span>
       </label>)}
     </fieldset>)}</div>

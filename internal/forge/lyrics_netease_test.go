@@ -90,6 +90,10 @@ func TestNetEaseGuestSessionReuseAndRenewal(t *testing.T) {
 			return
 		}
 		searches++
+		if netEaseRequestCookie(r, "MUSIC_A") == "expired-guest" {
+			lyricsJSON(w, `{"code":301}`)
+			return
+		}
 		if netEaseRequestCookie(r, "MUSIC_A") != "guest-session" || netEaseRequestCookie(r, "__csrf") != "guest-csrf" {
 			t.Error("anonymous session was not used")
 		}
@@ -108,6 +112,17 @@ func TestNetEaseGuestSessionReuseAndRenewal(t *testing.T) {
 	}
 	if registrations != 2 || searches != 3 {
 		t.Fatal("expired guest session was not renewed", registrations, searches)
+	}
+	a.netease.session.cookies["MUSIC_A"] = "expired-guest"
+	if _, err := a.neteaseCandidates(context.Background(), "Song Artist"); err == nil || !strings.Contains(err.Error(), "guest session") || a.netease.session != nil {
+		t.Fatal("rejected guest credentials were not invalidated", err)
+	}
+	if _, err := a.neteaseCandidates(context.Background(), "Song Artist"); err == nil || searches != 4 || time.Until(a.netease.retryAt) < 59*time.Second {
+		t.Fatal("guest rejection did not pause requests", err, searches)
+	}
+	a.netease.retryAt = time.Now().Add(-time.Second)
+	if _, err := a.neteaseCandidates(context.Background(), "Song Artist"); err != nil || registrations != 3 || searches != 5 {
+		t.Fatal("rejected guest session was not renewed after cooldown", err, registrations, searches)
 	}
 }
 

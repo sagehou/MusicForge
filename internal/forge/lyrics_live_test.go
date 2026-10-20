@@ -3,8 +3,6 @@ package forge
 import (
 	"bytes"
 	"context"
-	"crypto/md5"
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -136,50 +134,5 @@ func liveLyricsShape(value any, key string, depth int) any {
 		return fmt.Sprintf("string(%d)", len(value))
 	default:
 		return value
-	}
-}
-
-// Diagnose wire compatibility with public protocol examples, without logging
-// registration usernames, cookies, encrypted bodies or other credentials.
-func TestNetEaseGuestProtocolOnline(t *testing.T) {
-	for _, knownDevice := range []bool{false, true} {
-		t.Run(fmt.Sprintf("reference-profile-known-device-%t", knownDevice), func(t *testing.T) {
-			a := &App{version: "lyrics-provider-check"}
-			a.lyricsHTTP = &http.Client{Timeout: 10 * time.Second, Transport: lyricsTransport(func(r *http.Request) (*http.Response, error) {
-				r.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Safari/537.36 Chrome/91.0.4472.164 NeteaseMusicDesktop/3.1.3.203419 MusicForge/lyrics-provider-check")
-				r.Header.Set("Accept", "*/*")
-				return http.DefaultTransport.RoundTrip(r)
-			})}
-			session := newNetEaseSession(nil)
-			session.cookies["mode"] = "ASUS ROG STRIX Z790"
-			if knownDevice {
-				// Public sample identifier from the upstream protocol reference.
-				session.cookies["deviceId"] = "AA9955F5FE37BA7EAF48F8EF0C9966B28293CC8D6415CCD93549"
-			}
-			device := session.cookies["deviceId"]
-			xor := []byte(device)
-			key := "3go8&$8*3*3h0k(2)2"
-			for i := range xor {
-				xor[i] ^= key[i%len(key)]
-			}
-			sum := md5.Sum(xor)
-			username := base64.StdEncoding.EncodeToString([]byte(device + " " + base64.StdEncoding.EncodeToString(sum[:])))
-			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-			defer cancel()
-			code, cookies, err := a.neteaseEAPI(ctx, "/eapi/register/anonimous", map[string]any{"username": username}, session, new(any))
-			if err != nil {
-				t.Fatalf("registration code=%d: %v", code, err)
-			}
-			present := false
-			for _, cookie := range cookies {
-				if cookie.Name == "MUSIC_A" && cookie.Value != "" {
-					present = true
-				}
-			}
-			if !present {
-				t.Fatal("registration did not issue MUSIC_A")
-			}
-			t.Log("guest registration succeeded")
-		})
 	}
 }

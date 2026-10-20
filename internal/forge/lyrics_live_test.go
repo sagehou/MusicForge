@@ -38,7 +38,13 @@ func TestLyricsProvidersOnline(t *testing.T) {
 				}
 				response.Body = io.NopCloser(bytes.NewReader(raw))
 				var value any
-				decodeErr := json.Unmarshal(raw, &value)
+				decoded := raw
+				if request.URL.Host == "interface.music.163.com" && !json.Valid(raw) {
+					if plaintext, decryptErr := neteaseDecrypt(raw); decryptErr == nil {
+						decoded = plaintext
+					}
+				}
+				decodeErr := json.Unmarshal(decoded, &value)
 				if request.URL.Host == "u.y.qq.com" {
 					var metadata struct {
 						Request struct {
@@ -99,6 +105,9 @@ func TestLyricsProvidersOnline(t *testing.T) {
 }
 
 func liveLyricsShape(value any, key string, depth int) any {
+	if key == "userId" || key == "cookie" || key == "MUSIC_A" || key == "MUSIC_U" || key == "__csrf" {
+		return "redacted"
+	}
 	if depth == 0 {
 		return fmt.Sprintf("%T", value)
 	}
@@ -116,7 +125,7 @@ func liveLyricsShape(value any, key string, depth int) any {
 		}
 		return result
 	case string:
-		if key == "message" || key == "msg" || key == "errmsg" || key == "code" {
+		if key == "code" {
 			if len(value) > 160 {
 				return value[:160]
 			}

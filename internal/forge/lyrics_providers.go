@@ -405,54 +405,6 @@ func (a *App) kugouCandidates(ctx context.Context, query string) ([]lyricsCandid
 	return result, nil
 }
 
-func (a *App) neteaseCandidates(ctx context.Context, query string) ([]lyricsCandidate, error) {
-	params := url.Values{"s": {query}, "type": {"1"}, "limit": {"8"}, "offset": {"0"}}
-	var response struct {
-		Code   int `json:"code"`
-		Result struct {
-			Songs []struct {
-				ID       int64    `json:"id"`
-				Name     string   `json:"name"`
-				Aliases  []string `json:"alias"`
-				Duration float64  `json:"duration"`
-				Artists  []struct {
-					Name    string   `json:"name"`
-					Aliases []string `json:"alias"`
-				} `json:"artists"`
-				Album struct {
-					Name string `json:"name"`
-				} `json:"album"`
-			} `json:"songs"`
-		} `json:"result"`
-	}
-	if _, err := a.lyricsRequest(ctx, "netease", "GET", "https://music.163.com/api/search/pc?"+params.Encode(), nil, &response); err != nil {
-		return nil, err
-	}
-	if response.Code != 200 {
-		return nil, neteaseLyricsError(response.Code)
-	}
-	var result []lyricsCandidate
-	for _, song := range response.Result.Songs {
-		var artists, aliases []string
-		for _, artist := range song.Artists {
-			artists = append(artists, artist.Name)
-			if len(song.Artists) == 1 {
-				aliases = artist.Aliases
-			}
-		}
-		result = append(result, lyricsCandidate{Title: song.Name, Artist: strings.Join(artists, " / "), Album: song.Album.Name, Duration: song.Duration / 1000,
-			remoteID: strconv.FormatInt(song.ID, 10), titleAliases: song.Aliases, artistAliases: aliases})
-	}
-	return result, nil
-}
-
-func neteaseLyricsError(code int) error {
-	if code == -462 {
-		return errors.New("NetEase requires account verification (code -462); try another lyrics provider")
-	}
-	return fmt.Errorf("NetEase rejected the lyrics request (code %d)", code)
-}
-
 func (a *App) kugouLyricsGET(ctx context.Context, path string, params url.Values, result any) (int, error) {
 	params.Set("appid", "3116")
 	params.Set("clientver", "11070")
@@ -549,7 +501,7 @@ func (a *App) candidateLyrics(ctx context.Context, candidate lyricsCandidate) (l
 			break
 		}
 	case "netease":
-		params := url.Values{"id": {candidate.remoteID}, "lv": {"-1"}, "tv": {"-1"}, "rv": {"-1"}}
+		params := map[string]any{"id": json.Number(candidate.remoteID), "lv": "-1", "tv": "-1", "rv": "-1", "yv": "-1"}
 		var response struct {
 			Code int `json:"code"`
 			LRC  struct {
@@ -562,11 +514,8 @@ func (a *App) candidateLyrics(ctx context.Context, candidate lyricsCandidate) (l
 				Lyric string `json:"lyric"`
 			} `json:"romalrc"`
 		}
-		if _, err := a.lyricsRequest(ctx, "netease", "GET", "https://music.163.com/api/song/lyric?"+params.Encode(), nil, &response); err != nil {
+		if err := a.neteaseCall(ctx, "/eapi/song/lyric/v1", params, &response); err != nil {
 			return text, err
-		}
-		if response.Code != 200 {
-			return text, neteaseLyricsError(response.Code)
 		}
 		text = lyricsText{Original: response.LRC.Lyric, Translation: response.Translation.Lyric, Romanization: response.Romanization.Lyric}
 	default:
@@ -582,6 +531,31 @@ func (a *App) candidateLyrics(ctx context.Context, candidate lyricsCandidate) (l
 }
 
 func (a *App) lyricsRequest(ctx context.Context, provider, method, endpoint string, body []byte, target any) (int, error) {
+	request, err := http.NewRequestWithContext(ctx, method, endpoint, bytes.NewReader(body))
+	if err != nil {
+		return 0, err
+	}
+	if len(body) > 0 {
+		request.Header.Set("Content-Type", "application/json")
+	}
+	if provider == "qq" {
+		request.Header.Set("Referer", "https://y.qq.com/")
+		request.Header.Set("Cookie", "tmeLoginType=-1;")
+	}
+	response, raw, err := a.lyricsHTTPResponse(provider, request)
+	if response == nil {
+		return 0, err
+	}
+	if err == nil && response.StatusCode == 200 && json.Unmarshal(raw, target) != nil {
+		err = fmt.Errorf("%s returned invalid or oversized lyrics data", provider)
+	}
+	return response.StatusCode, err
+}
+
+// Both JSON and NetEase's encrypted responses share request bounds, cancellation,
+// redirect protection and per-provider rate limits. Response bodies are closed.
+func (a *App) lyricsHTTPResponse(provider string, request *http.Request) (*http.Response, []byte, error) {
+	ctx := request.Context()
 	a.lyricsMu.Lock()
 	if a.lyricsGates == nil {
 		a.lyricsGates = map[string]chan struct{}{}
@@ -596,11 +570,11 @@ func (a *App) lyricsRequest(ctx context.Context, provider, method, endpoint stri
 	select {
 	case gate <- struct{}{}:
 	case <-ctx.Done():
-		return 0, ctx.Err()
+		return nil, nil, ctx.Err()
 	}
 	defer func() { <-gate }()
 	if err := ctx.Err(); err != nil {
-		return 0, err
+		return nil, nil, err
 	}
 	a.lyricsMu.Lock()
 	next := a.lyricsRetries[provider]
@@ -610,27 +584,15 @@ func (a *App) lyricsRequest(ctx context.Context, provider, method, endpoint stri
 	a.lyricsMu.Unlock()
 	wait := time.Until(next)
 	if wait > 2*time.Second {
-		return 0, fmt.Errorf("%s lyrics service is cooling down; retry later", provider)
+		return nil, nil, fmt.Errorf("%s lyrics service is cooling down; retry later", provider)
 	}
 	if wait > 0 && !pause(ctx, wait) {
-		return 0, ctx.Err()
+		return nil, nil, ctx.Err()
 	}
-	request, err := http.NewRequestWithContext(ctx, method, endpoint, bytes.NewReader(body))
-	if err != nil {
-		return 0, err
+	if request.Header.Get("User-Agent") == "" {
+		request.Header.Set("User-Agent", "MusicForge/"+a.version+" (https://github.com/sagehou/MusicForge)")
 	}
-	request.Header.Set("User-Agent", "MusicForge/"+a.version+" (https://github.com/sagehou/MusicForge)")
 	request.Header.Set("Accept", "application/json")
-	if len(body) > 0 {
-		request.Header.Set("Content-Type", "application/json")
-	}
-	if provider == "qq" {
-		request.Header.Set("Referer", "https://y.qq.com/")
-		request.Header.Set("Cookie", "tmeLoginType=-1;")
-	}
-	if provider == "netease" {
-		request.Header.Set("Referer", "https://music.163.com/")
-	}
 	client := http.Client{Timeout: 10 * time.Second}
 	if a.lyricsHTTP != nil {
 		client = *a.lyricsHTTP
@@ -651,6 +613,9 @@ func (a *App) lyricsRequest(ctx context.Context, provider, method, endpoint stri
 		}
 	}
 	a.lyricsMu.Lock()
+	if a.lyricsRetries[provider].After(next) {
+		next = a.lyricsRetries[provider]
+	}
 	a.lyricsRetries[provider] = next
 	if provider == "lrclib" {
 		a.lyricsRetryAt = next
@@ -660,23 +625,26 @@ func (a *App) lyricsRequest(ctx context.Context, provider, method, endpoint stri
 		if response != nil {
 			response.Body.Close()
 		}
-		return 0, ctx.Err()
+		return nil, nil, ctx.Err()
 	}
 	if err != nil {
-		return 0, fmt.Errorf("%s lyrics request failed; check connectivity or retry later", provider)
+		return nil, nil, fmt.Errorf("%s lyrics request failed; check connectivity or retry later", provider)
 	}
 	defer response.Body.Close()
 	if response.StatusCode == 404 {
-		return 404, nil
+		return response, nil, nil
 	}
 	if response.StatusCode != 200 {
-		return response.StatusCode, fmt.Errorf("%s lyrics service returned HTTP %d; retry later", provider, response.StatusCode)
+		return response, nil, fmt.Errorf("%s lyrics service returned HTTP %d; retry later", provider, response.StatusCode)
 	}
 	raw, err := io.ReadAll(io.LimitReader(response.Body, 8*maxLyricsBytes+1))
-	if err != nil || len(raw) > 8*maxLyricsBytes || json.Unmarshal(raw, target) != nil {
-		return response.StatusCode, fmt.Errorf("%s returned invalid or oversized lyrics data", provider)
+	if ctx.Err() != nil {
+		return response, nil, ctx.Err()
 	}
-	return response.StatusCode, nil
+	if err != nil || len(raw) > 8*maxLyricsBytes {
+		return response, nil, fmt.Errorf("%s returned invalid or oversized lyrics data", provider)
+	}
+	return response, raw, nil
 }
 
 // A few web lyric endpoints still return base64 or HTML entities inside JSON.

@@ -1,0 +1,13 @@
+# Optional override. Mount a private directory so atomic Cookie-file replacement
+# becomes visible without recreating the container. Use the same PUID/PGID.
+services:
+  musicforge:
+    environment:
+      MUSICFORGE_NETEASE_COOKIE_FILE: /run/secrets/musicforge/netease.cookie
+    volumes:
+      - type: bind
+        source: ${NETEASE_SECRETS_DIR:?Set NETEASE_SECRETS_DIR to your private Cookie directory}
+        target: /run/secrets/musicforge
+        read_only: true
+        bind:
+          create_host_path: false

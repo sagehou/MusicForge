@@ -16,6 +16,31 @@ See the [README](../README.md) for directory creation and startup. Check `docker
 
 For multiple domains, follow the [runtime configuration example](../README.md#runtime-configuration). Test local login, saving Settings and logout on each origin; cookies remain separate. OIDC started on an additional origin redirects to the primary URL and stays there after login. Bind the identity while logged in locally at the primary URL. HTTPS-cookie behavior uses the configured origin, even when TLS terminates at the proxy. Changes to the allowlist require container recreation.
 
+## Optional NetEase lyrics login
+
+Lyrics lookup keeps LRCLIB → QQ Music → Kugou → NetEase priority. NetEase first uses an anonymous session, reused in memory for up to ten days and renewed after expiry; restart creates a new session. No account is required by default. Platform or regional restrictions can still block guest access.
+
+If NetEase requires an account, sign in and complete any phone/account verification on the official NetEase website or app. Obtain your own logged-in website request's `Cookie` header and save its value as one line in a private `netease.cookie` file, for example `MUSIC_U=<your login value>; __csrf=<your csrf value>`. The file must contain a nonempty `MUSIC_U`, stay within 16 KiB, and contain no `Cookie:` prefix, browser-export JSON or Netscape cookie-file format. MusicForge does not perform password/SMS login or bypass platform verification. The MusicForge administrator account is separate from this provider login.
+
+For the default UID/GID, prepare the file on the host (adjust both IDs to your `PUID`/`PGID`):
+
+```bash
+sudo install -d -m 0700 -o 10001 -g 10001 /srv/musicforge/secrets
+sudo install -m 0600 -o 10001 -g 10001 /dev/null /srv/musicforge/secrets/netease.cookie
+sudoedit /srv/musicforge/secrets/netease.cookie
+```
+
+Add `NETEASE_SECRETS_DIR=/srv/musicforge/secrets` to `.env`, then use the optional [Compose override](../docker-compose.netease.yml):
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.netease.yml config --quiet
+docker compose -f docker-compose.yml -f docker-compose.netease.yml up -d
+```
+
+Use both files for subsequent Compose commands. The override mounts that directory read-only and sets `MUSICFORGE_NETEASE_COOKIE_FILE=/run/secrets/musicforge/netease.cookie`. Other deployment systems can set this environment variable to any absolute, container-readable secret-file path. The Cookie itself never belongs in `.env`, Settings, source control or shared logs. Keep its directory outside the library/output roots and protect backups as credentials. No default secret mount is needed for anonymous access.
+
+The application rereads the file for each NetEase operation and never writes it. Replace its contents privately, preserving owner/permissions; the directory mount also makes atomic replacement visible. A changed Cookie clears the credential cooldown on the next lookup without restarting; HTTP `Retry-After` limits still apply. An unreadable or invalid configured file pauses NetEase rather than silently using a different identity. Login expiry/rejection or account verification is reported for this provider, with a thirty-minute cooldown (one minute for rejected guest sessions); guest sessions renew on a later retry. These errors preserve existing lyrics and the other providers' results. Complete verification and refresh the file when prompted; re-run the track's lyrics search afterward. Guest credentials are memory-only, and login Cookies are never saved to the database or returned by APIs.
+
 ## Reverse proxy networking
 
 A host-process Nginx/Caddy can use `http://127.0.0.1:8787` upstream. The default Compose file binds only the host loopback address.

@@ -626,6 +626,11 @@
   "error.lyricsProviderCooldown": "{provider} 正在等待限流恢复，请稍后重试",
   "error.lyricsProviderHTTP": "{provider} 返回 HTTP {status}，请稍后重试",
   "error.lyricsProviderData": "{provider} 返回的歌词数据无效或过大",
-  "error.lyricsNetEaseVerification": "网易云要求账号验证（错误码 -462），请尝试其他歌词来源",
-  "error.lyricsPreviewChanged": "歌词预览已切换，请重新选择候选"
+  "error.lyricsNetEaseVerification": "网易云要求账号验证（错误码 -462）；请在官方完成验证后更新 Cookie 文件",
+  "error.lyricsPreviewChanged": "歌词预览已切换，请重新选择候选",
+  "error.lyricsNetEaseCookie": "网易云 Cookie 文件无法读取或格式无效；请检查挂载、权限和 MUSIC_U 值",
+  "error.lyricsNetEaseLoginExpired": "网易云登录 Cookie 已过期或被拒绝；请更新 Cookie 文件",
+  "error.lyricsNetEaseGuestExpired": "网易云游客会话已过期或被拒绝；请稍后重试",
+  "error.lyricsNetEaseGuestMissing": "网易云未提供游客会话；请稍后重试或配置 Cookie 文件",
+  "error.lyricsNetEaseRestricted": "网易云暂时限制了歌词请求（错误码 -460）；请稍后重试"
 }

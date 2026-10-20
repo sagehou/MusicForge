@@ -52,6 +52,7 @@ type lyricsState struct {
 	lyricsGates   map[string]chan struct{}
 	lyricsRetries map[string]time.Time
 	lyricsChoices map[string]*lyricsChoiceSet
+	netease       *neteaseSessionState
 }
 
 func (a *App) lyricsOptions(ctx context.Context) (lyricsOptions, error) {

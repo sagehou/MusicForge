@@ -16,6 +16,31 @@
 
 多域名配置见 [README 启动配置示例](../README.zh-CN.md#启动配置)。逐个地址验收本地登录、保存设置和退出，Cookie 按域名独立保存。从其他地址发起 OIDC 会跳转主地址并在登录后停留于主地址；绑定身份时，必须先在主地址使用本地账号登录。HTTPS Cookie 根据配置的访问地址判断，兼容代理终止 TLS。修改允许列表后需要重建容器。
 
+## 可选的网易云歌词登录
+
+歌词搜索保持 LRCLIB → QQ 音乐 → 酷狗 → 网易云顺序。网易云默认使用游客会话，在内存复用最多十天，到期后续期，重启后重新获取；默认无需账号。平台或地区限制仍可能阻止游客访问。
+
+需要账号时，在网易云官方网站或 App 登录，并按官方提示完成手机号／账号验证。获取自己已登录网站请求的 `Cookie` 请求头，将其值作为一行保存到私有的 `netease.cookie` 文件，例如 `MUSIC_U=<你的登录值>; __csrf=<你的 csrf 值>`。文件必须含非空 `MUSIC_U`，不超过 16 KiB，不包含 `Cookie:` 前缀，不使用浏览器导出的 JSON 或 Netscape 格式。MusicForge 不执行密码／短信登录，也不绕过平台验证；这里的账号与 MusicForge 管理员账号相互独立。
+
+使用默认 UID/GID 时，在宿主机准备文件（按实际 `PUID`／`PGID` 调整两个数字）：
+
+```bash
+sudo install -d -m 0700 -o 10001 -g 10001 /srv/musicforge/secrets
+sudo install -m 0600 -o 10001 -g 10001 /dev/null /srv/musicforge/secrets/netease.cookie
+sudoedit /srv/musicforge/secrets/netease.cookie
+```
+
+在 `.env` 添加 `NETEASE_SECRETS_DIR=/srv/musicforge/secrets`，再使用可选的 [Compose 覆盖文件](../docker-compose.netease.yml)：
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.netease.yml config --quiet
+docker compose -f docker-compose.yml -f docker-compose.netease.yml up -d
+```
+
+后续 Compose 命令也使用这两个文件。覆盖配置以只读方式挂载该目录，并设置 `MUSICFORGE_NETEASE_COOKIE_FILE=/run/secrets/musicforge/netease.cookie`；其他部署方式可将这个环境变量指向容器内可读的绝对路径。Cookie 本身不要放入 `.env`、设置、源码或共享日志；凭据目录应独立于源库／输出库，备份也按凭据保护。默认游客访问不需要挂载文件。
+
+每次网易云操作都会重新读取文件，程序不写回；私下更新内容并保留所有者／权限即可，目录挂载也支持原子替换文件。下一次请求检测到 Cookie 变化后立即解除凭据冷却，无需重启；HTTP `Retry-After` 限制仍生效。已配置的文件无法读取或格式无效时，暂停网易云并提示问题。登录失效／被拒或要求验证时，单独显示该来源错误并冷却三十分钟；游客会话被拒则冷却一分钟，后续重试重新获取。现有歌词及其他来源结果会保留。按提示完成官方验证并更新文件后，重新搜索曲目歌词。游客凭据只在内存中，登录 Cookie 不写入数据库，也不通过 API 返回。
+
 ## 反向代理网络
 
 宿主机进程中的 Nginx/Caddy 使用 `http://127.0.0.1:8787` 作为上游。Compose 默认只绑定宿主机回环地址。

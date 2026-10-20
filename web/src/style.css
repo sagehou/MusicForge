@@ -685,6 +685,11 @@ input[role="switch"]:checked::after { transform: translateX(16px); background: v
 .comparison-result-heading { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
 .comparison-results pre { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 240px; overflow-y: auto; }
 @media (max-width: 600px) { .comparison-filters { grid-template-columns: 1fr; } .library-comparison { padding: 12px; } }
+.library-maintenance { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; gap: 12px; margin-bottom: 24px; }
+.library-maintenance > .library-comparison { margin-bottom: 0; }
+.library-maintenance > .library-comparison:only-child, .library-maintenance > .library-comparison[open] { grid-column: 1 / -1; }
+.library-maintenance > .library-comparison > summary > span { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.library-maintenance > .library-comparison > summary > svg { flex-shrink: 0; }
 .lyrics-body > .actions { margin: 16px 0; flex-wrap: wrap; }
 .lyrics-body code, .lyrics-track { overflow-wrap: anywhere; }
 .lyrics-track { margin-top: 8px; }

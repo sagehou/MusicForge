@@ -56,6 +56,13 @@ func TestLRCLIBMatching(t *testing.T) {
 	otherLyrics.Synced = "[00:01.00]Different version"
 	wrongInstrumental := wrongAlbum
 	wrongInstrumental.Instrumental, wrongInstrumental.Synced = true, ""
+	var crowded []lrclibRecord
+	for i := 0; i < 8; i++ {
+		record := wrongDuration
+		record.Duration += float64(i)
+		crowded = append(crowded, record)
+	}
+	crowded = append(crowded, good)
 	for _, test := range []struct {
 		name   string
 		get    *lrclibRecord
@@ -66,6 +73,7 @@ func TestLRCLIBMatching(t *testing.T) {
 		{"exact synchronized", &good, nil, "ready", 1},
 		{"fallback synchronized", &plain, []lrclibRecord{wrongDuration, wrongArtist, plain, good}, "ready", 2},
 		{"ignore another album's instrumental flag", &wrongInstrumental, []lrclibRecord{good}, "ready", 2},
+		{"rank matching recordings before candidate limit", nil, crowded, "ready", 2},
 		{"review mismatches without accepting plain lyrics", &wrongArtist, []lrclibRecord{wrongArtist, wrongDuration, plain, wrongAlbum}, "needs_review", 2},
 		{"ambiguous versions", nil, []lrclibRecord{good, otherLyrics}, "needs_review", 2},
 		{"not found", nil, nil, "not_found", 2},

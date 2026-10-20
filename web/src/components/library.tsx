@@ -211,8 +211,10 @@ export function Library({ notify }: { notify: Notice }) {
     <div className="page-heading"><div><h1 id="library-title" tabIndex={-1}>{t("app.library")}</h1><p>{t("library.description", { count: data.length })}</p></div>
       <div className="actions"><Button variant="outline" disabled={busy} onClick={() => void action("/library/scan", { verify: true }, "notice.verify")}><ShieldCheck size={16} />{t("library.verify")}</Button><Button disabled={busy} onClick={() => void action("/library/scan", {}, "notice.scan")}><RefreshCw size={16} className={busy ? "animate-spin" : ""} />{t("library.scan")}</Button></div>
     </div>
-    {!scope.artist && !isAlbum && <LibraryComparison sources={data} notify={notify} />}
-    <LyricsMaintenance notify={notify} />
+    <div className="library-maintenance">
+      {!scope.artist && !isAlbum && <LibraryComparison sources={data} notify={notify} />}
+      <LyricsMaintenance notify={notify} />
+    </div>
     {expired > 0 && <div className="banner amber"><Clock3 size={20} /><div><strong>{t("library.expiredCount", { count: expired })}</strong><p>{t("library.expiredHint")}</p></div><Button variant="destructive" size="sm" disabled={busy} onClick={() => deleteSelected(true)}><Trash2 size={14} />{t("library.deleteExpired")}</Button></div>}
     {removable.length > 0 && <div className="library-cleanup"><Trash2 size={17} /><div><strong>{t("library.removableCount", { count: removable.length })}</strong><small>{t("library.forgetHint")}</small></div><Button variant="outline" size="sm" disabled={busy} onClick={() => void forget([], true)}>{t("library.forgetAll")}</Button></div>}
     {(scope.artist || isAlbum) && <nav className="library-breadcrumbs" aria-label={t("library.hierarchy")}>

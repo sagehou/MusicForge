@@ -45,13 +45,14 @@ function LyricsControls({ notify }: { notify: Notice }) {
   const { options, report } = resource.data;
   const running = report.state === "running";
   async function automatic(enabled: boolean) {
+    resource.update(data => ({ ...data, options: { auto_search: enabled } }));
     setBusy(true);
     try { await api("/lyrics/options", "PUT", { auto_search: enabled }); resource.retry(); }
-    catch (err) { notify(err as Error, true); } finally { setBusy(false); }
+    catch (err) { resource.update(data => ({ ...data, options })); notify(err as Error, true); } finally { setBusy(false); }
   }
   async function stop() {
     setBusy(true);
-    try { await api("/lyrics/search", "DELETE"); resource.retry(); }
+    try { await api("/lyrics/search", "DELETE"); resource.update(data => ({ ...data, options: { auto_search: false } })); resource.retry(); }
     catch (err) { notify(err as Error, true); } finally { setBusy(false); }
   }
   return <div className="lyrics-body">

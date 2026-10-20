@@ -216,6 +216,10 @@ func (a *App) providerCandidates(ctx context.Context, provider string, source So
 	default:
 		return nil, false, errors.New("Unknown lyrics provider")
 	}
+	for i := range candidates {
+		candidates[i].HighConfidence = candidateMatches(candidates[i], source)
+	}
+	sort.SliceStable(candidates, func(i, j int) bool { return candidates[i].HighConfidence && !candidates[j].HighConfidence })
 	var result []lyricsCandidate
 	seen := map[string]bool{}
 	for _, candidate := range candidates {
@@ -223,7 +227,6 @@ func (a *App) providerCandidates(ctx context.Context, provider string, source So
 			continue
 		}
 		candidate.Provider, candidate.Index = provider, len(result)
-		candidate.HighConfidence = candidateMatches(candidate, source)
 		key := candidate.remoteID
 		if key == "" && candidate.text != nil {
 			key = digest(candidate.Title + "\x00" + candidate.Artist + "\x00" + candidate.Album + "\x00" + strconv.FormatFloat(candidate.Duration, 'f', -1, 64) + "\x00" + candidate.text.Original)

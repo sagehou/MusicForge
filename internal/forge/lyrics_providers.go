@@ -324,7 +324,7 @@ func (a *App) qqRequest(ctx context.Context, comm map[string]any, module, method
 		return err
 	}
 	if response.Code != 0 || response.Request.Code != 0 || len(response.Request.Data) == 0 {
-		return errors.New("QQ Music rejected the lyrics request")
+		return fmt.Errorf("QQ Music rejected the lyrics request (codes %d/%d)", response.Code, response.Request.Code)
 	}
 	return json.Unmarshal(response.Request.Data, result)
 }
@@ -351,8 +351,9 @@ func (a *App) qqCandidates(ctx context.Context, query string) ([]lyricsCandidate
 			Items []song `json:"item_song"`
 		} `json:"body"`
 	}
-	err := a.qqCall(ctx, "music.search.SearchCgiService", "DoSearchForQQMusicLite", map[string]any{"query": query, "search_type": 0, "num_per_page": 8, "page_num": 1, "grp": 1,
-		"search_id": strconv.FormatInt(time.Now().UnixMilli(), 10), "remoteplace": "search.android.keyboard", "highlight": 0, "nqc_flag": 0, "page_id": 1}, &data)
+	searchID := (rand.Int64N(20)+1)<<54 + rand.Int64N(4194305)<<32 + time.Now().UnixMilli()%86400000
+	err := a.qqCall(ctx, "music.search.SearchCgiService", "DoSearchForQQMusicMobile", map[string]any{"query": query, "search_type": 0, "num_per_page": 8, "page_num": 1, "grp": 1,
+		"search_id": strconv.FormatInt(searchID, 10), "remoteplace": "search.android.keyboard", "highlight": 0, "nqc_flag": 0, "page_id": 1}, &data)
 	if err != nil {
 		return nil, err
 	}

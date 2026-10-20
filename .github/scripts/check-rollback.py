@@ -20,6 +20,8 @@ NAME = "musicforge-rollback"
 CANDIDATE = "musicforge:validation"
 PASSWORD = "ci-rollback-password"
 LEGACY = {
+    "v0.2.24": "sha256:7871768e8e5491b6bfe90cc07560c822cd03f56557fe9db560d0c83df2a8a206",
+    "v0.2.23": "sha256:7419b87ce48dd917af7b4c8b6ad73fe5808d23b19fa12f97d037debe850a7dac",
     "v0.2.22": "sha256:fe0dd1d3c10487f716e6979d0787ab59454c386caa930a5b2847d5f5a9955cb2",
     "v0.2.21": "sha256:dd973ba0bcf961aa8316ef56d0b65307e0ff1a6f99c0b9dcfe750677867bc365",
     "v0.2.20": "sha256:7be864ae3641fbe0c6d4192c956f49b431cfe5aef908a391b5b5d1f5fe4f74b1",
@@ -270,6 +272,16 @@ def main():
             member = {**history, "id": "b" * 64, "source_id": tracks[1]["id"], "source_hash": tracks[1]["hash"], "state": "stopped"}
             db.execute("INSERT INTO meta(key,value) VALUES(?,?)", ("repair-task:" + member["id"], json.dumps(member)))
             db.execute("INSERT INTO meta(key,value) VALUES(?,?)", ("repair-member:" + member["id"], history["id"]))
+            # Search caches are optional schema-2 metadata: older writers must
+            # preserve recording identities and downloaded pending previews.
+            search = {"version": 1, "fingerprint": "0" * 64, "provider": "lrclib",
+                      "query": "Rollback Song", "searched": 1800000000, "instrumental": False,
+                      "candidates": [{"candidate": {"index": 0, "provider": "lrclib", "title": "Rollback Song",
+                                                   "artist": "Artist", "album": "Album", "duration": 2,
+                                                   "high_confidence": True, "match_score": 100, "script": "simplified"},
+                                      "text": {"original": "[00:01.000]爱这风云\\n"}}]}
+            db.execute("INSERT INTO meta(key,value) VALUES(?,?)",
+                       ("lyrics-search:" + str(tracks[0]["id"]) + ":" + "0" * 64, json.dumps(search)))
         expected = snapshot()
         held = next(row for row in expected["jobs"] if row[0] == pending)
         assert held[4] == "pending" and held[8] == 253402300799, "paused task changed schema-2 job semantics"

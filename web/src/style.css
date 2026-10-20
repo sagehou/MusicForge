@@ -714,5 +714,6 @@ input[role="switch"]:checked::after { transform: translateX(16px); background: v
 .lyrics-candidate input { margin-top: 4px; flex: 0 0 16px; width: 16px; height: 16px; padding: 0; box-shadow: none; accent-color: var(--accent); }
 .lyrics-candidate > span { display: grid; gap: 4px; min-width: 0; }
 .lyrics-candidate small { color: var(--muted); }
+.lyrics-recommended { display: inline-block; margin-inline-start: 8px; color: var(--success); font-size: 11px; font-style: normal; }
 .lyrics-preview { margin-top: 20px; }
 .lyrics-preview pre { max-height: 260px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; padding: 12px; background: var(--subtle); border: 1px solid var(--line); border-radius: 8px; }

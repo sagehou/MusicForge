@@ -37,13 +37,17 @@ type lyricsText struct {
 }
 
 type lyricsCandidate struct {
-	Index                       int     `json:"index"`
-	Provider                    string  `json:"provider"`
-	Title                       string  `json:"title"`
-	Artist                      string  `json:"artist"`
-	Album                       string  `json:"album"`
-	Duration                    float64 `json:"duration"`
-	HighConfidence              bool    `json:"high_confidence"`
+	Index                       int      `json:"index"`
+	Provider                    string   `json:"provider"`
+	Title                       string   `json:"title"`
+	Artist                      string   `json:"artist"`
+	Album                       string   `json:"album"`
+	Duration                    float64  `json:"duration"`
+	HighConfidence              bool     `json:"high_confidence"`
+	MatchScore                  int      `json:"match_score"`
+	DurationDelta               *float64 `json:"duration_delta,omitempty"`
+	Script                      string   `json:"script"`
+	TranslationScript           string   `json:"translation_script,omitempty"`
 	remoteID, mid, hash         string
 	titleAliases, artistAliases []string
 	text                        *lyricsText
@@ -94,6 +98,13 @@ func candidateMatches(candidate lyricsCandidate, source Source) bool {
 	if validLyricsSearch(source) != nil {
 		return false
 	}
+	title, artist := candidateIdentity(candidate, source)
+	return title && artist && candidate.Duration > 0 && !math.IsNaN(candidate.Duration) && !math.IsInf(candidate.Duration, 0) &&
+		math.Abs(candidate.Duration-source.Duration) <= 2 &&
+		(source.Album == "" || sameLyricsTag(candidate.Album, source.Album))
+}
+
+func candidateIdentity(candidate lyricsCandidate, source Source) (bool, bool) {
 	title := sameLyricsTag(candidate.Title, source.Title)
 	if strings.EqualFold(strings.Join(lyricsVersionWords.FindAllString(foldLyricsWidth(candidate.Title), -1), "/"), strings.Join(lyricsVersionWords.FindAllString(foldLyricsWidth(source.Title), -1), "/")) {
 		for _, alias := range candidate.titleAliases {
@@ -104,9 +115,109 @@ func candidateMatches(candidate lyricsCandidate, source Source) bool {
 	for _, alias := range candidate.artistAliases {
 		artist = artist || sameLyricsArtist(alias, source.Artist)
 	}
-	return title && artist && candidate.Duration > 0 && !math.IsNaN(candidate.Duration) && !math.IsInf(candidate.Duration, 0) &&
-		math.Abs(candidate.Duration-source.Duration) <= 2 &&
-		(source.Album == "" || sameLyricsTag(candidate.Album, source.Album))
+	return title, artist
+}
+
+// A conservative script hint, not language identification or text conversion.
+// Shared Han characters remain unknown; kana/Hangul are never labelled Chinese.
+var lyricsScriptForms = func() map[rune]rune {
+	forms := map[rune]rune{}
+	for _, pair := range strings.Fields("這这 來来 時时 愛爱 說说 聽听 風风 雲云 夢梦 歸归 遠远 還还 讓让 從从 開开 關关 會会 過过 無无 為为 裡里 後后 個个 們们 點点 葉叶 淚泪 歲岁 亂乱 對对 難难 見见 觸触 覺觉 樂乐 歡欢 聲声 燈灯 轉转 動动 飛飞 願愿 隨随 給给 總总 記记 憶忆 間间 門门 問问 題题 顏颜 擁拥 體体 溫温 寫写 畫画 線线 終终 結结 絲丝 紅红 綠绿 藍蓝 黃黄 頭头 隻只 變变 幾几 麼么 嗎吗 於于 與与 錯错 尋寻 親亲 輕轻 輪轮 迴回 儘尽 盡尽 絕绝 將将 兩两 萬万 連连 國国 鄉乡 處处 讀读 書书 學学 長长 語语 銀银 邊边 靜静 陽阳 陰阴 熱热 龍龙 馬马 車车 鄧邓 麗丽 華华 寶宝 貝贝 廣广 雙双 傷伤 隱隐 請请 應应 許许 諾诺 識识 實实 現现 證证 擔担 懷怀 賴赖 敗败 戰战 勝胜 計计 劃划 傳传 統统 緣缘 練练 獨独 擇择 壞坏 遲迟 遺遗 謝谢 輸输 贏赢 絢绚 爛烂 燦灿 確确 載载 機机 卻却 戀恋") {
+		p := []rune(pair)
+		if p[0] != p[1] {
+			forms[p[0]], forms[p[1]] = p[1], p[1]
+		}
+	}
+	return forms
+}()
+
+func foldLyricsScript(text string) string {
+	return strings.Map(func(r rune) rune {
+		if simplified, ok := lyricsScriptForms[r]; ok {
+			return simplified
+		}
+		return r
+	}, text)
+}
+
+func lyricsScript(text string) string {
+	var lines []string
+	for _, line := range strings.Split(text, "\n") {
+		if lrcTimestamp.MatchString(line) {
+			for lrcTimestamp.MatchString(line) {
+				line = lrcTimestamp.ReplaceAllString(line, "")
+			}
+			lines = append(lines, line)
+		}
+	}
+	text = strings.Join(lines, "\n")
+	for _, r := range text {
+		if unicode.In(r, unicode.Hiragana, unicode.Katakana, unicode.Hangul) {
+			return "unknown"
+		}
+	}
+	simplified, traditional := 0, 0
+	for _, r := range text {
+		if form, ok := lyricsScriptForms[r]; ok {
+			if form == r {
+				simplified++
+			} else {
+				traditional++
+			}
+		}
+	}
+	if simplified > 0 && traditional == 0 {
+		return "simplified"
+	}
+	if traditional > 0 && simplified == 0 {
+		return "traditional"
+	}
+	return "unknown"
+}
+
+func rankLyricsCandidates(candidates []lyricsCandidate, source Source) {
+	for i := range candidates {
+		c := &candidates[i]
+		c.HighConfidence, c.MatchScore, c.DurationDelta = candidateMatches(*c, source), 0, nil
+		title, artist := candidateIdentity(*c, source)
+		if title {
+			c.MatchScore += 40
+		}
+		if artist {
+			c.MatchScore += 30
+		}
+		if source.Album == "" || sameLyricsTag(c.Album, source.Album) {
+			c.MatchScore += 10
+		}
+		if source.Duration > 0 && c.Duration > 0 && !math.IsNaN(c.Duration) && !math.IsInf(c.Duration, 0) {
+			delta := math.Abs(c.Duration - source.Duration)
+			c.DurationDelta = &delta
+			if delta <= 2 {
+				c.MatchScore += 20 - int(math.Ceil(delta*2))
+			} else if delta <= 5 {
+				c.MatchScore += 12
+			} else if delta <= 10 {
+				c.MatchScore += 5
+			}
+		}
+		c.Script, c.TranslationScript = "unknown", ""
+		if c.text != nil {
+			c.Script, c.TranslationScript = lyricsScript(c.text.Original), lyricsScript(c.text.Translation)
+		}
+	}
+	sort.SliceStable(candidates, func(i, j int) bool {
+		a, b := candidates[i], candidates[j]
+		if a.HighConfidence != b.HighConfidence {
+			return a.HighConfidence
+		}
+		if (a.Script == "simplified") != (b.Script == "simplified") {
+			return a.Script == "simplified"
+		}
+		if (a.TranslationScript == "simplified") != (b.TranslationScript == "simplified") {
+			return a.TranslationScript == "simplified"
+		}
+		return a.MatchScore > b.MatchScore
+	})
 }
 
 func validLyricsSearch(source Source) error {
@@ -116,17 +227,24 @@ func validLyricsSearch(source Source) error {
 	return nil
 }
 
-func (a *App) searchOnlineLyrics(ctx context.Context, source Source) (text, provider, state string, attempts []lyricsAttempt, err error) {
+func (a *App) searchOnlineLyrics(ctx context.Context, target lyricsTarget, refresh bool) (text, provider, state string, attempts []lyricsAttempt, err error) {
+	source := target.Source
 	if err = validLyricsSearch(source); err != nil {
 		return
 	}
 	review, instrumental, failed := false, false, false
+	var traditionalText, traditionalProvider string
 	for _, name := range lyricsProviders {
-		candidates, noVocals, searchErr := a.providerCandidates(ctx, name, source, "", false)
+		candidates, noVocals, _, searched, searchErr := a.cachedLyricsCandidates(ctx, target, name, "", false, refresh)
 		instrumental = instrumental || noVocals
 		result, resultState := "", "not_found"
 		if searchErr == nil {
 			result, resultState, searchErr = a.chooseLyrics(ctx, source, candidates)
+			if ctx.Err() == nil {
+				if cacheErr := a.storeLyricsSearch(ctx, target, name, "", candidates, noVocals, searched); cacheErr != nil {
+					return "", "", "failed", attempts, cacheErr
+				}
+			}
 		}
 		if ctx.Err() != nil {
 			err = ctx.Err()
@@ -141,9 +259,18 @@ func (a *App) searchOnlineLyrics(ctx context.Context, source Source) (text, prov
 		}
 		attempts = append(attempts, attempt)
 		if result != "" && searchErr == nil {
-			return result, name, "ready", attempts, nil
+			script := lyricsScript(result)
+			if script == "simplified" || traditionalText == "" && script != "traditional" {
+				return result, name, "ready", attempts, nil
+			}
+			if traditionalText == "" {
+				traditionalText, traditionalProvider = result, name
+			}
 		}
 		review = review || resultState == "needs_review"
+	}
+	if traditionalText != "" {
+		return traditionalText, traditionalProvider, "ready", attempts, nil
 	}
 	switch {
 	case review:
@@ -159,10 +286,10 @@ func (a *App) searchOnlineLyrics(ctx context.Context, source Source) (text, prov
 }
 
 func (a *App) chooseLyrics(ctx context.Context, source Source, candidates []lyricsCandidate) (string, string, error) {
-	var safe []lyricsCandidate
-	for _, candidate := range candidates {
-		if candidateMatches(candidate, source) {
-			safe = append(safe, candidate)
+	var safe []*lyricsCandidate
+	for i := range candidates {
+		if candidateMatches(candidates[i], source) {
+			safe = append(safe, &candidates[i])
 		}
 	}
 	// ponytail: bound downloads per track; crowded or conflicting recordings are
@@ -171,9 +298,10 @@ func (a *App) chooseLyrics(ctx context.Context, source Source, candidates []lyri
 		return "", "needs_review", nil
 	}
 	var selected string
+	selectedScript := ""
 	var failures []error
 	for _, candidate := range safe {
-		text, err := a.candidateLyrics(ctx, candidate)
+		text, err := a.candidateLyrics(ctx, *candidate)
 		if err != nil {
 			failures = append(failures, err)
 			continue
@@ -181,10 +309,17 @@ func (a *App) chooseLyrics(ctx context.Context, source Source, candidates []lyri
 		if text.Original == "" {
 			continue
 		}
+		candidate.text = &text
 		if selected != "" && selected != text.Original {
-			return "", "needs_review", nil
+			// Script preference cannot resolve different words or timing.
+			if foldLyricsScript(selected) != foldLyricsScript(text.Original) {
+				return "", "needs_review", nil
+			}
 		}
-		selected = text.Original
+		script := lyricsScript(text.Original)
+		if selected == "" || script == "simplified" && selectedScript != "simplified" {
+			selected, selectedScript = text.Original, script
+		}
 	}
 	if len(failures) > 0 {
 		return "", "failed", errors.Join(failures...)
@@ -217,10 +352,7 @@ func (a *App) providerCandidates(ctx context.Context, provider string, source So
 	default:
 		return nil, false, errors.New("Unknown lyrics provider")
 	}
-	for i := range candidates {
-		candidates[i].HighConfidence = candidateMatches(candidates[i], source)
-	}
-	sort.SliceStable(candidates, func(i, j int) bool { return candidates[i].HighConfidence && !candidates[j].HighConfidence })
+	rankLyricsCandidates(candidates, source)
 	var result []lyricsCandidate
 	seen := map[string]bool{}
 	for _, candidate := range candidates {

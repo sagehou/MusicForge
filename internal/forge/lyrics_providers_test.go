@@ -125,7 +125,7 @@ func TestLyricsProviderPriorityAndFallback(t *testing.T) {
 					w.WriteHeader(500)
 				}
 			})
-			text, actual, state, attempts, err := a.searchOnlineLyrics(context.Background(), track)
+			text, actual, state, attempts, err := a.searchOnlineLyrics(context.Background(), lyricsTarget{Source: track}, false)
 			if err != nil || actual != provider || state != "ready" || text != "[00:01.00]夜の歌\n" {
 				t.Fatal(actual, state, text, err, calls)
 			}

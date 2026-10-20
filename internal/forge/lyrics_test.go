@@ -510,6 +510,7 @@ func TestLyricsAPIAuthenticationAndAutomaticOptIn(t *testing.T) {
 		{"PUT", "/api/lyrics/options", `{"auto_search":true}`},
 		{"DELETE", "/api/lyrics/search", ""},
 		{"POST", "/api/library/1/lyrics/candidates", `{"provider":"lrclib","query":"Track Artist"}`},
+		{"GET", "/api/library/1/lyrics/candidates", ""},
 		{"POST", "/api/library/1/lyrics/preview", `{"token":"invalid","index":0}`},
 		{"PUT", "/api/library/1/lyrics", `{"token":"invalid","index":0}`},
 	} {
@@ -520,6 +521,12 @@ func TestLyricsAPIAuthenticationAndAutomaticOptIn(t *testing.T) {
 			}
 			w := httptest.NewRecorder()
 			a.Handler().ServeHTTP(w, r)
+			if route.method == "GET" && authenticated {
+				if w.Code != 200 {
+					t.Fatal("authenticated cache read failed", w.Code, w.Body.String())
+				}
+				continue
+			}
 			if w.Code != 401 && w.Code != 403 {
 				t.Fatal("mutation accepted without auth/CSRF", route, w.Code)
 			}

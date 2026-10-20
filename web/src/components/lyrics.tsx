@@ -118,13 +118,13 @@ export function LyricsTrack({ source, notify, refresh }: { source: Source; notif
 
 const onlineProviders = ["lrclib", "qq", "kugou", "netease"] as const;
 type OnlineProvider = Exclude<LyricsProvider, "source">;
-type Candidate = { index: number; provider: OnlineProvider; title: string; artist: string; album: string; duration: number; high_confidence: boolean };
-type CandidateGroup = { provider: OnlineProvider; token?: string; candidates: Candidate[]; loading: boolean; error?: string };
-type CandidateText = { original: string; translation?: string; romanization?: string };
+type Candidate = { index: number; provider: OnlineProvider; title: string; artist: string; album: string; duration: number; high_confidence: boolean; match_score: number; duration_delta?: number; script: string; translation_script?: string };
+type CandidateGroup = { provider: OnlineProvider; token?: string; candidates: Candidate[]; cached?: boolean; searched?: number; loading: boolean; error?: string };
+type CandidateText = { original: string; translation?: string; romanization?: string; script?: string; translation_script?: string };
 type CandidateChoice = { token: string; candidate: Candidate };
 
 function LyricsPicker({ source, notify, close, saved }: { source: Source; notify: Notice; close: () => void; saved: () => void }) {
-  const { t, errorMessage } = useI18n();
+  const { t, errorMessage, locale } = useI18n();
   const dialog = useRef<HTMLDialogElement>(null);
   const searchController = useRef<AbortController | null>(null);
   const previewController = useRef<AbortController | null>(null);
@@ -137,20 +137,28 @@ function LyricsPicker({ source, notify, close, saved }: { source: Source; notify
   const [translation, setTranslation] = useState(false);
   const [romanization, setRomanization] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [restoring, setRestoring] = useState(true);
+  const [restoreError, setRestoreError] = useState("");
   const base = `/library/${source.id}/lyrics`;
   useEffect(() => {
     dialog.current?.showModal();
-    return () => { searchController.current?.abort(); previewController.current?.abort(); };
+    const controller = new AbortController();
+    void api<{ query: string; groups: CandidateGroup[] }>(`${base}/candidates`, "GET", undefined, controller.signal).then(result => {
+      if (!controller.signal.aborted) { setQuery(result.query); setGroups(result.groups.map(group => ({ ...group, loading: false }))); }
+    }).catch((err: Error) => { if (!controller.signal.aborted) setRestoreError(err.message); })
+      .finally(() => { if (!controller.signal.aborted) setRestoring(false); });
+    return () => { controller.abort(); searchController.current?.abort(); previewController.current?.abort(); };
   }, []);
-  async function search() {
+  async function search(refresh = false) {
     searchController.current?.abort(); previewController.current?.abort();
     const controller = new AbortController(); searchController.current = controller;
     setSelected(undefined); setPreview(undefined); setPreviewError(""); setPreviewing(false);
+    setRestoreError("");
     setGroups(onlineProviders.map(provider => ({ provider, candidates: [], loading: true })));
     await Promise.allSettled(onlineProviders.map(async provider => {
       try {
-        const result = await api<{ token: string; candidates: Candidate[] }>(`${base}/candidates`, "POST", { provider, query }, controller.signal);
-        if (!controller.signal.aborted) setGroups(old => old.map(group => group.provider === provider ? { provider, ...result, loading: false } : group));
+        const result = await api<CandidateGroup>(`${base}/candidates`, "POST", { provider, query, refresh }, controller.signal);
+        if (!controller.signal.aborted) setGroups(old => old.map(group => group.provider === provider ? { ...result, provider, loading: false } : group));
       } catch (err) {
         if (!controller.signal.aborted) setGroups(old => old.map(group => group.provider === provider ? { provider, candidates: [], loading: false, error: (err as Error).message } : group));
       }
@@ -166,7 +174,10 @@ function LyricsPicker({ source, notify, close, saved }: { source: Source; notify
     setSelected(choice); setPreview(undefined); setPreviewing(true); setPreviewError(""); setTranslation(false); setRomanization(false);
     try {
       const result = await api<CandidateText>(`${base}/preview`, "POST", { token: choice.token, index: choice.candidate.index }, controller.signal);
-      if (!controller.signal.aborted) setPreview(result);
+      if (!controller.signal.aborted) {
+        setPreview(result);
+        setGroups(old => old.map(group => ({ ...group, candidates: group.candidates.map(candidate => group.token === choice.token && candidate.index === choice.candidate.index ? { ...candidate, script: result.script || "unknown", translation_script: result.translation_script } : candidate) })));
+      }
     } catch (err) { if (!controller.signal.aborted) setPreviewError((err as Error).message); }
     finally { if (!controller.signal.aborted) setPreviewing(false); }
   }
@@ -180,28 +191,36 @@ function LyricsPicker({ source, notify, close, saved }: { source: Source; notify
     finally { setSaving(false); }
   }
   const loading = groups.some(group => group.loading);
+  const recommended = groups.flatMap(group => group.candidates.filter(candidate => candidate.high_confidence).map(candidate => ({ token: group.token, candidate })))
+    .sort((a, b) => Number(b.candidate.script === "simplified") - Number(a.candidate.script === "simplified") || Number(b.candidate.translation_script === "simplified") - Number(a.candidate.translation_script === "simplified") || b.candidate.match_score - a.candidate.match_score)[0];
   return createPortal(<dialog className="lyrics-picker" ref={dialog} aria-labelledby={`lyrics-picker-title-${source.id}`} onClose={close} onCancel={event => { if (saving) event.preventDefault(); }}>
     <div className="lyrics-picker-heading"><h2 id={`lyrics-picker-title-${source.id}`}>{t("lyrics.choose")}</h2><Button type="button" variant="ghost" size="icon" aria-label={t("lyrics.close")} disabled={saving} onClick={() => dialog.current?.close()}><X size={18} /></Button></div>
-    <p>{source.title} · {source.artist}</p><p>{t("lyrics.chooseHint")}</p>
+    <p>{source.title} · {source.artist}{source.duration ? <> · {t("lyrics.targetDuration", { seconds: source.duration })}</> : null}</p><p>{t("lyrics.chooseHint")}</p>
+    <p>{t("lyrics.recommendationHint")}</p><p>{t("lyrics.cacheHint")}</p>
+    {restoring && <p role="status">{t("lyrics.restoring")}</p>}
+    {restoreError && <p role="alert">{errorMessage(restoreError)}</p>}
     <form className="lyrics-query" onSubmit={event => { event.preventDefault(); void search(); }}>
-      <label><span>{t("lyrics.query")}</span><input autoFocus maxLength={500} value={query} disabled={saving} onChange={event => setQuery(event.target.value)} /></label>
-      <Button type="submit" variant="outline" disabled={saving || loading || !query.trim()}><Search size={15} />{t("lyrics.findCandidates")}</Button>
+      <label><span>{t("lyrics.query")}</span><input autoFocus maxLength={500} value={query} disabled={saving || restoring} onChange={event => setQuery(event.target.value)} /></label>
+      <Button type="submit" variant="outline" disabled={saving || restoring || loading || !query.trim()}><Search size={15} />{t("lyrics.findCandidates")}</Button>
+      <Button type="button" variant="ghost" disabled={saving || restoring || loading || !query.trim()} onClick={() => void search(true)}>{t("lyrics.forceSearch")}</Button>
       {loading && <Button type="button" variant="ghost" onClick={cancelSearch}>{t("lyrics.cancelSearch")}</Button>}
     </form>
     <div className="lyrics-candidate-groups" aria-live="polite">{groups.map(group => <fieldset key={group.provider} disabled={saving}>
       <legend>{t(`lyrics.name.${group.provider}`)}</legend>
+      {group.cached && <small>{t("lyrics.cached")}{group.searched ? <> · {new Date(group.searched * 1000).toLocaleString(locale)}</> : null}</small>}
       {group.loading && <p role="status">{t("app.loading")}</p>}
       {group.error && <p role="alert">{errorMessage(group.error)}</p>}
       {!group.loading && !group.error && group.candidates.length === 0 && <p>{t("lyrics.noCandidates")}</p>}
       {group.candidates.map(candidate => <label className="lyrics-candidate" key={candidate.index}>
         <input type="radio" name={`lyrics-candidate-${source.id}`} aria-label={t("lyrics.previewCandidate", { title: candidate.title, artist: candidate.artist, provider: t(`lyrics.name.${candidate.provider}`) })} checked={!!selected && selected.token === group.token && selected.candidate.index === candidate.index} onChange={() => group.token && void choose({ token: group.token, candidate })} />
-        <span><strong dir="auto">{candidate.title}</strong><span dir="auto">{candidate.artist} · {candidate.album || "—"} · {candidate.duration > 0 ? `${Math.floor(candidate.duration / 60)}:${String(Math.floor(candidate.duration % 60)).padStart(2, "0")}` : "—"}</span><small>{t(candidate.high_confidence ? "lyrics.matchHigh" : "lyrics.matchReview")}</small></span>
+        <span><strong dir="auto">{candidate.title}{recommended && recommended.token === group.token && recommended.candidate.index === candidate.index && <em className="lyrics-recommended">{t("lyrics.recommended")}</em>}</strong><span dir="auto">{candidate.artist} · {candidate.album || "—"} · {candidate.duration > 0 ? `${Math.floor(candidate.duration / 60)}:${String(Math.floor(candidate.duration % 60)).padStart(2, "0")}` : "—"}</span><small>{t(candidate.high_confidence ? "lyrics.matchHigh" : "lyrics.matchReview")}{candidate.match_score !== undefined && <> · {t("lyrics.matchScore", { score: candidate.match_score })}</>}{candidate.duration_delta !== undefined && <> · {t("lyrics.durationDelta", { seconds: Math.round(candidate.duration_delta * 100) / 100 })}</>}</small>
+          {candidate.script === "simplified" && <small>{t("lyrics.simplified")}</small>}{candidate.script === "traditional" && <small>{t("lyrics.traditional")}</small>}{candidate.translation_script === "simplified" && <small>{t("lyrics.simplifiedTranslation")}</small>}</span>
       </label>)}
     </fieldset>)}</div>
     {previewing && <p role="status">{t("lyrics.loadingPreview")}</p>}
     {previewError && <p className="repair-warning" role="alert">{errorMessage(previewError)}</p>}
     {preview && <section className="lyrics-preview" aria-label={t("lyrics.preview")}>
-      <h3>{t("lyrics.preview")}</h3><pre dir="auto">{preview.original}</pre>
+      <h3>{t("lyrics.preview")}</h3>{preview.script === "simplified" && <p>{t("lyrics.simplified")}</p>}{preview.script === "traditional" && <p>{t("lyrics.traditional")}</p>}<pre dir="auto">{preview.original}</pre>
       {preview.translation && <><label className="check-field"><input type="checkbox" checked={translation} disabled={saving} onChange={event => setTranslation(event.target.checked)} /><span>{t("lyrics.includeTranslation")}</span></label>{translation && <pre dir="auto">{preview.translation}</pre>}</>}
       {preview.romanization && <><label className="check-field"><input type="checkbox" checked={romanization} disabled={saving} onChange={event => setRomanization(event.target.checked)} /><span>{t("lyrics.includeRomanization")}</span></label>{romanization && <pre dir="auto">{preview.romanization}</pre>}</>}
       <p>{t("lyrics.saveHint")}</p><Button type="button" disabled={saving} onClick={() => void save()}>{t("lyrics.saveCandidate")}</Button>

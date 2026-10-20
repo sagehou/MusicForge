@@ -152,6 +152,7 @@ test("lyrics candidates keep partial results, preview languages and save an expl
   await page.route("**/api/library", route => route.fulfill({ json: [source] }));
   const searches: { provider: string; query: string }[] = [];
   await page.route("**/api/library/1/lyrics/candidates", route => {
+    if (route.request().method() === "GET") return route.fulfill({ json: { query: "Track Artist", groups: [] } });
     expect(route.request().headers()["x-csrf-token"]).toBe("test");
     const body = route.request().postDataJSON(); searches.push(body);
     if (body.provider === "qq") return route.fulfill({ status: 502, json: { error: "qq lyrics service returned HTTP 403; retry later" } });
@@ -207,4 +208,68 @@ test("lyrics candidates keep partial results, preview languages and save an expl
   expect(await page.locator(".lyrics-picker").evaluate(element => element.scrollWidth <= element.clientWidth + 1)).toBe(true);
   await page.keyboard.press("Escape");
   await expect(page.getByRole("dialog")).toHaveCount(0);
+});
+
+test("song details and saved recommendations survive reopening and page reload", async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem("musicforge.language", "en"));
+  const source: Source = { id: 1, path: "Artist/Album/01.flac", hash: "0123456789abcdef".repeat(4), artist: "Artist", album: "Album", title: "Track", track: 1, disc: 2, duration: 183.5, present: true, output: "Artist/Album/01.opus", output_present: true, status: "ready", error: "", size: 2621440, metadata: { genre: "Pop", date: "2026" }, lyrics: { state: "needs_review", output: "Artist/Album/01.opus", signature: "audio", checked: 1 } };
+  await page.route("**/api/auth/me", route => route.fulfill({ json: { initialized: true, authenticated: true, username: "admin", method: "local", csrf: "test", oidc: false, version: "test" } }));
+  await page.route("**/api/library", route => route.fulfill({ json: [source] }));
+  const candidate = { index: 0, title: "Track", artist: "Artist", album: "Album", duration: 183.5, duration_delta: 0, match_score: 100, high_confidence: true, script: "traditional" };
+  const groups = [
+    { provider: "lrclib", token: "lrclib-saved", searched: 1800000000, cached: true, candidates: [{ ...candidate, provider: "lrclib" }] },
+    { provider: "qq", token: "qq-saved", searched: 1800000000, cached: true, candidates: [{ ...candidate, provider: "qq", script: "simplified", duration: 184, duration_delta: 0.5, match_score: 99 }] },
+  ];
+  const searches: { provider: string; refresh: boolean }[] = [];
+  await page.route("**/api/library/1/lyrics/candidates", route => {
+    if (route.request().method() === "GET") return route.fulfill({ json: { query: "Track Artist", groups } });
+    const body = route.request().postDataJSON(); searches.push(body);
+    return route.fulfill({ json: groups.find(group => group.provider === body.provider) || { provider: body.provider, token: `${body.provider}-empty`, cached: false, candidates: [] } });
+  });
+  await page.route("**/api/library/1/lyrics/preview", route => route.fulfill({ json: { original: "[00:01.00]爱这风云", script: "simplified" } }));
+  await page.goto("/library?view=albums&artist=Artist&album=Artist%2FAlbum");
+  const details = page.locator(".track-file").first();
+  await details.locator(":scope > summary").click();
+  for (const text of ["Artist", "Album", "3:04 (183.5 s)", "1 / 2", "2.5 MiB (2,621,440 bytes)", source.hash!, source.path, source.output]) await expect(details).toContainText(text);
+  await details.getByText("All audio tags", { exact: true }).click();
+  await expect(details).toContainText("Pop");
+  await page.locator(".lyrics-track > summary").click();
+  await page.getByRole("button", { name: "Choose lyrics", exact: true }).click();
+  let picker = page.getByRole("dialog", { name: "Choose lyrics", exact: true });
+  await expect(picker.getByText("Saved search", { exact: false })).toHaveCount(2);
+  const recommended = picker.locator(".lyrics-candidate").filter({ has: picker.getByText("Recommended", { exact: true }) });
+  await expect(recommended).toContainText("Simplified Chinese characters detected");
+  await expect(recommended).toContainText("Match score 99/100");
+  await expect(recommended).toContainText("Duration difference 0.5 s");
+  expect(searches).toHaveLength(0);
+  await recommended.getByRole("radio").check();
+  await expect(picker.locator("pre")).toContainText("爱这风云");
+  await picker.getByRole("button", { name: "Close lyrics selection", exact: true }).click();
+  await page.getByRole("button", { name: "Choose lyrics", exact: true }).click();
+  await expect(picker.getByText("Recommended", { exact: true })).toBeVisible();
+  expect(searches).toHaveLength(0);
+  await page.reload();
+  await page.locator(".lyrics-track > summary").click();
+  await page.getByRole("button", { name: "Choose lyrics", exact: true }).click();
+  await expect(picker.getByText("Recommended", { exact: true })).toBeVisible();
+  expect(searches).toHaveLength(0);
+  await picker.getByRole("button", { name: "Force new search", exact: true }).click();
+  await expect.poll(() => searches.length).toBe(4);
+  expect(searches.every(search => search.refresh)).toBe(true);
+  await expect(picker.getByRole("button", { name: "Search candidates", exact: true })).toBeEnabled();
+  await picker.getByRole("button", { name: "Search candidates", exact: true }).click();
+  await expect.poll(() => searches.length).toBe(8);
+  expect(searches.slice(4).every(search => !search.refresh)).toBe(true);
+  await page.keyboard.press("Escape");
+  await page.getByRole("combobox", { name: "Language", exact: true }).selectOption("zh-CN");
+  await page.setViewportSize({ width: 320, height: 844 });
+  await page.locator(".track-file > summary").first().click();
+  await expect(page.locator(".track-file").first()).toContainText("源文件 SHA-256");
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
+  await page.screenshot({ path: "test-results/song-details-mobile-zh-CN.png", fullPage: true });
+  await page.getByRole("button", { name: "选择歌词", exact: true }).click();
+  picker = page.getByRole("dialog", { name: "选择歌词", exact: true });
+  await expect(picker.getByText("推荐", { exact: true })).toBeVisible();
+  expect(await picker.evaluate(element => element.scrollWidth <= element.clientWidth + 1)).toBe(true);
+  await page.screenshot({ path: "test-results/lyrics-recommendations-mobile-zh-CN.png", fullPage: true });
 });

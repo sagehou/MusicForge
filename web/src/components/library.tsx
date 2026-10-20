@@ -30,6 +30,22 @@ function duration(seconds: number) {
   const value = Math.round(seconds);
   return `${Math.floor(value / 60)}:${String(value % 60).padStart(2, "0")}`;
 }
+function TrackDetails({ source }: { source: Source }) {
+  const { t, locale, number } = useI18n();
+  const unit = Math.min(4, Math.floor(Math.log2(Math.max(source.size, 1)) / 10));
+  const size = `${new Intl.NumberFormat(locale, { maximumFractionDigits: 2 }).format(source.size / 1024 ** unit)} ${["B", "KiB", "MiB", "GiB", "TiB"][unit]}`;
+  return <details className="track-file"><summary>{t("library.fileDetails")}</summary><dl>
+    <dt>{t("library.songTitle")}</dt><dd>{source.title || "—"}</dd>
+    <dt>{t("library.songArtist")}</dt><dd>{source.artist || t("library.unknownArtist")}</dd>
+    <dt>{t("library.songAlbum")}</dt><dd>{source.album || t("library.unknownAlbum")}</dd>
+    <dt>{t("library.duration")}</dt><dd>{source.duration ? t("library.exactDuration", { time: duration(source.duration), seconds: number(source.duration) }) : "—"}</dd>
+    <dt>{t("library.trackDisc")}</dt><dd>{source.track || "—"} / {source.disc || "—"}</dd>
+    <dt>{t("library.sourceSize")}</dt><dd>{size}{unit > 0 && <> ({t("library.bytes", { size: source.size })})</>}</dd>
+    <dt>{t("library.sourceSHA256")}</dt><dd><code>{source.hash || t("library.hashPending")}</code></dd>
+    <dt>{t("library.source")}</dt><dd>{source.path}</dd>
+    {source.output && <><dt>{t("library.artifact")}</dt><dd>{source.output}</dd></>}
+  </dl>{Object.keys(source.metadata).length > 0 && <details><summary>{t("library.metadata")}</summary><dl>{Object.entries(source.metadata).sort(([a], [b]) => a.localeCompare(b)).map(([key, value]) => <Fragment key={key}><dt>{key}</dt><dd dir="auto">{value}</dd></Fragment>)}</dl></details>}</details>;
+}
 function CoverImage({ url, failed }: { url: string; failed: () => void }) {
   const [ready, setReady] = useState(false);
   return <img src={url} alt="" loading="lazy" decoding="async" className={ready ? "cover-loaded" : ""} onLoad={() => setReady(true)} onError={failed} />;
@@ -281,7 +297,7 @@ export function Library({ notify }: { notify: Notice }) {
           return <Fragment key={source.id}>{heading && <tr className="disc-heading"><th colSpan={trackColumns} scope="rowgroup"><Disc3 size={15} />{t("library.disc", { number: disc })}</th></tr>}<tr className={selected.has(source.id) ? "selected" : ""}>
             <td><input type="checkbox" aria-label={t("library.selectTrack", { title: source.title || source.path })} checked={selected.has(source.id)} disabled={busy} onChange={event => toggle([source.id], event.target.checked)} /></td>
             <td><div className="track-cell"><span className="track-number">{source.track || <Music2 size={15} />}</span><div><strong>{source.title || source.path.split("/").pop()}</strong><small className={source.present ? "source-present" : "source-missing"}>{source.present ? t("library.sourceOnline", { format: source.path.split(".").pop()?.toUpperCase() || "--" }) : t("library.sourceDeleted")}</small>
-              <details className="track-file"><summary>{t("library.fileDetails")}</summary><dl><dt>{t("library.source")}</dt><dd>{source.path}</dd>{source.output && <><dt>{t("library.artifact")}</dt><dd>{source.output}</dd></>}</dl></details>
+              <TrackDetails source={source} />
             </div></div></td>
             <td className="track-artist"><strong>{source.artist || t("library.unknownArtist")}</strong><small>{source.album || t("library.unknownAlbum")}</small></td>
             <td className="track-duration">{duration(source.duration || 0)}</td>

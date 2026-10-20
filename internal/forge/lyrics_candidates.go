@@ -110,11 +110,14 @@ func (a *App) publishLyricsTarget(ctx context.Context, target lyricsTarget, text
 	return a.writeLyricsFile(ctx, settings, current, text, provider)
 }
 
-// Candidate searches and previews are bounded, short-lived memory only. No
-// remote identifiers, credentials or selection tokens enter schema-2 journals.
+// Live selection tokens are short-lived memory only. Search records are
+// separate optional metadata and are rebound to a fresh target on restoration.
 type lyricsChoiceSet struct {
 	Created        time.Time
 	Target         lyricsTarget
+	Provider       string
+	Query          string
+	Searched       int64
 	Candidates     []lyricsCandidate
 	PreviewIndex   int
 	PreviewVersion uint64
@@ -158,6 +161,7 @@ func (a *App) requestLyricsCandidates(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		Provider string `json:"provider"`
 		Query    string `json:"query"`
+		Refresh  bool   `json:"refresh"`
 	}
 	if !decode(w, r, &body) {
 		return
@@ -183,11 +187,23 @@ func (a *App) requestLyricsCandidates(w http.ResponseWriter, r *http.Request) {
 		apiError(w, 400, errors.New("Enter a title or artist to search for lyrics"))
 		return
 	}
-	candidates, _, err := a.providerCandidates(ctx, body.Provider, target.Source, strings.TrimSpace(body.Query), true)
+	candidates, _, cached, searched, err := a.cachedLyricsCandidates(ctx, target, body.Provider, body.Query, true, body.Refresh)
 	if err != nil {
 		apiError(w, 502, err)
 		return
 	}
+	respond(w, 200, a.newLyricsChoices(target, body.Provider, body.Query, candidates, cached, searched))
+}
+
+type lyricsCandidateGroup struct {
+	Provider   string            `json:"provider"`
+	Token      string            `json:"token"`
+	Candidates []lyricsCandidate `json:"candidates"`
+	Cached     bool              `json:"cached"`
+	Searched   int64             `json:"searched"`
+}
+
+func (a *App) newLyricsChoices(target lyricsTarget, provider, query string, candidates []lyricsCandidate, cached bool, searched int64) lyricsCandidateGroup {
 	// JSON must encode an empty result as [], so each provider can finish alone.
 	if candidates == nil {
 		candidates = []lyricsCandidate{}
@@ -197,10 +213,43 @@ func (a *App) requestLyricsCandidates(w http.ResponseWriter, r *http.Request) {
 	if a.lyricsChoices == nil {
 		a.lyricsChoices = map[string]*lyricsChoiceSet{}
 	}
-	a.lyricsChoices[token] = &lyricsChoiceSet{Created: time.Now(), Target: target, Candidates: candidates, PreviewIndex: -1}
+	a.lyricsChoices[token] = &lyricsChoiceSet{Created: time.Now(), Target: target, Provider: provider, Query: query,
+		Searched: searched, Candidates: candidates, PreviewIndex: -1}
 	a.trimLyricsChoices()
 	a.lyricsMu.Unlock()
-	respond(w, 200, map[string]any{"token": token, "candidates": candidates})
+	return lyricsCandidateGroup{Provider: provider, Token: token, Candidates: candidates, Cached: cached, Searched: searched}
+}
+
+func (a *App) getLyricsCandidates(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil || id < 1 {
+		apiError(w, 400, errors.New("invalid source ID"))
+		return
+	}
+	target, err := a.captureLyricsTarget(r.Context(), id)
+	if err != nil {
+		apiError(w, 409, err)
+		return
+	}
+	records, err := a.restoreLyricsSearches(r.Context(), target)
+	if err != nil {
+		apiError(w, 500, err)
+		return
+	}
+	query := lyricsSearchQuery(target.Source, "")
+	if len(records) > 0 {
+		query = records[0].Query
+	}
+	groups := []lyricsCandidateGroup{}
+	for _, provider := range lyricsProviders {
+		for _, record := range records {
+			if record.Query == query && record.Provider == provider {
+				groups = append(groups, a.newLyricsChoices(target, provider, query, record.candidates(target.Source), true, record.Searched))
+				break
+			}
+		}
+	}
+	respond(w, 200, map[string]any{"query": query, "groups": groups})
 }
 
 type lyricsChoiceRequest struct {
@@ -224,7 +273,9 @@ func (a *App) lyricsChoice(w http.ResponseWriter, r *http.Request) (lyricsChoice
 		apiError(w, 409, errors.New("Lyrics candidates expired; search again"))
 		return body, lyricsChoiceSet{}, false
 	}
-	return body, *set, true
+	snapshot := *set
+	snapshot.Candidates = append([]lyricsCandidate(nil), set.Candidates...)
+	return body, snapshot, true
 }
 
 func (a *App) previewLyricsCandidate(w http.ResponseWriter, r *http.Request) {
@@ -273,9 +324,18 @@ func (a *App) previewLyricsCandidate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	current.PreviewIndex, current.Preview = body.Index, &text
+	current.Candidates[body.Index].text = &text
+	candidates := append([]lyricsCandidate(nil), current.Candidates...)
 	a.trimLyricsChoices()
 	a.lyricsMu.Unlock()
-	respond(w, 200, text)
+	// Keep downloaded previews with their search so reopening never downloads
+	// the same pending result again. Publication still requires explicit preview.
+	if err = a.storeLyricsSearch(ctx, set.Target, set.Provider, set.Query, candidates, false, set.Searched); err != nil {
+		apiError(w, 500, err)
+		return
+	}
+	respond(w, 200, map[string]any{"original": text.Original, "translation": text.Translation,
+		"romanization": text.Romanization, "script": lyricsScript(text.Original), "translation_script": lyricsScript(text.Translation)})
 }
 
 func (a *App) applyLyricsCandidate(w http.ResponseWriter, r *http.Request) {

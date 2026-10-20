@@ -52,6 +52,7 @@ type lyricsState struct {
 	lyricsGates   map[string]chan struct{}
 	lyricsRetries map[string]time.Time
 	lyricsChoices map[string]*lyricsChoiceSet
+	lyricsCacheMu sync.Mutex
 	netease       *neteaseSessionState
 }
 
@@ -306,7 +307,7 @@ func (a *App) maintainLyrics(ctx context.Context, s Settings, id int64, refresh 
 			return
 		}
 		if err == nil && text == "" {
-			text, provider, status.State, status.Attempts, err = a.searchOnlineLyrics(ctx, target.Source)
+			text, provider, status.State, status.Attempts, err = a.searchOnlineLyrics(ctx, target, refresh)
 			if text == "" && err == nil {
 				if target.FilePresent {
 					if target.File.SourceHash == target.Source.BuiltHash {

@@ -51,17 +51,32 @@ func TestLyricsProviderPriorityAndFallback(t *testing.T) {
 						t.Error("QQ request headers/method missing")
 					}
 					var body struct {
+						Comm struct {
+							App string `json:"tmeAppID"`
+							SID string `json:"sid"`
+						} `json:"comm"`
 						Request struct {
-							Param struct {
+							Method string `json:"method"`
+							Param  struct {
 								Query string `json:"query"`
 							} `json:"param"`
 						} `json:"request"`
 					}
-					if err := json.NewDecoder(r.Body).Decode(&body); err != nil || !strings.Contains(body.Request.Param.Query, track.Title) {
-						t.Error("QQ search lost Unicode", err)
+					if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+						t.Fatal("invalid QQ request", err)
+					}
+					if body.Comm.App != "qqmusiclight" || r.Header.Get("Cookie") != "tmeLoginType=-1;" {
+						t.Error("QQ anonymous client identity missing")
+					}
+					if body.Request.Method == "GetSession" {
+						lyricsJSON(w, `{"code":0,"request":{"code":0,"data":{"session":{"uid":"0","sid":"guest-session","userip":"127.0.0.1"}}}}`)
+						return
+					}
+					if body.Request.Method != "DoSearchForQQMusicLite" || body.Comm.SID != "guest-session" || !strings.Contains(body.Request.Param.Query, track.Title) {
+						t.Error("QQ search lost Unicode or its anonymous session")
 					}
 					if provider == "qq" {
-						lyricsJSON(w, `{"code":0,"request":{"code":0,"data":{"body":{"song":{"list":[{"id":123,"mid":"song-mid","title":"夜に駆ける","interval":261,"album":{"name":"THE BOOK"},"singer":[{"name":"YOASOBI"}]}]}}}}}`)
+						lyricsJSON(w, `{"code":0,"request":{"code":0,"data":{"body":{"item_song":[{"id":123,"mid":"song-mid","title":"夜に駆ける","interval":261,"album":{"name":"THE BOOK"},"singer":[{"name":"YOASOBI"}]}]}}}}`)
 					} else {
 						lyricsJSON(w, `{"code":0,"request":{"code":0,"data":{"body":{"song":{"list":[]}}}}}`)
 					}
@@ -77,8 +92,8 @@ func TestLyricsProviderPriorityAndFallback(t *testing.T) {
 						lyricsJSON(w, `{"status":1,"data":{"info":[]}}`)
 					}
 				case "lyrics.kugou.com/v1/search":
-					if r.URL.Query().Get("duration") != "261000" || r.URL.Query().Get("hash") != "audio-hash" {
-						t.Error("Kugou lost milliseconds or recording hash")
+					if r.URL.Query().Get("duration") != "261000" || r.URL.Query().Get("hash") != "audio-hash" || r.URL.Query().Get("appid") != "3116" || len(r.URL.Query().Get("signature")) != 32 {
+						t.Error("Kugou lost milliseconds, recording hash or signed client parameters")
 					}
 					if provider == "netease" {
 						lyricsJSON(w, `{"status":403}`)
@@ -86,7 +101,7 @@ func TestLyricsProviderPriorityAndFallback(t *testing.T) {
 					}
 					lyricsJSON(w, `{"status":200,"candidates":[{"id":"999","accesskey":"wrong","duration":999000},{"id":"345","accesskey":"lyric-key","duration":261000}]}`)
 				case "lyrics.kugou.com/download":
-					if r.URL.Query().Get("id") != "345" || r.URL.Query().Get("fmt") != "lrc" {
+					if r.URL.Query().Get("id") != "345" || r.URL.Query().Get("fmt") != "lrc" || r.URL.Query().Get("client") != "mobi" || len(r.URL.Query().Get("signature")) != 32 {
 						t.Error("Kugou accepted a different duration or format")
 					}
 					respond(w, 200, map[string]any{"status": 200, "content": base64.StdEncoding.EncodeToString([]byte("[00:01.00]夜の歌"))})
@@ -119,6 +134,17 @@ func TestLyricsProviderPriorityAndFallback(t *testing.T) {
 				t.Fatal("Kugou rejection was mistaken for missing lyrics", attempts)
 			}
 		})
+	}
+}
+
+func TestNetEaseVerificationIsReported(t *testing.T) {
+	a, _ := testApp(t)
+	mockLyricsServices(t, a, func(w http.ResponseWriter, r *http.Request) {
+		lyricsJSON(w, `{"code":-462,"message":"请绑定手机后再试哦~"}`)
+	})
+	candidates, err := a.neteaseCandidates(context.Background(), "晴天 周杰伦")
+	if len(candidates) != 0 || err == nil || !strings.Contains(err.Error(), "verification") || !strings.Contains(err.Error(), "-462") {
+		t.Fatal("account verification was reported as missing lyrics", candidates, err)
 	}
 }
 

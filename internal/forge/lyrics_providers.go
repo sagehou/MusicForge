@@ -3,6 +3,7 @@ package forge
 import (
 	"bytes"
 	"context"
+	"crypto/md5"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -287,7 +288,27 @@ func (a *App) lrclibCandidates(ctx context.Context, source Source, query string,
 }
 
 func (a *App) qqCall(ctx context.Context, module, method string, params any, result any) error {
-	body, err := json.Marshal(map[string]any{"comm": map[string]any{"ct": 24, "cv": 0, "format": "json", "uin": 0},
+	comm := map[string]any{"ct": 11, "cv": "1003006", "v": "1003006", "tmeAppID": "qqmusiclight", "nettype": "NETWORK_WIFI", "udid": "0"}
+	var guest struct {
+		Session map[string]any `json:"session"`
+	}
+	// ponytail: use a fresh anonymous session per call; no credentials or durable
+	// session state are needed for the small, rate-limited lyrics requests.
+	if err := a.qqRequest(ctx, comm, "music.getSession.session", "GetSession", map[string]any{"caller": 0, "uid": "0", "vkey": 0}, &guest); err != nil {
+		return err
+	}
+	for _, key := range []string{"uid", "sid", "userip"} {
+		value, ok := guest.Session[key]
+		if !ok || value == nil {
+			return errors.New("QQ Music did not provide an anonymous session")
+		}
+		comm[key] = value
+	}
+	return a.qqRequest(ctx, comm, module, method, params, result)
+}
+
+func (a *App) qqRequest(ctx context.Context, comm map[string]any, module, method string, params any, result any) error {
+	body, err := json.Marshal(map[string]any{"comm": comm,
 		"request": map[string]any{"module": module, "method": method, "param": params}})
 	if err != nil {
 		return err
@@ -330,7 +351,8 @@ func (a *App) qqCandidates(ctx context.Context, query string) ([]lyricsCandidate
 			Items []song `json:"item_song"`
 		} `json:"body"`
 	}
-	err := a.qqCall(ctx, "music.search.SearchCgiService", "DoSearchForQQMusicDesktop", map[string]any{"query": query, "search_type": 0, "num_per_page": 8, "page_num": 1, "grp": 1}, &data)
+	err := a.qqCall(ctx, "music.search.SearchCgiService", "DoSearchForQQMusicLite", map[string]any{"query": query, "search_type": 0, "num_per_page": 8, "page_num": 1, "grp": 1,
+		"search_id": strconv.FormatInt(time.Now().UnixMilli(), 10), "remoteplace": "search.android.keyboard", "highlight": 0, "nqc_flag": 0, "page_id": 1}, &data)
 	if err != nil {
 		return nil, err
 	}
@@ -405,7 +427,7 @@ func (a *App) neteaseCandidates(ctx context.Context, query string) ([]lyricsCand
 		return nil, err
 	}
 	if response.Code != 200 {
-		return nil, errors.New("NetEase rejected the lyrics request")
+		return nil, neteaseLyricsError(response.Code)
 	}
 	var result []lyricsCandidate
 	for _, song := range response.Result.Songs {
@@ -420,6 +442,33 @@ func (a *App) neteaseCandidates(ctx context.Context, query string) ([]lyricsCand
 			remoteID: strconv.FormatInt(song.ID, 10), titleAliases: song.Aliases, artistAliases: aliases})
 	}
 	return result, nil
+}
+
+func neteaseLyricsError(code int) error {
+	if code == -462 {
+		return errors.New("NetEase requires account verification (code -462); try another lyrics provider")
+	}
+	return fmt.Errorf("NetEase rejected the lyrics request (code %d)", code)
+}
+
+func (a *App) kugouLyricsGET(ctx context.Context, path string, params url.Values, result any) (int, error) {
+	params.Set("appid", "3116")
+	params.Set("clientver", "11070")
+	keys := make([]string, 0, len(params))
+	for key := range params {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	// The published client protocol uses MD5, not a password or stored user key.
+	const key = "LnT6xpN3khm36zse0QzvmgTZ3waWdRSA"
+	var signature strings.Builder
+	signature.WriteString(key)
+	for _, name := range keys {
+		signature.WriteString(name + "=" + params.Get(name))
+	}
+	signature.WriteString(key)
+	params.Set("signature", fmt.Sprintf("%x", md5.Sum([]byte(signature.String()))))
+	return a.lyricsRequest(ctx, "kugou", "GET", "https://lyrics.kugou.com"+path+"?"+params.Encode(), nil, result)
 }
 
 func (a *App) candidateLyrics(ctx context.Context, candidate lyricsCandidate) (lyricsText, error) {
@@ -460,7 +509,7 @@ func (a *App) candidateLyrics(ctx context.Context, candidate lyricsCandidate) (l
 			text.Romanization, _ = decodeCloudQRC(cloud.Romanization)
 		}
 	case "kugou":
-		params := url.Values{"ver": {"1"}, "man": {"no"}, "client": {"pc"}, "keyword": {candidate.Artist + " - " + candidate.Title}, "duration": {strconv.FormatInt(int64(candidate.Duration*1000), 10)}, "hash": {candidate.hash}, "album_audio_id": {candidate.remoteID}, "lrctxt": {"1"}}
+		params := url.Values{"man": {"no"}, "keyword": {candidate.Artist + " - " + candidate.Title}, "duration": {strconv.FormatInt(int64(candidate.Duration*1000), 10)}, "hash": {candidate.hash}, "album_audio_id": {candidate.remoteID}, "lrctxt": {"1"}}
 		var response struct {
 			Status     int `json:"status"`
 			Candidates []struct {
@@ -469,7 +518,7 @@ func (a *App) candidateLyrics(ctx context.Context, candidate lyricsCandidate) (l
 				Duration  float64     `json:"duration"`
 			} `json:"candidates"`
 		}
-		if _, err := a.lyricsRequest(ctx, "kugou", "GET", "https://lyrics.kugou.com/v1/search?"+params.Encode(), nil, &response); err != nil {
+		if _, err := a.kugouLyricsGET(ctx, "/v1/search", params, &response); err != nil {
 			return text, err
 		}
 		if response.Status != 200 {
@@ -479,12 +528,12 @@ func (a *App) candidateLyrics(ctx context.Context, candidate lyricsCandidate) (l
 			if lyric.ID == "" || lyric.AccessKey == "" || math.Abs(lyric.Duration/1000-candidate.Duration) > 2 {
 				continue
 			}
-			params = url.Values{"ver": {"1"}, "client": {"pc"}, "id": {string(lyric.ID)}, "accesskey": {lyric.AccessKey}, "fmt": {"lrc"}, "charset": {"utf8"}}
+			params = url.Values{"ver": {"1"}, "client": {"mobi"}, "id": {string(lyric.ID)}, "accesskey": {lyric.AccessKey}, "fmt": {"lrc"}, "charset": {"utf8"}}
 			var data struct {
 				Content string `json:"content"`
 				Status  int    `json:"status"`
 			}
-			if _, err := a.lyricsRequest(ctx, "kugou", "GET", "https://lyrics.kugou.com/download?"+params.Encode(), nil, &data); err != nil {
+			if _, err := a.kugouLyricsGET(ctx, "/download", params, &data); err != nil {
 				return text, err
 			}
 			if data.Status != 200 {
@@ -515,7 +564,7 @@ func (a *App) candidateLyrics(ctx context.Context, candidate lyricsCandidate) (l
 			return text, err
 		}
 		if response.Code != 200 {
-			return text, errors.New("NetEase rejected the lyrics request")
+			return text, neteaseLyricsError(response.Code)
 		}
 		text = lyricsText{Original: response.LRC.Lyric, Translation: response.Translation.Lyric, Romanization: response.Romanization.Lyric}
 	default:
@@ -575,6 +624,7 @@ func (a *App) lyricsRequest(ctx context.Context, provider, method, endpoint stri
 	}
 	if provider == "qq" {
 		request.Header.Set("Referer", "https://y.qq.com/")
+		request.Header.Set("Cookie", "tmeLoginType=-1;")
 	}
 	if provider == "netease" {
 		request.Header.Set("Referer", "https://music.163.com/")

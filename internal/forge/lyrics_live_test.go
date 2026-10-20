@@ -39,6 +39,26 @@ func TestLyricsProvidersOnline(t *testing.T) {
 				response.Body = io.NopCloser(bytes.NewReader(raw))
 				var value any
 				decodeErr := json.Unmarshal(raw, &value)
+				if request.URL.Host == "u.y.qq.com" {
+					var metadata struct {
+						Request struct {
+							Data struct {
+								Body struct {
+									Songs []struct {
+										Title    string `json:"title"`
+										Name     string `json:"name"`
+										Subtitle string `json:"subtitle"`
+										Main     string `json:"title_main"`
+										Extra    string `json:"title_extra"`
+									} `json:"item_song"`
+								} `json:"body"`
+							} `json:"data"`
+						} `json:"request"`
+					}
+					if json.Unmarshal(raw, &metadata) == nil && len(metadata.Request.Data.Body.Songs) > 0 {
+						t.Logf("QQ first recording metadata: %+v", metadata.Request.Data.Body.Songs[0])
+					}
+				}
 				shape, _ := json.Marshal(liveLyricsShape(value, "", 8))
 				if len(shape) > 5000 {
 					shape = shape[:5000]

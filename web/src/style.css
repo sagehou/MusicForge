@@ -305,7 +305,7 @@ input[role="switch"]:checked::after { transform: translateX(16px); background: v
 .library-surface { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 0 24px; }
 .library-options { min-width: 0; }
 .library-options > summary { display: none; }
-.library-options-body { display: flex; align-items: center; gap: 12px; }
+.library-options-body { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
 .library-options-body select { width: auto; max-width: 100%; min-width: 100px; }
 .library-navigation { display: flex; align-items: center; justify-content: space-between; padding: 18px 0 0; }
 .segmented { display: inline-flex; align-items: center; gap: 3px; border-radius: var(--radius-artwork); background: var(--subtle); padding: 3px; }
@@ -690,6 +690,8 @@ input[role="switch"]:checked::after { transform: translateX(16px); background: v
 .library-maintenance > .library-comparison:only-child, .library-maintenance > .library-comparison[open] { grid-column: 1 / -1; }
 .library-maintenance > .library-comparison > summary > span { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .library-maintenance > .library-comparison > summary > svg { flex-shrink: 0; }
+.lyrics-library-summary { margin-top: 16px; padding: 12px; border-radius: var(--radius-control); background: var(--subtle); }
+.lyrics-library-summary small { color: var(--muted); }
 .lyrics-body > .actions { margin: 16px 0; flex-wrap: wrap; }
 .lyrics-body code, .lyrics-track { overflow-wrap: anywhere; }
 .lyrics-track { margin-top: 8px; }

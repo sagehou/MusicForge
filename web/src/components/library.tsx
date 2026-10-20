@@ -8,7 +8,7 @@ import { Badge, Empty, Loading, ResourceWarning, useResource, type Notice } from
 import { Button } from "./ui/button";
 import { BatchRepairButton, RepairControls, RepairDiagnostics } from "./repair";
 import { LibraryComparison } from "./library-comparison";
-import { LyricsMaintenance, LyricsSearchButton, LyricsTrack } from "./lyrics";
+import { LyricsMaintenance, LyricsSearchButton, LyricsTrack, lyricsMatchState, lyricsMatchStates, type LyricsMatchState } from "./lyrics";
 
 type Scope = { view: "artists" | "albums"; artist?: string; album?: string };
 type Identity = { artistKey: string; albumKey: string; artist: string; album: string };
@@ -60,6 +60,7 @@ export function Library({ notify }: { notify: Notice }) {
   const [query, setQuery] = useState("");
   const search = useDeferredValue(query.trim().toLocaleLowerCase(locale));
   const [filter, setFilter] = useState("all");
+  const [lyricsFilter, setLyricsFilter] = useState<LyricsMatchState | "all">("all");
   const [layout, setLayout] = useState<"grid" | "list">(() => preference("layout") === "list" ? "list" : "grid");
   const [density, setDensity] = useState<Density>(() => {
     const saved = preference("density");
@@ -118,6 +119,7 @@ export function Library({ notify }: { notify: Notice }) {
       const { source, identity } = item;
       if (scope.artist && identity.artistKey !== scope.artist || isAlbum && identity.albumKey !== scope.album) continue;
       if (filter !== "all" && (filter === "possibly_damaged" ? !source.possibly_damaged : source.status !== filter)) continue;
+      if (lyricsFilter !== "all" && lyricsMatchState(source) !== lyricsFilter) continue;
       if (search && !`${identity.artist} ${source.artist} ${identity.album} ${source.title} ${source.path}`.toLocaleLowerCase(locale).includes(search)) continue;
       rows.push(source);
       if (isAlbum) continue;
@@ -141,7 +143,7 @@ export function Library({ notify }: { notify: Notice }) {
     });
     if (isAlbum) rows.sort((a, b) => (a.disc || 1) - (b.disc || 1) || a.track - b.track || collator.compare(a.path, b.path));
     return { rows, groups };
-  }, [indexed, scope.artist, scope.album, isAlbum, showingArtists, filter, search, sort, collator, locale]);
+  }, [indexed, scope.artist, scope.album, isAlbum, showingArtists, filter, lyricsFilter, search, sort, collator, locale]);
   const totals = useMemo(() => ({
     artists: new Set(indexed.map(item => item.identity.artistKey)).size,
     albums: new Set(indexed.map(item => `${item.identity.artistKey}\0${item.identity.albumKey}`)).size,
@@ -213,7 +215,7 @@ export function Library({ notify }: { notify: Notice }) {
     </div>
     <div className="library-maintenance">
       {!scope.artist && !isAlbum && <LibraryComparison sources={data} notify={notify} />}
-      <LyricsMaintenance notify={notify} />
+      <LyricsMaintenance sources={data} notify={notify} />
     </div>
     {expired > 0 && <div className="banner amber"><Clock3 size={20} /><div><strong>{t("library.expiredCount", { count: expired })}</strong><p>{t("library.expiredHint")}</p></div><Button variant="destructive" size="sm" disabled={busy} onClick={() => deleteSelected(true)}><Trash2 size={14} />{t("library.deleteExpired")}</Button></div>}
     {removable.length > 0 && <div className="library-cleanup"><Trash2 size={17} /><div><strong>{t("library.removableCount", { count: removable.length })}</strong><small>{t("library.forgetHint")}</small></div><Button variant="outline" size="sm" disabled={busy} onClick={() => void forget([], true)}>{t("library.forgetAll")}</Button></div>}
@@ -238,10 +240,11 @@ export function Library({ notify }: { notify: Notice }) {
       </div></div>}
       <div className="table-toolbar library-toolbar">
         <div className="search"><Search size={17} aria-hidden="true" /><input type="search" aria-label={t("library.search")} placeholder={t("library.searchPlaceholder")} value={query} onChange={event => { setQuery(event.target.value); setOffset(0); }} />{query && <button aria-label={t("library.clearSearch")} title={t("library.clearSearch")} onClick={() => { setQuery(""); setOffset(0); }}><X size={16} /></button>}</div>
-        <details className="library-options" data-filtered={filter !== "all"} open={!compact || optionsOpen} onKeyDown={event => { if (event.key === "Escape") { setOptionsOpen(false); event.currentTarget.querySelector("summary")?.focus(); } }}>
-          <summary aria-label={t("library.options")} title={filter === "all" ? t("library.options") : `${t("library.options")}: ${statusLabel(filter)}`} onClick={event => { if (compact) { event.preventDefault(); setOptionsOpen(open => !open); } }}><SlidersHorizontal size={17} /></summary>
+        <details className="library-options" data-filtered={filter !== "all" || lyricsFilter !== "all"} open={!compact || optionsOpen} onKeyDown={event => { if (event.key === "Escape") { setOptionsOpen(false); event.currentTarget.querySelector("summary")?.focus(); } }}>
+          <summary aria-label={t("library.options")} title={[t("library.options"), filter !== "all" ? statusLabel(filter) : "", lyricsFilter !== "all" ? t(`lyrics.state.${lyricsFilter}`) : ""].filter(Boolean).join(" · ")} onClick={event => { if (compact) { event.preventDefault(); setOptionsOpen(open => !open); } }}><SlidersHorizontal size={17} /></summary>
           <div className="library-options-body">
             <select aria-label={t("library.filter")} value={filter} onChange={event => { setFilter(event.target.value); setOffset(0); setOptionsOpen(false); }}><option value="all">{t("library.allStatuses")}</option>{priority.slice().reverse().map(state => <option value={state} key={state}>{statusLabel(state)}</option>)}</select>
+            <select aria-label={t("lyrics.filter")} value={lyricsFilter} onChange={event => { setLyricsFilter(event.target.value as LyricsMatchState | "all"); setOffset(0); setOptionsOpen(false); }}><option value="all">{t("lyrics.allStates")}</option>{lyricsMatchStates.map(state => <option value={state} key={state}>{t(`lyrics.state.${state}`)}</option>)}</select>
             {!isAlbum && <select aria-label={t("library.sort")} value={sort} onChange={event => { setSort(event.target.value); setOffset(0); setOptionsOpen(false); }}><option value="name">{t("library.sortName")}</option><option value="attention">{t("library.sortAttention")}</option></select>}
             {!isAlbum && !compact && layout === "grid" && <select aria-label={t("library.coverSize")} value={density} onChange={event => { const value = event.target.value as Density; setDensity(value); savePreference("density", value); setOptionsOpen(false); }}>
               <option value="compact">{t("library.coverCompact")}</option><option value="standard">{t("library.coverStandard")}</option><option value="large">{t("library.coverLarge")}</option>

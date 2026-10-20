@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { ChevronRight, FileMusic, Search, Square, X } from "lucide-react";
 import { api } from "../api";
@@ -11,6 +11,14 @@ type LyricsResponse = {
   options: { auto_search: boolean };
   report: { state: "idle" | "running" | "complete" | "stopped"; total: number; processed: number; found: number; not_found: number; failed: number; needs_review?: number; current?: string; error?: string; stopping: boolean };
 };
+
+export const lyricsMatchStates = ["ready", "unchecked", "not_found", "instrumental", "needs_review", "failed"] as const;
+export type LyricsMatchState = typeof lyricsMatchStates[number];
+
+export function lyricsMatchState(source: Source): LyricsMatchState | undefined {
+  if (!source.output || !source.output_present) return undefined;
+  return source.lyrics?.state || "unchecked";
+}
 
 export function LyricsSearchButton({ ids, all = false, refresh = false, disabled = false, label, notify, onStarted }: {
   ids?: number[]; all?: boolean; refresh?: boolean; disabled?: boolean; label: MessageKey; notify: Notice; onStarted?: () => void;
@@ -28,12 +36,30 @@ export function LyricsSearchButton({ ids, all = false, refresh = false, disabled
   return <Button type="button" variant="outline" size="sm" disabled={disabled || busy || !all && !ids?.length} onClick={() => void search()}><Search size={13} />{t(label)}</Button>;
 }
 
-export function LyricsMaintenance({ notify }: { notify: Notice }) {
+export function LyricsMaintenance({ sources, notify }: { sources: Source[]; notify: Notice }) {
   const { t } = useI18n();
   const [open, setOpen] = useState(false);
+  const inventory = useMemo(() => {
+    const counts: Record<LyricsMatchState, number> = { ready: 0, unchecked: 0, not_found: 0, instrumental: 0, needs_review: 0, failed: 0 };
+    let total = 0;
+    for (const source of sources) {
+      const state = lyricsMatchState(source);
+      if (!state) continue;
+      counts[state]++;
+      total++;
+    }
+    return { counts, total, checked: total - counts.unchecked };
+  }, [sources]);
   return <details className="library-comparison lyrics-panel" onToggle={event => setOpen(event.currentTarget.open)}>
     <summary><FileMusic size={18} /><span>{t("lyrics.title")}</span><ChevronRight size={16} /></summary>
-    {open && <LyricsControls notify={notify} />}
+    {open && <>
+      <section className="lyrics-library-summary" aria-label={t("lyrics.libraryStatus")}>
+        <strong>{t("lyrics.coverage", { done: inventory.checked, total: inventory.total })}</strong>
+        <p>{t("lyrics.inventory", { found: inventory.counts.ready, missing: inventory.counts.not_found, instrumental: inventory.counts.instrumental, review: inventory.counts.needs_review, failed: inventory.counts.failed, unchecked: inventory.counts.unchecked })}</p>
+        <small>{t("lyrics.inventoryHint")}</small>
+      </section>
+      <LyricsControls notify={notify} />
+    </>}
   </details>;
 }
 
@@ -65,7 +91,7 @@ function LyricsControls({ notify }: { notify: Notice }) {
       {running && <Button variant="outline" size="sm" disabled={busy || report.stopping} onClick={() => void stop()}><Square size={13} />{t(report.stopping ? "lyrics.stopping" : "lyrics.stop")}</Button>}
     </div>
     <ResourceWarning error={resource.error} retry={resource.retry} />
-    {report.state !== "idle" && <div role="status" aria-live="polite">
+    {report.state !== "idle" && <div role="status" aria-label={t("lyrics.batchProgress")} aria-live="polite">
       <strong>{t(`lyrics.report.${report.state}`)}</strong>
       <p>{t("lyrics.progress", { done: report.processed, total: report.total, found: report.found, missing: report.not_found, failed: report.failed, review: report.needs_review ?? 0 })}</p>
       {report.current && <code>{report.current}</code>}

@@ -1,6 +1,101 @@
 import { test, expect } from "@playwright/test";
 import type { Source } from "../src/types";
 
+test("lyrics filters compose with audio status and library coverage survives new batches and reloads", async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem("musicforge.language", "en"));
+  const base: Source = { id: 1, path: "Artist/Album/01.flac", artist: "Artist", album: "Album", title: "Track", track: 1, disc: 1, present: true, output: "Artist/Album/01.opus", output_present: true, status: "ready", error: "", size: 123, metadata: {} };
+  const states = ["ready", "not_found", "instrumental", "needs_review", "failed", undefined] as const;
+  const sources: Source[] = states.map((state, index) => ({
+    ...base, id: index + 1, track: index + 1, title: `Lyrics ${state || "unchecked"}`,
+    path: `Artist/Album/${index + 1}.flac`, output: `Artist/Album/${index + 1}.opus`,
+    present: index !== 0, status: index === 0 ? "expired" : state === "failed" ? "failed" : "ready",
+    lyrics: state ? { state, output: `Artist/Album/${index + 1}.opus`, signature: "audio", checked: 1 } : undefined,
+  }));
+  sources.push({ ...base, id: 7, title: "No audio yet", path: "Artist/Album/7.flac", output: "", output_present: false, status: "unverified", lyrics: { state: "ready", output: "old.opus", signature: "old", checked: 1 } });
+  sources.push({ ...base, id: 8, title: "Other album", artist: "Other", album: "Other", path: "Other/Other/1.flac", output: "Other/Other/1.opus", lyrics: { state: "ready", output: "Other/Other/1.opus", signature: "other", checked: 1 } });
+  let report = { state: "idle", total: 0, processed: 0, found: 0, not_found: 0, failed: 0, stopping: false };
+  const searches: unknown[] = [];
+  await page.route("**/api/auth/me", route => route.fulfill({ json: { initialized: true, authenticated: true, username: "admin", method: "local", csrf: "test", oidc: false, version: "test" } }));
+  await page.route("**/api/library", route => route.fulfill({ json: sources }));
+  await page.route("**/api/lyrics", route => route.fulfill({ json: { options: { auto_search: true }, report } }));
+  await page.route("**/api/lyrics/search", route => { searches.push(route.request().postDataJSON()); return route.fulfill({ status: 202, json: { selected: 1 } }); });
+  async function refresh() {
+    await Promise.all([
+      page.waitForResponse(response => new URL(response.url()).pathname === "/api/library"),
+      page.evaluate(() => document.dispatchEvent(new Event("visibilitychange"))),
+    ]);
+  }
+
+  await page.goto("/library");
+  await page.locator(".lyrics-panel > summary").click();
+  const inventory = page.getByRole("region", { name: "Library lyrics status", exact: true });
+  await expect(inventory).toContainText("Library checked 6/7 tracks");
+  await expect(inventory).toContainText("Available 2 · No match 1 · Instrumental 1 · Review 1 · Failed 1 · Unchecked 1");
+  const lyricsFilter = page.getByLabel("Filter by lyrics status", { exact: true });
+  await lyricsFilter.selectOption("failed");
+  await expect(page.locator(".library-group")).toHaveCount(1);
+  await page.getByRole("button", { name: "Browse artist Artist", exact: true }).click();
+  await page.getByRole("button", { name: "Browse album Album", exact: true }).click();
+  const rows = page.locator(".track-table tbody > tr");
+  await page.getByLabel("Filter by status", { exact: true }).selectOption("ready");
+  await expect(rows).toHaveCount(0);
+  await page.getByLabel("Filter by status", { exact: true }).selectOption("all");
+  for (const state of states) {
+    await lyricsFilter.selectOption(state || "unchecked");
+    await expect(rows).toHaveCount(1);
+    await expect(rows).toContainText(`Lyrics ${state || "unchecked"}`);
+    await expect(inventory).toContainText("Library checked 6/7 tracks");
+  }
+  await lyricsFilter.selectOption("not_found");
+  await page.getByLabel("Search library", { exact: true }).fill("Lyrics ready");
+  await expect(rows).toHaveCount(0);
+  await page.getByLabel("Search library", { exact: true }).fill("");
+  await page.getByLabel("Select current page", { exact: true }).check();
+  await page.getByRole("button", { name: "Fill lyrics for selected artifacts", exact: true }).click();
+  await expect.poll(() => searches.length).toBe(1);
+  expect(searches).toEqual([{ ids: [2], refresh: false }]);
+  await page.getByRole("button", { name: "Clear selection", exact: true }).click();
+  await lyricsFilter.selectOption("all");
+  await expect(rows).toHaveCount(7);
+
+  const added: Source = { ...base, id: 9, title: "New track", path: "Artist/Album/9.flac", output: "Artist/Album/9.opus" };
+  sources.push(added);
+  report = { ...report, state: "running", total: 1 };
+  await refresh();
+  await expect(inventory).toContainText("Library checked 6/8 tracks");
+  added.lyrics = { state: "ready", output: added.output, signature: "new", checked: 2 };
+  report = { ...report, state: "complete", processed: 1, found: 1 };
+  await refresh();
+  await expect(inventory).toContainText("Library checked 7/8 tracks");
+  await expect(inventory).toContainText("Available 3");
+  await expect(page.getByRole("status", { name: "Current lyrics batch", exact: true })).toContainText("This batch: checked 1/1");
+  report = { ...report, state: "running", processed: 0, found: 0 };
+  await refresh();
+  added.lyrics.checked++;
+  report = { ...report, state: "complete", processed: 1, found: 1 };
+  await refresh();
+  await expect(inventory).toContainText("Library checked 7/8 tracks");
+
+  report = { ...report, state: "idle", total: 0, processed: 0, found: 0 };
+  await page.reload();
+  await page.locator(".lyrics-panel > summary").click();
+  await expect(inventory).toContainText("Library checked 7/8 tracks");
+  await expect(page.getByRole("status", { name: "Current lyrics batch", exact: true })).toHaveCount(0);
+  sources[0].output_present = false;
+  sources[1].lyrics = undefined;
+  await refresh();
+  await expect(inventory).toContainText("Library checked 5/7 tracks");
+  await page.getByRole("combobox", { name: "Language", exact: true }).selectOption("zh-CN");
+  await page.setViewportSize({ width: 320, height: 844 });
+  await page.locator(".library-options > summary").click();
+  await page.getByLabel("歌词匹配状态", { exact: true }).selectOption("failed");
+  await expect(rows).toHaveCount(1);
+  await expect(page.locator(".library-options")).toHaveAttribute("data-filtered", "true");
+  await expect(page.getByRole("region", { name: "全库歌词匹配状态", exact: true })).toContainText("全库已检查 5/7 首");
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
+  await page.screenshot({ path: "test-results/lyrics-inventory-mobile-zh-CN.png", fullPage: true });
+});
+
 test("lyrics selection, background progress, stop, automatic option and bilingual mobile UI", async ({ page }) => {
   await page.addInitScript(() => localStorage.setItem("musicforge.language", "en"));
   const source: Source = { id: 1, path: "Artist/Album/01.flac", artist: "Artist", album: "Album", title: "Track", track: 1, disc: 1, present: true, output: "Artist/Album/01.opus", output_present: true, status: "ready", error: "", size: 123, metadata: {}, lyrics: { state: "not_found", output: "Artist/Album/01.opus", signature: "audio", checked: 1 } };

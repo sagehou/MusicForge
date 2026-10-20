@@ -237,7 +237,7 @@ test("song details and saved recommendations survive reopening and page reload",
   await page.getByRole("button", { name: "Choose lyrics", exact: true }).click();
   let picker = page.getByRole("dialog", { name: "Choose lyrics", exact: true });
   await expect(picker.getByText("Saved search", { exact: false })).toHaveCount(2);
-  const recommended = picker.locator(".lyrics-candidate").filter({ has: picker.getByText("Recommended", { exact: true }) });
+  const recommended = picker.locator(".lyrics-candidate").filter({ hasText: "Recommended" });
   await expect(recommended).toContainText("Simplified Chinese characters detected");
   await expect(recommended).toContainText("Match score 99/100");
   await expect(recommended).toContainText("Duration difference 0.5 s");

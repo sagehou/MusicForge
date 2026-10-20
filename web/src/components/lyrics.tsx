@@ -196,7 +196,8 @@ function LyricsPicker({ source, notify, close, saved }: { source: Source; notify
   return createPortal(<dialog className="lyrics-picker" ref={dialog} aria-labelledby={`lyrics-picker-title-${source.id}`} onClose={close} onCancel={event => { if (saving) event.preventDefault(); }}>
     <div className="lyrics-picker-heading"><h2 id={`lyrics-picker-title-${source.id}`}>{t("lyrics.choose")}</h2><Button type="button" variant="ghost" size="icon" aria-label={t("lyrics.close")} disabled={saving} onClick={() => dialog.current?.close()}><X size={18} /></Button></div>
     <p>{source.title} · {source.artist}{source.duration ? <> · {t("lyrics.targetDuration", { seconds: source.duration })}</> : null}</p><p>{t("lyrics.chooseHint")}</p>
-    <p>{t("lyrics.recommendationHint")}</p><p>{t("lyrics.cacheHint")}</p>
+    <p>{t("lyrics.cacheHint")}</p>
+    <details><summary>{t("lyrics.recommendationInfo")}</summary><p>{t("lyrics.recommendationHint")}</p></details>
     {restoring && <p role="status">{t("lyrics.restoring")}</p>}
     {restoreError && <p role="alert">{errorMessage(restoreError)}</p>}
     <form className="lyrics-query" onSubmit={event => { event.preventDefault(); void search(); }}>

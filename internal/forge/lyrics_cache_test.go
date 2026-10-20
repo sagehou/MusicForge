@@ -207,7 +207,7 @@ func TestAutomaticLyricsPrefersSimplifiedWithTraditionalFallback(t *testing.T) {
 				if body.Request.Method == "GetSession" {
 					lyricsJSON(w, `{"code":0,"request":{"code":0,"data":{"session":{"uid":"0","sid":"guest","userip":"127.0.0.1"}}}}`)
 				} else {
-					lyricsJSON(w, `{"code":0,"request":{"code":0,"data":{"body":{"song":{"list":[{"id":123,"mid":"mid","title":"Song","interval":183,"album":{"name":"Album"},"singer":[{"name":"Artist"}]}]}}}}`)
+					lyricsJSON(w, `{"code":0,"request":{"code":0,"data":{"body":{"song":{"list":[{"id":123,"mid":"mid","title":"Song","interval":183,"album":{"name":"Album"},"singer":[{"name":"Artist"}]}]}}}}}`)
 				}
 			case "c.y.qq.com/lyric/fcgi-bin/fcg_query_lyric_new.fcg":
 				lyricsJSON(w, `{"retcode":0,"lyric":"[00:01.00]爱这风云"}`)

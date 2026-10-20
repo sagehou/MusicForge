@@ -49,6 +49,10 @@ func TestLyricsSearchRestoresPreviewsAfterRestart(t *testing.T) {
 	if w = request("PUT", "/api/library/1/lyrics", body); w.Code != 200 {
 		t.Fatal("restored candidate could not be saved", w.Code, w.Body.String())
 	}
+	var count int
+	if err = reopened.reads.QueryRow("SELECT count(*) FROM meta WHERE key LIKE 'lyrics-search:1:%'").Scan(&count); err != nil || count != 0 {
+		t.Fatal("saved lyrics retained obsolete searches", count, err)
+	}
 	w = request("GET", "/api/library/1/lyrics/candidates", nil)
 	if w.Code != 200 || !strings.Contains(w.Body.String(), `"groups":[]`) {
 		t.Fatal("changed lyrics did not invalidate saved results", w.Code, w.Body.String())
@@ -245,7 +249,12 @@ func TestLyricsSearchCacheIsBoundedAndPrunesExpiredRecords(t *testing.T) {
 		if i == 513 {
 			searched = time.Now().Add(-8 * 24 * time.Hour).Unix()
 		}
-		raw, _ := json.Marshal(map[string]any{"searched": searched})
+		value := map[string]any{"searched": searched}
+		if i == 0 {
+			value["searched"] = time.Now().Add(-time.Hour).Unix()
+			value["candidates"] = []any{map[string]any{"candidate": map[string]any{"high_confidence": true}}}
+		}
+		raw, _ := json.Marshal(value)
 		if _, err = tx.Exec("INSERT INTO meta(key,value) VALUES(?,?)", lyricsSearchPrefix+"99:"+strconv.Itoa(i), string(raw)); err != nil {
 			t.Fatal(err)
 		}
@@ -262,6 +271,9 @@ func TestLyricsSearchCacheIsBoundedAndPrunesExpiredRecords(t *testing.T) {
 	}
 	if _, err = a.meta(lyricsSearchKey(target, "lrclib", "")); err != nil {
 		t.Fatal("new search was evicted", err)
+	}
+	if _, err = a.meta("lyrics-search:99:0"); err != nil {
+		t.Fatal("new empty results evicted high-confidence pending candidates", err)
 	}
 	if err = a.reads.QueryRow("SELECT count(*) FROM meta WHERE key='lyrics-search:99:513'").Scan(&count); err != nil || count != 0 {
 		t.Fatal("expired entry retained", count, err)

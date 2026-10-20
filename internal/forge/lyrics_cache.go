@@ -138,9 +138,10 @@ func (a *App) storeLyricsSearch(ctx context.Context, target lyricsTarget, provid
 		return err
 	}
 	type entry struct {
-		key      string
-		size     int
-		searched int64
+		key         string
+		size        int
+		searched    int64
+		recommended bool
 	}
 	var entries []entry
 	for rows.Next() {
@@ -149,31 +150,53 @@ func (a *App) storeLyricsSearch(ctx context.Context, target lyricsTarget, provid
 			break
 		}
 		var stored struct {
-			Searched int64 `json:"searched"`
+			Searched   int64 `json:"searched"`
+			Candidates []struct {
+				Candidate struct {
+					HighConfidence bool `json:"high_confidence"`
+				} `json:"candidate"`
+			} `json:"candidates"`
 		}
 		_ = json.Unmarshal([]byte(value), &stored)
-		entries = append(entries, entry{k, len(value), stored.Searched})
+		recommended := false
+		for _, candidate := range stored.Candidates {
+			recommended = recommended || candidate.Candidate.HighConfidence
+		}
+		entries = append(entries, entry{k, len(value), stored.Searched, recommended})
 	}
 	err = errors.Join(err, rows.Err(), rows.Close())
 	if err != nil {
 		return err
 	}
 	sort.Slice(entries, func(i, j int) bool {
+		if entries[i].recommended != entries[j].recommended {
+			return entries[i].recommended
+		}
 		if entries[i].searched == entries[j].searched {
 			return entries[i].key == key && entries[j].key != key
 		}
 		return entries[i].searched > entries[j].searched
 	})
-	total := 0
-	for i, e := range entries {
-		total += e.size
-		if i >= 512 || total > 32*maxLyricsBytes || time.Since(time.Unix(e.searched, 0)) >= lyricsSearchTTL {
+	count, total := 0, 0
+	for _, e := range entries {
+		if count >= 512 || total+e.size > 32*maxLyricsBytes || time.Since(time.Unix(e.searched, 0)) >= lyricsSearchTTL {
 			if _, err = tx.ExecContext(ctx, "DELETE FROM meta WHERE key=?", e.key); err != nil {
 				return err
 			}
+		} else {
+			count++
+			total += e.size
 		}
 	}
 	return tx.Commit()
+}
+
+func (a *App) discardLyricsSearches(id int64) {
+	a.lyricsCacheMu.Lock()
+	defer a.lyricsCacheMu.Unlock()
+	if _, err := a.db.Exec("DELETE FROM meta WHERE key LIKE ?", lyricsSearchPrefix+strconv.FormatInt(id, 10)+":%"); err != nil {
+		a.logger.Warn("lyrics search cache cleanup failed", "source_id", id, "error", err)
+	}
 }
 
 func (a *App) restoreLyricsSearches(ctx context.Context, target lyricsTarget) ([]lyricsSearchRecord, error) {

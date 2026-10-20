@@ -323,6 +323,7 @@ func (a *App) maintainLyrics(ctx context.Context, s Settings, id int64, refresh 
 		}
 		if err == nil {
 			status.State, status.Path, status.Provider = "ready", lyricsRel(target.Source.Output), provider
+			a.discardLyricsSearches(id)
 		}
 	}
 	if err != nil {

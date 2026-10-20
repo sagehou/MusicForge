@@ -357,6 +357,7 @@ func (a *App) applyLyricsCandidate(w http.ResponseWriter, r *http.Request) {
 		apiError(w, 409, err)
 		return
 	}
+	a.discardLyricsSearches(set.Target.Source.ID)
 	status := LyricsStatus{State: "ready", Output: set.Target.Source.Output, Signature: set.Target.Signature,
 		Path: lyricsRel(set.Target.Source.Output), Provider: candidate.Provider, Checked: time.Now().Unix()}
 	raw, _ := json.Marshal(status)

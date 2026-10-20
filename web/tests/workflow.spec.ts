@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { readFileSync, unlinkSync, writeFileSync, utimesSync, mkdirSync } from "node:fs";
+import { readFileSync, unlinkSync, writeFileSync, utimesSync, mkdirSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { execFileSync } from "node:child_process";
 import type { Job, Source, TaskItem } from "../src/types";
@@ -49,6 +49,16 @@ test("bilingual setup, real incremental build, state preservation and login", as
   await page.getByRole("button", { name: "浏览专辑 CI Album", exact: true }).click();
   await expect(page.getByText("CI Track", { exact: true })).toBeVisible({ timeout: 30000 });
   await expect(page.getByRole("table").getByText("已就绪", { exact: true })).toBeVisible({ timeout: 30000 });
+  const audioBeforeLyrics = readFileSync(join(root, "output/Artist/Album/01.opus"));
+  writeFileSync(join(root, "source/Artist/Album/01.lrc"), "[00:00.00]CI 同步歌词\n");
+  await page.locator(".lyrics-track > summary").click();
+  await page.getByRole("button", { name: "重新搜索歌词", exact: true }).click();
+  await expect.poll(() => {
+    const path = join(root, "output/Artist/Album/01.lrc");
+    return existsSync(path) ? readFileSync(path, "utf8") : "";
+  }).toBe("[00:00.00]CI 同步歌词\n");
+  await expect(page.locator(".lyrics-track > summary")).toContainText("已有歌词");
+  expect(readFileSync(join(root, "output/Artist/Album/01.opus")).equals(audioBeforeLyrics)).toBe(true);
   const cover = page.locator(".album-summary .cover img");
   await expect(cover).toBeVisible();
   await expect.poll(() => cover.evaluate((node: HTMLImageElement) => node.naturalWidth)).toBe(320);

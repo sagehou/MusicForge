@@ -110,7 +110,7 @@ The desktop sidebar can collapse to icons with the top-left toggle and remembers
 
 Settings are grouped into Library, Encoding, Integrations, and Account & security. Drafts stay intact when switching sections or language; Save settings applies the whole form, and Discard changes restores saved values. The Library page keeps its last snapshot in memory while revalidating, uses compressed responses, and skips transferring unchanged data. Signing out clears that snapshot. The Lidarr file-count comparison is at the top of Library.
 
-The source library is the source of truth. MusicForge manages generated audio and covers; use the Web UI to maintain output.
+The source library is the source of truth for audio and tags. MusicForge manages generated audio, covers and optional LRC lyrics; use the Web UI to maintain output.
 
 | Trigger | Behavior |
 | --- | --- |
@@ -132,6 +132,8 @@ Expired artifacts remain in the output and Navidrome until explicit deletion. **
 After scanning establishes that a source is missing, **Remove record**, **Remove selected records** and **Remove missing records** can clear index entries with no artifacts. Clean retained artifacts first using the deletion workflow above. Record removal only changes the library index, preserves files and task history, and skips active or paused work, registered ownership and recovery journals. It also works with offline mounts; scanning rediscovers a restored source.
 
 Tags and ReplayGain are preserved. Each album gets one external `cover.jpg`, using source external artwork first, then an embedded cover in disc/track order. External artwork changes update the cover independently of audio encoding.
+
+**LRC lyrics** in Library fills lyrics for selected or all playable artifacts, with optional automatic filling (off by default), progress and stop. It prefers same-name source `.lrc`/`.LRC`, then searches LRCLIB → QQ Music → Kugou → NetEase; automatic adoption requires matching metadata and duration. Individual track details offer **Search again** and **Choose lyrics**, with original-title/alias queries, candidate previews and optional synchronized translation/romanization. Provider failures are shown independently; unofficial interfaces depend on platform and regional availability. Lyrics changes do not re-encode audio; owned LRC files follow audio moves and explicit deletion. Unregistered or edited lyrics are preserved. Stopping also disables automatic filling. Search progress resets on restart; completed track checks and the automatic option persist. Output storage must support hard links for safe LRC creation. See the [lyrics baseline](docs/mvp-design.en.md#lrc-lyrics-maintenance) for matching, retry and rollback behavior.
 
 ## Reliability and maintenance
 

@@ -685,3 +685,27 @@ input[role="switch"]:checked::after { transform: translateX(16px); background: v
 .comparison-result-heading { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
 .comparison-results pre { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 240px; overflow-y: auto; }
 @media (max-width: 600px) { .comparison-filters { grid-template-columns: 1fr; } .library-comparison { padding: 12px; } }
+.lyrics-body > .actions { margin: 16px 0; flex-wrap: wrap; }
+.lyrics-body code, .lyrics-track { overflow-wrap: anywhere; }
+.lyrics-track { margin-top: 8px; }
+.lyrics-track > summary { cursor: pointer; font-size: 12px; color: var(--muted); }
+.lyrics-track[open] > .ui-button { margin-top: 8px; }
+.lyrics-track p { white-space: pre-wrap; font-size: 12px; }
+.lyrics-track > .ui-button { margin-right: 6px; }
+.lyrics-picker { margin: auto; width: min(760px, calc(100vw - 24px)); max-height: calc(100dvh - 32px); box-sizing: border-box; overflow: auto; border: 1px solid var(--line); border-radius: 12px; padding: 20px; color: var(--ink); background: var(--surface); }
+.lyrics-picker::backdrop { background: rgb(0 0 0 / 55%); }
+.lyrics-picker-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.lyrics-picker h2, .lyrics-picker h3 { margin: 0; }
+.lyrics-picker p { overflow-wrap: anywhere; }
+.lyrics-query { display: flex; align-items: end; flex-wrap: wrap; gap: 10px; margin: 16px 0; }
+.lyrics-query label { flex: 1 1 220px; min-width: 0; }
+.lyrics-query label span { display: block; margin-bottom: 6px; }
+.lyrics-query input { width: 100%; box-sizing: border-box; }
+.lyrics-candidate-groups { display: grid; gap: 12px; }
+.lyrics-candidate-groups fieldset { min-width: 0; border: 1px solid var(--line); border-radius: 8px; padding: 10px; }
+.lyrics-candidate { display: flex; align-items: start; gap: 10px; padding: 10px 4px; cursor: pointer; overflow-wrap: anywhere; }
+.lyrics-candidate input { margin-top: 4px; flex: 0 0 16px; width: 16px; height: 16px; padding: 0; box-shadow: none; accent-color: var(--accent); }
+.lyrics-candidate > span { display: grid; gap: 4px; min-width: 0; }
+.lyrics-candidate small { color: var(--muted); }
+.lyrics-preview { margin-top: 20px; }
+.lyrics-preview pre { max-height: 260px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; padding: 12px; background: var(--subtle); border: 1px solid var(--line); border-radius: 8px; }

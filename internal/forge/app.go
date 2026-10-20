@@ -22,6 +22,7 @@ import (
 type App struct {
 	repairState
 	lidarrCheckState
+	lyricsState
 	cfg       Runtime
 	db        *sql.DB
 	reads     *sql.DB
@@ -148,10 +149,13 @@ func New(cfg Runtime, logger *slog.Logger, version string, assets fs.FS) (*App, 
 func (a *App) Close() {
 	if a.ioCancel != nil {
 		a.repairMu.Lock()
+		a.lyricsMu.Lock()
 		a.ioCancel()
+		a.lyricsMu.Unlock()
 		a.repairMu.Unlock()
 	}
 	a.repairWG.Wait()
+	a.lyricsWG.Wait()
 	a.lidarrMu.Lock()
 	a.lidarrMu.Unlock()
 	a.lidarrWG.Wait()
@@ -236,6 +240,7 @@ func (a *App) scheduler(ctx context.Context) {
 			if lastScan, err = a.scheduleScan(s, lastScan); err != nil {
 				a.logger.Error("scan scheduling failed", "error", err)
 			}
+			a.scheduleLyrics(s)
 			var dirty, active int
 			var latest int64
 			if err = a.reads.QueryRow("SELECT count(*),coalesce(max(updated),0) FROM dirty_dirs").Scan(&dirty, &latest); err == nil && dirty > 0 && time.Since(time.Unix(0, latest)) >= 5*time.Second {

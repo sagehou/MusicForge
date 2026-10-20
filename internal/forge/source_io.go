@@ -16,6 +16,7 @@ import (
 	"strings"
 	"syscall"
 	"time"
+	"unicode/utf8"
 )
 
 // Source mount calls can block inside FUSE. Keep them in a disposable process,
@@ -53,6 +54,7 @@ type sourceEvent struct {
 	Error    string      `json:"error,omitempty"`
 	Missing  bool        `json:"missing,omitempty"`
 	Complete bool        `json:"complete,omitempty"`
+	Text     string      `json:"text,omitempty"`
 }
 
 // RunSourceIO handles only the internal child-process mode, before app startup.
@@ -82,6 +84,34 @@ func readSourceIO(operation, root, rel string, emit func(sourceEvent) error, sta
 		return err
 	}
 	switch operation {
+	case "lyrics":
+		file, err := os.Open(path)
+		if err != nil {
+			return err
+		}
+		defer file.Close()
+		info, err := file.Stat()
+		if err != nil {
+			return err
+		}
+		if !info.Mode().IsRegular() || info.Size() > maxLyricsBytes {
+			return errors.New("LRC must be a regular UTF-8 file no larger than 1 MiB")
+		}
+		raw, err := io.ReadAll(io.LimitReader(file, maxLyricsBytes+1))
+		if err != nil {
+			return err
+		}
+		if len(raw) > maxLyricsBytes || !utf8.Valid(raw) {
+			return errors.New("LRC must be UTF-8 and no larger than 1 MiB")
+		}
+		after, err := os.Stat(path)
+		if err != nil {
+			return err
+		}
+		if !os.SameFile(info, after) || info.Size() != after.Size() || int64(len(raw)) != info.Size() || !info.ModTime().Equal(after.ModTime()) {
+			return errors.New("Source LRC changed while being read; retry")
+		}
+		return emit(sourceEvent{Text: string(raw)})
 	case "stat":
 		info, err := os.Stat(path)
 		if err != nil {

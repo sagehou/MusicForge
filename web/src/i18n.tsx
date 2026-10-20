@@ -53,6 +53,15 @@ function useLanguage() {
     if (scan) return t("error.scanIncomplete", { unavailable: scan[1], invalid: scan[2] }) + raw.slice(scan[0].length);
     const http = raw.match(/^Server returned(?: an unreadable response \(HTTP (\d+)\)| HTTP (\d+)); please retry(?=\n|$)/);
     if (http) return t("error.http", { status: http[1] || http[2] }) + raw.slice(http[0].length);
+    const lyrics = raw.match(/^(lrclib|qq|kugou|netease) (.+)$/);
+    if (lyrics) {
+      const provider = t(`lyrics.name.${lyrics[1]}` as MessageKey);
+      if (lyrics[2] === "lyrics request failed; check connectivity or retry later") return t("error.lyricsProviderRequest", { provider });
+      if (lyrics[2] === "lyrics service is cooling down; retry later") return t("error.lyricsProviderCooldown", { provider });
+      if (lyrics[2] === "returned invalid or oversized lyrics data") return t("error.lyricsProviderData", { provider });
+      const status = lyrics[2].match(/^lyrics service returned HTTP (\d+); retry later$/);
+      if (status) return t("error.lyricsProviderHTTP", { provider, status: status[1] });
+    }
     const key = Object.keys(en).find(key => key.startsWith("error.") && en[key as MessageKey] === raw) as MessageKey | undefined;
     if (key) return t(key);
     const prefix = Object.keys(en).find(key => key.startsWith("error.") && key.endsWith("Prefix") &&

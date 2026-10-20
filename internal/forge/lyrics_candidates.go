@@ -1,0 +1,311 @@
+package forge
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"net/http"
+	"os"
+	"strconv"
+	"strings"
+	"time"
+	"unicode/utf8"
+)
+
+type lyricsTarget struct {
+	Settings                 Settings
+	Source                   Source
+	Signature, FileSignature string
+	File                     lyricsFile
+	FilePresent              bool
+}
+
+func (a *App) captureLyricsTarget(ctx context.Context, id int64) (target lyricsTarget, err error) {
+	if err = a.lockFiles(ctx); err != nil {
+		return
+	}
+	defer a.files.Unlock()
+	target.Settings, err = a.settingsContext(ctx)
+	if err != nil {
+		return
+	}
+	if !target.Settings.Enabled {
+		err = errors.New("Enable the library before searching for lyrics")
+		return
+	}
+	if err = a.storageContext(ctx, target.Settings); err != nil {
+		return
+	}
+	if err = a.ensureRecovery(ctx, target.Settings); err != nil {
+		return
+	}
+	target.Source, err = a.source(id)
+	if err != nil {
+		return
+	}
+	source := target.Source
+	if source.Output == "" || !source.OutputPresent || source.Hash != source.BuiltHash {
+		err = errors.New("Artifact missing or waiting for rebuild; search again after conversion")
+		return
+	}
+	err = a.reads.QueryRowContext(ctx, "SELECT signature FROM managed WHERE kind='audio' AND source_id=? AND path=?", id, source.Output).Scan(&target.Signature)
+	if err != nil {
+		return
+	}
+	path, pathErr := safePath(target.Settings.Output, source.Output)
+	if pathErr != nil {
+		err = pathErr
+		return
+	}
+	if info, statErr := os.Lstat(path); statErr != nil || !info.Mode().IsRegular() {
+		err = errors.New("Playable artifact is no longer available")
+		return
+	}
+	var text string
+	target.File, text, target.FilePresent, err = a.readLyricsFile(ctx, target.Settings, lyricsRel(source.Output))
+	if target.FilePresent {
+		target.FileSignature = digest(text)
+	}
+	return
+}
+
+func (a *App) publishLyricsTarget(ctx context.Context, target lyricsTarget, text, provider string) error {
+	if err := a.lockFiles(ctx); err != nil {
+		return err
+	}
+	defer a.files.Unlock()
+	settings, err := a.settingsContext(ctx)
+	if err != nil {
+		return err
+	}
+	current, err := a.source(target.Source.ID)
+	if err != nil {
+		return err
+	}
+	var signature string
+	err = a.reads.QueryRowContext(ctx, "SELECT signature FROM managed WHERE path=? AND source_id=? AND kind='audio'", current.Output, current.ID).Scan(&signature)
+	if err != nil {
+		return err
+	}
+	if !settings.Enabled || settings.Source != target.Settings.Source || settings.Output != target.Settings.Output || current.Output != target.Source.Output || current.Rel != target.Source.Rel || current.Hash != target.Source.Hash || current.BuiltHash != target.Source.BuiltHash || !current.OutputPresent || signature != target.Signature {
+		return errors.New("Artifact or library settings changed during lyrics search; result discarded")
+	}
+	if err = a.storageContext(ctx, settings); err != nil {
+		return err
+	}
+	path, err := safePath(settings.Output, current.Output)
+	if err != nil {
+		return err
+	}
+	if info, statErr := os.Lstat(path); statErr != nil || !info.Mode().IsRegular() {
+		return errors.New("Playable artifact is no longer available")
+	}
+	_, existing, present, err := a.readLyricsFile(ctx, settings, lyricsRel(current.Output))
+	if err != nil {
+		return err
+	}
+	if present != target.FilePresent || present && digest(existing) != target.FileSignature {
+		return errors.New("LRC changed during publication; file preserved")
+	}
+	return a.writeLyricsFile(ctx, settings, current, text, provider)
+}
+
+// Candidate searches and previews are bounded, short-lived memory only. No
+// remote identifiers, credentials or selection tokens enter schema-2 journals.
+type lyricsChoiceSet struct {
+	Created        time.Time
+	Target         lyricsTarget
+	Candidates     []lyricsCandidate
+	PreviewIndex   int
+	PreviewVersion uint64
+	Preview        *lyricsText
+}
+
+func (a *App) trimLyricsChoices() {
+	for token, set := range a.lyricsChoices {
+		if time.Since(set.Created) >= 10*time.Minute {
+			delete(a.lyricsChoices, token)
+		}
+	}
+	for {
+		bytes, oldest := 0, ""
+		for token, set := range a.lyricsChoices {
+			if oldest == "" || set.Created.Before(a.lyricsChoices[oldest].Created) {
+				oldest = token
+			}
+			for _, candidate := range set.Candidates {
+				if candidate.text != nil {
+					bytes += len(candidate.text.Original) + len(candidate.text.Translation) + len(candidate.text.Romanization)
+				}
+			}
+			if set.Preview != nil {
+				bytes += len(set.Preview.Original) + len(set.Preview.Translation) + len(set.Preview.Romanization)
+			}
+		}
+		if len(a.lyricsChoices) <= 16 && bytes <= 16*maxLyricsBytes {
+			return
+		}
+		delete(a.lyricsChoices, oldest)
+	}
+}
+
+func (a *App) requestLyricsCandidates(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil || id < 1 {
+		apiError(w, 400, errors.New("invalid source ID"))
+		return
+	}
+	var body struct {
+		Provider string `json:"provider"`
+		Query    string `json:"query"`
+	}
+	if !decode(w, r, &body) {
+		return
+	}
+	known := false
+	for _, provider := range lyricsProviders {
+		known = known || body.Provider == provider
+	}
+	if !known || len(body.Query) > 2000 || utf8.RuneCountInString(body.Query) > 500 || !utf8.ValidString(body.Query) || strings.ContainsAny(body.Query, "\x00\r\n") {
+		apiError(w, 400, errors.New("Invalid lyrics provider or search query"))
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 12*time.Second)
+	defer cancel()
+	stop := context.AfterFunc(a.ioContext, cancel)
+	defer stop()
+	target, err := a.captureLyricsTarget(ctx, id)
+	if err != nil {
+		apiError(w, 409, err)
+		return
+	}
+	if strings.TrimSpace(body.Query) == "" && (lyricsTag(target.Source.Title) == "" || lyricsTag(target.Source.Artist) == "") {
+		apiError(w, 400, errors.New("Enter a title or artist to search for lyrics"))
+		return
+	}
+	candidates, _, err := a.providerCandidates(ctx, body.Provider, target.Source, strings.TrimSpace(body.Query), true)
+	if err != nil {
+		apiError(w, 502, err)
+		return
+	}
+	// JSON must encode an empty result as [], so each provider can finish alone.
+	if candidates == nil {
+		candidates = []lyricsCandidate{}
+	}
+	token := randomToken()
+	a.lyricsMu.Lock()
+	if a.lyricsChoices == nil {
+		a.lyricsChoices = map[string]*lyricsChoiceSet{}
+	}
+	a.lyricsChoices[token] = &lyricsChoiceSet{Created: time.Now(), Target: target, Candidates: candidates, PreviewIndex: -1}
+	a.trimLyricsChoices()
+	a.lyricsMu.Unlock()
+	respond(w, 200, map[string]any{"token": token, "candidates": candidates})
+}
+
+type lyricsChoiceRequest struct {
+	Token        string `json:"token"`
+	Index        int    `json:"index"`
+	Translation  bool   `json:"translation"`
+	Romanization bool   `json:"romanization"`
+}
+
+func (a *App) lyricsChoice(w http.ResponseWriter, r *http.Request) (lyricsChoiceRequest, lyricsChoiceSet, bool) {
+	var body lyricsChoiceRequest
+	if !decode(w, r, &body) {
+		return body, lyricsChoiceSet{}, false
+	}
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	a.lyricsMu.Lock()
+	defer a.lyricsMu.Unlock()
+	a.trimLyricsChoices()
+	set := a.lyricsChoices[body.Token]
+	if err != nil || id < 1 || len(body.Token) > 128 || set == nil || set.Target.Source.ID != id || body.Index < 0 || body.Index >= len(set.Candidates) {
+		apiError(w, 409, errors.New("Lyrics candidates expired; search again"))
+		return body, lyricsChoiceSet{}, false
+	}
+	return body, *set, true
+}
+
+func (a *App) previewLyricsCandidate(w http.ResponseWriter, r *http.Request) {
+	body, set, ok := a.lyricsChoice(w, r)
+	if !ok {
+		return
+	}
+	a.lyricsMu.Lock()
+	current := a.lyricsChoices[body.Token]
+	if current == nil {
+		a.lyricsMu.Unlock()
+		apiError(w, 409, errors.New("Lyrics candidates expired; search again"))
+		return
+	}
+	current.PreviewVersion++
+	version := current.PreviewVersion
+	current.Preview, current.PreviewIndex = nil, -1
+	a.lyricsMu.Unlock()
+	ctx, cancel := context.WithTimeout(r.Context(), 12*time.Second)
+	defer cancel()
+	stop := context.AfterFunc(a.ioContext, cancel)
+	defer stop()
+	text, err := a.candidateLyrics(ctx, set.Candidates[body.Index])
+	if ctx.Err() != nil {
+		err = ctx.Err()
+	}
+	if err != nil {
+		apiError(w, 502, err)
+		return
+	}
+	if text.Original == "" {
+		apiError(w, 422, errors.New("No synchronized LRC lines found"))
+		return
+	}
+	a.lyricsMu.Lock()
+	a.trimLyricsChoices()
+	current = a.lyricsChoices[body.Token]
+	if current == nil {
+		a.lyricsMu.Unlock()
+		apiError(w, 409, errors.New("Lyrics candidates expired; search again"))
+		return
+	}
+	if current.PreviewVersion != version {
+		a.lyricsMu.Unlock()
+		apiError(w, 409, errors.New("Lyrics preview changed; select the candidate again"))
+		return
+	}
+	current.PreviewIndex, current.Preview = body.Index, &text
+	a.trimLyricsChoices()
+	a.lyricsMu.Unlock()
+	respond(w, 200, text)
+}
+
+func (a *App) applyLyricsCandidate(w http.ResponseWriter, r *http.Request) {
+	body, set, ok := a.lyricsChoice(w, r)
+	if !ok {
+		return
+	}
+	if set.Preview == nil || set.PreviewIndex != body.Index {
+		apiError(w, 409, errors.New("Preview the lyrics candidate before saving"))
+		return
+	}
+	text, err := combineLyrics(*set.Preview, body.Translation, body.Romanization)
+	if err != nil {
+		apiError(w, 400, err)
+		return
+	}
+	candidate := set.Candidates[body.Index]
+	if err = a.publishLyricsTarget(r.Context(), set.Target, text, candidate.Provider); err != nil {
+		apiError(w, 409, err)
+		return
+	}
+	status := LyricsStatus{State: "ready", Output: set.Target.Source.Output, Signature: set.Target.Signature,
+		Path: lyricsRel(set.Target.Source.Output), Provider: candidate.Provider, Checked: time.Now().Unix()}
+	raw, _ := json.Marshal(status)
+	if err = a.setMeta("lyrics-status:"+strconv.FormatInt(set.Target.Source.ID, 10), string(raw)); err != nil {
+		apiError(w, 500, err)
+		return
+	}
+	a.lyricsMu.Lock()
+	delete(a.lyricsChoices, body.Token)
+	a.lyricsMu.Unlock()
+	respond(w, 200, status)
+}

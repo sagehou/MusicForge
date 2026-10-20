@@ -804,6 +804,9 @@ func (a *App) inheritReplacedOutput(ctx context.Context, s Settings, source Sour
 	if _, err = tx.Exec("UPDATE managed SET source_id=? WHERE path=? AND source_id=? AND kind='audio'", source.ID, target, old.ID); err != nil {
 		return source, err
 	}
+	if _, err = tx.Exec("UPDATE meta SET value=json_set(value,'$.source_id',?) WHERE key=? AND json_valid(value)", source.ID, lyricsFileKey(lyricsRel(target))); err != nil {
+		return source, err
+	}
 	if _, err = tx.Exec("UPDATE sources SET output=?,built_hash=?,built_profile=?,output_present=? WHERE id=?", target, old.BuiltHash, old.BuiltProfile, present, source.ID); err != nil {
 		return source, err
 	}
@@ -942,6 +945,7 @@ func (a *App) recoverFiles(ctx context.Context, s Settings) error {
 			return err
 		}
 	}
+	a.reconcileLyrics(ctx, s)
 	return nil
 }
 
@@ -1565,6 +1569,7 @@ func (a *App) removeOwned(s Settings, rel string, id int64) error {
 	if err = tx.Commit(); err != nil {
 		return err
 	}
+	a.syncLyricsAfterDelete(s, rel)
 	a.cleanAlbum(s, filepath.Dir(rel))
 	return nil
 }

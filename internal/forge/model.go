@@ -354,6 +354,7 @@ type Source struct {
 	CanRepair       bool              `json:"can_repair,omitempty"`
 	Repair          *RepairStatus     `json:"repair,omitempty"`
 	PossiblyDamaged bool              `json:"possibly_damaged,omitempty"`
+	Lyrics          *LyricsStatus     `json:"lyrics,omitempty"`
 }
 
 type Job struct {

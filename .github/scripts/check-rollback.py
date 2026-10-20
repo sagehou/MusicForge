@@ -141,8 +141,8 @@ def verification_queued(rel):
 
 
 def library_record(track):
-    # Artwork URLs are derived UI data, absent in older API responses.
-    return {key: value for key, value in track.items() if key != "artwork_url"}
+    # Optional artwork/lyrics UI data is absent in older API responses.
+    return {key: value for key, value in track.items() if key not in ("artwork_url", "lyrics")}
 
 
 def seed_refresh():
@@ -186,6 +186,7 @@ def main():
     pixels = (b"\x00" + b"\x2c\xa0\xb4" * 32) * 32
     cover = b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", header) + chunk(b"IDAT", zlib.compress(pixels)) + chunk(b"IEND", b"")
     (ROOT / "source/Album/cover.png").write_bytes(cover)
+    (ROOT / "source/Album/01.lrc").write_text("[00:00.00]Rollback synchronized lyrics\n", encoding="utf-8")
     stable = time.time() - 120
     for rel in ("01.flac", "02.mp3", "03.m4a"):
         os.utime(ROOT / "source/Album" / rel, (stable, stable))
@@ -220,7 +221,11 @@ def main():
             assert successor["output"] == previous["output"] and successor["built_hash"] == successor["hash"], "format replacement did not rebuild the same output"
             assert successor["hash"] == hashlib.sha256((ROOT / "source" / new_rel).read_bytes()).hexdigest(), "format replacement lost complete source identity"
             wait_for(lambda: api("/api/jobs")["jobs"], lambda rows: all(row["state"] == "success" for row in rows), "completed source format replacement jobs")
-        tracks = sorted((library_record(track) for track in tracks), key=lambda track: track["id"])
+        lyrics_track = next(row for row in tracks if row["path"] == "Album/01.flac")
+        api("/api/lyrics/options", "PUT", {"auto_search": False})
+        api("/api/lyrics/search", "POST", {"ids": [lyrics_track["id"]]})
+        wait_for(lambda: api("/api/lyrics")["report"], lambda row: row["state"] == "complete" and row["found"] == 1, "candidate source LRC publication")
+        tracks = sorted((library_record(track) for track in api("/api/library")), key=lambda track: track["id"])
         values = api("/api/settings")["settings"]
         api("/api/lidarr/connection", "PUT", {"url": "http://lidarr.example.test:8686", "api_key": "ci-only-lidarr-key"})
         values.update(enabled=False, nav_url="https://navidrome.example.test", nav_user="admin", nav_password="ci-nav-secret",
@@ -267,7 +272,7 @@ def main():
         expected = snapshot()
         held = next(row for row in expected["jobs"] if row[0] == pending)
         assert held[4] == "pending" and held[8] == 253402300799, "paused task changed schema-2 job semantics"
-        assert all(path in expected["output"] for path in ("Album/01.opus", "Album/02.opus", "Album/03.opus", "Album/cover.jpg")), "mixed audio/cover fixture missing"
+        assert all(path in expected["output"] for path in ("Album/01.opus", "Album/02.opus", "Album/03.opus", "Album/cover.jpg", "Album/01.lrc")), "mixed audio/cover/LRC fixture missing"
         evidence = []
         for version, digest in LEGACY.items():
             image = "ghcr.io/sagehou/musicforge@" + digest
@@ -277,6 +282,10 @@ def main():
                 if actual_image == image:
                     assert running == version, "wrong rollback release"
                 verify(api, tracks, pending, stopped)
+                if actual_image == CANDIDATE:
+                    assert api("/api/lyrics")["options"] == {"auto_search": False}, "older Settings writer lost lyrics options"
+                    restored_lyrics = next(row for row in api("/api/library") if row["path"] == "Album/01.flac").get("lyrics")
+                    assert restored_lyrics and restored_lyrics["state"] == "ready" and restored_lyrics["provider"] == "source", "older writer lost optional lyrics annotation"
                 stop()
                 actual = snapshot()
                 changed = [key for key in expected if actual[key] != expected[key]]

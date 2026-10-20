@@ -108,6 +108,13 @@ func (a *App) Handler() http.Handler {
 	mux.HandleFunc("GET /api/lidarr/check", a.auth(a.getLidarrCheck))
 	mux.HandleFunc("POST /api/lidarr/check", a.auth(a.startLidarrCheck))
 	mux.HandleFunc("GET /api/library/{id}/artwork", a.auth(a.libraryArtwork))
+	mux.HandleFunc("GET /api/lyrics", a.auth(a.getLyrics))
+	mux.HandleFunc("PUT /api/lyrics/options", a.auth(a.putLyricsOptions))
+	mux.HandleFunc("POST /api/lyrics/search", a.auth(a.requestLyrics))
+	mux.HandleFunc("DELETE /api/lyrics/search", a.auth(a.stopLyrics))
+	mux.HandleFunc("POST /api/library/{id}/lyrics/candidates", a.auth(a.requestLyricsCandidates))
+	mux.HandleFunc("POST /api/library/{id}/lyrics/preview", a.auth(a.previewLyricsCandidate))
+	mux.HandleFunc("PUT /api/library/{id}/lyrics", a.auth(a.applyLyricsCandidate))
 	mux.HandleFunc("POST /api/library/{id}/repair", a.auth(a.requestRepair))
 	mux.HandleFunc("POST /api/library/repair", a.auth(a.requestRepairBatch))
 	mux.HandleFunc("DELETE /api/library/{id}/repair", a.auth(a.deleteRepair))
@@ -253,6 +260,10 @@ func (a *App) library(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err = a.libraryArtworkURLs(r.Context(), list); err != nil {
+		apiError(w, 500, err)
+		return
+	}
+	if err = a.annotateLyrics(r.Context(), list); err != nil {
 		apiError(w, 500, err)
 		return
 	}

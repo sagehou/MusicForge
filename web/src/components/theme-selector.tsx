@@ -34,7 +34,8 @@ function applyAppearance() {
   let accent = color;
   for (let step = 1; step <= 20; step++) {
     const tint = mix(surface, accent, dark ? .16 : .08);
-    if (Math.min(contrast(accent, surface), contrast(accent, canvas), contrast(accent, tint)) >= 4.5) break;
+    // Leave a small margin for color-mix's fractional channels in the browser.
+    if (Math.min(contrast(accent, surface), contrast(accent, canvas), contrast(accent, tint)) >= 4.6) break;
     accent = mix(color, dark ? "#ffffff" : "#000000", step / 20);
   }
   root.dataset.theme = dark ? "dark" : "light";

@@ -131,6 +131,11 @@ input:not([type="checkbox"], [type="radio"]):focus-visible, select:focus-visible
 .page-tools > summary:hover, .library-options > summary:hover, .lyrics-details > summary:hover { background: var(--hover); color: var(--ink); }
 .page-tools[open] > summary, .lyrics-details[open] > summary { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); }
 .library-comparison > summary:hover, .lyrics-settings > summary:hover, .track-file summary:hover { color: var(--ink); background: var(--hover); border-radius: 6px; }
+.library-breadcrumbs button:hover { text-decoration: underline; text-underline-offset: 3px; }
+.search > button, .toast > button { border-radius: 6px; transition: background 140ms, color 140ms; }
+.search > button:hover, .toast > button:hover { background: var(--hover); color: var(--ink); }
+.search > button:active, .toast > button:active, .overview-metrics .metric:active, .recent-panel .job-row:active, .attention-list > button:active, .lyrics-overview:active { background: var(--pressed); }
+.library-cover-open:hover { box-shadow: 0 0 0 1px var(--line-strong); }
 .library-group { transition: background 140ms, box-shadow 140ms; }
 .library-group:hover { background: var(--subtle); }
 .library-group[data-selected="true"] { background: var(--accent-soft); box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 35%, var(--line)); }

@@ -20,14 +20,15 @@ async function readable(page: Page) {
     function luminance(color: string) {
       const digits = color.slice(1);
       const full = digits.length === 3 ? [...digits].map(value => value + value).join("") : digits;
-      const values = color.startsWith("#") ? [0, 2, 4].map(index => parseInt(full.slice(index, index + 2), 16)) : color.match(/[\d.]+/g)!.slice(0, 3).map(Number);
+      const values = color.startsWith("#") ? [0, 2, 4].map(index => parseInt(full.slice(index, index + 2), 16)) : color.match(/[\d.]+/g)!.slice(0, 3).map(value => Number(value) * (color.startsWith("color(srgb ") ? 255 : 1));
       const [r, g, b] = values.map(value => value / 255 <= .04045 ? value / 255 / 12.92 : ((value / 255 + .055) / 1.055) ** 2.4);
       return .2126 * r + .7152 * g + .0722 * b;
     }
     function contrast(a: string, b: string) { const x = luminance(a), y = luminance(b); return (Math.max(x, y) + .05) / (Math.min(x, y) + .05); }
     const style = getComputedStyle(document.documentElement);
     const value = (name: string) => style.getPropertyValue(name).trim();
-    return [contrast(value("--accent-fill"), value("--accent-ink")), contrast(value("--accent"), value("--canvas")), contrast(value("--accent"), value("--surface"))];
+    const selected = getComputedStyle(document.querySelector('.page-heading .palette-presets button[aria-pressed="true"]')!);
+    return [contrast(value("--accent-fill"), value("--accent-ink")), contrast(value("--accent"), value("--canvas")), contrast(value("--accent"), value("--surface")), contrast(selected.color, selected.backgroundColor)];
   });
   for (const ratio of ratios) expect(ratio).toBeGreaterThanOrEqual(4.5);
 }

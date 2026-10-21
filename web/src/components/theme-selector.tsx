@@ -16,7 +16,7 @@ function savedAppearance(): Appearance {
   return { theme: theme === "light" || theme === "dark" ? theme : "system", palette: palette && (Object.hasOwn(presets, palette) || palette === "custom") ? palette as Palette : "apple", custom: hex(read(keys.custom)) || presets.apple };
 }
 function rgb(color: string) { return [1, 3, 5].map(index => parseInt(color.slice(index, index + 2), 16)); }
-function mix(color: string, target: number, amount: number) { return `#${rgb(color).map(channel => Math.round(channel + (target - channel) * amount).toString(16).padStart(2, "0")).join("")}`; }
+function mix(color: string, target: string, amount: number) { const to = rgb(target); return `#${rgb(color).map((channel, index) => Math.round(channel + (to[index] - channel) * amount).toString(16).padStart(2, "0")).join("")}`; }
 function luminance(color: string) {
   const [r, g, b] = rgb(color).map(value => { const channel = value / 255; return channel <= .04045 ? channel / 12.92 : ((channel + .055) / 1.055) ** 2.4; });
   return .2126 * r + .7152 * g + .0722 * b;
@@ -29,15 +29,20 @@ function applyAppearance() {
   const dark = appearance.theme === "dark" || appearance.theme === "system" && media.matches;
   const color = appearance.palette === "custom" ? appearance.custom : presets[appearance.palette];
   const ink = contrast(color, "#ffffff") >= 4.5 ? "#ffffff" : "#000000";
+  const surface = dark ? "#202024" : "#ffffff", canvas = dark ? "#18181b" : "#fafafa";
   // Keep custom colors, adapting small text and focus rings to the page surface.
   let accent = color;
-  for (let step = 1; contrast(accent, dark ? "#202024" : "#fafafa") < 4.5 && step <= 20; step++) accent = mix(color, dark ? 255 : 0, step / 20);
+  for (let step = 1; step <= 20; step++) {
+    const tint = mix(surface, accent, dark ? .16 : .08);
+    if (Math.min(contrast(accent, surface), contrast(accent, canvas), contrast(accent, tint)) >= 4.5) break;
+    accent = mix(color, dark ? "#ffffff" : "#000000", step / 20);
+  }
   root.dataset.theme = dark ? "dark" : "light";
   root.dataset.palette = appearance.palette;
   root.style.setProperty("--accent", accent);
   root.style.setProperty("--accent-fill", color);
-  root.style.setProperty("--accent-hover", mix(color, ink === "#ffffff" ? 0 : 255, .10));
-  root.style.setProperty("--accent-active", mix(color, ink === "#ffffff" ? 0 : 255, .18));
+  root.style.setProperty("--accent-hover", mix(color, ink === "#ffffff" ? "#000000" : "#ffffff", .10));
+  root.style.setProperty("--accent-active", mix(color, ink === "#ffffff" ? "#000000" : "#ffffff", .18));
   root.style.setProperty("--accent-ink", ink);
 }
 function updateAppearance(patch: Partial<Appearance>) {

@@ -215,7 +215,7 @@ function LyricsPicker({ source, notify, close, saved }: { source: Source; notify
       {loading && <Button type="button" variant="ghost" onClick={cancelSearch}>{t("lyrics.cancelSearch")}</Button>}
     </form>
     <div className="lyrics-picker-results"><div className="lyrics-candidate-groups" aria-live="polite">{groups.map(group => <fieldset key={group.provider} disabled={saving}>
-      <legend>{t(`lyrics.name.${group.provider}`)}{group.provider === "lrclib" && <span className="provider-priority">{t("lyrics.preferredSource")}</span>}</legend>
+      <legend>{t(`lyrics.name.${group.provider}`)}{group.provider === "lrclib" && <> <span className="provider-priority">{t("lyrics.preferredSource")}</span></>}</legend>
       {group.cached && <small>{t("lyrics.cached")}{group.searched ? <> · {new Date(group.searched * 1000).toLocaleString(locale)}</> : null}</small>}
       {group.loading && <p role="status">{t("app.loading")}</p>}
       {group.error && <p role="alert">{errorMessage(group.error)}</p>}

@@ -577,7 +577,7 @@ input[role="switch"]:checked::after { transform: translateX(16px); background: v
   .topbar-actions .mobile-logout { width: 28px; padding: 0; }
   .page-content { padding: 20px 16px 32px; }
   h1 { font-size: 22px; }
-  .page-heading { margin-bottom: 18px; }
+  .page-heading { margin-bottom: 16px; }
   .page-heading .actions { gap: 6px; }
   .hero-copy h1 { font-size: 23px; }
   .hero-actions { width: 100%; }
@@ -607,7 +607,7 @@ input[role="switch"]:checked::after { transform: translateX(16px); background: v
   .jobs-panel .task-details, .jobs-panel .task > .task-waiting { margin: 0 0 14px; padding: 12px; }
   .panel, .settings-panel { padding: 18px 16px; }
   .library-surface { padding: 0 12px; }
-  .library-navigation { padding-top: 12px; }
+  .library-navigation { padding-top: 10px; }
   .library-navigation .segmented { width: 100%; }
   .library-navigation .segmented button { flex: 1; font-size: 12px; padding: 7px 6px; gap: 5px; }
   .settings-nav { margin: -6px -4px 0; }
@@ -619,6 +619,9 @@ input[role="switch"]:checked::after { transform: translateX(16px); background: v
   .settings-title > div { flex-basis: calc(100% - 50px); }
   .settings-title > button { margin-left: 0; }
   .table-toolbar { gap: 8px; }
+  .library-toolbar { padding: 12px 0; }
+  .library-selection { padding: 0; }
+  .library-selection .check-field { margin: 10px 0; }
   .table-toolbar > select { flex: 1; min-width: 100px; }
   .search { flex-basis: 100%; }
   .selection-bar { padding: 12px; gap: 8px; }
@@ -630,7 +633,7 @@ input[role="switch"]:checked::after { transform: translateX(16px); background: v
   .auth-card { padding: 24px 20px; }
   .auth-layout > .appearance-controls { top: 16px; right: 16px; }
   .banner { padding: 14px; }
-  .library-groups, .library-groups[data-density] { gap: 20px 14px; }
+  .library-groups, .library-groups[data-density] { gap: 20px 14px; padding-top: 8px; }
   .library-options > summary { width: 44px; height: 44px; }
   .library-list[data-density] { gap: 0; }
   .library-group-body { grid-template-columns: 16px minmax(0, 1fr); gap: 8px; }
@@ -738,7 +741,7 @@ input[role="switch"]:checked::after { transform: translateX(16px); background: v
 .lyrics-picker-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .lyrics-picker-heading h2 { font-size: 18px; }
 .lyrics-picker p { overflow-wrap: anywhere; font-size: 12px; color: var(--muted); }
-.lyrics-target { color: var(--ink) !important; margin-top: 4px; }
+.lyrics-picker .lyrics-target { color: var(--ink); margin-top: 4px; }
 .lyrics-picker-hint { margin-top: 8px; }
 .lyrics-guidance { margin: 8px 0 16px; }
 .lyrics-guidance > summary { color: var(--muted); font-size: 11px; }
@@ -781,9 +784,9 @@ input[role="switch"]:checked::after { transform: translateX(16px); background: v
 }
 @media (max-width: 600px) {
   .comparison-filters { grid-template-columns: 1fr; }
-  .library-maintenance { grid-template-columns: 1fr; gap: 8px; }
-  .library-comparison { padding: 10px 12px; }
-  .library-comparison > summary, .lyrics-settings > summary { min-height: 32px; }
+  .library-maintenance { grid-template-columns: 1fr; gap: 6px; margin-bottom: 12px; }
+  .library-comparison { padding: 8px 12px; }
+  .library-comparison > summary, .lyrics-settings > summary { min-height: 28px; }
   .lyrics-picker { width: calc(100vw - 16px); max-height: calc(100dvh - 16px); padding: 16px; border-radius: 10px; }
   .lyrics-query { gap: 6px; margin-bottom: 16px; }
   .lyrics-query label { flex-basis: 100%; }

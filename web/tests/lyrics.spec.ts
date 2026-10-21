@@ -186,7 +186,7 @@ test("lyrics candidates keep partial results, preview languages and save an expl
   await picker.getByRole("button", { name: "Search candidates", exact: true }).click();
   await expect.poll(() => searches.length).toBe(4);
   expect(searches.map(search => search.provider).sort()).toEqual(["kugou", "lrclib", "netease", "qq"]);
-  await expect(picker.locator("fieldset > legend")).toHaveText(["LRCLIB", "QQ Music", "Kugou", "NetEase"]);
+  await expect(picker.locator("fieldset > legend")).toHaveText(["LRCLIB Preferred", "QQ Music", "Kugou", "NetEase"]);
   expect(searches.every(search => search.query === "別名 Artist")).toBe(true);
   await expect(picker).toContainText("QQ Music returned HTTP 403; retry later");
   await expect(picker).toContainText("No candidates found");

@@ -114,6 +114,8 @@ test("all songs share filters, pagination and batch lyrics with visible file fac
   await expect(first.getByRole("button", { name: "Choose lyrics", exact: true })).toBeVisible();
   await expect(first.getByRole("button", { name: "Search again", exact: true })).toBeVisible();
   await expect(first.locator(".lyrics-details")).not.toHaveAttribute("open", "");
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.screenshot({ path: "test-results/all-songs-1440-light-en.png", animations: "disabled" });
   await page.getByLabel("Select current page", { exact: true }).check();
   await page.getByRole("button", { name: "Fill lyrics for selected artifacts", exact: true }).click();
   await expect.poll(() => searches.length).toBe(1);

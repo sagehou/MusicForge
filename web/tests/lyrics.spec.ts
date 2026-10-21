@@ -250,7 +250,7 @@ test("automatic lyric previews wait for all providers, preserve manual choices a
     delayed = new Promise<void>(resolve => { release = resolve; });
     await picker.getByRole("button", { name: "Search candidates", exact: true }).click();
     await expect(lrclib).toBeVisible();
-    await expect(picker.getByRole("button", { name: "Cancel search", exact: true })).toBeVisible();
+    await expect(picker.getByRole("button", { name: "Cancel candidate search", exact: true })).toBeVisible();
   }
   await startSearch();
   await expect(lrclib).not.toBeChecked();
@@ -268,7 +268,7 @@ test("automatic lyric previews wait for all providers, preserve manual choices a
   await expect(lrclib).toBeChecked();
   expect(previews).toHaveLength(2);
   await startSearch();
-  await picker.getByRole("button", { name: "Cancel search", exact: true }).click();
+  await picker.getByRole("button", { name: "Cancel candidate search", exact: true }).click();
   release!();
   await expect(picker.getByRole("button", { name: "Search candidates", exact: true })).toBeEnabled();
   await expect(picker.locator('input[type="radio"]:checked')).toHaveCount(0);

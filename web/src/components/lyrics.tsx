@@ -106,7 +106,7 @@ export function LyricsSettings({ notify, notification }: { notify: Notice; notif
   const dirty = options.auto_search !== saved.auto_search || options.min_score !== saved.min_score;
   return <div className="lyrics-settings-page">
     <ResourceWarning error={resource.error} retry={resource.retry} />
-    <form className="settings-form" onSubmit={event => {
+    <form id="lyrics-options-form" className="settings-form" onSubmit={event => {
       event.preventDefault(); setBusy(true);
       void api<LyricsResponse["options"]>("/lyrics/options", "PUT", options).then(result => { resource.update(data => ({ ...data, options: result })); setDraft(undefined); notify("notice.saved"); }).catch(err => notify(err as Error, true)).finally(() => setBusy(false));
     }}>
@@ -115,9 +115,10 @@ export function LyricsSettings({ notify, notification }: { notify: Notice; notif
         <div className="lyrics-threshold"><label className="field field-label"><span>{t("lyrics.threshold")}</span><input type="number" min={0} max={100} step={1} required value={options.min_score} disabled={busy} onChange={event => setDraft({ ...options, min_score: event.target.valueAsNumber })} /></label><div className="actions" role="group" aria-label={t("lyrics.presets")}>{([100, 96, 90] as const).map(score => <Button key={score} type="button" variant="outline" size="sm" aria-pressed={options.min_score === score} disabled={busy} onClick={() => setDraft({ ...options, min_score: score })}>{t(`lyrics.preset.${score}`)}</Button>)}</div></div>
         <small>{t("lyrics.thresholdHint")}</small><small>{t("lyrics.privacy")}</small><small>{t("lyrics.stopHint")}</small>
       </section>
-      <div className="settings-save" data-dirty={dirty}>{notification}<span>{t(dirty ? "settings.unsaved" : "settings.savedIn")}</span><Button type="button" variant="ghost" disabled={busy || !dirty} onClick={() => setDraft(undefined)}>{t("settings.discard")}</Button><Button disabled={busy || !dirty}><Check size={16} />{t("settings.save")}</Button></div>
+
     </form>
-    <section className="panel settings-panel lyrics-batch-settings"><div className="settings-title"><Search /><div><h2>{t("lyrics.batchTitle")}</h2><p>{t("lyrics.batchHint")}</p></div></div><LyricsControls notify={notify} settings /><p>{t("lyrics.inspectHint")}</p><a href="/library?view=tracks&lyrics_script=traditional">{t("lyrics.filterTraditional")}</a><small>{t("lyrics.replaceHint")}</small></section>
+    <section className="panel settings-panel lyrics-batch-settings"><div className="settings-title"><Search /><div><h2>{t("lyrics.batchTitle")}</h2><p>{t("lyrics.batchHint")}</p></div></div><LyricsControls notify={notify} settings /><small>{t("lyrics.inspectHint")}</small><div className="actions"><Button asChild variant="outline" size="sm"><a href="/library?view=tracks&lyrics_script=traditional">{t("lyrics.filterTraditional")}</a></Button></div><small>{t("lyrics.replaceHint")}</small></section>
+      <div className="settings-save" data-dirty={dirty}>{notification}<span>{t(dirty ? "settings.unsaved" : "settings.savedIn")}</span><Button type="button" variant="ghost" disabled={busy || !dirty} onClick={() => setDraft(undefined)}>{t("settings.discard")}</Button><Button type="submit" form="lyrics-options-form" disabled={busy || !dirty}><Check size={16} />{t("settings.save")}</Button></div>
   </div>;
 }
 

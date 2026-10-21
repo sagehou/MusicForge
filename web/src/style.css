@@ -1256,6 +1256,7 @@ input[role="switch"]:checked::after { transform: translateX(14px); background: v
 .lyrics-threshold .actions { margin: 0; }
 .lyrics-threshold [aria-pressed="true"] { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); }
 .lyrics-settings-page { display: grid; gap: 16px; }
+.lyrics-settings-page .settings-panel { margin-bottom: 0; }
 .lyrics-batch-settings .lyrics-body { display: grid; gap: 8px; }
 .lyrics-batch-settings .lyrics-body > .actions { margin: 0; flex-wrap: wrap; }
 .lyrics-batch-settings .lyrics-quick-actions .lyrics-action { width: auto; }

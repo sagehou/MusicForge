@@ -95,7 +95,13 @@ func TestLyricsThresholdRetainsIdentityDurationAndConflictGuards(t *testing.T) {
 	}
 	traditional := base
 	traditional.text = &lyricsText{Original: "[00:01.00]愛這風雲\n", Translation: "[00:01.00]爱这风云\n"}
-	if text, _, err := a.chooseLyrics(context.Background(), source, []lyricsCandidate{traditional}, lyricsBatchOptions{MinScore: 90, ReplaceTraditional: true}); err != nil || text != "" { t.Fatal("simplified translation qualified as an original", text, err) }
+	if text, _, err := a.chooseLyrics(context.Background(), source, []lyricsCandidate{traditional}, lyricsBatchOptions{MinScore: 90, ReplaceTraditional: true}); err != nil || text != "" {
+		t.Fatal("simplified translation qualified as an original", text, err)
+	}
+	traditional.text = &lyricsText{Original: "[00:02.00]愛這風雲\n"}
+	if text, state, err := a.chooseLyrics(context.Background(), source, []lyricsCandidate{base, traditional}, lyricsBatchOptions{MinScore: 90, ReplaceTraditional: true}); err != nil || text != "" || state != "needs_review" {
+		t.Fatal("script replacement ignored conflicting candidate timing", text, state, err)
+	}
 }
 
 func TestLyricsInspectionOnlyReadsOutputAndPreservesMatchingStatus(t *testing.T) {

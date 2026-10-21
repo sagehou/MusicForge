@@ -317,9 +317,6 @@ func (a *App) chooseLyrics(ctx context.Context, source Source, candidates []lyri
 			continue
 		}
 		candidate.text = &text
-		if batch.ReplaceTraditional && lyricsScript(text.Original) != "simplified" {
-			continue
-		}
 		if selected != "" && selected != text.Original {
 			// Script preference cannot resolve different words or timing.
 			if foldLyricsScript(selected) != foldLyricsScript(text.Original) {
@@ -335,6 +332,9 @@ func (a *App) chooseLyrics(ctx context.Context, source Source, candidates []lyri
 		return "", "failed", errors.Join(failures...)
 	}
 	if selected != "" {
+		if batch.ReplaceTraditional && selectedScript != "simplified" {
+			return "", "not_found", nil
+		}
 		return selected, "ready", nil
 	}
 	if len(candidates) > len(safe) {

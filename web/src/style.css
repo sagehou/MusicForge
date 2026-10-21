@@ -1212,3 +1212,9 @@ body { font-size: 14px; }
 .lyrics-status-popover { position: absolute; top: 32px; right: 0; z-index: 6; width: min(300px, calc(100vw - 40px)); padding: 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); box-shadow: var(--shadow); }
 .lyrics-status-popover small { overflow-wrap: anywhere; }
 @media (max-width: 1000px) { .track-table td { padding: 0; } .track-lyrics .lyrics-details { grid-column: auto; } }
+@media (max-width: 360px) {
+  .library-maintenance { grid-template-columns: 1fr; gap: 0; }
+  .track-lyrics .lyrics-track { grid-template-columns: 1fr; }
+  .track-lyrics .lyrics-state { display: block; }
+  .track-lyrics .lyrics-actions { justify-content: flex-start; }
+}

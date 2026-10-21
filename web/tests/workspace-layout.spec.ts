@@ -146,6 +146,9 @@ test("phone pages retain real content, readable facts and full-screen inspectors
     await expect(page.locator(".track-table tbody > tr").first().locator(".track-open")).toBeInViewport();
     const first = await page.locator(".track-table tbody > tr").first().boundingBox();
     expect(first!.y + first!.height).toBeLessThan(780);
+    const lyricsTitle = await page.locator(".lyrics-settings > summary").boundingBox();
+    expect(lyricsTitle!.height).toBeLessThanOrEqual(40);
+    expect(await page.locator(".lyrics-state").first().evaluate(element => element.scrollHeight <= element.clientHeight + 1)).toBe(true);
     for (const theme of ["light", "dark"]) {
       await setPreference(page, "theme", theme);
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);

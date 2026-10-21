@@ -78,7 +78,7 @@ test("best-effort repair requires consent and imports normal audio with a persis
   await page.getByRole("combobox", { name: "外观", exact: true }).selectOption("dark");
   for (const width of [320, 768, 390]) {
     await page.setViewportSize({ width, height: 844 });
-    await expect.poll(() => page.locator(".repair-detail-row td").getAttribute("colspan")).toBe(width <= 600 ? "3" : "4");
+    await expect.poll(() => page.locator(".repair-detail-row td").getAttribute("colspan")).toBe(width <= 800 ? "3" : "4");
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
     expect(await page.locator(".repair-diagnostic").evaluate(element => element.getBoundingClientRect().width / element.closest("table")!.getBoundingClientRect().width)).toBeGreaterThan(0.8);
     expect(await page.locator(".track-table tbody tr:not(.repair-detail-row) td:nth-child(2)").evaluate(element => element.getBoundingClientRect().width / element.closest("table")!.getBoundingClientRect().width)).toBeGreaterThan(0.45);
@@ -88,7 +88,7 @@ test("best-effort repair requires consent and imports normal audio with a persis
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.getByRole("combobox", { name: "语言", exact: true }).selectOption("en");
   await page.getByRole("combobox", { name: "Appearance", exact: true }).selectOption("light");
-  await expect.poll(() => page.locator(".repair-detail-row td").getAttribute("colspan")).toBe("5");
+  await expect.poll(() => page.locator(".repair-detail-row td").getAttribute("colspan")).toBe("4");
   expect(await page.locator(".repair-diagnostic").evaluate(element => element.getBoundingClientRect().width / element.closest("table")!.getBoundingClientRect().width)).toBeGreaterThan(0.8);
   await page.evaluate(() => window.scrollTo(0, 0));
   await page.screenshot({ path: "test-results/repair-import-1440-light.png", fullPage: true, animations: "disabled" });

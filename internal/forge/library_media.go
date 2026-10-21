@@ -11,6 +11,7 @@ import (
 type sourceMedia struct {
 	Version int    `json:"version"`
 	Path    string `json:"path"`
+	Hash    string `json:"hash"`
 	Size    int64  `json:"size"`
 	Mtime   int64  `json:"mtime"`
 	Bitrate int64  `json:"bitrate"` // bits per second, as reported by ffprobe
@@ -32,7 +33,7 @@ func (p probeData) bitrate() int64 {
 }
 
 func (a *App) rememberSourceMedia(source Source, p probeData) error {
-	data, _ := json.Marshal(sourceMedia{1, source.Rel, source.Size, source.Mtime, p.bitrate()})
+	data, _ := json.Marshal(sourceMedia{1, source.Rel, source.Hash, source.Size, source.Mtime, p.bitrate()})
 	return a.setMeta("source-media:"+strconv.FormatInt(source.ID, 10), string(data))
 }
 
@@ -71,7 +72,7 @@ func (a *App) annotateMedia(ctx context.Context, sources []Source) error {
 			continue
 		}
 		var media sourceMedia
-		if json.Unmarshal([]byte(raw), &media) == nil && media.Version == 1 && media.Path == source.Rel && media.Size == source.Size && media.Mtime == source.Mtime && media.Bitrate >= 0 {
+		if json.Unmarshal([]byte(raw), &media) == nil && media.Version == 1 && media.Path == source.Rel && media.Hash == source.Hash && media.Size == source.Size && media.Mtime == source.Mtime && media.Bitrate >= 0 {
 			source.SourceBitrate, source.mediaInfoKnown = media.Bitrate, true
 		}
 		if bytes, err := strconv.ParseInt(size, 10, 64); err == nil && bytes >= 0 && source.OutputPresent {

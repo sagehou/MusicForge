@@ -93,13 +93,15 @@ test("presets and custom colors persist, retain contrast and stay synchronized i
   await expect(page.locator("html")).toHaveAttribute("data-palette", "custom");
   expect(await page.evaluate(() => localStorage.getItem("musicforge.custom-color"))).toBe("#12ab7e");
   await page.locator(".track-open").first().click();
-  const panel = page.getByRole("dialog", { name: "Song details", exact: true });
+  const panel = page.getByRole("dialog");
+  await expect(panel).toHaveAccessibleName("Song details");
   const panelMenu = await colors(page);
   await panelMenu.getByRole("button", { name: "Spotify", exact: true }).click();
   await page.keyboard.press("Escape");
   await expect(panel).toBeVisible();
   await expect(panelMenu.locator("summary")).toBeFocused();
   await setPreference(page, "language", "zh-CN");
+  await expect(panel).toHaveAccessibleName("歌曲详情");
   await expect(panel.locator(".palette-label")).toHaveText("Spotify");
   await page.keyboard.press("Escape");
   await expect(panel).toHaveCount(0);

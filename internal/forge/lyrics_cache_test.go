@@ -144,7 +144,7 @@ func TestBackgroundLyricsKeepsHighConfidencePendingCandidates(t *testing.T) {
 			w.WriteHeader(503)
 		}
 	})
-	status := a.maintainLyrics(context.Background(), s, 1, false)
+	status := a.maintainLyrics(context.Background(), s, 1, lyricsBatchOptions{MinScore: defaultLyricsMinScore})
 	if status.State != "needs_review" {
 		t.Fatal(status)
 	}
@@ -174,11 +174,11 @@ func TestLyricsRecommendationUsesMetadataAndScriptWithoutGuessing(t *testing.T) 
 	if candidates[0].Script != "simplified" || !candidates[0].HighConfidence || candidates[0].MatchScore < 96 || candidates[2].HighConfidence {
 		t.Fatal(candidates)
 	}
-	if data, state, err := a.chooseLyrics(context.Background(), source, candidates[:2]); err != nil || state != "ready" || data != simplified.text.Original {
+	if data, state, err := a.chooseLyrics(context.Background(), source, candidates[:2], lyricsBatchOptions{MinScore: defaultLyricsMinScore}); err != nil || state != "ready" || data != simplified.text.Original {
 		t.Fatal("did not prefer equivalent Simplified Chinese lyrics", data, state, err)
 	}
 	traditional.text = &lyricsText{Original: "[00:02.00]愛這風雲\n"}
-	if _, state, _ := a.chooseLyrics(context.Background(), source, []lyricsCandidate{simplified, traditional}); state != "needs_review" {
+	if _, state, _ := a.chooseLyrics(context.Background(), source, []lyricsCandidate{simplified, traditional}, lyricsBatchOptions{MinScore: defaultLyricsMinScore}); state != "needs_review" {
 		t.Fatal("script preference erased conflicting timing", state)
 	}
 	for _, text := range []string{"[ti:爱这风云]\n[00:01.00]hello", "[00:01.00]爱してる", "[00:01.00]하늘과爱", "[00:01.00]你好"} {
@@ -220,7 +220,7 @@ func TestAutomaticLyricsPrefersSimplifiedWithTraditionalFallback(t *testing.T) {
 			}
 		})
 		target := lyricsTarget{Source: Source{Title: "Song", Artist: "Artist", Album: "Album", Duration: 183}}
-		text, provider, state, _, err := a.searchOnlineLyrics(context.Background(), target, false)
+		text, provider, state, _, err := a.searchOnlineLyrics(context.Background(), target, lyricsBatchOptions{MinScore: defaultLyricsMinScore})
 		want := "traditional"
 		if available {
 			want = "simplified"

@@ -122,7 +122,8 @@ func (a *App) writeLyricsFile(ctx context.Context, s Settings, source Source, te
 	entry := lyricsFile{Path: rel, ID: source.ID, SourceHash: sourceHash, Signature: hash, Provider: provider}
 	if present && content == text {
 		raw, _ := json.Marshal(entry)
-		return a.setMeta(lyricsFileKey(rel), string(raw))
+		if err = a.setMeta(lyricsFileKey(rel), string(raw)); err != nil { return err }
+		return a.recordLyricsScript(ctx, source, entry, text)
 	}
 	path, err := safePath(s.Output, rel)
 	if err != nil {
@@ -187,7 +188,8 @@ func (a *App) writeLyricsFile(ctx context.Context, s Settings, source Source, te
 	if err = a.setMeta(lyricsFileKey(rel), string(raw)); err != nil {
 		return err
 	}
-	return a.dirty(rel)
+	if err = a.dirty(rel); err != nil { return err }
+	return a.recordLyricsScript(ctx, source, entry, text)
 }
 
 func (a *App) removeLyricsFile(ctx context.Context, s Settings, rel string) error {

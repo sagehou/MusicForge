@@ -211,7 +211,7 @@ func TestLyricsSourceUpdatesAndArtifactLifecycle(t *testing.T) {
 	}
 	settingsBefore, _ := json.Marshal(s)
 	mockLRCLIB(t, a, func(w http.ResponseWriter, r *http.Request) { t.Error("local LRC should not query the internet") })
-	if !a.startLyrics(s, []Source{source}, false, false) {
+	if !a.startLyrics(s, []Source{source}, lyricsBatchOptions{}, false) {
 		t.Fatal("lyrics did not start")
 	}
 	if report := waitLyrics(t, a); report.Found != 1 || report.Failed != 0 {
@@ -224,7 +224,7 @@ func TestLyricsSourceUpdatesAndArtifactLifecycle(t *testing.T) {
 	if err := os.WriteFile(local, []byte("[00:01.00]更新歌词\n"), 0644); err != nil {
 		t.Fatal(err)
 	}
-	if !a.startLyrics(s, []Source{source}, false, false) {
+	if !a.startLyrics(s, []Source{source}, lyricsBatchOptions{}, false) {
 		t.Fatal("update did not start")
 	}
 	if report := waitLyrics(t, a); report.Found != 1 {
@@ -320,7 +320,7 @@ func TestLyricsOwnershipAndInterruptedPublication(t *testing.T) {
 	if err := os.WriteFile(output, []byte("user lyrics"), 0644); err != nil {
 		t.Fatal(err)
 	}
-	if status := a.maintainLyrics(ctx, s, source.ID, false); status.State != "failed" {
+	if status := a.maintainLyrics(ctx, s, source.ID, lyricsBatchOptions{MinScore: defaultLyricsMinScore}); status.State != "failed" {
 		t.Fatal("adopted an unregistered file", status)
 	}
 	if data, _ := os.ReadFile(output); string(data) != "user lyrics" {
@@ -329,7 +329,7 @@ func TestLyricsOwnershipAndInterruptedPublication(t *testing.T) {
 	if err := os.Remove(output); err != nil {
 		t.Fatal(err)
 	}
-	if status := a.maintainLyrics(ctx, s, source.ID, false); status.State != "ready" {
+	if status := a.maintainLyrics(ctx, s, source.ID, lyricsBatchOptions{MinScore: defaultLyricsMinScore}); status.State != "ready" {
 		t.Fatal(status)
 	}
 	// A crash between rename and the final annotation update recognizes the new hash.
@@ -352,7 +352,7 @@ func TestLyricsOwnershipAndInterruptedPublication(t *testing.T) {
 	if err = os.WriteFile(output, []byte("hand edited"), 0644); err != nil {
 		t.Fatal(err)
 	}
-	if status := a.maintainLyrics(ctx, s, source.ID, true); status.State != "failed" {
+	if status := a.maintainLyrics(ctx, s, source.ID, lyricsBatchOptions{MinScore: defaultLyricsMinScore, Refresh: true}); status.State != "failed" {
 		t.Fatal("overwrote edited LRC", status)
 	}
 	if err = a.removeOwned(s, source.Output, source.ID); err != nil {
@@ -370,7 +370,7 @@ func TestLyricsRecoveryAfterOlderWorkerMoveAndDeletion(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(s.Source, "Album/01.lrc"), []byte("[00:01.00]Kept across versions"), 0644); err != nil {
 		t.Fatal(err)
 	}
-	if status := a.maintainLyrics(ctx, s, source.ID, false); status.State != "ready" {
+	if status := a.maintainLyrics(ctx, s, source.ID, lyricsBatchOptions{MinScore: defaultLyricsMinScore}); status.State != "ready" {
 		t.Fatal(status)
 	}
 	// An older release moves its ordinary audio and registry without interpreting
@@ -427,7 +427,7 @@ func TestLyricsSearchRejectsChangedArtifactAndStopsWithoutBlockingAPI(t *testing
 		}
 		respond(w, 200, lrclibRecord{Title: source.Title, Artist: source.Artist, Album: source.Album, Duration: source.Duration, Synced: "[00:01.00]Network"})
 	})
-	if !a.startLyrics(s, []Source{source}, false, false) {
+	if !a.startLyrics(s, []Source{source}, lyricsBatchOptions{}, false) {
 		t.Fatal("did not start")
 	}
 	select {
@@ -452,7 +452,7 @@ func TestLyricsSearchRejectsChangedArtifactAndStopsWithoutBlockingAPI(t *testing
 	}
 	// A source-side stalled LRC read is cancellable too, without an audio retry.
 	sourceFault(t, "lyrics", "Album/01.lrc", 10000, 0)
-	if !a.startLyrics(s, []Source{source}, false, false) {
+	if !a.startLyrics(s, []Source{source}, lyricsBatchOptions{}, false) {
 		t.Fatal("second search did not start")
 	}
 	issued := httptest.NewRecorder()
@@ -485,7 +485,7 @@ func TestLyricsSearchRejectsChangedArtifactAndStopsWithoutBlockingAPI(t *testing
 	if options, err := a.lyricsOptions(context.Background()); err != nil || options.AutoSearch {
 		t.Fatal("stop did not persistently disable automatic filling", options, err)
 	}
-	if a.startLyrics(s, []Source{source}, false, true) {
+	if a.startLyrics(s, []Source{source}, lyricsBatchOptions{}, true) {
 		t.Fatal("a previously selected automatic batch restarted after stop")
 	}
 }

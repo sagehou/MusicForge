@@ -2,9 +2,99 @@ import { setPreference } from "./preferences";
 import { test, expect } from "@playwright/test";
 import type { Source } from "../src/types";
 
+const settings = { enabled: true, source: "/music/source", output: "/music/output", encoding: { codec: "opus", mode: "vbr", bitrate: 192, quality: 2 }, concurrency: 1, scan_minutes: 60, lidarr_prefix: "", nav_url: "", nav_user: "", nav_library: 1, oidc_issuer: "", oidc_client_id: "" };
+
 test.beforeEach(async ({ page }) => {
   await page.route("**/api/lyrics", route => route.fulfill({ json: { options: { auto_search: false }, report: { state: "idle", total: 0, processed: 0, found: 0, not_found: 0, failed: 0, stopping: false } } }));
 });
+
+test("lyrics settings save thresholds, retain drafts and offer output-only inspection", async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem("musicforge.language", "en"));
+  await page.route("**/api/auth/me", route => route.fulfill({ json: { initialized: true, authenticated: true, username: "admin", method: "local", csrf: "test", oidc: false, version: "test" } }));
+  await page.route("**/api/settings", route => route.fulfill({ json: { settings, configured: { webhook: false, nav_password: false, oidc_secret: false }, public_url: "", allowed_origins: [] } }));
+  let options = { auto_search: false, min_score: 96 };
+  const saves: unknown[] = [], batches: unknown[] = [];
+  await page.route("**/api/lyrics", route => route.fulfill({ json: { options, report: { state: "idle", total: 0, processed: 0, found: 0, not_found: 0, failed: 0, stopping: false } } }));
+  await page.route("**/api/lyrics/options", route => { expect(route.request().headers()["x-csrf-token"]).toBe("test"); options = route.request().postDataJSON(); saves.push(options); return route.fulfill({ json: options }); });
+  await page.route("**/api/lyrics/search", route => { batches.push(route.request().postDataJSON()); return route.fulfill({ status: 202, json: { selected: 1 } }); });
+  await page.goto("/settings?section=lyrics");
+  await expect(page.getByRole("tab", { name: "Lyrics", exact: true })).toHaveAttribute("aria-selected", "true");
+  const score = page.getByLabel("Minimum score for automatic matching", { exact: true });
+  await expect(score).toHaveValue("96");
+  await page.getByRole("button", { name: "90 · Relaxed", exact: true }).click();
+  await page.getByRole("switch", { name: "Automatically fill lyrics for new and existing artifacts", exact: true }).check();
+  await page.getByRole("tab", { name: "Encoding", exact: true }).click();
+  await page.getByRole("tab", { name: "Lyrics", exact: true }).click();
+  await expect(score).toHaveValue("90");
+  expect(saves).toHaveLength(0);
+  await page.getByRole("button", { name: "Save settings", exact: true }).click();
+  await expect.poll(() => saves.length).toBe(1);
+  expect(options).toEqual({ auto_search: true, min_score: 90 });
+  await page.getByRole("button", { name: "100 · Strictest", exact: true }).click();
+  await page.getByRole("button", { name: "Discard changes", exact: true }).click();
+  await expect(score).toHaveValue("90");
+  await score.fill("101");
+  await page.getByRole("button", { name: "Save settings", exact: true }).click();
+  expect(saves).toHaveLength(1);
+  await score.fill("90");
+  await page.getByRole("button", { name: "Identify existing lyric scripts", exact: true }).click();
+  await expect.poll(() => batches.length).toBe(1);
+  expect(batches[0]).toEqual({ all: true, refresh: false, inspect_only: true });
+  await page.reload();
+  await expect(score).toHaveValue("90");
+  await page.screenshot({ path: "test-results/lyrics-settings-desktop-en.png", fullPage: true });
+  await setPreference(page, "language", "zh-CN");
+  await page.setViewportSize({ width: 320, height: 844 });
+  await expect(page.getByRole("tab", { name: "歌词设置", exact: true })).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
+  await page.screenshot({ path: "test-results/lyrics-settings-mobile-zh-CN.png", fullPage: true });
+});
+
+test("traditional script filter supports cross-page batch replacement and shared URLs", async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem("musicforge.language", "en"));
+  const tracks: Source[] = Array.from({ length: 64 }, (_, index) => ({ id: index + 1, path: `Artist/Album/${index + 1}.flac`, artist: "Artist", album: "Album", title: `Song ${String(index + 1).padStart(2, "0")}`, track: index + 1, disc: 1, present: true, output: `Artist/Album/${index + 1}.opus`, output_present: true, status: "ready", error: "", size: 123, metadata: {}, lyrics_script: index < 60 ? "traditional" : "simplified", lyrics: { state: "ready", output: `Artist/Album/${index + 1}.opus`, signature: "audio", checked: 1 } }));
+  const batches: unknown[] = [];
+  await page.route("**/api/auth/me", route => route.fulfill({ json: { initialized: true, authenticated: true, username: "admin", method: "local", csrf: "test", oidc: false, version: "test" } }));
+  await page.route("**/api/library", route => route.fulfill({ json: tracks }));
+  await page.route("**/api/lyrics/search", route => { batches.push(route.request().postDataJSON()); return route.fulfill({ status: 202, json: { selected: 60 } }); });
+  await page.goto("/library?view=tracks&lyrics_script=traditional");
+  const filter = page.getByLabel("Lyric script", { exact: true });
+  await expect(filter).toHaveValue("traditional");
+  await expect(page.locator(".track-table tbody > tr")).toHaveCount(50);
+  await page.getByLabel("Select current page", { exact: true }).check();
+  await page.getByRole("button", { name: "Select all 60 matching tracks", exact: true }).click();
+  await page.getByRole("button", { name: "Replace traditional with simplified", exact: true }).click();
+  await expect.poll(() => batches.length).toBe(1);
+  expect(batches[0]).toEqual({ ids: Array.from({ length: 60 }, (_, index) => index + 1), refresh: false, replace_traditional: true });
+  await page.getByRole("button", { name: "Clear selection", exact: true }).click();
+  await filter.selectOption("simplified");
+  await expect(page.locator(".track-table tbody > tr")).toHaveCount(4);
+  await expect(page).toHaveURL(/lyrics_script=simplified/);
+  await page.reload();
+  await expect(filter).toHaveValue("simplified");
+  await page.getByRole("button", { name: "Clear filters", exact: true }).click();
+  await expect(filter).toHaveValue("all");
+  await expect(page).not.toHaveURL(/lyrics_script/);
+});
+
+for (const { threshold, score, selected } of [{ threshold: 96, score: 90, selected: false }, { threshold: 90, score: 90, selected: true }, { threshold: 98, score: 97, selected: false }]) {
+  test(`candidate recommendation respects saved threshold ${threshold} for score ${score}`, async ({ page }) => {
+    await page.addInitScript(() => localStorage.setItem("musicforge.language", "en"));
+    const source: Source = { id: 1, path: "Album/01.flac", artist: "Artist", album: "Album", title: "Track", track: 1, disc: 1, present: true, output: "Album/01.opus", output_present: true, status: "ready", error: "", size: 123, metadata: {} };
+    await page.route("**/api/auth/me", route => route.fulfill({ json: { initialized: true, authenticated: true, username: "admin", method: "local", csrf: "test", oidc: false, version: "test" } }));
+    await page.route("**/api/library", route => route.fulfill({ json: [source] }));
+    await page.route("**/api/lyrics", route => route.fulfill({ json: { options: { auto_search: false, min_score: threshold }, report: { state: "idle" } } }));
+    await page.route("**/api/library/1/lyrics/candidates", route => { expect(route.request().method()).toBe("GET"); return route.fulfill({ json: { query: "Track Artist", groups: [{ token: "cached", provider: "lrclib", cached: true, candidates: [{ index: 0, provider: "lrclib", title: "Track", artist: "Artist", album: score === 90 ? "Other" : "Album", duration: 183, high_confidence: score >= 96, identity_match: true, match_score: score, duration_delta: 0, script: "simplified" }] }] } }); });
+    let previews = 0;
+    await page.route("**/api/library/1/lyrics/preview", route => { previews++; return route.fulfill({ json: { original: "[00:01.00]爱这风云", script: "simplified" } }); });
+    await page.goto("/library?view=tracks");
+    await page.getByRole("button", { name: "Choose lyrics", exact: true }).click();
+    const picker = page.getByRole("dialog", { name: "Choose lyrics", exact: true });
+    await expect(picker.getByRole("radio")).toHaveCount(1);
+    if (selected) { await expect(picker.getByRole("radio")).toBeChecked(); await expect.poll(() => previews).toBe(1); }
+    else { await expect(picker.getByRole("radio")).not.toBeChecked(); expect(previews).toBe(0); }
+  });
+}
 
 test("lyrics filters compose with audio status and library coverage survives new batches and reloads", async ({ page }) => {
   await page.addInitScript(() => localStorage.setItem("musicforge.language", "en"));
@@ -102,7 +192,7 @@ test("lyrics filters compose with audio status and library coverage survives new
   await page.screenshot({ path: "test-results/lyrics-inventory-mobile-zh-CN.png", fullPage: true });
 });
 
-test("lyrics selection, background progress, stop, automatic option and bilingual mobile UI", async ({ page }) => {
+test("lyrics selection, background progress, stop and bilingual mobile UI", async ({ page }) => {
   await page.addInitScript(() => localStorage.setItem("musicforge.language", "en"));
   const source: Source = { id: 1, path: "Artist/Album/01.flac", artist: "Artist", album: "Album", title: "Track", track: 1, disc: 1, present: true, output: "Artist/Album/01.opus", output_present: true, status: "ready", error: "", size: 123, metadata: {}, lyrics: { state: "not_found", output: "Artist/Album/01.opus", signature: "audio", checked: 1 } };
   await page.route("**/api/auth/me", route => route.fulfill({ json: { initialized: true, authenticated: true, username: "admin", method: "local", csrf: "test", oidc: false, version: "test" } }));
@@ -131,11 +221,10 @@ test("lyrics selection, background progress, stop, automatic option and bilingua
   await page.locator(".lyrics-panel > .lyrics-settings > summary").click();
   await expect(page.locator(".lyrics-panel")).toContainText("Searching for lyrics");
   await expect(page.getByRole("button", { name: "Fill lyrics for all artifacts", exact: true })).toBeDisabled();
-  await page.locator(".lyrics-options > summary").click();
-  await page.getByLabel("Automatically fill lyrics for new and existing artifacts", { exact: true }).check();
+  await expect(page.getByLabel("Automatically fill lyrics for new and existing artifacts", { exact: true })).toHaveCount(0);
   await page.getByRole("button", { name: "Stop lyrics search", exact: true }).click();
   await expect(page.locator(".lyrics-panel")).toContainText("Lyrics search stopped");
-  await expect(page.getByLabel("Automatically fill lyrics for new and existing artifacts", { exact: true })).not.toBeChecked();
+  expect(autoSearch).toBe(false);
   await page.getByRole("button", { name: "Fill lyrics for all artifacts", exact: true }).click();
   await expect.poll(() => requests.length).toBe(2);
   expect(requests.at(-1)).toEqual({ all: true, refresh: false });

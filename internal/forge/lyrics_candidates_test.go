@@ -106,7 +106,7 @@ func TestLyricsCandidatePreviewAndExplicitLanguageSelection(t *testing.T) {
 		t.Error("filling replaced a manually selected managed LRC")
 		w.WriteHeader(500)
 	})
-	if status = a.maintainLyrics(context.Background(), s, source.ID, false); status.State != "ready" || status.Provider != "netease" {
+	if status = a.maintainLyrics(context.Background(), s, source.ID, lyricsBatchOptions{MinScore: defaultLyricsMinScore}); status.State != "ready" || status.Provider != "netease" {
 		t.Fatal(status)
 	}
 	w = request("PUT", "/api/library/1/lyrics", map[string]any{"token": token, "index": index})

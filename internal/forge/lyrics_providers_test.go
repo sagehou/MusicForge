@@ -125,7 +125,7 @@ func TestLyricsProviderPriorityAndFallback(t *testing.T) {
 					w.WriteHeader(500)
 				}
 			})
-			text, actual, state, attempts, err := a.searchOnlineLyrics(context.Background(), lyricsTarget{Source: track}, false)
+			text, actual, state, attempts, err := a.searchOnlineLyrics(context.Background(), lyricsTarget{Source: track}, lyricsBatchOptions{MinScore: defaultLyricsMinScore})
 			if err != nil || actual != provider || state != "ready" || text != "[00:01.00]夜の歌\n" {
 				t.Fatal(actual, state, text, err, calls)
 			}
@@ -235,7 +235,7 @@ func TestLyricsProviderFormatsAndLanguageMerge(t *testing.T) {
 	first := lyricsCandidate{Title: "Song", Artist: "Artist", Album: "Album", Duration: 183, text: &lyricsText{Original: "[00:01.00]First\n"}}
 	second := first
 	second.text = &lyricsText{Original: "[00:01.00]Different\n"}
-	if data, state, err := app.chooseLyrics(context.Background(), source, []lyricsCandidate{first, second}); err != nil || data != "" || state != "needs_review" {
+	if data, state, err := app.chooseLyrics(context.Background(), source, []lyricsCandidate{first, second}, lyricsBatchOptions{MinScore: defaultLyricsMinScore}); err != nil || data != "" || state != "needs_review" {
 		t.Fatal("silently chose conflicting lyrics", data, state, err)
 	}
 	ctx, cancel := context.WithCancel(context.Background())

@@ -739,10 +739,8 @@ input[role="switch"]:checked::after { transform: translateX(14px); background: v
 .library-maintenance > .lyrics-panel:has(.lyrics-settings[open]) { grid-column: 1 / -1; }
 .lyrics-body > .lyrics-quick-actions { margin: 0; gap: 4px; flex-wrap: nowrap; }
 .lyrics-quick-actions .lyrics-action { width: 30px; height: 30px; min-height: 30px; padding: 4px; }
-.lyrics-options, .lyrics-body > [role="status"], .lyrics-body > .banner { flex-basis: 100%; min-width: 0; }
-.lyrics-panel:not(:has(.lyrics-settings[open])) .lyrics-options,
+.lyrics-body > [role="status"], .lyrics-body > .banner { flex-basis: 100%; min-width: 0; }
 .lyrics-panel:not(:has(.lyrics-settings[open])) .lyrics-body:not([data-running="true"]) > [role="status"] { display: none; }
-.lyrics-options > summary { font-size: 12px; color: var(--muted); }
 .lyrics-body > [role="status"] { padding-top: 8px; border-top: 1px solid var(--line); font-size: 12px; }
 .lyrics-body > [role="status"] p { margin: 4px 0; font-size: 11px; }
 .lyrics-body > [role="status"] code { display: block; font-size: 10px; color: var(--muted); }
@@ -1249,3 +1247,15 @@ input[role="switch"]:checked::after { transform: translateX(14px); background: v
   input[type="checkbox"]:not([role="switch"]), input[type="radio"] { appearance: auto; }
   input[type="checkbox"]:not([role="switch"])::after, input[type="radio"]::after { display: none; }
 }
+
+.lyrics-settings-link { display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px; color: var(--muted); border-radius: 7px; }
+.lyrics-settings-link:hover { color: var(--ink); background: var(--hover); }
+.lyrics-script { font-size: 10px; color: var(--muted); }
+.lyrics-threshold { display: flex; align-items: end; flex-wrap: wrap; gap: 12px; }
+.lyrics-threshold input { width: 110px; }
+.lyrics-threshold .actions { margin: 0; }
+.lyrics-threshold [aria-pressed="true"] { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); }
+.lyrics-settings-page { display: grid; gap: 16px; }
+.lyrics-batch-settings .lyrics-body { display: grid; gap: 8px; }
+.lyrics-batch-settings .lyrics-body > .actions { margin: 0; flex-wrap: wrap; }
+.lyrics-batch-settings .lyrics-quick-actions .lyrics-action { width: auto; }

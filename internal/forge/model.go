@@ -362,6 +362,7 @@ type Source struct {
 	Repair          *RepairStatus     `json:"repair,omitempty"`
 	PossiblyDamaged bool              `json:"possibly_damaged,omitempty"`
 	Lyrics          *LyricsStatus     `json:"lyrics,omitempty"`
+	LyricsScript    string            `json:"lyrics_script,omitempty"`
 
 	mediaInfoKnown bool
 }

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { flushSync } from "react-dom";
-import { Activity, ArrowRight, Check, ChevronLeft, ChevronRight, Clock3, FolderOpen, HardDrive, LayoutDashboard, ListMusic, Loader2, PanelLeftClose, PanelLeftOpen, Pause, Play, RefreshCw, Settings2, ShieldCheck, Square, Trash2, Waves, X } from "lucide-react";
+import { Activity, ArrowRight, Check, ChevronLeft, ChevronRight, Clock3, FileMusic, FolderOpen, HardDrive, LayoutDashboard, ListMusic, Loader2, PanelLeftClose, PanelLeftOpen, Pause, Play, RefreshCw, Settings2, ShieldCheck, Square, Trash2, Waves, X } from "lucide-react";
 import { Button } from "./components/ui/button";
 import { api, loadSession, setCSRF } from "./api";
 import type { Activity as JobActivity, Encoding, Job, Me, Settings, TaskItem } from "./types";
@@ -9,6 +9,7 @@ import { Badge, Empty, Loading, ResourceWarning, useResource, type Notice } from
 import { AppearanceControls } from "./components/theme-selector";
 import { PageHeading } from "./components/page-heading";
 import { Library } from "./components/library";
+import { LyricsSettings } from "./components/lyrics";
 import { BatchRepairButton } from "./components/repair";
 import { RepairTaskDetails } from "./components/repair-tasks";
 import { Overview } from "./components/overview";
@@ -211,11 +212,13 @@ function Jobs({ notify }: { notify: Notice }) {
 }
 
 type SettingsResponse = { settings: Settings; configured: { webhook: boolean; nav_password: boolean; oidc_secret: boolean }; lidarr?: { url: string; key_configured: boolean }; public_url: string; allowed_origins: string[] };
-function settingsSection() { const value = new URLSearchParams(location.search).get("section") || "library"; return ["library", "encoding", "integrations", "security"].includes(value) ? value : "library"; }
+function settingsSection() { const value = new URLSearchParams(location.search).get("section") || "library"; return ["library", "encoding", "lyrics", "integrations", "security"].includes(value) ? value : "library"; }
 function SettingsPage({ me, notify, logout, notification }: { me: Me; notify: Notice; logout: () => Promise<void>; notification: ReactNode }) {
   const { t } = useI18n();
   const { data, error, retry: retryResource } = useResource<SettingsResponse>("/settings");
   const [section, setSection] = useState(settingsSection);
+  const [lyricsVisited, setLyricsVisited] = useState(() => settingsSection() === "lyrics");
+  useEffect(() => { if (section === "lyrics") setLyricsVisited(true); }, [section]);
   useEffect(() => {
     const change = () => setSection(settingsSection());
     window.addEventListener("route-changed", change); window.addEventListener("popstate", change);
@@ -224,6 +227,7 @@ function SettingsPage({ me, notify, logout, notification }: { me: Me; notify: No
   const sections = [
     { id: "library", label: t("settings.tabLibrary"), icon: FolderOpen },
     { id: "encoding", label: t("settings.tabEncoding"), icon: Waves },
+    { id: "lyrics", label: t("lyrics.settings"), icon: FileMusic },
     { id: "integrations", label: t("settings.tabIntegrations"), icon: RefreshCw },
     { id: "security", label: t("settings.tabSecurity"), icon: ShieldCheck },
   ];
@@ -253,7 +257,8 @@ function SettingsPage({ me, notify, logout, notification }: { me: Me; notify: No
     }}>{sections.map(item => <button key={item.id} id={`settings-tab-${item.id}`} role="tab" aria-selected={section === item.id} aria-controls={`settings-${item.id}`} tabIndex={section === item.id ? 0 : -1} onClick={() => setSection(item.id)}><item.icon size={17} /><span>{item.label}</span><ChevronRight size={14} /></button>)}</nav>
     <div className="settings-content" role="tabpanel" id={`settings-${section}`} aria-labelledby={`settings-tab-${section}`}>
     <div hidden={section !== "security"}><div className="account-summary"><div><strong>{me.username}</strong><small>{me.method === "oidc" ? t("app.oidcAdmin") : t("app.localAdmin")}</small></div><Button type="button" variant="outline" onClick={() => void logout()}>{t("app.logout")}</Button></div><PasswordForm notify={notify} disabled={me.method !== "local"} /></div>
-    <form noValidate onSubmit={event => {
+    <div hidden={section !== "lyrics"}>{lyricsVisited && <LyricsSettings notify={notify} notification={notification} />}</div>
+    <form hidden={section === "lyrics"} noValidate onSubmit={event => {
       event.preventDefault();
       const invalid = event.currentTarget.querySelector<HTMLInputElement | HTMLSelectElement>(":invalid");
       if (invalid) {

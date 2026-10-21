@@ -18,6 +18,7 @@ type lyricsTarget struct {
 	Signature, FileSignature string
 	File                     lyricsFile
 	FilePresent              bool
+	FileScript               string
 }
 
 func (a *App) captureLyricsTarget(ctx context.Context, id int64) (target lyricsTarget, err error) {
@@ -65,6 +66,7 @@ func (a *App) captureLyricsTarget(ctx context.Context, id int64) (target lyricsT
 	target.File, text, target.FilePresent, err = a.readLyricsFile(ctx, target.Settings, lyricsRel(source.Output))
 	if target.FilePresent {
 		target.FileSignature = digest(text)
+		target.FileScript = lyricsScript(text)
 	}
 	return
 }

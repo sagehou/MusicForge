@@ -44,6 +44,7 @@ type lyricsCandidate struct {
 	Album                       string   `json:"album"`
 	Duration                    float64  `json:"duration"`
 	HighConfidence              bool     `json:"high_confidence"`
+	IdentityMatch               bool     `json:"identity_match"`
 	MatchScore                  int      `json:"match_score"`
 	DurationDelta               *float64 `json:"duration_delta,omitempty"`
 	Script                      string   `json:"script"`
@@ -180,6 +181,7 @@ func rankLyricsCandidates(candidates []lyricsCandidate, source Source) {
 		c := &candidates[i]
 		c.HighConfidence, c.MatchScore, c.DurationDelta = candidateMatches(*c, source), 0, nil
 		title, artist := candidateIdentity(*c, source)
+		c.IdentityMatch = title && artist
 		if title {
 			c.MatchScore += 40
 		}
@@ -227,7 +229,7 @@ func validLyricsSearch(source Source) error {
 	return nil
 }
 
-func (a *App) searchOnlineLyrics(ctx context.Context, target lyricsTarget, refresh bool) (text, provider, state string, attempts []lyricsAttempt, err error) {
+func (a *App) searchOnlineLyrics(ctx context.Context, target lyricsTarget, batch lyricsBatchOptions) (text, provider, state string, attempts []lyricsAttempt, err error) {
 	source := target.Source
 	if err = validLyricsSearch(source); err != nil {
 		return
@@ -235,11 +237,11 @@ func (a *App) searchOnlineLyrics(ctx context.Context, target lyricsTarget, refre
 	review, instrumental, failed := false, false, false
 	var traditionalText, traditionalProvider string
 	for _, name := range lyricsProviders {
-		candidates, noVocals, _, searched, searchErr := a.cachedLyricsCandidates(ctx, target, name, "", false, refresh)
+		candidates, noVocals, _, searched, searchErr := a.cachedLyricsCandidates(ctx, target, name, "", false, batch.Refresh)
 		instrumental = instrumental || noVocals
 		result, resultState := "", "not_found"
 		if searchErr == nil {
-			result, resultState, searchErr = a.chooseLyrics(ctx, source, candidates)
+			result, resultState, searchErr = a.chooseLyrics(ctx, source, candidates, batch)
 			if ctx.Err() == nil {
 				if cacheErr := a.storeLyricsSearch(ctx, target, name, "", candidates, noVocals, searched); cacheErr != nil {
 					return "", "", "failed", attempts, cacheErr
@@ -260,6 +262,7 @@ func (a *App) searchOnlineLyrics(ctx context.Context, target lyricsTarget, refre
 		attempts = append(attempts, attempt)
 		if result != "" && searchErr == nil {
 			script := lyricsScript(result)
+			if batch.ReplaceTraditional && script != "simplified" { continue }
 			if script == "simplified" || traditionalText == "" && script != "traditional" {
 				return result, name, "ready", attempts, nil
 			}
@@ -285,10 +288,12 @@ func (a *App) searchOnlineLyrics(ctx context.Context, target lyricsTarget, refre
 	return
 }
 
-func (a *App) chooseLyrics(ctx context.Context, source Source, candidates []lyricsCandidate) (string, string, error) {
+func (a *App) chooseLyrics(ctx context.Context, source Source, candidates []lyricsCandidate, batch lyricsBatchOptions) (string, string, error) {
+	rankLyricsCandidates(candidates, source)
 	var safe []*lyricsCandidate
 	for i := range candidates {
-		if candidateMatches(candidates[i], source) {
+		candidate := candidates[i]
+		if validLyricsSearch(source) == nil && candidate.IdentityMatch && candidate.Duration > 0 && candidate.DurationDelta != nil && *candidate.DurationDelta <= 10 && candidate.MatchScore >= batch.MinScore {
 			safe = append(safe, &candidates[i])
 		}
 	}
@@ -310,6 +315,7 @@ func (a *App) chooseLyrics(ctx context.Context, source Source, candidates []lyri
 			continue
 		}
 		candidate.text = &text
+		if batch.ReplaceTraditional && lyricsScript(text.Original) != "simplified" { continue }
 		if selected != "" && selected != text.Original {
 			// Script preference cannot resolve different words or timing.
 			if foldLyricsScript(selected) != foldLyricsScript(text.Original) {

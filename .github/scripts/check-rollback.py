@@ -20,6 +20,7 @@ NAME = "musicforge-rollback"
 CANDIDATE = "musicforge:validation"
 PASSWORD = "ci-rollback-password"
 LEGACY = {
+    "v0.2.31": "sha256:9cbedabe9900f2023177def997dd03068fb0f2ff183b80cc225e8c17e2d6d557",
     "v0.2.26": "sha256:0a08c8bd29344bef6eb9f3fbd8f0104082763a6b1b31d88bc50f0603d64bb1ce",
     "v0.2.25": "sha256:4b8851a44dbd5150def7dbccd5d26658ef5e1526cc840961d367ae763df3e662",
     "v0.2.24": "sha256:7871768e8e5491b6bfe90cc07560c822cd03f56557fe9db560d0c83df2a8a206",
@@ -147,7 +148,7 @@ def verification_queued(rel):
 
 def library_record(track):
     # Optional display annotations are absent in older API responses.
-    return {key: value for key, value in track.items() if key not in ("artwork_url", "lyrics", "source_bitrate", "source_audio", "output_size")}
+    return {key: value for key, value in track.items() if key not in ("artwork_url", "lyrics", "source_bitrate", "source_audio", "output_size", "lyrics_script")}
 
 
 def seed_refresh():
@@ -191,7 +192,7 @@ def main():
     pixels = (b"\x00" + b"\x2c\xa0\xb4" * 32) * 32
     cover = b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", header) + chunk(b"IDAT", zlib.compress(pixels)) + chunk(b"IEND", b"")
     (ROOT / "source/Album/cover.png").write_bytes(cover)
-    (ROOT / "source/Album/01.lrc").write_text("[00:00.00]Rollback synchronized lyrics\n", encoding="utf-8")
+    (ROOT / "source/Album/01.lrc").write_text("[00:00.00]愛這風雲\n", encoding="utf-8")
     stable = time.time() - 120
     for rel in ("01.flac", "02.mp3", "03.m4a"):
         os.utime(ROOT / "source/Album" / rel, (stable, stable))
@@ -227,7 +228,7 @@ def main():
             assert successor["hash"] == hashlib.sha256((ROOT / "source" / new_rel).read_bytes()).hexdigest(), "format replacement lost complete source identity"
             wait_for(lambda: api("/api/jobs")["jobs"], lambda rows: all(row["state"] == "success" for row in rows), "completed source format replacement jobs")
         lyrics_track = next(row for row in tracks if row["path"] == "Album/01.flac")
-        api("/api/lyrics/options", "PUT", {"auto_search": False})
+        api("/api/lyrics/options", "PUT", {"auto_search": False, "min_score": 98})
         api("/api/lyrics/search", "POST", {"ids": [lyrics_track["id"]]})
         wait_for(lambda: api("/api/lyrics")["report"], lambda row: row["state"] == "complete" and row["found"] == 1, "candidate source LRC publication")
         tracks = sorted((library_record(track) for track in api("/api/library")), key=lambda track: track["id"])
@@ -296,9 +297,14 @@ def main():
                 api, running = start(actual_image)
                 if actual_image == image:
                     assert running == version, "wrong rollback release"
+                if actual_image == image and version == "v0.2.31":
+                    api("/api/lyrics/options", "PUT", {"auto_search": False})
+                    api("/api/lyrics/search", "DELETE")
                 verify(api, tracks, pending, stopped)
                 if actual_image == CANDIDATE:
-                    assert api("/api/lyrics")["options"] == {"auto_search": False}, "older Settings writer lost lyrics options"
+                    assert api("/api/lyrics")["options"] == {"auto_search": False, "min_score": 98}, "older option/Stop writer lost lyrics settings"
+                    restored_track = next(row for row in api("/api/library") if row["path"] == "Album/01.flac")
+                    assert restored_track.get("lyrics_script") == "traditional", "older writer lost script classification"
                     restored_lyrics = next(row for row in api("/api/library") if row["path"] == "Album/01.flac").get("lyrics")
                     assert restored_lyrics and restored_lyrics["state"] == "ready" and restored_lyrics["provider"] == "source", "older writer lost optional lyrics annotation"
                 stop()

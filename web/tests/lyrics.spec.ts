@@ -48,6 +48,9 @@ test("lyrics settings save thresholds, retain drafts and offer output-only inspe
   await expect(page.getByRole("tab", { name: "歌词设置", exact: true })).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
   await page.screenshot({ path: "test-results/lyrics-settings-mobile-zh-CN.png", fullPage: true });
+  await page.route("**/api/library", route => route.fulfill({ json: [] }));
+  await page.getByRole("link", { name: "查看繁体歌词并批量替换", exact: true }).click();
+  await expect(page).toHaveURL(/view=tracks&lyrics_script=traditional/);
 });
 
 test("traditional script filter supports cross-page batch replacement and shared URLs", async ({ page }) => {

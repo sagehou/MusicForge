@@ -697,5 +697,15 @@
   "lyrics.allCandidates": "全部候选",
   "lyrics.sourceFilter": "按来源筛选候选",
   "jobs.summary": "处理结果",
-  "lyrics.saveNext": "保存并处理下一首"
+  "lyrics.saveNext": "保存并处理下一首",
+  "app.account": "账户设置",
+  "theme.colors": "主题配色",
+  "theme.apple": "Apple Music",
+  "theme.spotify": "Spotify",
+  "theme.violet": "紫罗兰",
+  "theme.amber": "琥珀",
+  "theme.custom": "自定义",
+  "theme.customColor": "自定义颜色",
+  "theme.hex": "颜色十六进制值",
+  "theme.invalidColor": "请输入 #RRGGBB 格式的颜色。"
 }

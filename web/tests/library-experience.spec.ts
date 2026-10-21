@@ -317,11 +317,11 @@ test("cover density and list preferences persist, pagination and polling retain 
   await page.goto("/library?view=albums");
   await expect(page.locator(".library-group")).toHaveCount(50);
   const columns = () => page.locator(".library-groups").evaluate(node => getComputedStyle(node).gridTemplateColumns.split(" ").length);
-  expect(await columns()).toBe(5);
+  expect(await columns()).toBe(6);
   await page.getByLabel("Cover size", { exact: true }).selectOption("compact");
-  expect(await columns()).toBe(7);
+  expect(await columns()).toBe(8);
   await page.getByLabel("Cover size", { exact: true }).selectOption("large");
-  expect(await columns()).toBe(4);
+  expect(await columns()).toBe(5);
   await page.reload();
   await expect(page.getByLabel("Cover size", { exact: true })).toHaveValue("large");
   await page.getByLabel("Select album Night Studies", { exact: true }).check();

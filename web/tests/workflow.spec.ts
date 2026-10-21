@@ -1,4 +1,4 @@
-import { setPreference, openPreferences } from "./preferences";
+import { setPreference, openAccount } from "./preferences";
 import { test, expect } from "@playwright/test";
 import { readFileSync, unlinkSync, writeFileSync, utimesSync, mkdirSync, existsSync } from "node:fs";
 import { join } from "node:path";
@@ -143,7 +143,7 @@ test("bilingual setup, real incremental build, state preservation and login", as
   await expect(page.locator("html")).toHaveAttribute("lang", "en");
   await expect(page.getByRole("heading", { name: "Background jobs" })).toBeVisible();
   await setPreference(page, "language", "zh-CN");
-  await openPreferences(page);
+  await openAccount(page);
   await page.getByRole("button", { name: "退出登录" }).click();
   await expect(page.getByRole("heading", { name: "欢迎回来" })).toBeVisible();
   await page.getByLabel("用户名", { exact: true }).fill("admin");
@@ -156,9 +156,11 @@ test("bilingual setup, real incremental build, state preservation and login", as
   await page.getByLabel("Password", { exact: true }).fill("test-admin-password");
   await setPreference(page, "language", "zh-CN");
   await page.getByRole("button", { name: "登录", exact: true }).click();
+  await expect(page.locator(".account-summary")).toBeVisible();
+  await page.getByRole("link", { name: "任务", exact: true }).click();
   await expect(page.getByRole("heading", { name: "后台任务" })).toBeVisible();
   await page.setViewportSize({ width: 390, height: 844 });
-  await openPreferences(page);
+  await openAccount(page);
   await expect(page.getByRole("button", { name: "退出登录", exact: true })).toBeVisible();
   await page.getByRole("link", { name: "概览", exact: true }).click();
   await expect(page.getByRole("progressbar")).toHaveAttribute("aria-valuenow", "100");
@@ -270,12 +272,12 @@ test("bilingual setup, real incremental build, state preservation and login", as
     data: {}, headers: { Origin: "http://unconfigured.test", "X-CSRF-Token": aliasMe.csrf },
   });
   expect(blocked.status()).toBe(403);
-  await openPreferences(aliasPage);
+  await openAccount(aliasPage);
   await aliasPage.getByRole("button", { name: "退出登录", exact: true }).click();
   await expect(aliasPage.getByRole("heading", { name: "欢迎回来" })).toBeVisible();
   expect((await (await page.request.get("/api/auth/me")).json()).authenticated).toBe(true);
   await aliasPage.close();
-  await openPreferences(page);
+  await openAccount(page);
   await page.getByRole("button", { name: "Log out", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Welcome back" })).toBeVisible();
 });

@@ -22,7 +22,7 @@ async function setup(page: Page) {
 test("aligned records fit six tracks, and the icon rail keeps navigation and preferences usable", async ({ page }) => {
   await setup(page);
   await page.setViewportSize({ width: 1440, height: 900 });
-  await page.goto("/library");
+  await page.goto("/library?view=tracks");
   await expect(page.getByRole("heading", { level: 1 })).toHaveCount(1);
   await expect(page.getByRole("button", { name: /^All songs/ })).toHaveAttribute("aria-pressed", "true");
   const rows = page.locator(".track-table tbody > tr");
@@ -49,7 +49,7 @@ test("aligned records fit six tracks, and the icon rail keeps navigation and pre
   await page.screenshot({ path: "test-results/workspace-settings-collapsed-dark.png", animations: "disabled" });
   await page.getByRole("button", { name: "展开侧栏", exact: true }).click();
   await expect.poll(async () => (await page.locator(".sidebar").boundingBox())!.width).toBe(216);
-  await page.goto("/library");
+  await page.goto("/library?view=tracks");
   await expect(page.locator(".track-open").first()).toBeVisible();
   for (const width of [801, 900, 1024]) {
     await page.setViewportSize({ width, height: 900 });
@@ -119,7 +119,7 @@ test("signing in after expiry restores the open lyric panel and its unsaved quer
   await page.route("**/api/auth/me", route => route.fulfill({ json: { initialized: true, authenticated, username: "admin", method: "local", csrf: "test", oidc: false, version: "test" } }));
   await page.route("**/api/auth/login", route => { authenticated = true; return route.fulfill({ json: {} }); });
   await page.route("**/api/library/*/lyrics/candidates", route => route.fulfill({ json: { query: "Song 01 River Ensemble", groups: [] } }));
-  await page.goto("/library");
+  await page.goto("/library?view=tracks");
   await page.locator(".track-table tbody > tr").first().getByRole("button", { name: "Choose lyrics", exact: true }).click();
   const picker = page.getByRole("dialog", { name: "Choose lyrics", exact: true });
   await picker.getByLabel("Title or artist", { exact: true }).fill("Unsaved alternate title");
@@ -142,7 +142,7 @@ test("phone pages retain real content, readable facts and full-screen inspectors
   await setup(page);
   for (const width of [390, 320]) {
     await page.setViewportSize({ width, height: 844 });
-    await page.goto("/library");
+    await page.goto("/library?view=tracks");
     await expect(page.locator(".track-table tbody > tr").first().locator(".track-open")).toBeInViewport();
     const first = await page.locator(".track-table tbody > tr").first().boundingBox();
     expect(first!.y + first!.height).toBeLessThan(780);

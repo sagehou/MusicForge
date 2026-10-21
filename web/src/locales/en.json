@@ -745,5 +745,15 @@
   "lyrics.allCandidates": "All candidates",
   "lyrics.sourceFilter": "Filter candidates by source",
   "jobs.summary": "Result",
-  "lyrics.saveNext": "Save and next"
+  "lyrics.saveNext": "Save and next",
+  "app.account": "Account settings",
+  "theme.colors": "Color theme",
+  "theme.apple": "Apple Music",
+  "theme.spotify": "Spotify",
+  "theme.violet": "Violet",
+  "theme.amber": "Amber",
+  "theme.custom": "Custom",
+  "theme.customColor": "Custom color",
+  "theme.hex": "Color hex code",
+  "theme.invalidColor": "Enter a color in #RRGGBB format."
 }

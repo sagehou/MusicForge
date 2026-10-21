@@ -9,6 +9,7 @@ import { Button } from "./ui/button";
 import { BatchRepairButton, RepairControls, RepairDiagnostics } from "./repair";
 import { LibraryComparison } from "./library-comparison";
 import { DetailPanel } from "./detail-panel";
+import { PageHeading } from "./page-heading";
 import { LyricsMaintenance, LyricsPicker, LyricsSearchButton, LyricsTrack, lyricsMatchState, lyricsMatchStates, type LyricsMatchState } from "./lyrics";
 
 type Scope = { view: "artists" | "albums" | "tracks"; artist?: string; album?: string };
@@ -25,7 +26,7 @@ function savePreference(key: string, value: string) {
 function readScope(): Scope {
   const params = new URLSearchParams(location.search);
   const view = params.get("view");
-  return { view: view === "albums" || view === "artists" ? view : "tracks", artist: params.get("artist") ?? undefined, album: params.get("album") ?? undefined };
+  return { view: view === "tracks" || view === "artists" ? view : "albums", artist: params.get("artist") ?? undefined, album: params.get("album") ?? undefined };
 }
 function duration(seconds: number) {
   if (!seconds) return "--";
@@ -237,8 +238,8 @@ export function Library({ notify }: { notify: Notice }) {
   function toggle(ids: number[], checked: boolean) {
     setSelected(old => { const next = new Set(old); ids.forEach(id => checked ? next.add(id) : next.delete(id)); return next; });
   }
-  if (!data) return error ? <Loading error={error} retry={retry} /> : <div className="library-loading" role="status" aria-label={t("app.loading")}>
-    <div className="page-heading"><div><h1>{t("app.library")}</h1><p>{t("library.loadingHint")}</p></div></div>
+  if (!data) return error ? <><PageHeading><div><h1>{t("app.library")}</h1></div></PageHeading><Loading error={error} retry={retry} /></> : <div className="library-loading" role="status" aria-label={t("app.loading")}>
+    <PageHeading><div><h1>{t("app.library")}</h1><p>{t("library.loadingHint")}</p></div></PageHeading>
     <div className="skeleton-toolbar" aria-hidden="true" />
     <div className="library-groups" aria-hidden="true">{Array.from({ length: 10 }, (_, index) => <div className="skeleton-card" key={index}><div /><span /><span /></div>)}</div>
   </div>;
@@ -294,9 +295,9 @@ export function Library({ notify }: { notify: Notice }) {
   }
   return <>
     <ResourceWarning error={error} retry={retry} />
-    <div className="page-heading"><div><h1 id="library-title" tabIndex={-1}>{t("app.library")}</h1><p>{t("library.description", { count: data.length })}</p></div>
+    <PageHeading><div><h1 id="library-title" tabIndex={-1}>{t("app.library")}</h1><p>{t("library.description", { count: data.length })}</p></div>
       <div className="actions"><details className="page-tools"><summary aria-label={t("library.more")} title={t("library.more")}><Ellipsis size={19} /></summary><div className="tools-popover"><Button variant="ghost" disabled={busy} onClick={() => void action("/library/scan", { verify: true }, "notice.verify")}><ShieldCheck size={16} />{t("library.verify")}</Button><Button variant="ghost" disabled={busy} onClick={() => void action("/library/rebuild", { all: true }, "notice.rebuild")}><RefreshCw size={14} />{t("library.startRebuild")}</Button></div></details><Button disabled={busy} onClick={() => void action("/library/scan", {}, "notice.scan")}><RefreshCw size={16} className={busy ? "animate-spin" : ""} />{t("library.scan")}</Button></div>
-    </div>
+    </PageHeading>
     <div className="library-maintenance">
       {!scope.artist && !isAlbum && <LibraryComparison sources={data} notify={notify} />}
       <LyricsMaintenance sources={data} notify={notify} />
@@ -319,8 +320,8 @@ export function Library({ notify }: { notify: Notice }) {
     </section>}
     <section className="library-surface">
       {!scope.artist && <div className="library-navigation"><div className="segmented" role="group" aria-label={t("library.browse")}>
-        <button aria-pressed={scope.view === "tracks"} onClick={() => navigate({ view: "tracks" })}>{t("library.allTracks")}<span>{number(data.length)}</span></button>
         <button aria-pressed={scope.view === "albums"} onClick={() => navigate({ view: "albums" })}>{t("library.albums")}<span>{number(totals.albums)}</span></button>
+        <button aria-pressed={scope.view === "tracks"} onClick={() => navigate({ view: "tracks" })}>{t("library.allTracks")}<span>{number(data.length)}</span></button>
         <button aria-pressed={scope.view === "artists"} onClick={() => navigate({ view: "artists" })}>{t("library.artists")}<span>{number(totals.artists)}</span></button>
       </div></div>}
       <div className="table-toolbar library-toolbar">

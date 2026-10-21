@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Activity, ArrowRight, Check, Clock3, Disc3, FileMusic, HardDrive, Loader2, Music2, RefreshCw } from "lucide-react";
 import { api } from "../api";
 import { useI18n } from "../i18n";
+import { PageHeading } from "./page-heading";
 import { taskPercent } from "../lib/utils";
 import type { Dashboard, Job, Settings, Source } from "../types";
 import { Badge, Empty, Loading, ResourceWarning, useResource, type Notice } from "./resource";
@@ -19,7 +20,7 @@ export function Overview({ notify, navigate }: { notify: Notice; navigate: (path
     try { await api("/library/scan", "POST", {}); notify("notice.scan"); }
     catch (err) { notify(err as Error, true); } finally { setBusy(false); }
   }
-  if (!data) return <Loading error={error} retry={retry} />;
+  if (!data) return <><PageHeading><div><h1>{t("app.overview")}</h1></div></PageHeading><Loading error={error} retry={retry} /></>;
   const percent = data.source_count ? Math.max(0, Math.min(100, Math.round(data.ready_count / data.source_count * 100))) : 0;
   const percentLabel = new Intl.NumberFormat(locale, { style: "percent" }).format(percent / 100);
   const encoding = config.data?.settings.encoding;
@@ -40,7 +41,7 @@ export function Overview({ notify, navigate }: { notify: Notice; navigate: (path
   ];
   return <div className="overview-page">
     <ResourceWarning error={error} retry={retry} />
-    <div className="page-heading"><div><h1>{t("app.overview")}</h1><p className={`online ${data.online ? "is-online" : ""}`}><span />{data.online ? t("overview.online") : data.storage_checking ? t("overview.checkingShort") : t("overview.waiting")}</p></div><div className="actions hero-actions"><Button variant="outline" onClick={() => navigate("/library")}>{t("overview.viewLibrary")}<ArrowRight size={15} /></Button><Button onClick={() => void scan()} disabled={busy || !data.enabled}><RefreshCw size={15} className={busy ? "animate-spin" : ""} />{t("overview.scan")}</Button></div></div>
+    <PageHeading><div><h1>{t("app.overview")}</h1><p className={`online ${data.online ? "is-online" : ""}`}><span />{data.online ? t("overview.online") : data.storage_checking ? t("overview.checkingShort") : t("overview.waiting")}</p></div><div className="actions hero-actions"><Button variant="outline" onClick={() => navigate("/library")}>{t("overview.viewLibrary")}<ArrowRight size={15} /></Button><Button onClick={() => void scan()} disabled={busy || !data.enabled}><RefreshCw size={15} className={busy ? "animate-spin" : ""} />{t("overview.scan")}</Button></div></PageHeading>
     {!data.online && <div className="banner"><HardDrive size={20} /><div><strong>{data.storage_checking ? t("overview.checking") : data.enabled ? t("overview.offline") : t("overview.configure")}</strong><p>{errorMessage(data.storage_message)}</p></div><Button variant="outline" size="sm" onClick={() => navigate("/settings")}>{t("overview.openSettings")}</Button></div>}
     <div className="metrics overview-metrics">{metrics.map(metric => <button className="metric" key={metric.label} onClick={() => navigate(metric.path)}><div><span>{metric.label}</span><metric.icon size={17} /></div><strong>{number(metric.value)}</strong><small>{metric.note}</small></button>)}</div>
     <section className="readiness-panel">

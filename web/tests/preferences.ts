@@ -1,21 +1,22 @@
 import { expect, type Page } from "@playwright/test";
 
-export async function openPreferences(page: Page) {
-  const panels = page.locator(".detail-panel[open] .preferences");
-  const menu = await panels.count() ? panels : page.locator(".sidebar .preferences");
-  if (!await menu.getAttribute("open").then(value => value !== null)) await menu.locator(":scope > summary").click();
+export async function openAccount(page: Page) {
+  const account = page.locator(".sidebar .account-link");
+  if (await account.isVisible()) await account.click();
+  else {
+    await page.locator('.sidebar nav a[href="/settings"]').click();
+    await page.locator("#settings-tab-security").click();
+  }
+  await expect(page.locator("#settings-tab-security")).toHaveAttribute("aria-selected", "true");
 }
 
 export async function setPreference(page: Page, kind: "language" | "theme", value: string) {
-  let control = page.locator(`.${kind}-selector select`).filter({ visible: true }).first();
-  await expect(control.or(page.locator(".sidebar .preferences > summary")).first()).toBeVisible();
-  if (!await control.count()) {
-    await openPreferences(page);
-    control = page.locator(`.preferences[open] .${kind}-selector select`);
-  }
+  const login = page.locator(".session-dialog");
+  const panel = page.locator(".detail-panel[open]");
+  const root = await login.count() ? login : await panel.count() ? panel : page.locator("body");
+  const control = root.locator(`.${kind}-selector select`).filter({ visible: true }).first();
+  await expect(control).toBeVisible();
   await control.selectOption(value);
-  const menu = page.locator(".preferences[open]");
-  if (await menu.count()) await menu.locator(":scope > summary").click();
 }
 
 export async function openLibraryTools(page: Page) {

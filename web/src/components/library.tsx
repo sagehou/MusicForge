@@ -1,6 +1,6 @@
 import { useDeferredValue, useEffect, useMemo, useRef, useState, Fragment, memo } from "react";
 import { flushSync } from "react-dom";
-import { ArrowLeft, ChevronLeft, ChevronRight, Clock3, Disc3, Grid2X2, List, Music2, RefreshCw, Search, ShieldCheck, SlidersHorizontal, Trash2, X } from "lucide-react";
+import { ArrowLeft, ChevronLeft, ChevronRight, Clock3, Copy, Disc3, Ellipsis, Grid2X2, List, Music2, RefreshCw, Search, ShieldCheck, SlidersHorizontal, Trash2, X } from "lucide-react";
 import { api } from "../api";
 import { useI18n, type MessageKey } from "../i18n";
 import type { Source } from "../types";
@@ -8,7 +8,8 @@ import { Badge, Empty, Loading, ResourceWarning, useResource, type Notice } from
 import { Button } from "./ui/button";
 import { BatchRepairButton, RepairControls, RepairDiagnostics } from "./repair";
 import { LibraryComparison } from "./library-comparison";
-import { LyricsMaintenance, LyricsSearchButton, LyricsTrack, lyricsMatchState, lyricsMatchStates, type LyricsMatchState } from "./lyrics";
+import { DetailPanel } from "./detail-panel";
+import { LyricsMaintenance, LyricsPicker, LyricsSearchButton, LyricsTrack, lyricsMatchState, lyricsMatchStates, type LyricsMatchState } from "./lyrics";
 
 type Scope = { view: "artists" | "albums" | "tracks"; artist?: string; album?: string };
 type Identity = { artistKey: string; albumKey: string; artist: string; album: string };
@@ -24,7 +25,7 @@ function savePreference(key: string, value: string) {
 function readScope(): Scope {
   const params = new URLSearchParams(location.search);
   const view = params.get("view");
-  return { view: view === "albums" || view === "tracks" ? view : "artists", artist: params.get("artist") ?? undefined, album: params.get("album") ?? undefined };
+  return { view: view === "albums" || view === "artists" ? view : "tracks", artist: params.get("artist") ?? undefined, album: params.get("album") ?? undefined };
 }
 function duration(seconds: number) {
   if (!seconds) return "--";
@@ -43,29 +44,31 @@ function AudioSpec({ audio }: { audio: Source["source_audio"] }) {
 function TrackFacts({ source }: { source: Source }) {
   const { t, locale, number } = useI18n();
   return <dl className="track-facts">
-    <div><dt>{t("library.duration")}</dt><dd>{duration(source.duration || 0)}</dd></div>
-    <div className="track-fact-audio"><dt>{t("library.sourceAudio")}</dt><dd><AudioSpec audio={source.source_audio} /></dd></div>
-    <div title={!source.source_bitrate ? t("library.bitratePending") : undefined}><dt>{t("library.sourceBitrate")}</dt><dd>{source.source_bitrate ? `${number(Math.round(source.source_bitrate / 1000))} kbps` : "—"}</dd></div>
-    <div><dt>{t("library.sourceSize")}</dt><dd>{fileSize(source.size, locale)}</dd></div>
-    {source.output_present && source.output_size !== undefined && <div><dt>{t("library.outputSize")}</dt><dd>{fileSize(source.output_size, locale)}</dd></div>}
+    <div className="track-fact-duration"><dt>{t("library.duration")}</dt><dd>{duration(source.duration || 0)}</dd></div>
+    <div className="track-fact-audio"><dt>{t("library.sourceAudio")}</dt><dd><AudioSpec audio={source.source_audio} /></dd><dd className="track-bitrate" title={!source.source_bitrate ? t("library.bitratePending") : undefined}><span>{t("library.sourceBitrate")} </span>{source.source_bitrate ? `${number(Math.round(source.source_bitrate / 1000))} kbps` : "—"}</dd></div>
+    <div className="track-fact-sizes"><dt>{t("library.sourceSize")}</dt><dd>{fileSize(source.size, locale)}</dd>{source.output_present && source.output_size !== undefined && <><dt>{t("library.outputSize")}</dt><dd className="track-output-size">{fileSize(source.output_size, locale)}</dd></>}</div>
   </dl>;
 }
-function TrackDetails({ source }: { source: Source }) {
+function TrackDetails({ source, notify }: { source: Source; notify: Notice }) {
   const { t, locale, number } = useI18n();
-  return <details className="track-file"><summary>{t("library.fileDetails")}</summary><dl>
-    <dt>{t("library.songTitle")}</dt><dd>{source.title || "—"}</dd>
-    <dt>{t("library.songArtist")}</dt><dd>{source.artist || t("library.unknownArtist")}</dd>
-    <dt>{t("library.songAlbum")}</dt><dd>{source.album || t("library.unknownAlbum")}</dd>
+  async function copyHash() {
+    try { await navigator.clipboard.writeText(source.hash || ""); notify("notice.hashCopied"); }
+    catch { notify("notice.copyFailed", true); }
+  }
+  return <section className="track-file"><dl>
+    <dt>{t("library.songTitle")}</dt><dd dir="auto">{source.title || "—"}</dd>
+    <dt>{t("library.songArtist")}</dt><dd dir="auto">{source.artist || t("library.unknownArtist")}</dd>
+    <dt>{t("library.songAlbum")}</dt><dd dir="auto">{source.album || t("library.unknownAlbum")}</dd>
     <dt>{t("library.duration")}</dt><dd>{source.duration ? t("library.exactDuration", { time: duration(source.duration), seconds: number(source.duration) }) : "—"}</dd>
     <dt>{t("library.trackDisc")}</dt><dd>{source.track || "—"} / {source.disc || "—"}</dd>
     <dt>{t("library.sourceAudio")}</dt><dd><AudioSpec audio={source.source_audio} /></dd>
     <dt>{t("library.sourceBitrate")}</dt><dd>{source.source_bitrate ? `${number(source.source_bitrate)} bps` : t("library.bitratePending")}</dd>
     <dt>{t("library.sourceSize")}</dt><dd>{fileSize(source.size, locale)}{source.size >= 1024 && <> ({t("library.bytes", { size: source.size })})</>}</dd>
     {source.output_present && source.output_size !== undefined && <><dt>{t("library.outputSize")}</dt><dd>{fileSize(source.output_size, locale)} ({t("library.bytes", { size: source.output_size })})</dd></>}
-    <dt>{t("library.sourceSHA256")}</dt><dd><code>{source.hash || t("library.hashPending")}</code></dd>
-    <dt>{t("library.source")}</dt><dd>{source.path}</dd>
-    {source.output && <><dt>{t("library.artifact")}</dt><dd>{source.output}</dd></>}
-  </dl>{Object.keys(source.metadata).length > 0 && <details><summary>{t("library.metadata")}</summary><dl>{Object.entries(source.metadata).sort(([a], [b]) => a.localeCompare(b)).map(([key, value]) => <Fragment key={key}><dt>{key}</dt><dd dir="auto">{value}</dd></Fragment>)}</dl></details>}</details>;
+    <dt>{t("library.sourceSHA256")}</dt><dd className="hash-value"><code>{source.hash || t("library.hashPending")}</code>{source.hash && <Button type="button" variant="ghost" size="icon" aria-label={t("library.copyHash")} onClick={() => void copyHash()}><Copy size={15} /></Button>}</dd>
+    <dt>{t("library.source")}</dt><dd><code>{source.path}</code></dd>
+    {source.output && <><dt>{t("library.artifact")}</dt><dd><code>{source.output}</code></dd></>}
+  </dl>{source.error && <div className="error-box" role="alert"><strong>{t("library.errorDetails")}</strong><pre>{source.error}</pre></div>}{Object.keys(source.metadata).length > 0 && <details><summary>{t("library.metadata")}</summary><dl>{Object.entries(source.metadata).sort(([a], [b]) => a.localeCompare(b)).map(([key, value]) => <Fragment key={key}><dt>{key}</dt><dd dir="auto">{value}</dd></Fragment>)}</dl></details>}<RepairDiagnostics source={source} /></section>;
 }
 function CoverImage({ url, failed }: { url: string; failed: () => void }) {
   const [ready, setReady] = useState(false);
@@ -96,8 +99,8 @@ export function Library({ notify }: { notify: Notice }) {
   const [scope, setScope] = useState<Scope>(readScope);
   const [query, setQuery] = useState("");
   const search = useDeferredValue(query.trim().toLocaleLowerCase(locale));
-  const [filter, setFilter] = useState("all");
-  const [lyricsFilter, setLyricsFilter] = useState<LyricsMatchState | "all">("all");
+  const [filter, setFilter] = useState(() => new URLSearchParams(location.search).get("status") || "all");
+  const [lyricsFilter, setLyricsFilter] = useState<LyricsMatchState | "all">(() => { const value = new URLSearchParams(location.search).get("lyrics"); return lyricsMatchStates.includes(value as LyricsMatchState) ? value as LyricsMatchState : "all"; });
   const [layout, setLayout] = useState<"grid" | "list">(() => preference("layout") === "list" ? "list" : "grid");
   const [density, setDensity] = useState<Density>(() => {
     const saved = preference("density");
@@ -106,14 +109,16 @@ export function Library({ notify }: { notify: Notice }) {
   const transition = useRef<ViewTransition | null>(null);
   const navigation = useRef(0);
   const [compact, setCompact] = useState(() => matchMedia("(max-width: 800px)").matches);
-  const trackColumns = compact ? 3 : 4;
+  const trackColumns = 7;
+  const [detailID, setDetailID] = useState<number>();
+  const [lyricsID, setLyricsID] = useState<number>();
   const [optionsOpen, setOptionsOpen] = useState(false);
-  const [sort, setSort] = useState("name");
+  const [sort, setSort] = useState(() => new URLSearchParams(location.search).get("sort") === "attention" ? "attention" : "name");
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [busy, setBusy] = useState(false);
   const [offset, setOffset] = useState(0);
   useEffect(() => {
-    const back = () => { navigation.current++; transition.current?.skipTransition(); setScope(readScope()); setOffset(0); setOptionsOpen(false); };
+    const back = () => { navigation.current++; transition.current?.skipTransition(); setScope(readScope()); const params = new URLSearchParams(location.search); setFilter(params.get("status") || "all"); setLyricsFilter((params.get("lyrics") || "all") as LyricsMatchState | "all"); setSort(params.get("sort") === "attention" ? "attention" : "name"); setOffset(0); setDetailID(undefined); setLyricsID(undefined); setOptionsOpen(false); };
     window.addEventListener("popstate", back);
     window.addEventListener("route-changed", back);
     return () => { window.removeEventListener("popstate", back); window.removeEventListener("route-changed", back); };
@@ -217,6 +222,14 @@ export function Library({ notify }: { notify: Notice }) {
       if (transition.current === current) transition.current = null;
     });
   }
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    for (const [key, value] of [["status", filter], ["lyrics", lyricsFilter], ["sort", sort]]) {
+      if (value === "all" || key === "sort" && value === "name") params.delete(key); else params.set(key, value);
+    }
+    const query = params.toString();
+    history.replaceState(null, "", `/library${query ? `?${query}` : ""}`);
+  }, [filter, lyricsFilter, sort]);
   function toggle(ids: number[], checked: boolean) {
     setSelected(old => { const next = new Set(old); ids.forEach(id => checked ? next.add(id) : next.delete(id)); return next; });
   }
@@ -251,10 +264,22 @@ export function Library({ notify }: { notify: Notice }) {
       setSelected(new Set()); retry();
     } catch (err) { notify(err as Error, true); } finally { setBusy(false); }
   }
+  const detailSource = data.find(source => source.id === detailID);
+  const lyricsSource = data.find(source => source.id === lyricsID);
+  function adjacent(id: number, direction: number, lyrics = false) {
+    const candidates = lyrics ? rows.filter(source => source.output_present && source.output) : rows;
+    const index = candidates.findIndex(source => source.id === id);
+    return index < 0 ? undefined : candidates[index + direction];
+  }
+  function step(source: Source | undefined, lyrics = false) {
+    if (!source) return;
+    if (lyrics) setLyricsID(source.id); else setDetailID(source.id);
+    if (showingTracks) setOffset(Math.floor(rows.findIndex(row => row.id === source.id) / 50) * 50);
+  }
   return <>
     <ResourceWarning error={error} retry={retry} />
     <div className="page-heading"><div><h1 id="library-title" tabIndex={-1}>{t("app.library")}</h1><p>{t("library.description", { count: data.length })}</p></div>
-      <div className="actions"><Button variant="outline" disabled={busy} onClick={() => void action("/library/scan", { verify: true }, "notice.verify")}><ShieldCheck size={16} />{t("library.verify")}</Button><Button disabled={busy} onClick={() => void action("/library/scan", {}, "notice.scan")}><RefreshCw size={16} className={busy ? "animate-spin" : ""} />{t("library.scan")}</Button></div>
+      <div className="actions"><details className="page-tools"><summary aria-label={t("library.more")} title={t("library.more")}><Ellipsis size={19} /></summary><div className="tools-popover"><Button variant="ghost" disabled={busy} onClick={() => void action("/library/scan", { verify: true }, "notice.verify")}><ShieldCheck size={16} />{t("library.verify")}</Button><Button variant="ghost" disabled={busy} onClick={() => void action("/library/rebuild", { all: true }, "notice.rebuild")}><RefreshCw size={14} />{t("library.startRebuild")}</Button></div></details><Button disabled={busy} onClick={() => void action("/library/scan", {}, "notice.scan")}><RefreshCw size={16} className={busy ? "animate-spin" : ""} />{t("library.scan")}</Button></div>
     </div>
     <div className="library-maintenance">
       {!scope.artist && !isAlbum && <LibraryComparison sources={data} notify={notify} />}
@@ -278,9 +303,9 @@ export function Library({ notify }: { notify: Notice }) {
     </section>}
     <section className="library-surface">
       {!scope.artist && <div className="library-navigation"><div className="segmented" role="group" aria-label={t("library.browse")}>
-        <button aria-pressed={scope.view === "artists"} onClick={() => navigate({ view: "artists" })}>{t("library.artists")}<span>{number(totals.artists)}</span></button>
-        <button aria-pressed={scope.view === "albums"} onClick={() => navigate({ view: "albums" })}>{t("library.albums")}<span>{number(totals.albums)}</span></button>
         <button aria-pressed={scope.view === "tracks"} onClick={() => navigate({ view: "tracks" })}>{t("library.allTracks")}<span>{number(data.length)}</span></button>
+        <button aria-pressed={scope.view === "albums"} onClick={() => navigate({ view: "albums" })}>{t("library.albums")}<span>{number(totals.albums)}</span></button>
+        <button aria-pressed={scope.view === "artists"} onClick={() => navigate({ view: "artists" })}>{t("library.artists")}<span>{number(totals.artists)}</span></button>
       </div></div>}
       <div className="table-toolbar library-toolbar">
         <div className="search"><Search size={17} aria-hidden="true" /><input type="search" aria-label={t("library.search")} placeholder={t("library.searchPlaceholder")} value={query} onChange={event => { setQuery(event.target.value); setOffset(0); }} />{query && <button aria-label={t("library.clearSearch")} title={t("library.clearSearch")} onClick={() => { setQuery(""); setOffset(0); }}><X size={16} /></button>}</div>
@@ -299,7 +324,6 @@ export function Library({ notify }: { notify: Notice }) {
           <button aria-label={t("library.grid")} title={t("library.grid")} aria-pressed={layout === "grid"} onClick={() => { setLayout("grid"); savePreference("layout", "grid"); }}><Grid2X2 size={17} /></button>
           <button aria-label={t("library.list")} title={t("library.list")} aria-pressed={layout === "list"} onClick={() => { setLayout("list"); savePreference("layout", "list"); }}><List size={17} /></button>
         </div>}
-        <Button variant="outline" size="sm" disabled={busy} onClick={() => void action("/library/rebuild", { all: true }, "notice.rebuild")}><RefreshCw size={14} />{t("library.startRebuild")}</Button>
       </div>
       {(filter !== "all" || lyricsFilter !== "all") && <div className="active-filters" role="group" aria-label={t("library.activeFilters")}>
         {filter !== "all" && <button aria-label={t("library.removeFilter", { name: statusLabel(filter) })} onClick={() => { setFilter("all"); setOffset(0); }}><span>{t("library.filter")} · {statusLabel(filter)}</span><X size={12} /></button>}
@@ -324,19 +348,16 @@ export function Library({ notify }: { notify: Notice }) {
               <Badge status={state} />
             </div>
           </article>;
-        })}</div> : <div className="table-scroll"><table className="track-table"><thead><tr><th aria-label={t("library.selectedTracks")} /><th>{t("library.trackFile")}</th><th className="track-artist">{t("library.artistAlbum")}</th><th>{t("library.artifact")}</th></tr></thead><tbody>{shown.map((source, index) => {
+        })}</div> : <div className="table-scroll"><table className="track-table"><thead><tr><th aria-label={t("library.selectedTracks")} /><th className="track-title-column">{t("library.trackFile")}</th><th className="track-duration-column">{t("library.duration")}</th><th className="track-audio-column">{t("library.audioColumn")}</th><th className="track-size-column">{t("library.sizesColumn")}</th><th className="track-status-column">{t("library.artifact")}</th><th className="track-lyrics-column">{t("lyrics.title")}</th></tr></thead><tbody>{shown.map((source, index) => {
           const disc = source.disc || 1;
           const heading = isAlbum && discs.size > 1 && (index === 0 || disc !== (shown[index - 1].disc || 1));
           return <Fragment key={source.id}>{heading && <tr className="disc-heading"><th colSpan={trackColumns} scope="rowgroup"><Disc3 size={15} />{t("library.disc", { number: disc })}</th></tr>}<tr className={selected.has(source.id) ? "selected" : ""}>
             <td><input type="checkbox" aria-label={t("library.selectTrack", { title: source.title || source.path })} checked={selected.has(source.id)} disabled={busy} onChange={event => toggle([source.id], event.target.checked)} /></td>
-            <td><div className="track-cell"><span className="track-number">{source.track || <Music2 size={15} />}</span><div><strong>{source.title || source.path.split("/").pop()}</strong><small className={source.present ? "source-present" : "source-missing"}>{source.present ? t("library.sourceOnline", { format: source.path.split(".").pop()?.toUpperCase() || "--" }) : t("library.sourceDeleted")}</small>
-              <small className="track-byline">{source.artist || t("library.unknownArtist")} · {source.album || t("library.unknownAlbum")}</small>
-              <TrackFacts source={source} />
-              <TrackDetails source={source} />
-            </div></div></td>
-            <td className="track-artist"><strong>{source.artist || t("library.unknownArtist")}</strong><small>{source.album || t("library.unknownAlbum")}</small></td>
-            <td className="track-output"><Badge status={source.status} />{source.output_present && source.status !== "ready" && source.status !== "possibly_damaged" && <small>{t("library.stillPlayable")}</small>}<RepairControls source={source} notify={notify} refresh={retry} /><LyricsTrack source={source} notify={notify} refresh={retry} />{!source.present && !source.output && !source.output_present && <Button className="forget-record" size="sm" variant="ghost" disabled={busy} onClick={() => void forget([source.id])}><Trash2 size={13} />{t("library.forgetRecord")}</Button>}{source.error && <details><summary>{t("library.errorDetails")}</summary><pre>{source.error}</pre></details>}</td>
-          </tr>{(source.possibly_damaged || source.repair?.diagnostics) && <tr className="repair-detail-row"><td colSpan={trackColumns}><RepairDiagnostics source={source} /></td></tr>}</Fragment>;
+            <td className="track-title"><div className="track-cell"><span className="track-number">{source.track || <Music2 size={15} />}</span><div><button className="track-open" aria-label={t("library.openDetails", { title: source.title || source.path })} onClick={() => setDetailID(source.id)}><strong dir="auto">{source.title || source.path.split("/").pop()}</strong></button><small className="track-byline" dir="auto">{source.artist || t("library.unknownArtist")} · {source.album || t("library.unknownAlbum")}</small>{!source.present && <small className="source-missing">{t("library.sourceDeleted")}</small>}</div></div></td>
+            <td className="track-facts-cell" colSpan={3}><TrackFacts source={source} /></td>
+            <td className="track-output"><Badge status={source.status} />{source.output_present && source.status !== "ready" && source.status !== "possibly_damaged" && <small>{t("library.stillPlayable")}</small>}<RepairControls source={source} notify={notify} refresh={retry} />{!source.present && !source.output && !source.output_present && <Button className="forget-record" size="sm" variant="ghost" disabled={busy} onClick={() => void forget([source.id])}><Trash2 size={13} />{t("library.forgetRecord")}</Button>}{source.error && <Button variant="ghost" size="sm" onClick={() => setDetailID(source.id)}>{t("library.errorDetails")}</Button>}</td>
+            <td className="track-lyrics"><LyricsTrack source={source} notify={notify} refresh={retry} onChoose={() => setLyricsID(source.id)} /></td>
+          </tr></Fragment>;
         })}</tbody></table></div>}
         <div className="pagination"><span>{t(showingTracks ? "library.pagination" : "library.groupPagination", { start: safeOffset + 1, end: Math.min(safeOffset + 50, count), total: count })}</span>
           <Button variant="ghost" size="icon" aria-label={t("library.previous")} title={t("library.previous")} disabled={safeOffset === 0} onClick={() => setOffset(Math.max(0, safeOffset - 50))}><ChevronLeft size={16} /></Button>
@@ -344,5 +365,7 @@ export function Library({ notify }: { notify: Notice }) {
         </div>
       </> : <Empty title={data.length ? t("library.noMatch") : t("library.empty")}>{data.length ? t("library.noMatchHint") : t("library.emptyHint")}</Empty>}
     </section>
+    {detailSource && <DetailPanel title={t("library.fileDetails")} subtitle={detailSource.title || detailSource.path} close={() => setDetailID(undefined)} actions={<><Button variant="ghost" size="icon" aria-label={t("library.previousTrack")} disabled={!adjacent(detailSource.id, -1)} onClick={() => step(adjacent(detailSource.id, -1))}><ChevronLeft size={17} /></Button><Button variant="ghost" size="icon" aria-label={t("library.nextTrack")} disabled={!adjacent(detailSource.id, 1)} onClick={() => step(adjacent(detailSource.id, 1))}><ChevronRight size={17} /></Button></>}><TrackDetails source={detailSource} notify={notify} /></DetailPanel>}
+    {lyricsSource && <LyricsPicker key={`${lyricsSource.id}:${lyricsSource.output}`} source={lyricsSource} notify={notify} close={() => setLyricsID(undefined)} saved={retry} previous={adjacent(lyricsSource.id, -1, true) ? () => step(adjacent(lyricsSource.id, -1, true), true) : undefined} next={adjacent(lyricsSource.id, 1, true) ? () => step(adjacent(lyricsSource.id, 1, true), true) : undefined} />}
   </>;
 }

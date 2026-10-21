@@ -1,3 +1,4 @@
+import { setPreference } from "./preferences";
 import { test, expect, type Page } from "@playwright/test";
 import type { Dashboard, Job, Source } from "../src/types";
 
@@ -69,7 +70,7 @@ test("missing records have confirmed individual, selected and all cleanup with p
   await page.getByRole("button", { name: "Remove missing records", exact: true }).click();
   await expect.poll(() => requests.length).toBe(2);
   expect(requests[1]).toEqual({ all: true });
-  await page.getByRole("combobox", { name: "Language", exact: true }).selectOption("zh-CN");
+  await setPreference(page, "language", "zh-CN");
   await page.getByRole("table").getByRole("button", { name: "移除记录", exact: true }).click();
   await expect.poll(() => requests.length).toBe(3);
   expect(requests[2]).toEqual({ ids: [5] });
@@ -90,7 +91,7 @@ test("sidebar collapse persists and icon navigation stays accessible across lang
   await expect(page.getByRole("button", { name: "Expand sidebar", exact: true })).toHaveAttribute("aria-expanded", "false");
   await page.getByRole("link", { name: "Jobs", exact: true }).click();
   await expect(page.getByRole("link", { name: "Jobs", exact: true })).toHaveAttribute("aria-current", "page");
-  await page.getByRole("combobox", { name: "Language", exact: true }).selectOption("zh-CN");
+  await setPreference(page, "language", "zh-CN");
   await expect(page.getByRole("link", { name: "任务", exact: true })).toHaveAttribute("title", "任务");
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(page.getByRole("button", { name: "展开侧栏", exact: true })).toBeHidden();
@@ -128,12 +129,12 @@ for (const width of [1440, 1024, 768, 390, 320]) {
     await page.goto("/");
     await expect(page.locator(".hero-profile")).toContainText("192 kbps");
     for (const theme of ["light", "dark"]) {
-      await page.getByRole("combobox", { name: "Appearance", exact: true }).selectOption(theme);
+      await setPreference(page, "theme", theme);
       await expect(page.locator("html")).toHaveAttribute("data-theme", theme);
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
       await page.screenshot({ path: `test-results/forge-overview-${width}-${theme}.png`, fullPage: true, animations: "disabled" });
     }
-    await page.getByRole("combobox", { name: "Language", exact: true }).selectOption("zh-CN");
+    await setPreference(page, "language", "zh-CN");
     await expect(page.locator(".hero-completion")).toContainText("91%");
     await page.screenshot({ path: `test-results/forge-overview-${width}-dark-zh.png`, fullPage: true, animations: "disabled" });
     await page.getByRole("link", { name: "任务", exact: true }).click();
@@ -142,6 +143,7 @@ for (const width of [1440, 1024, 768, 390, 320]) {
     await expect(page.locator('.task[data-state="running"] [role="progressbar"]')).toHaveAttribute("aria-valuenow", "44");
     const colors = await page.locator(".task-meter > span").evaluateAll(nodes => nodes.map(node => getComputedStyle(node).backgroundColor));
     expect(new Set(colors).size).toBeGreaterThanOrEqual(4);
+    await expect(page.locator('.task[data-state="success"] .task-meter')).toBeHidden();
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
     // A breakpoint change must settle immediately, without layout overflow.
     await page.setViewportSize({ width: 390, height: 844 });
@@ -153,8 +155,8 @@ for (const width of [1440, 1024, 768, 390, 320]) {
       expect(success!.height).toBeLessThan(150);
     }
     await page.screenshot({ path: `test-results/forge-jobs-${width}-dark-zh.png`, fullPage: true, animations: "disabled" });
-    await page.getByRole("combobox", { name: "语言", exact: true }).selectOption("en");
-    await page.getByRole("combobox", { name: "Appearance", exact: true }).selectOption("light");
+    await setPreference(page, "language", "en");
+    await setPreference(page, "theme", "light");
     await page.screenshot({ path: `test-results/forge-jobs-${width}-light.png`, fullPage: true, animations: "disabled" });
     await page.emulateMedia({ reducedMotion: "reduce" });
     expect(await page.locator('.task[data-state="running"] .task-meter > span').evaluate(node => getComputedStyle(node, "::after").animationName)).toBe("none");

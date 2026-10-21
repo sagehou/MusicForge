@@ -31,7 +31,7 @@ export function ThemeSelector() {
     return () => { media.removeEventListener("change", changed); window.removeEventListener("storage", storage); window.removeEventListener("theme-changed", selected); };
   }, [theme]);
   const Icon = theme === "system" ? Monitor : theme === "dark" ? Moon : Sun;
-  return <label className="theme-selector" title={t("theme.label")}><Icon size={17} aria-hidden="true" />
+  return <label className="theme-selector" title={t("theme.label")}><Icon size={17} aria-hidden="true" /><span>{t("theme.label")}</span>
     <select aria-label={t("theme.label")} value={theme} onChange={event => {
       const value = event.target.value as Theme;
       setTheme(value);

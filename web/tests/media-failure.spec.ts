@@ -1,3 +1,4 @@
+import { setPreference } from "./preferences";
 import { test, expect } from "@playwright/test";
 
 test("decode failures show a translated summary and retain full diagnostics", async ({ page }) => {
@@ -20,7 +21,7 @@ test("decode failures show a translated summary and retain full diagnostics", as
   await expect(page.locator(".task-diagnostic pre")).not.toBeVisible();
   await page.locator(".task-diagnostic summary").click();
   await expect(page.locator(".task-diagnostic pre")).toContainText("MD5 signature mismatch");
-  await page.getByRole("combobox", { name: "Language", exact: true }).selectOption("zh-CN");
+  await setPreference(page, "language", "zh-CN");
   await expect(page.locator(".task-error-summary")).toContainText("尚不能认定源文件损坏");
   await expect(page.locator(".task-diagnostic pre")).toContainText("Source SHA-256:");
   await page.setViewportSize({ width: 390, height: 844 });

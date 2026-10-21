@@ -1,3 +1,4 @@
+import { setPreference } from "./preferences";
 import { test, expect } from "@playwright/test";
 
 test("temporary auth failures preserve unsaved settings; confirmed expiry returns to login", async ({ page }) => {
@@ -32,7 +33,7 @@ test("temporary auth failures preserve unsaved settings; confirmed expiry return
   release!();
   await expect(page.getByRole("alert")).toContainText("Authentication temporarily unavailable");
   await expect(source).toHaveValue("/unsaved/source");
-  await page.getByRole("combobox", { name: "Language", exact: true }).selectOption("zh-CN");
+  await setPreference(page, "language", "zh-CN");
   await expect(page.getByRole("alert")).toContainText("暂时无法验证登录状态");
   fail = false;
   await page.getByRole("button", { name: "重试", exact: true }).click();
@@ -67,7 +68,7 @@ test("HTML proxy 401 and generic 500 preserve the task page and identify the fai
   status = 500;
   await expect(page.getByRole("alert")).toContainText("HTTP 500");
   await expect(page.locator(".task-activity")).toContainText("Still readable");
-  await page.getByRole("combobox", { name: "Language", exact: true }).selectOption("zh-CN");
+  await setPreference(page, "language", "zh-CN");
   await expect(page.getByRole("alert")).toContainText("服务器返回 HTTP 500，请重试");
   await expect(page.getByRole("alert")).toContainText("/api/jobs");
   await expect(page.getByRole("button", { name: "暂停", exact: true })).toBeEnabled();

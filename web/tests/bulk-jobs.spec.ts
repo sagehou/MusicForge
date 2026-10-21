@@ -1,3 +1,4 @@
+import { setPreference } from "./preferences";
 import { test, expect } from "@playwright/test";
 
 test("jobs support page and filtered selection, mixed states and accurate bulk results", async ({ page }) => {
@@ -50,7 +51,7 @@ test("jobs support page and filtered selection, mixed states and accurate bulk r
   await page.locator(".panel .filter-tabs").getByRole("button", { name: "Failed", exact: true }).click();
   await expect(pageSelection).not.toBeChecked();
   await page.getByRole("button", { name: "Select all 203 matching tasks", exact: true }).click();
-  await page.getByRole("combobox", { name: "Language", exact: true }).selectOption("zh-CN");
+  await setPreference(page, "language", "zh-CN");
   await expect(page.locator(".selection-bar")).toContainText(["全选本页", "已选择筛选结果中的全部 203 项任务"]);
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(page.locator(".selection-bar").getByRole("button", { name: "删除记录", exact: true })).toBeVisible();

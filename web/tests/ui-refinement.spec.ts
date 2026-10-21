@@ -1,3 +1,4 @@
+import { setPreference, openPreferences } from "./preferences";
 import { test, expect, type Page } from "@playwright/test";
 
 const me = { initialized: true, authenticated: true, username: "admin", method: "local", csrf: "test", oidc: false, version: "test" };
@@ -35,7 +36,7 @@ test("settings sections preserve drafts, reveal invalid controls, discard and sa
   await page.getByLabel("Concurrent conversions", { exact: true }).fill("2");
   await page.getByRole("tab", { name: "Integrations", exact: true }).click();
   await page.getByLabel("Independent webhook secret", { exact: true }).fill("draft-webhook-secret-value");
-  await page.getByLabel("Language", { exact: true }).selectOption("zh-CN");
+  await setPreference(page, "language", "zh-CN");
   await page.getByRole("tab", { name: "音乐库", exact: true }).click();
   await expect(page.getByLabel("音频源目录", { exact: true })).toHaveValue("/draft/source");
   await page.getByRole("button", { name: "放弃修改", exact: true }).click();
@@ -43,7 +44,7 @@ test("settings sections preserve drafts, reveal invalid controls, discard and sa
   await expect(page.getByRole("button", { name: "保存设置", exact: true })).toBeDisabled();
   await page.getByRole("tab", { name: "集成", exact: true }).click();
   await expect(page.getByLabel("Webhook 独立密钥", { exact: true })).toHaveValue("");
-  await page.locator(".language-selector select").selectOption("en");
+  await setPreference(page, "language", "en");
   await page.getByRole("tab", { name: "Encoding", exact: true }).focus();
   await page.keyboard.press("Home");
   await expect(page.getByRole("tab", { name: "Library", exact: true })).toBeFocused();
@@ -59,11 +60,11 @@ test("settings sections preserve drafts, reveal invalid controls, discard and sa
 test("settings layouts in both themes and narrow viewports", async ({ page }) => {
   await setup(page);
   await page.goto("/settings");
-  await page.locator(".language-selector select").selectOption("zh-CN");
+  await setPreference(page, "language", "zh-CN");
   for (const width of [1440, 390, 320]) {
     await page.setViewportSize({ width, height: 900 });
     for (const theme of ["light", "dark"]) {
-      await page.locator(".theme-selector select").selectOption(theme);
+      await setPreference(page, "theme", theme);
       for (const [id, label] of [["library", "音乐库"], ["encoding", "编码"], ["integrations", "集成"], ["security", "账户安全"]]) {
         await page.getByRole("tab", { name: label, exact: true }).click();
         expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
@@ -95,7 +96,7 @@ test("large library returns instantly from memory, revalidates with 304 and clea
     else if (etag) await route.fulfill({ status: 304, headers: { ETag: 'W/"library-test"' } });
     else await route.fulfill({ json: sources, headers: { ETag: 'W/"library-test"' } });
   });
-  await page.goto("/library");
+  await page.goto("/library?view=artists");
   await expect(page.getByRole("status", { name: "Loading" })).toBeVisible();
   await expect.poll(() => reads).toBe(1);
   await page.screenshot({ path: "test-results/library-skeleton.png", animations: "disabled" });
@@ -108,6 +109,7 @@ test("large library returns instantly from memory, revalidates with 304 and clea
   await page.getByRole("link", { name: "Library", exact: true }).click();
   await expect.poll(() => reads).toBe(2);
   // Data is visible while the network response is still deliberately blocked.
+  await page.getByRole("button", { name: /^All artists/ }).click();
   await expect(page.locator(".library-group")).toHaveCount(50);
   await expect(page.getByRole("status", { name: "Loading" })).toHaveCount(0);
   expect(conditionals[1]).toBe('W/"library-test"');
@@ -122,6 +124,7 @@ test("large library returns instantly from memory, revalidates with 304 and clea
   await page.getByRole("button", { name: "Scan", exact: true }).click();
   await expect(page.locator(".library-group").filter({ has: page.getByRole("button", { name: "Browse artist Artist 0", exact: true }) }).locator(".badge")).toHaveText("Failed");
   expect(conditionals.at(-1)).toBeUndefined();
+  await openPreferences(page);
   await page.getByRole("button", { name: "Log out", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Welcome back", exact: true })).toBeVisible();
   hold = true;
@@ -134,5 +137,6 @@ test("large library returns instantly from memory, revalidates with 304 and clea
   await expect.poll(() => reads).toBeGreaterThan(beforeLogin);
   expect(conditionals.at(-1)).toBeUndefined();
   hold = false; release!();
+  await page.getByRole("button", { name: /^All artists/ }).click();
   await expect(page.locator(".library-group")).toHaveCount(50);
 });

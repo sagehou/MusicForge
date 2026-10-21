@@ -1,3 +1,4 @@
+import { setPreference } from "./preferences";
 import { test, expect, type Page } from "@playwright/test";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
@@ -36,7 +37,7 @@ test.beforeEach(async ({ page }) => {
 
 test("artwork, hierarchy, multi-disc tracks, selection and browser history", async ({ page }) => {
   await mockLibrary(page);
-  await page.goto("/library");
+  await page.goto("/library?view=artists");
   const artistCard = page.locator(".library-group").filter({ has: page.getByRole("button", { name: "Browse artist River Ensemble", exact: true }) });
   await expect(artistCard.locator(".cover img")).toHaveCount(2);
   await expect(artistCard.getByText("2 albums", { exact: true })).toBeVisible();
@@ -49,8 +50,8 @@ test("artwork, hierarchy, multi-disc tracks, selection and browser history", asy
   await expect(page.locator(".track-facts").getByText("3:21", { exact: true })).toBeVisible();
   await page.getByLabel("Select First Light", { exact: true }).check();
   await page.getByLabel("Search library", { exact: true }).fill("Light");
-  await page.getByRole("combobox", { name: "Appearance", exact: true }).selectOption("dark");
-  await page.getByRole("combobox", { name: "Language", exact: true }).selectOption("zh-CN");
+  await setPreference(page, "theme", "dark");
+  await setPreference(page, "language", "zh-CN");
   await expect(page.getByLabel("搜索音乐库", { exact: true })).toHaveValue("Light");
   await expect(page.getByLabel("选择 First Light", { exact: true })).toBeChecked();
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
@@ -63,6 +64,7 @@ test("artwork, hierarchy, multi-disc tracks, selection and browser history", asy
   await page.getByRole("button", { name: "浏览专辑 Night Studies", exact: true }).click();
   await page.getByRole("link", { name: "音乐库", exact: true }).click();
   await expect(page).toHaveURL(/\/library$/);
+  await page.getByRole("button", { name: /^All artists|^全部歌手/ }).click();
   await expect(page.locator(".album-summary")).toHaveCount(0);
   await expect(page.getByRole("button", { name: "浏览歌手 River Ensemble", exact: true })).toBeVisible();
 });
@@ -75,10 +77,11 @@ test("all-album and list views, unverified filter, missing images and persisted 
   await expect(page.locator(".library-groups")).toHaveClass(/library-list/);
   await page.getByLabel("Filter by status", { exact: true }).selectOption("unverified");
   await expect(page.locator(".library-group")).toHaveCount(1);
-  await page.getByRole("combobox", { name: "Appearance", exact: true }).selectOption("dark");
+  await setPreference(page, "theme", "dark");
   await page.reload();
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
   await expect(page.locator(".cover-fallback")).toBeVisible();
+  await page.getByLabel("Filter by status", { exact: true }).selectOption("all");
   await page.route("**/api/library/*/artwork?*", route => route.fulfill({ status: 404, json: { error: "artwork not found" } }));
   await page.reload();
   await expect(page.locator(".cover-fallback")).toHaveCount(3);
@@ -110,7 +113,8 @@ test("all songs share filters, pagination and batch lyrics with visible file fac
   await page.getByLabel("Filter by lyrics status", { exact: true }).selectOption("not_found");
   const first = rows.filter({ has: page.locator(".track-cell strong").filter({ hasText: /^First Light$/ }) });
   for (const text of ["3:21", "FLAC · 24 bit / 96 kHz · 2 ch", "894 kbps", "25 MiB", "5 MiB"]) await expect(first.locator(".track-facts")).toContainText(text);
-  await expect(first.locator(".track-file")).not.toHaveAttribute("open", "");
+  await expect(first.locator(".track-open")).toBeVisible();
+  await expect(page.locator(".detail-panel")).toHaveCount(0);
   await expect(first.getByRole("button", { name: "Choose lyrics", exact: true })).toBeVisible();
   await expect(first.getByRole("button", { name: "Search again", exact: true })).toBeVisible();
   await expect(first.locator(".lyrics-details")).not.toHaveAttribute("open", "");
@@ -129,10 +133,10 @@ test("all songs share filters, pagination and batch lyrics with visible file fac
   await expect(rows.locator(".track-facts")).toContainText("—");
   await page.getByLabel("Filter by status", { exact: true }).selectOption("all");
   await page.getByLabel("Filter by lyrics status", { exact: true }).selectOption("not_found");
-  await page.getByRole("combobox", { name: "Language", exact: true }).selectOption("zh-CN");
+  await setPreference(page, "language", "zh-CN");
   await page.setViewportSize({ width: 320, height: 844 });
   for (const theme of ["light", "dark"]) {
-    await page.getByRole("combobox", { name: "外观", exact: true }).selectOption(theme);
+    await setPreference(page, "theme", theme);
     await expect(first.locator(".track-facts")).toContainText("3:21");
     await expect(first.locator(".track-facts")).toContainText("FLAC · 24 bit / 96 kHz · 2 声道");
     await expect(first.getByRole("button", { name: "选择歌词", exact: true })).toBeVisible();
@@ -281,7 +285,7 @@ test("system appearance follows the OS and reduced motion disables the toast ent
   await page.route("**/api/library/scan", route => route.fulfill({ status: 202, json: { job_id: 1 } }));
   await page.emulateMedia({ colorScheme: "dark", reducedMotion: "reduce" });
   await page.goto("/library");
-  await page.getByRole("combobox", { name: "Appearance", exact: true }).selectOption("system");
+  await setPreference(page, "theme", "system");
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
   await page.emulateMedia({ colorScheme: "light", reducedMotion: "reduce" });
   await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
@@ -393,7 +397,7 @@ test("narrow-screen filter and display menu stays usable and inside the viewport
   await page.keyboard.press("Escape");
   await expect(summary).toBeFocused();
   await expect(page.locator(".library-options")).not.toHaveAttribute("open", "");
-  await page.getByRole("combobox", { name: "Language", exact: true }).selectOption("zh-CN");
+  await setPreference(page, "language", "zh-CN");
   await expect(summary).toHaveAttribute("aria-label", "筛选与显示选项");
 });
 
@@ -408,7 +412,7 @@ test("Navidrome waiting is a localized non-error state", async ({ page }) => {
   await page.goto("/jobs");
   await expect(page.locator(".task-waiting")).toContainText("Waiting for Navidrome scan completion");
   await expect(page.getByRole("alert")).toHaveCount(0);
-  await page.getByRole("combobox", { name: "Language", exact: true }).selectOption("zh-CN");
+  await setPreference(page, "language", "zh-CN");
   await expect(page.locator(".task-waiting")).toContainText("等待 Navidrome 完成扫描");
 });
 
@@ -430,16 +434,16 @@ for (const width of [1920, 1440, 768, 390, 320]) {
       expect(name!.y + name!.height).toBeLessThan(navigation?.y ?? 844);
     }
     for (const theme of ["light", "dark"]) {
-      await page.getByRole("combobox", { name: "Appearance", exact: true }).selectOption(theme);
+      await setPreference(page, "theme", theme);
       await expect(page.locator("html")).toHaveAttribute("data-theme", theme);
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
       await page.screenshot({ path: `test-results/library-${width}-${theme}.png`, animations: "disabled" });
     }
-    await page.getByRole("combobox", { name: "Language", exact: true }).selectOption("zh-CN");
+    await setPreference(page, "language", "zh-CN");
     await expect(page.getByRole("heading", { name: "音乐库", exact: true })).toBeVisible();
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
     await page.screenshot({ path: `test-results/library-${width}-dark-zh.png`, animations: "disabled" });
-    await page.getByRole("combobox", { name: "语言", exact: true }).selectOption("en");
+    await setPreference(page, "language", "en");
     await page.getByRole("button", { name: "List view", exact: true }).click();
     expect(await page.locator(".library-groups").evaluate(node => getComputedStyle(node).gridTemplateColumns.split(" ").length)).toBe(1);
     await page.screenshot({ path: `test-results/library-list-${width}-dark.png`, animations: "disabled" });
@@ -448,7 +452,7 @@ for (const width of [1920, 1440, 768, 390, 320]) {
     await expect(page.getByRole("table")).toBeVisible();
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
     await page.screenshot({ path: `test-results/album-${width}-dark.png`, fullPage: true, animations: "disabled" });
-    await page.goto("/library");
+    await page.goto("/library?view=artists");
     await expect(page.getByRole("button", { name: "Browse artist River Ensemble", exact: true })).toBeVisible();
     await expect(page.locator(".cover-mosaic").first().locator("img.cover-loaded")).toHaveCount(4);
     await page.screenshot({ path: `test-results/artists-${width}-dark.png`, animations: "disabled" });

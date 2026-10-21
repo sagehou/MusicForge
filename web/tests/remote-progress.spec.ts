@@ -1,3 +1,4 @@
+import { setPreference } from "./preferences";
 import { test, expect } from "@playwright/test";
 
 test("remote read progress is bilingual and proxy errors retain a usable task page", async ({ page }) => {
@@ -11,7 +12,7 @@ test("remote read progress is bilingual and proxy errors retain a usable task pa
   await expect(page.locator(".task-activity")).toContainText("Read 12.0 / 40.0 MiB");
   await expect(page.locator(".task-activity")).toContainText("Track 36");
   await expect(page.getByRole("progressbar")).toHaveAttribute("aria-valuenow", "88");
-  await page.getByRole("combobox", { name: "Language", exact: true }).selectOption("zh-CN");
+  await setPreference(page, "language", "zh-CN");
   await expect(page.locator(".task-activity")).toContainText("已读取 12.0 / 40.0 MiB");
   await expect(page.locator(".task-activity")).toContainText("读取源文件并校验哈希");
   await page.unroute("**/api/jobs?*");
@@ -50,7 +51,7 @@ test("scan failure summaries show file paths and causes in both languages", asyn
   await page.getByRole("button", { name: "Details", exact: true }).click();
   await expect(page.locator(".task-outcome")).toContainText("1 unavailable source files and 0 invalid audio files");
   await expect(page.locator(".task-outcome")).toContainText(diagnostic);
-  await page.getByRole("combobox", { name: "Language", exact: true }).selectOption("zh-CN");
+  await setPreference(page, "language", "zh-CN");
   await expect(page.locator(".task-outcome")).toContainText("1 个源文件无法读取、0 个音频文件无效");
   await expect(page.locator(".task-outcome")).toContainText(diagnostic);
   await page.setViewportSize({ width: 390, height: 844 });

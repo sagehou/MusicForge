@@ -1,3 +1,4 @@
+import { setPreference } from "./preferences";
 import { test, expect } from "@playwright/test";
 
 test.beforeEach(async ({ page }) => {
@@ -67,31 +68,32 @@ test("best-effort repair requires consent and imports normal audio with a persis
   await page.reload();
   await expect(page.locator(".badge-possibly_damaged")).toHaveText("Possibly damaged");
   await expect(button).toHaveCount(0);
+  await page.locator(".track-open").click();
   await expect(page.getByText("Imported into the output library", { exact: false })).toBeVisible();
-  await page.locator(".track-file summary").click();
   await expect(page.getByText("Artist/Album/01.opus", { exact: true })).toBeVisible();
   await page.locator(".repair-diagnostic summary").click();
   await expect(page.locator(".repair-diagnostic pre")).toContainText("Original strict conversion failure");
-  await page.getByRole("combobox", { name: "Language", exact: true }).selectOption("zh-CN");
+  await setPreference(page, "language", "zh-CN");
   await expect(page.locator(".badge-possibly_damaged")).toHaveText("可能损坏");
   await expect(page.getByText("已导入输出库", { exact: false })).toBeVisible();
-  await page.getByRole("combobox", { name: "外观", exact: true }).selectOption("dark");
+  await setPreference(page, "theme", "dark");
   for (const width of [320, 768, 390]) {
     await page.setViewportSize({ width, height: 844 });
-    await expect.poll(() => page.locator(".repair-detail-row td").getAttribute("colspan")).toBe(width <= 800 ? "3" : "4");
+    await expect(page.getByRole("dialog", { name: "歌曲详情", exact: true })).toBeVisible();
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
-    expect(await page.locator(".repair-diagnostic").evaluate(element => element.getBoundingClientRect().width / element.closest("table")!.getBoundingClientRect().width)).toBeGreaterThan(0.8);
-    expect(await page.locator(".track-table tbody tr:not(.repair-detail-row) td:nth-child(2)").evaluate(element => element.getBoundingClientRect().width / element.closest("table")!.getBoundingClientRect().width)).toBeGreaterThan(0.45);
+    expect(await page.locator(".repair-diagnostic").evaluate(element => element.getBoundingClientRect().width / element.closest("dialog")!.getBoundingClientRect().width)).toBeGreaterThan(0.8);
+    expect(await page.locator(".detail-panel").evaluate(element => element.scrollWidth <= element.clientWidth + 1)).toBe(true);
   }
   await page.evaluate(() => window.scrollTo(0, 0));
   await page.screenshot({ path: "test-results/repair-import-390-dark-zh.png", fullPage: true, animations: "disabled" });
   await page.setViewportSize({ width: 1440, height: 1000 });
-  await page.getByRole("combobox", { name: "语言", exact: true }).selectOption("en");
-  await page.getByRole("combobox", { name: "Appearance", exact: true }).selectOption("light");
-  await expect.poll(() => page.locator(".repair-detail-row td").getAttribute("colspan")).toBe("4");
-  expect(await page.locator(".repair-diagnostic").evaluate(element => element.getBoundingClientRect().width / element.closest("table")!.getBoundingClientRect().width)).toBeGreaterThan(0.8);
+  await setPreference(page, "language", "en");
+  await setPreference(page, "theme", "light");
+  await expect(page.getByRole("dialog", { name: "Song details", exact: true })).toBeVisible();
+  expect(await page.locator(".repair-diagnostic").evaluate(element => element.getBoundingClientRect().width / element.closest("dialog")!.getBoundingClientRect().width)).toBeGreaterThan(0.8);
   await page.evaluate(() => window.scrollTo(0, 0));
   await page.screenshot({ path: "test-results/repair-import-1440-light.png", fullPage: true, animations: "disabled" });
+  await page.getByRole("button", { name: "Close panel", exact: true }).click();
   await page.locator(".library-options-body select").first().selectOption("possibly_damaged");
   await expect(page.locator(".badge-possibly_damaged")).toBeVisible();
   await page.reload();
@@ -180,7 +182,7 @@ test("repair queues share the Jobs list, filters and safe controls in both langu
     await page.setViewportSize({ width, height: 900 });
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   }
-  await page.getByRole("combobox", { name: "Language", exact: true }).selectOption("zh-CN");
+  await setPreference(page, "language", "zh-CN");
   await expect(row).toContainText("尽力修复队列");
   await expect(row).toContainText("已导入输出库 · 可能损坏");
   await page.screenshot({ path: "test-results/unified-repair-tasks-320-zh.png", fullPage: true, animations: "disabled" });
@@ -211,7 +213,7 @@ test("filtered failed tracks can be selected across pages and repaired with one 
   await repair.click();
   await expect(page.locator(".toast")).toContainText("Queued 60 tracks for best-effort repair; skipped 5");
   await expect(repair).toHaveCount(0); expect(starts).toBe(1);
-  await page.getByRole("combobox", { name: "Language", exact: true }).selectOption("zh-CN");
+  await setPreference(page, "language", "zh-CN");
   await page.getByRole("checkbox", { name: "选择当前页", exact: true }).check();
   await page.getByRole("button", { name: "选择筛选结果中的全部 65 首曲目", exact: true }).click();
   await expect(page.getByRole("button", { name: "尽力修复所选曲目（60 首）", exact: true })).toBeVisible();

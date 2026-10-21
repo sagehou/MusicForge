@@ -1,3 +1,4 @@
+import { setPreference } from "./preferences";
 import { test, expect } from "@playwright/test";
 import type { Source } from "../src/types";
 
@@ -30,7 +31,7 @@ test("lyrics filters compose with audio status and library coverage survives new
     ]);
   }
 
-  await page.goto("/library");
+  await page.goto("/library?view=artists");
   await expect(page.locator(".maintenance-count")).toHaveText("6 / 7");
   await page.locator(".lyrics-panel > .lyrics-settings > summary").click();
   const inventory = page.getByRole("region", { name: "Library lyrics status", exact: true });
@@ -90,7 +91,7 @@ test("lyrics filters compose with audio status and library coverage survives new
   sources[1].lyrics = undefined;
   await refresh();
   await expect(inventory).toContainText("Library checked 5/7 tracks");
-  await page.getByRole("combobox", { name: "Language", exact: true }).selectOption("zh-CN");
+  await setPreference(page, "language", "zh-CN");
   await page.setViewportSize({ width: 320, height: 844 });
   await page.locator(".library-options > summary").click();
   await page.getByLabel("歌词匹配状态", { exact: true }).selectOption("failed");
@@ -144,7 +145,7 @@ test("lyrics selection, background progress, stop, automatic option and bilingua
   await page.getByRole("button", { name: "Search again", exact: true }).click();
   await expect.poll(() => requests.length).toBe(3);
   expect(requests.at(-1)).toEqual({ ids: [1], refresh: true });
-  await page.getByRole("combobox", { name: "Language", exact: true }).selectOption("zh-CN");
+  await setPreference(page, "language", "zh-CN");
   await expect(page.locator(".lyrics-panel")).toContainText("正在搜索歌词");
   await expect(page.locator(".lyrics-track")).toContainText("未找到同步歌词");
   await page.setViewportSize({ width: 320, height: 844 });
@@ -208,7 +209,7 @@ test("lyrics candidates keep partial results, preview languages and save an expl
   expect(applied).toEqual({ token: "netease-choices", index: 0, translation: true, romanization: true });
   expect(previews).toHaveLength(3);
   await expect(page.locator(".lyrics-track")).toContainText("From NetEase");
-  await page.getByRole("combobox", { name: "Language", exact: true }).selectOption("zh-CN");
+  await setPreference(page, "language", "zh-CN");
   await page.setViewportSize({ width: 320, height: 844 });
   await page.getByRole("button", { name: "选择歌词", exact: true }).click();
   await expect(page.getByRole("dialog", { name: "选择歌词", exact: true })).toBeVisible();
@@ -236,10 +237,11 @@ test("song details and saved recommendations survive reopening and page reload",
   await page.route("**/api/library/1/lyrics/preview", route => route.fulfill({ json: { original: "[00:01.00]爱这风云", script: "simplified" } }));
   await page.goto("/library?view=albums&artist=Artist&album=Artist%2FAlbum");
   const details = page.locator(".track-file").first();
-  await details.locator(":scope > summary").click();
+  await page.locator(".track-open").first().click();
   for (const text of ["Artist", "Album", "3:04 (183.5 s)", "1 / 2", "2.5 MiB (2,621,440 bytes)", source.hash!, source.path, source.output]) await expect(details).toContainText(text);
   await details.getByText("All audio tags", { exact: true }).click();
   await expect(details).toContainText("Pop");
+  await page.getByRole("button", { name: "Close panel", exact: true }).click();
   await page.locator(".lyrics-details > summary").click();
   await page.getByRole("button", { name: "Choose lyrics", exact: true }).click();
   let picker = page.getByRole("dialog", { name: "Choose lyrics", exact: true });
@@ -274,12 +276,13 @@ test("song details and saved recommendations survive reopening and page reload",
   await expect.poll(() => searches.length).toBe(8);
   expect(searches.slice(4).every(search => !search.refresh)).toBe(true);
   await page.keyboard.press("Escape");
-  await page.getByRole("combobox", { name: "Language", exact: true }).selectOption("zh-CN");
+  await setPreference(page, "language", "zh-CN");
   await page.setViewportSize({ width: 320, height: 844 });
-  await page.locator(".track-file > summary").first().click();
+  await page.locator(".track-open").first().click();
   await expect(page.locator(".track-file").first()).toContainText("源文件 SHA-256");
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
   await page.screenshot({ path: "test-results/song-details-mobile-zh-CN.png", fullPage: true });
+  await page.getByRole("button", { name: "关闭面板", exact: true }).click();
   await page.getByRole("button", { name: "选择歌词", exact: true }).click();
   picker = page.getByRole("dialog", { name: "选择歌词", exact: true });
   await expect(picker.getByText("推荐", { exact: true })).toBeVisible();

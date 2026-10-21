@@ -1,3 +1,4 @@
+import { setPreference } from "./preferences";
 import { test, expect } from "@playwright/test";
 import en from "../src/locales/en.json" with { type: "json" };
 import zh from "../src/locales/zh-CN.json" with { type: "json" };
@@ -49,7 +50,7 @@ test("language selection works when browser storage is unavailable", async ({ pa
     Storage.prototype.setItem = () => { throw new Error("Storage disabled"); };
   });
   await page.goto("/");
-  await page.getByRole("combobox", { name: "Language", exact: true }).selectOption("zh-CN");
+  await setPreference(page, "language", "zh-CN");
   await expect(page.locator("html")).toHaveAttribute("lang", "zh-CN");
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(/创建你的音乐工作空间|欢迎回来/);
 });
@@ -61,7 +62,7 @@ test("technical diagnostics remain available when switching language", async ({ 
   await page.goto("/");
   await expect(page.getByRole("alert")).toContainText("disk I/O error: /config/musicforge.db");
   await expect(page.getByRole("alert")).toContainText("Request: GET /api/auth/me");
-  await page.getByRole("combobox", { name: "Language", exact: true }).selectOption("zh-CN");
+  await setPreference(page, "language", "zh-CN");
   await expect(page.getByRole("alert")).toContainText("disk I/O error: /config/musicforge.db");
   await expect(page.getByRole("button", { name: "重新连接", exact: true })).toBeVisible();
 });

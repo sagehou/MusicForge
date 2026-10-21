@@ -1,3 +1,4 @@
+import { setPreference } from "./preferences";
 import { test, expect } from "@playwright/test";
 
 test.beforeEach(async ({ page }) => {
@@ -78,7 +79,7 @@ test("file comparison explains count differences and queues only selected direct
   await page.getByLabel("Difference type", { exact: true }).selectOption("failed");
   await expect(page.locator(".comparison-results > li")).toHaveCount(1);
   await expect(page.locator(".comparison-results")).toContainText("not a source-count difference");
-  await page.getByLabel("Language", { exact: true }).selectOption("zh-CN");
+  await setPreference(page, "language", "zh-CN");
   await expect(page.getByRole("button", { name: "核对文件清单", exact: true })).toBeVisible();
   await page.setViewportSize({ width: 390, height: 844 });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);

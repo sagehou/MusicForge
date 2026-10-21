@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { createPortal } from "react-dom";
-import { ChevronRight, FileMusic, Search, Square, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, FileMusic, Info, Search, Square } from "lucide-react";
 import { api } from "../api";
 import { useI18n, type MessageKey } from "../i18n";
 import type { LyricsProvider, Source } from "../types";
 import { Loading, ResourceWarning, useResource, type Notice } from "./resource";
 import { Button } from "./ui/button";
+import { DetailPanel } from "./detail-panel";
 
 type LyricsResponse = {
   options: { auto_search: boolean };
@@ -100,22 +100,22 @@ function LyricsControls({ notify }: { notify: Notice }) {
   </div>;
 }
 
-export function LyricsTrack({ source, notify, refresh }: { source: Source; notify: Notice; refresh: () => void }) {
+export function LyricsTrack({ source, notify, refresh, onChoose }: { source: Source; notify: Notice; refresh: () => void; onChoose?: () => void }) {
   const { t, errorMessage } = useI18n();
   const [picker, setPicker] = useState(false);
   if (!source.output_present || !source.output) return null;
   return <div className="lyrics-track" data-state={source.lyrics?.state || "unchecked"}>
-    <span className="lyrics-state">{t("lyrics.title")} · {t(`lyrics.state.${source.lyrics?.state || "unchecked"}`)}</span>
+    <span className="lyrics-state">{t(`lyrics.state.${source.lyrics?.state || "unchecked"}`)}</span>
     <div className="lyrics-actions">
       <LyricsSearchButton ids={[source.id]} refresh compact label="lyrics.searchAgain" notify={notify} />
-      <Button type="button" variant="outline" size="sm" className="lyrics-action" aria-label={t("lyrics.choose")} onClick={() => setPicker(true)}><FileMusic size={13} />{t("lyrics.chooseShort")}</Button>
-    </div>
-    {source.lyrics && <details className="lyrics-details"><summary>{t("lyrics.details")}</summary>
+      <Button type="button" variant="outline" size="sm" className="lyrics-action" aria-label={t("lyrics.choose")} onClick={() => onChoose ? onChoose() : setPicker(true)}><FileMusic size={13} />{t("lyrics.chooseShort")}</Button>
+    {source.lyrics && <details className="lyrics-details"><summary aria-label={t("lyrics.details")} title={t("lyrics.details")}><Info size={14} /></summary><div className="lyrics-status-popover">
     {source.lyrics?.path && <small>{source.lyrics.path}</small>}
     {source.lyrics?.provider && <small>{t(`lyrics.provider.${source.lyrics.provider}`)}</small>}
     {source.lyrics?.error && <p>{errorMessage(source.lyrics.error)}</p>}
     {source.lyrics?.attempts && <details><summary>{t("lyrics.attempts")}</summary>{source.lyrics.attempts.map(attempt => <p key={attempt.provider}>{t(`lyrics.provider.${attempt.provider}`)} · {t(`lyrics.state.${attempt.state}`)}{attempt.error && <> · {errorMessage(attempt.error)}</>}</p>)}</details>}
-    </details>}
+    </div></details>}
+    </div>
     {picker && <LyricsPicker key={`${source.id}:${source.output}`} source={source} notify={notify} close={() => setPicker(false)} saved={refresh} />}
   </div>;
 }
@@ -132,9 +132,8 @@ function candidateDuration(value: number) {
   return seconds > 0 ? `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}` : "—";
 }
 
-function LyricsPicker({ source, notify, close, saved }: { source: Source; notify: Notice; close: () => void; saved: () => void }) {
+export function LyricsPicker({ source, notify, close, saved, previous, next }: { source: Source; notify: Notice; close: () => void; saved: () => void; previous?: () => void; next?: () => void }) {
   const { t, errorMessage, locale } = useI18n();
-  const dialog = useRef<HTMLDialogElement>(null);
   const searchController = useRef<AbortController | null>(null);
   const previewController = useRef<AbortController | null>(null);
   const [query, setQuery] = useState(`${source.title} ${source.artist}`.trim());
@@ -146,11 +145,12 @@ function LyricsPicker({ source, notify, close, saved }: { source: Source; notify
   const [translation, setTranslation] = useState(false);
   const [romanization, setRomanization] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [savedSelection, setSavedSelection] = useState(false);
+  const [providerFilter, setProviderFilter] = useState("all");
   const [restoring, setRestoring] = useState(true);
   const [restoreError, setRestoreError] = useState("");
   const base = `/library/${source.id}/lyrics`;
   useEffect(() => {
-    dialog.current?.showModal();
     const controller = new AbortController();
     void api<{ query: string; groups: CandidateGroup[] }>(`${base}/candidates`, "GET", undefined, controller.signal).then(result => {
       if (!controller.signal.aborted) { setQuery(result.query); setGroups(result.groups.map(group => ({ ...group, loading: false }))); }
@@ -180,7 +180,7 @@ function LyricsPicker({ source, notify, close, saved }: { source: Source; notify
   async function choose(choice: CandidateChoice) {
     previewController.current?.abort();
     const controller = new AbortController(); previewController.current = controller;
-    setSelected(choice); setPreview(undefined); setPreviewing(true); setPreviewError(""); setTranslation(false); setRomanization(false);
+    setSavedSelection(false); setSelected(choice); setPreview(undefined); setPreviewing(true); setPreviewError(""); setTranslation(false); setRomanization(false);
     try {
       const result = await api<CandidateText>(`${base}/preview`, "POST", { token: choice.token, index: choice.candidate.index }, controller.signal);
       if (!controller.signal.aborted) {
@@ -190,21 +190,22 @@ function LyricsPicker({ source, notify, close, saved }: { source: Source; notify
     } catch (err) { if (!controller.signal.aborted) setPreviewError((err as Error).message); }
     finally { if (!controller.signal.aborted) setPreviewing(false); }
   }
-  async function save() {
+  async function save(advance = false) {
     if (!selected || !preview) return;
     setSaving(true);
     try {
       await api(base, "PUT", { token: selected.token, index: selected.candidate.index, translation, romanization });
-      notify("lyrics.saved"); saved(); dialog.current?.close();
+      notify("lyrics.saved"); saved(); setSavedSelection(true);
+      if (advance && next) next(); else if (!previous && !next) close();
     } catch (err) { setPreviewError((err as Error).message); }
     finally { setSaving(false); }
   }
   const loading = groups.some(group => group.loading);
   const recommended = groups.flatMap(group => group.candidates.filter(candidate => candidate.high_confidence).map(candidate => ({ token: group.token, candidate })))
     .sort((a, b) => Number(b.candidate.script === "simplified") - Number(a.candidate.script === "simplified") || Number(b.candidate.translation_script === "simplified") - Number(a.candidate.translation_script === "simplified") || b.candidate.match_score - a.candidate.match_score)[0];
-  return createPortal(<dialog className="lyrics-picker" ref={dialog} aria-labelledby={`lyrics-picker-title-${source.id}`} onClose={close} onCancel={event => { if (saving) event.preventDefault(); }}>
-    <div className="lyrics-picker-heading"><h2 id={`lyrics-picker-title-${source.id}`}>{t("lyrics.choose")}</h2><Button type="button" variant="ghost" size="icon" aria-label={t("lyrics.close")} disabled={saving} onClick={() => dialog.current?.close()}><X size={18} /></Button></div>
-    <p className="lyrics-target">{source.title} · {source.artist}{source.duration ? <> · {t("lyrics.targetDuration", { seconds: source.duration })}</> : null}</p><p className="lyrics-picker-hint">{t("lyrics.chooseHint")}</p>
+  const choices = groups.flatMap(group => group.candidates.map(candidate => ({ token: group.token, candidate })))
+    .sort((a, b) => Number(b.candidate.high_confidence) - Number(a.candidate.high_confidence) || Number(b.candidate.script === "simplified") - Number(a.candidate.script === "simplified") || Number(b.candidate.translation_script === "simplified") - Number(a.candidate.translation_script === "simplified") || (b.candidate.match_score || 0) - (a.candidate.match_score || 0) || onlineProviders.indexOf(a.candidate.provider) - onlineProviders.indexOf(b.candidate.provider));
+  return <DetailPanel className="lyrics-picker" title={t("lyrics.choose")} subtitle={`${source.title} · ${source.artist}${source.duration ? ` · ${t("lyrics.targetDuration", { seconds: source.duration })}` : ""}`} close={close} closeLabel={t("lyrics.close")} busy={saving} actions={<><Button type="button" variant="ghost" size="icon" aria-label={t("library.previousTrack")} disabled={saving || !previous} onClick={previous}><ChevronLeft size={17} /></Button><Button type="button" variant="ghost" size="icon" aria-label={t("library.nextTrack")} disabled={saving || !next} onClick={next}><ChevronRight size={17} /></Button></>}>
     <details className="lyrics-guidance"><summary>{t("lyrics.recommendationInfo")}</summary><p>{t("lyrics.recommendationHint")}</p><p>{t("lyrics.cacheHint")}</p></details>
     {restoring && <p role="status">{t("lyrics.restoring")}</p>}
     {restoreError && <p role="alert">{errorMessage(restoreError)}</p>}
@@ -214,18 +215,11 @@ function LyricsPicker({ source, notify, close, saved }: { source: Source; notify
       <Button type="button" variant="ghost" disabled={saving || restoring || loading || !query.trim()} onClick={() => void search(true)}>{t("lyrics.forceSearch")}</Button>
       {loading && <Button type="button" variant="ghost" onClick={cancelSearch}>{t("lyrics.cancelSearch")}</Button>}
     </form>
-    <div className="lyrics-picker-results"><div className="lyrics-candidate-groups" aria-live="polite">{groups.map(group => <fieldset key={group.provider} disabled={saving}>
-      <legend>{t(`lyrics.name.${group.provider}`)}{group.provider === "lrclib" && <> <span className="provider-priority">{t("lyrics.preferredSource")}</span></>}</legend>
-      {group.cached && <small>{t("lyrics.cached")}{group.searched ? <> · {new Date(group.searched * 1000).toLocaleString(locale)}</> : null}</small>}
-      {group.loading && <p role="status">{t("app.loading")}</p>}
-      {group.error && <p role="alert">{errorMessage(group.error)}</p>}
-      {!group.loading && !group.error && group.candidates.length === 0 && <p>{t("lyrics.noCandidates")}</p>}
-      {group.candidates.map(candidate => <label className="lyrics-candidate" key={candidate.index} data-recommended={recommended?.token === group.token && recommended?.candidate.index === candidate.index} data-selected={selected?.token === group.token && selected?.candidate.index === candidate.index}>
-        <input type="radio" name={`lyrics-candidate-${source.id}`} aria-label={t("lyrics.previewCandidate", { title: candidate.title, artist: candidate.artist, provider: t(`lyrics.name.${candidate.provider}`) })} checked={!!selected && selected.token === group.token && selected.candidate.index === candidate.index} onChange={() => group.token && void choose({ token: group.token, candidate })} />
-        <span><strong dir="auto">{candidate.title}{recommended && recommended.token === group.token && recommended.candidate.index === candidate.index && <em className="lyrics-recommended">{t("lyrics.recommended")}</em>}</strong><span dir="auto">{candidate.artist} · {candidate.album || "—"} · {candidateDuration(candidate.duration)}</span><small className="candidate-confidence" data-high={candidate.high_confidence}>{t(candidate.high_confidence ? "lyrics.matchHigh" : "lyrics.matchReview")}{candidate.match_score !== undefined && <> · {t("lyrics.matchScore", { score: candidate.match_score })}</>}{candidate.duration_delta !== undefined && <> · {t("lyrics.durationDelta", { seconds: Math.round(candidate.duration_delta * 100) / 100 })}</>}</small>
-          {candidate.script === "simplified" && <small className="script-chip">{t("lyrics.simplified")}</small>}{candidate.script === "traditional" && <small className="script-chip">{t("lyrics.traditional")}</small>}{candidate.translation_script === "simplified" && <small className="script-chip">{t("lyrics.simplifiedTranslation")}</small>}</span>
-      </label>)}
-    </fieldset>)}</div>
+    <div className="lyrics-provider-status" aria-label={t("lyrics.providerStatus")}>{groups.map(group => <fieldset key={group.provider} disabled={saving}><legend>{t(`lyrics.name.${group.provider}`)}{group.provider === "lrclib" && <> <span className="provider-priority">{t("lyrics.preferredSource")}</span></>}</legend>{group.cached && <small>{t("lyrics.cached")}{group.searched ? <> · {new Date(group.searched * 1000).toLocaleString(locale)}</> : null}</small>}{group.loading && <p role="status">{t("app.loading")}</p>}{group.error && <p role="alert">{errorMessage(group.error)}</p>}{!group.loading && !group.error && group.candidates.length === 0 && <p>{t("lyrics.noCandidates")}</p>}</fieldset>)}</div>
+    <div className="lyrics-picker-results"><div className="lyrics-candidate-groups" aria-live="polite"><label className="candidate-source-filter"><span>{t("lyrics.sourceFilter")}</span><select value={providerFilter} onChange={event => setProviderFilter(event.target.value)}><option value="all">{t("lyrics.allCandidates")}</option>{onlineProviders.map(provider => <option key={provider} value={provider}>{t(`lyrics.name.${provider}`)}</option>)}</select></label>{choices.filter(choice => providerFilter === "all" || choice.candidate.provider === providerFilter).map(({ token, candidate }) => <label className="lyrics-candidate" key={`${token}:${candidate.index}`} data-recommended={recommended?.token === token && recommended?.candidate.index === candidate.index} data-selected={selected?.token === token && selected?.candidate.index === candidate.index}>
+      <input type="radio" name={`lyrics-candidate-${source.id}`} aria-label={t("lyrics.previewCandidate", { title: candidate.title, artist: candidate.artist, provider: t(`lyrics.name.${candidate.provider}`) })} disabled={saving || !token} checked={!!selected && selected.token === token && selected.candidate.index === candidate.index} onChange={() => token && void choose({ token, candidate })} />
+      <span><strong dir="auto">{candidate.title}{recommended?.token === token && recommended?.candidate.index === candidate.index && <em className="lyrics-recommended">{t("lyrics.recommended")}</em>}</strong><span dir="auto">{candidate.artist} · {candidate.album || "—"} · {candidateDuration(candidate.duration)}</span><span className="candidate-source">{t(`lyrics.name.${candidate.provider}`)}</span><small className="candidate-confidence" data-high={candidate.high_confidence}>{t(candidate.high_confidence ? "lyrics.matchHigh" : "lyrics.matchReview")}{candidate.match_score !== undefined && <> · {t("lyrics.matchScore", { score: candidate.match_score })}</>}{candidate.duration_delta !== undefined && <> · {t("lyrics.durationDelta", { seconds: Math.round(candidate.duration_delta * 100) / 100 })}</>}</small>{candidate.script === "simplified" && <small className="script-chip">{t("lyrics.simplified")}</small>}{candidate.script === "traditional" && <small className="script-chip">{t("lyrics.traditional")}</small>}{candidate.translation_script === "simplified" && <small className="script-chip">{t("lyrics.simplifiedTranslation")}</small>}</span>
+    </label>)}</div>
     <div className="lyrics-preview-pane">
     {previewing && <p role="status">{t("lyrics.loadingPreview")}</p>}
     {previewError && <p className="repair-warning" role="alert">{errorMessage(previewError)}</p>}
@@ -233,9 +227,9 @@ function LyricsPicker({ source, notify, close, saved }: { source: Source; notify
       <h3>{t("lyrics.preview")}</h3>{preview.script === "simplified" && <p>{t("lyrics.simplified")}</p>}{preview.script === "traditional" && <p>{t("lyrics.traditional")}</p>}<pre dir="auto">{preview.original}</pre>
       {preview.translation && <><label className="check-field"><input type="checkbox" checked={translation} disabled={saving} onChange={event => setTranslation(event.target.checked)} /><span>{t("lyrics.includeTranslation")}</span></label>{translation && <pre dir="auto">{preview.translation}</pre>}</>}
       {preview.romanization && <><label className="check-field"><input type="checkbox" checked={romanization} disabled={saving} onChange={event => setRomanization(event.target.checked)} /><span>{t("lyrics.includeRomanization")}</span></label>{romanization && <pre dir="auto">{preview.romanization}</pre>}</>}
-      <div className="lyrics-save"><p>{t("lyrics.saveHint")}</p><Button type="button" disabled={saving} onClick={() => void save()}>{t("lyrics.saveCandidate")}</Button></div>
+      <div className="lyrics-save">{savedSelection && <p className="saved-feedback" role="status">{t("lyrics.savedNext")}</p>}<p>{t("lyrics.saveHint")}</p><Button type="button" disabled={saving || savedSelection} onClick={() => void save()}>{t("lyrics.saveCandidate")}</Button>{next && <Button type="button" variant="outline" disabled={saving} onClick={() => savedSelection ? next() : void save(true)}>{t(savedSelection ? "lyrics.next" : "lyrics.saveNext")}<ChevronRight size={15} /></Button>}</div>
     </section>}
     {!preview && !previewing && <div className="lyrics-preview-empty"><FileMusic size={24} /><h3>{t("lyrics.preview")}</h3><p>{t("lyrics.selectToPreview")}</p></div>}
     </div></div>
-  </dialog>, document.body);
+  </DetailPanel>;
 }

@@ -1,3 +1,4 @@
+import { setPreference, openPreferences } from "./preferences";
 import { test, expect } from "@playwright/test";
 import { readFileSync, unlinkSync, writeFileSync, utimesSync, mkdirSync, existsSync } from "node:fs";
 import { join } from "node:path";
@@ -18,19 +19,19 @@ test("bilingual setup, real incremental build, state preservation and login", as
   await page.getByLabel("初始化码").fill(code);
   await page.getByLabel("用户名", { exact: true }).fill("admin");
   await page.getByLabel("密码", { exact: true }).fill("test-admin-password");
-  await page.getByRole("combobox", { name: "语言", exact: true }).selectOption("en");
+  await setPreference(page, "language", "en");
   await expect(page.locator("html")).toHaveAttribute("lang", "en");
   await expect(page.getByLabel("Setup code", { exact: true })).toHaveValue(code);
   await expect(page.getByLabel("Username", { exact: true })).toHaveValue("admin");
   await expect(page.getByLabel("Password", { exact: true })).toHaveValue("test-admin-password");
-  await page.getByRole("combobox", { name: "Language", exact: true }).selectOption("zh-CN");
+  await setPreference(page, "language", "zh-CN");
   await page.getByRole("button", { name: "创建管理员" }).click();
-  await expect(page.getByRole("heading", { name: "音乐，从母库到播放" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "概览", exact: true })).toBeVisible();
   await page.getByRole("link", { name: "设置", exact: true }).click();
   await page.getByLabel("音频源目录").fill(join(root, "source"));
   await page.getByLabel("转码输出目录").fill(join(root, "output"));
   await page.getByLabel("启用音乐库扫描和后台任务").check();
-  await page.getByRole("combobox", { name: "语言", exact: true }).selectOption("en");
+  await setPreference(page, "language", "en");
   await expect(page.getByLabel("Source audio directory", { exact: true })).toHaveValue(join(root, "source"));
   await expect(page.getByLabel("Enable library scanning and background jobs", { exact: true })).toBeChecked();
   await page.getByRole("tab", { name: "Encoding", exact: true }).click();
@@ -42,9 +43,10 @@ test("bilingual setup, real incremental build, state preservation and login", as
   await expect(page.locator(".page-content")).not.toContainText(/[\u3400-\u9fff]/);
   await page.getByRole("button", { name: "Save settings", exact: true }).click();
   await expect(page.getByRole("status")).toContainText("Settings saved");
-  await page.getByRole("combobox", { name: "Language", exact: true }).selectOption("zh-CN");
+  await setPreference(page, "language", "zh-CN");
   await expect(page.getByRole("status")).toContainText("设置已保存");
   await page.getByRole("link", { name: "音乐库", exact: true }).click();
+  await page.getByRole("button", { name: /^全部歌手/ }).click();
   await page.getByRole("button", { name: "浏览歌手 CI Artist", exact: true }).click({ timeout: 30000 });
   await page.getByRole("button", { name: "浏览专辑 CI Album", exact: true }).click();
   await expect(page.locator(".track-cell strong").filter({ hasText: /^CI Track$/ })).toBeVisible({ timeout: 30000 });
@@ -67,11 +69,11 @@ test("bilingual setup, real incremental build, state preservation and login", as
   expect(artwork.headers()["cache-control"]).toContain("private");
   expect(artwork.headers()["x-request-id"]).toBeTruthy();
   for (const language of ["zh-CN", "en"]) {
-    await page.locator(".language-selector select").selectOption(language);
+    await setPreference(page, "language", language);
     for (const width of [1440, 390, 320]) {
       await page.setViewportSize({ width, height: width > 800 ? 1000 : 844 });
       for (const theme of ["light", "dark"]) {
-        await page.locator(".theme-selector select").selectOption(theme);
+        await setPreference(page, "theme", theme);
         await expect(page.locator("html")).toHaveAttribute("data-theme", theme);
         expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
         await page.screenshot({ path: `test-results/real-artwork-${language}-${width}-${theme}.png`, fullPage: true, animations: "disabled" });
@@ -79,12 +81,12 @@ test("bilingual setup, real incremental build, state preservation and login", as
     }
   }
   await page.setViewportSize({ width: 1280, height: 800 });
-  await page.locator(".theme-selector select").selectOption("system");
-  await page.locator(".language-selector select").selectOption("zh-CN");
+  await setPreference(page, "theme", "system");
+  await setPreference(page, "language", "zh-CN");
   await page.getByLabel("搜索音乐库", { exact: true }).fill("CI Track");
   await page.getByLabel("状态筛选", { exact: true }).selectOption("ready");
   await page.getByLabel("选择 CI Track", { exact: true }).check();
-  await page.getByRole("combobox", { name: "语言", exact: true }).selectOption("en");
+  await setPreference(page, "language", "en");
   await expect(page.getByLabel("Search library", { exact: true })).toHaveValue("CI Track");
   await expect(page.getByLabel("Filter by status", { exact: true })).toHaveValue("ready");
   await expect(page.getByLabel("Select CI Track", { exact: true })).toBeChecked();
@@ -105,7 +107,7 @@ test("bilingual setup, real incremental build, state preservation and login", as
   expect(dialog.message()).toBe("Permanently delete expired artifacts among the selected tracks?");
   await dialog.dismiss();
   await clicking;
-  await page.getByRole("combobox", { name: "Language", exact: true }).selectOption("zh-CN");
+  await setPreference(page, "language", "zh-CN");
   confirmation = page.waitForEvent("dialog");
   clicking = page.getByRole("button", { name: "删除所选过期产物", exact: true }).click();
   dialog = await confirmation;
@@ -121,10 +123,10 @@ test("bilingual setup, real incremental build, state preservation and login", as
   await page.getByRole("link", { name: "概览", exact: true }).click();
   await expect(page.getByText("100%", { exact: true })).toBeVisible();
   await page.screenshot({ path: "test-results/dashboard-zh-CN.png", fullPage: true });
-  await page.getByRole("combobox", { name: "语言", exact: true }).selectOption("en");
-  await expect(page.getByText("1 track matches the current profile", { exact: true })).toBeVisible();
+  await setPreference(page, "language", "en");
+  await expect(page.getByRole("progressbar", { name: "Build completion", exact: true })).toHaveAttribute("aria-valuenow", "100");
   await page.screenshot({ path: "test-results/dashboard-en.png", fullPage: true });
-  await page.getByRole("combobox", { name: "Language", exact: true }).selectOption("zh-CN");
+  await setPreference(page, "language", "zh-CN");
   await page.getByRole("link", { name: "任务", exact: true }).click();
   await expect(page.getByRole("heading", { name: "后台任务" })).toBeVisible();
   await page.getByRole("button", { name: "详情", exact: true }).first().click();
@@ -132,28 +134,31 @@ test("bilingual setup, real incremental build, state preservation and login", as
   const rawLog = await page.locator(".task-outcome").textContent();
   await expect(page.getByText("曲目结果与处理记录", { exact: true })).toBeVisible();
   await expect(page.locator(".task-details")).not.toContainText('"dirs"');
-  await page.getByRole("combobox", { name: "语言", exact: true }).selectOption("en");
+  await setPreference(page, "language", "en");
   await expect(page.getByText("Job logs", { exact: true })).toBeVisible();
   await expect(page.locator(".task-outcome")).toHaveText(rawLog === "任务成功完成。" ? "Job completed successfully." : rawLog!);
+  await page.getByRole("button", { name: "Close panel", exact: true }).click();
   await exerciseTaskQueue(page, root);
   await page.reload();
   await expect(page.locator("html")).toHaveAttribute("lang", "en");
   await expect(page.getByRole("heading", { name: "Background jobs" })).toBeVisible();
-  await page.getByRole("combobox", { name: "Language", exact: true }).selectOption("zh-CN");
+  await setPreference(page, "language", "zh-CN");
+  await openPreferences(page);
   await page.getByRole("button", { name: "退出登录" }).click();
   await expect(page.getByRole("heading", { name: "欢迎回来" })).toBeVisible();
   await page.getByLabel("用户名", { exact: true }).fill("admin");
   await page.getByLabel("密码", { exact: true }).fill("wrong-password");
   await page.getByRole("button", { name: "登录", exact: true }).click();
   await expect(page.getByRole("alert")).toHaveText("用户名或密码错误");
-  await page.getByRole("combobox", { name: "语言", exact: true }).selectOption("en");
+  await setPreference(page, "language", "en");
   await expect(page.getByRole("alert")).toHaveText("invalid username or password");
   await expect(page.getByLabel("Username", { exact: true })).toHaveValue("admin");
   await page.getByLabel("Password", { exact: true }).fill("test-admin-password");
-  await page.getByRole("combobox", { name: "Language", exact: true }).selectOption("zh-CN");
+  await setPreference(page, "language", "zh-CN");
   await page.getByRole("button", { name: "登录", exact: true }).click();
   await expect(page.getByRole("heading", { name: "后台任务" })).toBeVisible();
   await page.setViewportSize({ width: 390, height: 844 });
+  await openPreferences(page);
   await expect(page.getByRole("button", { name: "退出登录", exact: true })).toBeVisible();
   await page.getByRole("link", { name: "概览", exact: true }).click();
   await expect(page.getByRole("progressbar")).toHaveAttribute("aria-valuenow", "100");
@@ -169,7 +174,7 @@ test("bilingual setup, real incremental build, state preservation and login", as
   await page.getByRole("tab", { name: "编码", exact: true }).click();
   await page.getByLabel("同时转换数量", { exact: true }).fill("2");
   await expect(page.getByText("有未保存的更改", { exact: true })).toBeVisible();
-  await page.getByRole("combobox", { name: "语言", exact: true }).selectOption("en");
+  await setPreference(page, "language", "en");
   await page.getByRole("tab", { name: "Encoding", exact: true }).click();
   await expect(page.getByLabel("Concurrent conversions", { exact: true })).toHaveValue("2");
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
@@ -181,9 +186,9 @@ test("bilingual setup, real incremental build, state preservation and login", as
   await page.getByLabel("Lidarr source path prefix", { exact: true }).fill("relative/flac");
   await page.getByRole("button", { name: "Save settings", exact: true }).click();
   await expect(page.getByRole("alert")).toContainText("Lidarr path prefix must be an absolute container path");
-  await page.getByRole("combobox", { name: "Language", exact: true }).selectOption("zh-CN");
+  await setPreference(page, "language", "zh-CN");
   await expect(page.getByRole("alert")).toContainText("Lidarr 路径前缀必须是容器内的绝对路径");
-  await page.getByRole("combobox", { name: "语言", exact: true }).selectOption("en");
+  await setPreference(page, "language", "en");
   await page.getByRole("tab", { name: "Integrations", exact: true }).click();
   await page.getByLabel("Lidarr source path prefix", { exact: true }).fill("/lidarr/flac");
   // Configure secrets with workers paused; these settings do not call remote services.
@@ -212,7 +217,7 @@ test("bilingual setup, real incremental build, state preservation and login", as
   await page.getByLabel("Delete the saved Navidrome password", { exact: true }).check();
   await page.getByRole("tab", { name: "Account & security", exact: true }).click();
   await page.getByLabel("Delete the saved OIDC client secret", { exact: true }).check();
-  await page.getByRole("combobox", { name: "Language", exact: true }).selectOption("zh-CN");
+  await setPreference(page, "language", "zh-CN");
   await page.getByRole("tab", { name: "集成", exact: true }).click();
   await expect(page.getByLabel("删除已保存的 Navidrome 密码", { exact: true })).toBeChecked();
   await page.getByRole("tab", { name: "账户安全", exact: true }).click();
@@ -226,7 +231,7 @@ test("bilingual setup, real incremental build, state preservation and login", as
   await expect(page.getByLabel("删除已保存的 OIDC 客户端密钥", { exact: true })).toBeDisabled();
   const cleared = await page.request.get("/api/settings");
   expect((await cleared.json()).configured).toMatchObject({ nav_password: false, oidc_secret: false });
-  await page.getByRole("combobox", { name: "语言", exact: true }).selectOption("en");
+  await setPreference(page, "language", "en");
   // A second host reaches the same instance without sharing the primary host's cookie.
   const primaryOrigin = new URL(page.url()).origin;
   const aliasOrigin = "http://localhost:8787";
@@ -234,7 +239,7 @@ test("bilingual setup, real incremental build, state preservation and login", as
   const aliasPage = await page.context().newPage();
   await aliasPage.goto(`${aliasOrigin}/settings`);
   await expect(aliasPage.getByRole("heading", { name: "欢迎回来" })).toBeVisible();
-  await aliasPage.getByRole("combobox", { name: "语言", exact: true }).selectOption("en");
+  await setPreference(aliasPage, "language", "en");
   await aliasPage.getByLabel("Username", { exact: true }).fill("admin");
   await aliasPage.getByLabel("Password", { exact: true }).fill("test-admin-password");
   await aliasPage.getByRole("button", { name: "Log in", exact: true }).click();
@@ -252,7 +257,7 @@ test("bilingual setup, real incremental build, state preservation and login", as
   await aliasPage.getByRole("button", { name: "Save settings", exact: true }).click();
   await expect(aliasPage.getByRole("status")).toContainText("Settings saved");
   expect((await (await page.request.get("/api/settings")).json()).settings.concurrency).toBe(3);
-  await aliasPage.getByRole("combobox", { name: "Language", exact: true }).selectOption("zh-CN");
+  await setPreference(aliasPage, "language", "zh-CN");
   await aliasPage.getByRole("tab", { name: "账户安全", exact: true }).click();
   await expect(aliasPage.getByRole("textbox", { name: "允许访问的地址", exact: true })).toHaveValue(`${primaryOrigin}\n${aliasOrigin}`);
   await expect(aliasPage.getByText("绑定 OIDC 身份前，请在主地址使用本地管理员账号登录。")).toBeVisible();
@@ -265,10 +270,12 @@ test("bilingual setup, real incremental build, state preservation and login", as
     data: {}, headers: { Origin: "http://unconfigured.test", "X-CSRF-Token": aliasMe.csrf },
   });
   expect(blocked.status()).toBe(403);
+  await openPreferences(aliasPage);
   await aliasPage.getByRole("button", { name: "退出登录", exact: true }).click();
   await expect(aliasPage.getByRole("heading", { name: "欢迎回来" })).toBeVisible();
   expect((await (await page.request.get("/api/auth/me")).json()).authenticated).toBe(true);
   await aliasPage.close();
+  await openPreferences(page);
   await page.getByRole("button", { name: "Log out", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Welcome back" })).toBeVisible();
 });
@@ -298,9 +305,9 @@ async function exerciseTaskQueue(page: import("@playwright/test").Page, root: st
     await expect(page.locator(".track-cell strong").filter({ hasText: /^Queue Track 1$/ })).toBeVisible();
     await expect(page.getByRole("table").getByText("MP3 · Online", { exact: true })).toBeVisible();
     await expect(page.getByRole("table").getByText("M4A · Online", { exact: true })).toBeVisible();
-    await page.getByRole("combobox", { name: "Language", exact: true }).selectOption("zh-CN");
+    await setPreference(page, "language", "zh-CN");
     await expect(page.getByRole("table").getByText("MP3 · 在线", { exact: true })).toBeVisible();
-    await page.getByRole("combobox", { name: "语言", exact: true }).selectOption("en");
+    await setPreference(page, "language", "en");
     await page.screenshot({ path: "test-results/library-album-en.png", fullPage: true });
     await page.setViewportSize({ width: 390, height: 844 });
     await page.screenshot({ path: "test-results/mobile-library-album-en.png", fullPage: true });
@@ -334,14 +341,14 @@ async function exerciseTaskQueue(page: import("@playwright/test").Page, root: st
     await expect.poll(async () => (await read()).find(job => job.id === id)?.counts.done, { timeout: 30000 }).toBe(3);
     expect(readFileSync(playablePath)).toEqual(playable);
     const outputs = [1, 2, 3].map(index => readFileSync(join(root, `output/Queue Artist/Queue Album/0${index}.opus`)));
-    await page.getByRole("combobox", { name: "Language", exact: true }).selectOption("zh-CN");
+    await setPreference(page, "language", "zh-CN");
     await expect(task.getByRole("heading", { name: "曲目结果与处理记录", exact: true })).toBeVisible();
     await page.screenshot({ path: "test-results/jobs-complete-zh-CN.png", fullPage: true });
     await page.setViewportSize({ width: 390, height: 844 });
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
     await page.screenshot({ path: "test-results/mobile-jobs-complete-zh-CN.png", fullPage: true });
     await page.setViewportSize({ width: 1280, height: 800 });
-    await page.getByRole("combobox", { name: "语言", exact: true }).selectOption("en");
+    await setPreference(page, "language", "en");
     page.once("dialog", dialog => dialog.accept());
     await task.getByRole("button", { name: "Delete history", exact: true }).click();
     await expect(task).toHaveCount(0);

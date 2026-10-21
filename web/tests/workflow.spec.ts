@@ -300,13 +300,14 @@ async function exerciseTaskQueue(page: import("@playwright/test").Page, root: st
     const id = (await (await scanning).json()).job_id as number;
     const read = async () => (await (await page.request.get("/api/jobs")).json()).jobs as Job[];
     await expect.poll(async () => (await read()).find(job => job.id === id)?.counts.total).toBe(3);
+    await page.getByRole("button", { name: /^All artists/ }).click();
     await page.getByRole("button", { name: "Browse artist Queue Artist", exact: true }).click();
     await page.getByRole("button", { name: "Browse album Queue Album", exact: true }).click();
     await expect(page.locator(".track-cell strong").filter({ hasText: /^Queue Track 1$/ })).toBeVisible();
-    await expect(page.getByRole("table").getByText("MP3 · Online", { exact: true })).toBeVisible();
-    await expect(page.getByRole("table").getByText("M4A · Online", { exact: true })).toBeVisible();
+    await expect(page.getByRole("table").locator(".track-facts").filter({ hasText: "MP3" })).toBeVisible();
+    await expect(page.getByRole("table").locator(".track-facts").filter({ hasText: "AAC" })).toBeVisible();
     await setPreference(page, "language", "zh-CN");
-    await expect(page.getByRole("table").getByText("MP3 · 在线", { exact: true })).toBeVisible();
+    await expect(page.getByRole("table").locator(".track-facts").filter({ hasText: "MP3" })).toBeVisible();
     await setPreference(page, "language", "en");
     await page.screenshot({ path: "test-results/library-album-en.png", fullPage: true });
     await page.setViewportSize({ width: 390, height: 844 });

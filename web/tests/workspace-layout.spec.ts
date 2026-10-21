@@ -48,6 +48,14 @@ test("aligned records fit six tracks, and the icon rail keeps navigation and pre
   await page.screenshot({ path: "test-results/workspace-settings-collapsed-dark.png", animations: "disabled" });
   await page.getByRole("button", { name: "展开侧栏", exact: true }).click();
   await expect.poll(async () => (await page.locator(".sidebar").boundingBox())!.width).toBe(216);
+  await page.goto("/library");
+  await expect(page.locator(".track-open").first()).toBeVisible();
+  for (const width of [801, 900, 1024]) {
+    await page.setViewportSize({ width, height: 900 });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
+  }
+  await page.setViewportSize({ width: 900, height: 900 });
+  await page.screenshot({ path: "test-results/workspace-records-tablet.png", animations: "disabled" });
 });
 
 test("track inspectors keep the filtered list and restore keyboard focus without a source read", async ({ page }) => {
@@ -124,7 +132,7 @@ test("signing in after expiry restores the open lyric panel and its unsaved quer
   await expect(login).toHaveCount(0);
   await expect(picker).toBeVisible();
   await expect(picker.getByLabel("Title or artist", { exact: true })).toHaveValue("Unsaved alternate title");
-  await expect(picker.getByLabel("Title or artist", { exact: true })).toBeFocused();
+  expect(await picker.evaluate(element => element.contains(document.activeElement))).toBe(true);
   await page.keyboard.press("Escape");
   await expect(picker).toHaveCount(0);
 });

@@ -80,7 +80,8 @@ test("all-album and list views, unverified filter, missing images and persisted 
   await setPreference(page, "theme", "dark");
   await page.reload();
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
-  await expect(page.locator(".cover-fallback")).toBeVisible();
+  await expect(page.getByLabel("Filter by status", { exact: true })).toHaveValue("unverified");
+  await expect(page.locator(".library-group")).toHaveCount(1);
   await page.getByLabel("Filter by status", { exact: true }).selectOption("all");
   await page.route("**/api/library/*/artwork?*", route => route.fulfill({ status: 404, json: { error: "artwork not found" } }));
   await page.reload();
@@ -126,6 +127,7 @@ test("all songs share filters, pagination and batch lyrics with visible file fac
   expect(searches[0]).toEqual({ ids: [1, 4], refresh: false });
   await page.reload();
   await expect(page.getByRole("button", { name: /^All songs/ })).toHaveAttribute("aria-pressed", "true");
+  await page.getByLabel("Filter by lyrics status", { exact: true }).selectOption("all");
   await page.getByLabel("Filter by status", { exact: true }).selectOption("unverified");
   await expect(rows).toHaveCount(1);
   await expect(rows.locator(".track-facts")).toContainText("3:03");
@@ -284,7 +286,7 @@ test("system appearance follows the OS and reduced motion disables the toast ent
   await mockLibrary(page);
   await page.route("**/api/library/scan", route => route.fulfill({ status: 202, json: { job_id: 1 } }));
   await page.emulateMedia({ colorScheme: "dark", reducedMotion: "reduce" });
-  await page.goto("/library");
+  await page.goto("/library?view=artists");
   await setPreference(page, "theme", "system");
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
   await page.emulateMedia({ colorScheme: "light", reducedMotion: "reduce" });

@@ -8,6 +8,7 @@ export async function openPreferences(page: Page) {
 
 export async function setPreference(page: Page, kind: "language" | "theme", value: string) {
   let control = page.locator(`.${kind}-selector select`).filter({ visible: true }).first();
+  await expect(control.or(page.locator(".sidebar .preferences > summary")).first()).toBeVisible();
   if (!await control.count()) {
     await openPreferences(page);
     control = page.locator(`.preferences[open] .${kind}-selector select`);

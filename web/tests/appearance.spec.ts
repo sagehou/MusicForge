@@ -18,7 +18,9 @@ async function colors(page: Page) {
 async function readable(page: Page) {
   const ratios = await page.evaluate(() => {
     function luminance(color: string) {
-      const values = color.startsWith("#") ? [1, 3, 5].map(index => parseInt(color.slice(index, index + 2), 16)) : color.match(/[\d.]+/g)!.slice(0, 3).map(Number);
+      const digits = color.slice(1);
+      const full = digits.length === 3 ? [...digits].map(value => value + value).join("") : digits;
+      const values = color.startsWith("#") ? [0, 2, 4].map(index => parseInt(full.slice(index, index + 2), 16)) : color.match(/[\d.]+/g)!.slice(0, 3).map(Number);
       const [r, g, b] = values.map(value => value / 255 <= .04045 ? value / 255 / 12.92 : ((value / 255 + .055) / 1.055) ** 2.4);
       return .2126 * r + .7152 * g + .0722 * b;
     }
@@ -27,7 +29,7 @@ async function readable(page: Page) {
     const value = (name: string) => style.getPropertyValue(name).trim();
     return [contrast(value("--accent-fill"), value("--accent-ink")), contrast(value("--accent"), value("--canvas")), contrast(value("--accent"), value("--surface"))];
   });
-  expect(ratios.every(value => value >= 4.5)).toBe(true);
+  for (const ratio of ratios) expect(ratio).toBeGreaterThanOrEqual(4.5);
 }
 
 test("default albums, compact headings and the text account link retain settings drafts", async ({ page }) => {
@@ -145,7 +147,7 @@ test("checkbox, partial selection, hover, focus, switch and disabled states shar
   const toggle = page.getByRole("switch");
   const before = await toggle.evaluate(element => getComputedStyle(element, "::after").transform);
   await toggle.uncheck();
-  expect(await toggle.evaluate(element => getComputedStyle(element, "::after").transform)).not.toBe(before);
+  await expect.poll(() => toggle.evaluate(element => getComputedStyle(element, "::after").transform)).not.toBe(before);
   await expect(save).toBeEnabled();
 });
 

@@ -24,7 +24,7 @@
   --accent-fill: #e6213c;
   --accent-hover: #cf1e36;
   --accent-active: #bd1b31;
-  --accent-soft: color-mix(in srgb, var(--accent-fill) 8%, var(--surface));
+  --accent-soft: color-mix(in srgb, var(--accent) 8%, var(--surface));
   --accent-ink: #ffffff;
   --success: #187447;
   --success-soft: #edf7f0;
@@ -53,7 +53,7 @@
   --line: #35353c;
   --line-strong: #4c4c56;
   --accent: #f06f81;
-  --accent-soft: color-mix(in srgb, var(--accent-fill) 16%, var(--surface));
+  --accent-soft: color-mix(in srgb, var(--accent) 16%, var(--surface));
   --success: #88cea3;
   --success-soft: #1f3027;
   --warning: #e8c279;
@@ -94,12 +94,13 @@ input:disabled, select:disabled, textarea:disabled { opacity: .45; cursor: not-a
 input[type="checkbox"]:not([role="switch"]), input[type="radio"] { appearance: none; display: inline-grid; place-content: center; position: relative; width: 16px; height: 16px; margin: 0; padding: 0; border: 1px solid var(--line-strong); border-radius: 5px; background: var(--surface); box-shadow: 0 1px 2px #00000005; flex-shrink: 0; cursor: pointer; transition: background 140ms, border-color 140ms, transform 100ms; }
 input[type="radio"] { border-radius: 50%; }
 input[type="checkbox"]:not([role="switch"]):hover:not(:disabled), input[type="radio"]:hover:not(:disabled) { background: var(--hover); border-color: var(--muted); }
-input[type="checkbox"]:not([role="switch"]):is(:checked, :indeterminate), input[type="radio"]:checked { background: var(--accent-fill); border-color: var(--accent-fill); box-shadow: none; }
-input[type="checkbox"]:not([role="switch"]):is(:checked, :indeterminate):hover:not(:disabled), input[type="radio"]:checked:hover:not(:disabled) { background: var(--accent-hover); border-color: var(--accent-hover); }
+input[type="checkbox"]:not([role="switch"]):is(:checked, :indeterminate), input[type="radio"]:checked { background: var(--accent-fill); border-color: var(--accent); box-shadow: none; }
+input[type="checkbox"]:not([role="switch"]):is(:checked, :indeterminate):hover:not(:disabled), input[type="radio"]:checked:hover:not(:disabled) { background: var(--accent-hover); border-color: var(--accent); }
 input[type="checkbox"]:not([role="switch"]):checked::after { content: ""; width: 10px; height: 8px; background: var(--accent-ink); clip-path: polygon(14% 44%, 0 60%, 38% 96%, 100% 19%, 85% 5%, 36% 70%); }
 input[type="checkbox"]:indeterminate::after { content: ""; width: 8px; height: 2px; border-radius: 1px; background: var(--accent-ink); clip-path: none; }
 input[type="radio"]:checked::after { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--accent-ink); }
 input:is([type="checkbox"], [type="radio"]):active:not(:disabled) { transform: scale(.94); }
+input:is([type="checkbox"], [type="radio"]):disabled { cursor: not-allowed; }
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 input:not([type="checkbox"], [type="radio"]):focus-visible, select:focus-visible, textarea:focus-visible { outline: none; }
 .main:focus, #library-title:focus { outline: none; }
@@ -133,7 +134,7 @@ input:not([type="checkbox"], [type="radio"]):focus-visible, select:focus-visible
 .library-group { transition: background 140ms, box-shadow 140ms; }
 .library-group:hover { background: var(--subtle); }
 .library-group[data-selected="true"] { background: var(--accent-soft); box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 35%, var(--line)); }
-tr.selected:hover { background: color-mix(in srgb, var(--accent-fill) 12%, var(--surface)); }
+tr.selected:hover { background: color-mix(in srgb, var(--accent) 12%, var(--surface)); }
 .task:has(> .task-main input:checked), .task-result:has(> input:checked) { background: var(--accent-soft); }
 .app-shell { --sidebar-width: 216px; display: flex; min-height: 100vh; }
 .sidebar { position: fixed; width: var(--sidebar-width); inset: 0 auto 0 0; background: var(--surface); border-right: 1px solid var(--line); padding: 22px 12px 16px; display: flex; flex-direction: column; z-index: 10; }
@@ -224,7 +225,8 @@ tr.selected { background: var(--accent-soft); }
 .track-number { color: var(--muted); font-size: 12px; width: 24px; height: 24px; display: grid; place-items: center; flex-shrink: 0; font-variant-numeric: tabular-nums; }
 .source-present { color: var(--muted); font-size: 11px; }
 .source-missing { color: var(--warning); font-size: 11px; }
-summary { font-size: 12px; color: var(--danger); cursor: pointer; margin-top: 6px; }
+summary { font-size: 12px; color: var(--muted); cursor: pointer; margin-top: 6px; transition: background 140ms, color 140ms; }
+summary:hover { color: var(--ink); }
 .pagination { padding: 16px 0; display: flex; gap: 4px; align-items: center; border-top: 1px solid var(--line); }
 .pagination > span { margin-right: auto; font-size: 12px; color: var(--muted); overflow-wrap: anywhere; }
 .filter-tabs { display: flex; flex: 1; gap: 4px; flex-wrap: wrap; }
@@ -284,7 +286,7 @@ summary { font-size: 12px; color: var(--danger); cursor: pointer; margin-top: 6p
 .switch-field { justify-content: space-between; flex-direction: row-reverse; background: var(--subtle); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; margin-top: 12px; gap: 16px; }
 input[role="switch"] { appearance: none; width: 34px; height: 20px; margin: 0; padding: 0; flex-shrink: 0; border: 1px solid var(--line-strong); border-radius: 20px; background: var(--muted); position: relative; cursor: pointer; transition: background 140ms, border-color 140ms; }
 input[role="switch"]::after { content: ""; position: absolute; width: 14px; height: 14px; top: 2px; left: 2px; border-radius: 50%; background: var(--surface); transition: transform 140ms; }
-input[role="switch"]:checked { background: var(--accent-fill); border-color: var(--accent-fill); }
+input[role="switch"]:checked { background: var(--accent-fill); border-color: var(--accent); }
 input[role="switch"]:checked:hover:not(:disabled) { background: var(--accent-hover); }
 input[role="switch"]:checked::after { transform: translateX(14px); background: var(--accent-ink); }
 .settings-title { display: flex; gap: 12px; align-items: flex-start; margin-bottom: 24px; }
@@ -765,7 +767,8 @@ input[role="switch"]:checked::after { transform: translateX(14px); background: v
 .lyrics-candidate:hover { background: var(--subtle); }
 .lyrics-candidate[data-recommended="true"] { border-color: color-mix(in srgb, var(--success) 25%, var(--line)); background: var(--success-soft); }
 .lyrics-candidate[data-selected="true"] { border-color: var(--accent); background: var(--accent-soft); }
-.lyrics-candidate:focus-within { outline: 2px solid var(--accent); outline-offset: 2px; }
+.lyrics-candidate:has(input:focus-visible) { outline: 2px solid var(--accent); outline-offset: 2px; }
+.lyrics-candidate input:focus-visible { outline: none; }
 .lyrics-candidate input { margin-top: 3px; flex: 0 0 16px; width: 16px; height: 16px; padding: 0; box-shadow: none; accent-color: var(--accent); }
 .lyrics-candidate > span { display: grid; gap: 5px; min-width: 0; font-size: 12px; }
 .lyrics-candidate strong { font-size: 13px; font-weight: 600; }

@@ -40,7 +40,11 @@ test("bilingual setup, real incremental build, state preservation and login", as
   await page.getByRole("tab", { name: "Account & security", exact: true }).click();
   await expect(page.getByRole("button", { name: "Bind your OIDC identity", exact: true })).toBeVisible();
   // The selector's native language names are intentionally not translated.
-  await expect(page.locator(".page-content")).not.toContainText(/[\u3400-\u9fff]/);
+  await expect.poll(() => page.locator(".page-content").evaluate(element => {
+    const copy = element.cloneNode(true) as HTMLElement;
+    copy.querySelectorAll(".language-selector").forEach(control => control.remove());
+    return copy.textContent;
+  })).not.toMatch(/[\u3400-\u9fff]/);
   await page.getByRole("button", { name: "Save settings", exact: true }).click();
   await expect(page.getByRole("status")).toContainText("Settings saved");
   await setPreference(page, "language", "zh-CN");

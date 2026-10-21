@@ -262,7 +262,9 @@ func (a *App) searchOnlineLyrics(ctx context.Context, target lyricsTarget, batch
 		attempts = append(attempts, attempt)
 		if result != "" && searchErr == nil {
 			script := lyricsScript(result)
-			if batch.ReplaceTraditional && script != "simplified" { continue }
+			if batch.ReplaceTraditional && script != "simplified" {
+				continue
+			}
 			if script == "simplified" || traditionalText == "" && script != "traditional" {
 				return result, name, "ready", attempts, nil
 			}
@@ -315,7 +317,9 @@ func (a *App) chooseLyrics(ctx context.Context, source Source, candidates []lyri
 			continue
 		}
 		candidate.text = &text
-		if batch.ReplaceTraditional && lyricsScript(text.Original) != "simplified" { continue }
+		if batch.ReplaceTraditional && lyricsScript(text.Original) != "simplified" {
+			continue
+		}
 		if selected != "" && selected != text.Original {
 			// Script preference cannot resolve different words or timing.
 			if foldLyricsScript(selected) != foldLyricsScript(text.Original) {

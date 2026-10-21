@@ -96,7 +96,7 @@ export function LyricsSettings({ notify, notification }: { notify: Notice; notif
   const [draft, setDraft] = useState<LyricsResponse["options"]>();
   const [busy, setBusy] = useState(false);
   useEffect(() => {
-    const refresh = () => { setDraft(undefined); resource.retry(); };
+    const refresh = () => { setDraft(old => old && { ...old, auto_search: false }); resource.retry(); };
     window.addEventListener("lyrics-options-changed", refresh);
     return () => window.removeEventListener("lyrics-options-changed", refresh);
   }, [resource.retry]);
@@ -126,8 +126,7 @@ export function LyricsTrack({ source, notify, refresh, onChoose }: { source: Sou
   const [picker, setPicker] = useState(false);
   if (!source.output_present || !source.output) return null;
   return <div className="lyrics-track" data-state={source.lyrics?.state || "unchecked"}>
-    <span className="lyrics-state">{t(`lyrics.state.${source.lyrics?.state || "unchecked"}`)}</span>
-    {source.lyrics_script && <span className="lyrics-script">{t(`lyrics.script.${source.lyrics_script}`)}</span>}
+    <span className="lyrics-state">{t(`lyrics.state.${source.lyrics?.state || "unchecked"}`)}{source.lyrics_script && <small className="lyrics-script"> · {t(`lyrics.script.${source.lyrics_script}`)}</small>}</span>
     <div className="lyrics-actions">
       <LyricsSearchButton ids={[source.id]} refresh compact label="lyrics.searchAgain" notify={notify} />
       <Button type="button" variant="outline" size="sm" className="lyrics-action" aria-label={t("lyrics.choose")} onClick={() => onChoose ? onChoose() : setPicker(true)}><FileMusic size={13} />{t("lyrics.chooseShort")}</Button>
@@ -229,7 +228,8 @@ export function LyricsPicker({ source, notify, close, saved, previous, next }: {
   const loading = groups.some(group => group.loading);
   const choices = useMemo(() => groups.flatMap(group => group.candidates.map(candidate => ({ token: group.token, candidate })))
     .sort((a, b) => Number(b.candidate.high_confidence) - Number(a.candidate.high_confidence) || Number(b.candidate.script === "simplified") - Number(a.candidate.script === "simplified") || Number(b.candidate.translation_script === "simplified") - Number(a.candidate.translation_script === "simplified") || (b.candidate.match_score || 0) - (a.candidate.match_score || 0) || onlineProviders.indexOf(a.candidate.provider) - onlineProviders.indexOf(b.candidate.provider)), [groups]);
-  const recommended = options.data && choices.find(({ token, candidate }) => token && (candidate.identity_match ?? candidate.high_confidence) && candidate.duration > 0 && (candidate.duration_delta !== undefined ? candidate.duration_delta <= 10 : candidate.high_confidence) && candidate.match_score >= (options.data.options.min_score ?? 96));
+  const minScore = options.data?.options.min_score ?? 96;
+  const recommended = options.data && choices.find(({ token, candidate }) => token && (candidate.identity_match ?? candidate.high_confidence) && candidate.duration > 0 && (candidate.duration_delta !== undefined ? candidate.duration_delta <= 10 : candidate.high_confidence) && candidate.match_score >= minScore);
   useEffect(() => {
     if (autoSelect.current && !restoring && !loading && !selected && recommended?.token) void choose({ token: recommended.token, candidate: recommended.candidate });
   }, [restoring, loading, selected, recommended, choose]);

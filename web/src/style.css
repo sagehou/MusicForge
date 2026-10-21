@@ -609,6 +609,8 @@ input[role="switch"]:checked::after { transform: translateX(16px); background: v
   .metric { padding: 14px; }
   .panel, .settings-panel { padding: 18px 16px; }
   .library-surface { padding: 0 12px; }
+  .library-navigation { padding-top: 14px; }
+  .library-navigation .segmented button { font-size: 12px; padding: 7px 8px; gap: 6px; }
   .settings-nav { margin: -6px -4px 0; }
   .settings-save { flex-wrap: wrap; }
   .settings-save > span { flex-basis: 100%; }
@@ -676,7 +678,7 @@ input[role="switch"]:checked::after { transform: translateX(16px); background: v
 .comparison-result-heading { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
 .comparison-results pre { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 240px; overflow-y: auto; }
 @media (max-width: 600px) { .comparison-filters { grid-template-columns: 1fr; } .library-comparison { padding: 12px; } }
-.library-maintenance { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; gap: 12px; margin-bottom: 24px; }
+.library-maintenance { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; gap: 12px; margin-bottom: 16px; }
 .library-maintenance > .library-comparison { margin-bottom: 0; }
 .library-maintenance > .library-comparison:only-child, .library-maintenance > .library-comparison[open] { grid-column: 1 / -1; }
 .library-maintenance > .library-comparison > summary > span { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
@@ -711,13 +713,22 @@ input[role="switch"]:checked::after { transform: translateX(16px); background: v
 .lyrics-preview { margin-top: 20px; }
 .lyrics-preview pre { max-height: 260px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; padding: 12px; background: var(--subtle); border: 1px solid var(--line); border-radius: 8px; }
 
-.lyrics-settings > summary { margin: 0; }
+.lyrics-panel { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 12px 14px; }
+.lyrics-settings { flex: 1; min-width: 0; }
+.lyrics-settings[open] { flex-basis: 100%; }
+.lyrics-settings > summary { margin: 0; gap: 6px; font-size: 12px; }
+.lyrics-panel > .empty { padding: 0; }
+.lyrics-panel .lyrics-body { display: contents; }
 .lyrics-settings > summary::-webkit-details-marker { display: none; }
 .lyrics-settings > summary > svg { flex-shrink: 0; }
-.lyrics-settings > summary > span { min-width: 0; overflow-wrap: anywhere; }
-.lyrics-settings > summary > svg:last-child { margin-left: auto; color: var(--muted); }
+.lyrics-settings > summary > span { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.lyrics-settings > summary > svg:last-child { display: none; }
 .lyrics-settings[open] > summary > svg:last-child { transform: rotate(90deg); }
 .library-maintenance > .lyrics-panel:has(.lyrics-settings[open]) { grid-column: 1 / -1; }
-.lyrics-quick-actions { margin-top: 12px; }
-.lyrics-quick-actions .lyrics-action { min-height: 30px; height: auto; padding: 4px 8px; gap: 5px; font-size: 11px; }
+.lyrics-body > .lyrics-quick-actions { margin: 0; gap: 4px; flex-wrap: nowrap; }
+.lyrics-quick-actions .lyrics-action { width: 28px; height: 28px; min-height: 28px; padding: 4px; }
+.lyrics-options, .lyrics-body > [role="status"], .lyrics-body > .banner { flex-basis: 100%; min-width: 0; }
+.lyrics-panel:not(:has(.lyrics-settings[open])) .lyrics-options,
+.lyrics-panel:not(:has(.lyrics-settings[open])) .lyrics-body > [role="status"] { display: none; }
 .lyrics-options > summary { font-size: 11px; color: var(--muted); }
+@media (pointer: coarse) { .lyrics-quick-actions .lyrics-action { width: 32px; height: 32px; min-height: 32px; } }

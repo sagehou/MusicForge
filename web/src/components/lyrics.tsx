@@ -20,8 +20,8 @@ export function lyricsMatchState(source: Source): LyricsMatchState | undefined {
   return source.lyrics?.state || "unchecked";
 }
 
-export function LyricsSearchButton({ ids, all = false, refresh = false, disabled = false, compact = false, shortLabel = "lyrics.searchShort", label, notify, onStarted }: {
-  ids?: number[]; all?: boolean; refresh?: boolean; disabled?: boolean; compact?: boolean; shortLabel?: MessageKey; label: MessageKey; notify: Notice; onStarted?: () => void;
+export function LyricsSearchButton({ ids, all = false, refresh = false, disabled = false, compact = false, iconOnly = false, label, notify, onStarted }: {
+  ids?: number[]; all?: boolean; refresh?: boolean; disabled?: boolean; compact?: boolean; iconOnly?: boolean; label: MessageKey; notify: Notice; onStarted?: () => void;
 }) {
   const { t } = useI18n();
   const [busy, setBusy] = useState(false);
@@ -33,7 +33,7 @@ export function LyricsSearchButton({ ids, all = false, refresh = false, disabled
     } catch (err) { notify(err as Error, true); }
     finally { setBusy(false); }
   }
-  return <Button type="button" variant="outline" size="sm" className={compact ? "lyrics-action" : undefined} aria-label={t(label)} disabled={disabled || busy || !all && !ids?.length} onClick={() => void search()}><Search size={13} />{t(compact ? shortLabel : label)}</Button>;
+  return <Button type="button" variant="outline" size="sm" className={compact ? "lyrics-action" : undefined} aria-label={t(label)} disabled={disabled || busy || !all && !ids?.length} onClick={() => void search()}><Search size={13} />{!iconOnly && t(compact ? "lyrics.searchShort" : label)}</Button>;
 }
 
 export function LyricsMaintenance({ sources, notify }: { sources: Source[]; notify: Notice }) {
@@ -81,8 +81,8 @@ function LyricsControls({ notify }: { notify: Notice }) {
   }
   return <div className="lyrics-body">
     <div className="actions lyrics-quick-actions">
-      <LyricsSearchButton all compact shortLabel="lyrics.fillShort" label="lyrics.searchAll" notify={notify} disabled={busy || running} onStarted={resource.retry} />
-      {running && <Button className="lyrics-action" variant="outline" size="sm" disabled={busy || report.stopping} onClick={() => void stop()}><Square size={13} />{t(report.stopping ? "lyrics.stopping" : "lyrics.stop")}</Button>}
+      <LyricsSearchButton all compact iconOnly label="lyrics.searchAll" notify={notify} disabled={busy || running} onStarted={resource.retry} />
+      {running && <Button className="lyrics-action" variant="outline" size="sm" aria-label={t(report.stopping ? "lyrics.stopping" : "lyrics.stop")} disabled={busy || report.stopping} onClick={() => void stop()}><Square size={13} /></Button>}
     </div>
     <details className="lyrics-options"><summary>{t("lyrics.options")}</summary>
       <p>{t("lyrics.hint")}</p>

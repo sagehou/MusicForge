@@ -17,6 +17,13 @@ type sourceMedia struct {
 	Bitrate int64  `json:"bitrate"` // bits per second, as reported by ffprobe
 }
 
+type audioSize struct {
+	Version   int    `json:"version"`
+	Path      string `json:"path"`
+	Signature string `json:"signature"`
+	Size      int64  `json:"size"`
+}
+
 func (p probeData) bitrate() int64 {
 	for _, stream := range p.Streams {
 		if stream.Type == "audio" {
@@ -39,8 +46,9 @@ func (a *App) rememberSourceMedia(source Source, p probeData) error {
 
 func (a *App) rememberAudioSize(id int64, path string, size int64) error {
 	_, err := a.db.Exec(`INSERT INTO meta(key,value)
-	 SELECT 'audio-size:'||signature,? FROM managed WHERE source_id=? AND path=? AND kind='audio' AND signature<>''
-	 ON CONFLICT(key) DO UPDATE SET value=excluded.value`, strconv.FormatInt(size, 10), id, path)
+	 SELECT 'audio-size:'||source_id,json_object('version',1,'path',path,'signature',signature,'size',?)
+	 FROM managed WHERE source_id=? AND path=? AND kind='audio' AND signature<>''
+	 ON CONFLICT(key) DO UPDATE SET value=excluded.value`, size, id, path)
 	return err
 }
 
@@ -53,18 +61,18 @@ func (a *App) annotateMedia(ctx context.Context, sources []Source) error {
 	for i := range sources {
 		byID[sources[i].ID] = &sources[i]
 	}
-	rows, err := a.reads.QueryContext(ctx, `SELECT s.id,coalesce(b.value,''),coalesce(z.value,'') FROM sources s
+	rows, err := a.reads.QueryContext(ctx, `SELECT s.id,coalesce(b.value,''),coalesce(z.value,''),coalesce(m.signature,'') FROM sources s
 	 LEFT JOIN meta b ON b.key='source-media:'||s.id
 	 LEFT JOIN managed m ON m.source_id=s.id AND m.path=s.output AND m.kind='audio'
-	 LEFT JOIN meta z ON z.key='audio-size:'||m.signature`)
+	 LEFT JOIN meta z ON z.key='audio-size:'||s.id`)
 	if err != nil {
 		return err
 	}
 	defer rows.Close()
 	for rows.Next() {
 		var id int64
-		var raw, size string
-		if err = rows.Scan(&id, &raw, &size); err != nil {
+		var raw, size, signature string
+		if err = rows.Scan(&id, &raw, &size, &signature); err != nil {
 			return err
 		}
 		source := byID[id]
@@ -75,8 +83,9 @@ func (a *App) annotateMedia(ctx context.Context, sources []Source) error {
 		if json.Unmarshal([]byte(raw), &media) == nil && media.Version == 1 && media.Path == source.Rel && media.Hash == source.Hash && media.Size == source.Size && media.Mtime == source.Mtime && media.Bitrate >= 0 {
 			source.SourceBitrate, source.mediaInfoKnown = media.Bitrate, true
 		}
-		if bytes, err := strconv.ParseInt(size, 10, 64); err == nil && bytes >= 0 && source.OutputPresent {
-			source.OutputSize = &bytes
+		var audio audioSize
+		if json.Unmarshal([]byte(size), &audio) == nil && audio.Version == 1 && audio.Path == source.Output && audio.Signature == signature && signature != "" && audio.Size >= 0 && source.OutputPresent {
+			source.OutputSize = &audio.Size
 		}
 	}
 	return rows.Err()

@@ -39,18 +39,10 @@ export function Overview({ notify, navigate }: { notify: Notice; navigate: (path
         <div className="hero-profile"><span>{data.codec.toUpperCase()}</span><strong>{profile}</strong><span>{t("overview.buildEyebrow")}</span></div>
       </div>
       <div className="hero-visual">
-        <svg className="hero-waveform" viewBox="0 0 420 210" aria-hidden="true">{Array.from({ length: 51 }, (_, index) => {
-          const height = 12 + Math.abs(Math.sin(index * 1.7) * Math.cos(index * .41)) * 134;
-          return <line key={index} x1={10 + index * 8} x2={10 + index * 8} y1={105 - height / 2} y2={105 + height / 2} />;
-        })}</svg>
         <div className="hero-completion" role="progressbar" aria-label={t("overview.complete")} aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent}>
           <svg className="completion-orbit" viewBox="0 0 240 240" aria-hidden="true">
-            <defs><linearGradient id="completion-gradient" x1="0" y1="1" x2="1" y2="0"><stop stopColor="#7c83ff" /><stop offset="1" stopColor="#57dfdb" /></linearGradient></defs>
-            <circle className="orbit-outline" cx="120" cy="120" r="115" />
-            <circle className="orbit-face" cx="120" cy="120" r="102" />
             <circle className="orbit-track" cx="120" cy="120" r="90" />
             <circle className="orbit-progress" cx="120" cy="120" r="90" transform="rotate(-90 120 120)" strokeDasharray={Math.PI * 180} strokeDashoffset={Math.PI * 180 * (1 - percent / 100)} />
-            <circle className="orbit-groove" cx="120" cy="120" r="73" /><circle className="orbit-groove" cx="120" cy="120" r="68" />
           </svg>
           <div className="completion-value"><span>{t("overview.complete")}</span><strong>{percentLabel}</strong><small>{number(data.ready_count)} / {number(data.source_count)}</small></div>
         </div>

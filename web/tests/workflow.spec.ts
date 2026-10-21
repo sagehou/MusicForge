@@ -51,13 +51,12 @@ test("bilingual setup, real incremental build, state preservation and login", as
   await expect(page.getByRole("table").getByText("已就绪", { exact: true })).toBeVisible({ timeout: 30000 });
   const audioBeforeLyrics = readFileSync(join(root, "output/Artist/Album/01.opus"));
   writeFileSync(join(root, "source/Artist/Album/01.lrc"), "[00:00.00]CI 同步歌词\n");
-  await page.locator(".lyrics-track > summary").click();
   await page.getByRole("button", { name: "重新搜索歌词", exact: true }).click();
   await expect.poll(() => {
     const path = join(root, "output/Artist/Album/01.lrc");
     return existsSync(path) ? readFileSync(path, "utf8") : "";
   }).toBe("[00:00.00]CI 同步歌词\n");
-  await expect(page.locator(".lyrics-track > summary")).toContainText("已有歌词");
+  await expect(page.locator(".lyrics-state")).toContainText("已有歌词");
   expect(readFileSync(join(root, "output/Artist/Album/01.opus")).equals(audioBeforeLyrics)).toBe(true);
   const cover = page.locator(".album-summary .cover img");
   await expect(cover).toBeVisible();

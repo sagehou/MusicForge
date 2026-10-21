@@ -10,7 +10,7 @@ import { BatchRepairButton, RepairControls, RepairDiagnostics } from "./repair";
 import { LibraryComparison } from "./library-comparison";
 import { LyricsMaintenance, LyricsSearchButton, LyricsTrack, lyricsMatchState, lyricsMatchStates, type LyricsMatchState } from "./lyrics";
 
-type Scope = { view: "artists" | "albums"; artist?: string; album?: string };
+type Scope = { view: "artists" | "albums" | "tracks"; artist?: string; album?: string };
 type Identity = { artistKey: string; albumKey: string; artist: string; album: string };
 type Group = Identity & { key: string; name: string; tracks: Source[]; albums: Set<string>; rank: number };
 type Density = "compact" | "standard" | "large";
@@ -23,24 +23,38 @@ function savePreference(key: string, value: string) {
 }
 function readScope(): Scope {
   const params = new URLSearchParams(location.search);
-  return { view: params.get("view") === "albums" ? "albums" : "artists", artist: params.get("artist") ?? undefined, album: params.get("album") ?? undefined };
+  const view = params.get("view");
+  return { view: view === "albums" || view === "tracks" ? view : "artists", artist: params.get("artist") ?? undefined, album: params.get("album") ?? undefined };
 }
 function duration(seconds: number) {
   if (!seconds) return "--";
   const value = Math.round(seconds);
   return `${Math.floor(value / 60)}:${String(value % 60).padStart(2, "0")}`;
 }
+function fileSize(bytes: number, locale: string) {
+  const unit = Math.min(4, Math.floor(Math.log2(Math.max(bytes, 1)) / 10));
+  return `${new Intl.NumberFormat(locale, { maximumFractionDigits: 2 }).format(bytes / 1024 ** unit)} ${["B", "KiB", "MiB", "GiB", "TiB"][unit]}`;
+}
+function TrackFacts({ source }: { source: Source }) {
+  const { t, locale, number } = useI18n();
+  return <dl className="track-facts">
+    <div><dt>{t("library.duration")}</dt><dd>{duration(source.duration || 0)}</dd></div>
+    <div title={!source.source_bitrate ? t("library.bitratePending") : undefined}><dt>{t("library.sourceBitrate")}</dt><dd>{source.source_bitrate ? `${number(Math.round(source.source_bitrate / 1000))} kbps` : "—"}</dd></div>
+    <div><dt>{t("library.sourceSize")}</dt><dd>{fileSize(source.size, locale)}</dd></div>
+    {source.output_present && source.output_size !== undefined && <div><dt>{t("library.outputSize")}</dt><dd>{fileSize(source.output_size, locale)}</dd></div>}
+  </dl>;
+}
 function TrackDetails({ source }: { source: Source }) {
   const { t, locale, number } = useI18n();
-  const unit = Math.min(4, Math.floor(Math.log2(Math.max(source.size, 1)) / 10));
-  const size = `${new Intl.NumberFormat(locale, { maximumFractionDigits: 2 }).format(source.size / 1024 ** unit)} ${["B", "KiB", "MiB", "GiB", "TiB"][unit]}`;
   return <details className="track-file"><summary>{t("library.fileDetails")}</summary><dl>
     <dt>{t("library.songTitle")}</dt><dd>{source.title || "—"}</dd>
     <dt>{t("library.songArtist")}</dt><dd>{source.artist || t("library.unknownArtist")}</dd>
     <dt>{t("library.songAlbum")}</dt><dd>{source.album || t("library.unknownAlbum")}</dd>
     <dt>{t("library.duration")}</dt><dd>{source.duration ? t("library.exactDuration", { time: duration(source.duration), seconds: number(source.duration) }) : "—"}</dd>
     <dt>{t("library.trackDisc")}</dt><dd>{source.track || "—"} / {source.disc || "—"}</dd>
-    <dt>{t("library.sourceSize")}</dt><dd>{size}{unit > 0 && <> ({t("library.bytes", { size: source.size })})</>}</dd>
+    <dt>{t("library.sourceBitrate")}</dt><dd>{source.source_bitrate ? `${number(source.source_bitrate)} bps` : t("library.bitratePending")}</dd>
+    <dt>{t("library.sourceSize")}</dt><dd>{fileSize(source.size, locale)}{source.size >= 1024 && <> ({t("library.bytes", { size: source.size })})</>}</dd>
+    {source.output_present && source.output_size !== undefined && <><dt>{t("library.outputSize")}</dt><dd>{fileSize(source.output_size, locale)} ({t("library.bytes", { size: source.output_size })})</dd></>}
     <dt>{t("library.sourceSHA256")}</dt><dd><code>{source.hash || t("library.hashPending")}</code></dd>
     <dt>{t("library.source")}</dt><dd>{source.path}</dd>
     {source.output && <><dt>{t("library.artifact")}</dt><dd>{source.output}</dd></>}
@@ -85,8 +99,7 @@ export function Library({ notify }: { notify: Notice }) {
   const transition = useRef<ViewTransition | null>(null);
   const navigation = useRef(0);
   const [compact, setCompact] = useState(() => matchMedia("(max-width: 800px)").matches);
-  const [phone, setPhone] = useState(() => matchMedia("(max-width: 600px)").matches);
-  const trackColumns = phone ? 3 : compact ? 4 : 5;
+  const trackColumns = compact ? 3 : 4;
   const [optionsOpen, setOptionsOpen] = useState(false);
   const [sort, setSort] = useState("name");
   const [selected, setSelected] = useState<Set<number>>(new Set());
@@ -101,11 +114,9 @@ export function Library({ notify }: { notify: Notice }) {
   useEffect(() => () => transition.current?.skipTransition(), []);
   useEffect(() => {
     const media = matchMedia("(max-width: 800px)");
-    const small = matchMedia("(max-width: 600px)");
-    const change = () => { setCompact(media.matches); setPhone(small.matches); setOptionsOpen(false); };
+    const change = () => { setCompact(media.matches); setOptionsOpen(false); };
     media.addEventListener("change", change);
-    small.addEventListener("change", change);
-    return () => { media.removeEventListener("change", change); small.removeEventListener("change", change); };
+    return () => { media.removeEventListener("change", change); };
   }, []);
   useEffect(() => {
     const frame = requestAnimationFrame(() => document.getElementById("library-title")?.focus());
@@ -123,6 +134,7 @@ export function Library({ notify }: { notify: Notice }) {
     return { source, identity };
   }), [data, locale]);
   const isAlbum = scope.album !== undefined;
+  const showingTracks = isAlbum || scope.view === "tracks";
   const showingArtists = !scope.artist && scope.view === "artists" && !isAlbum;
   const artist = indexed.find(item => item.identity.artistKey === scope.artist)?.identity;
   const albumTracks = useMemo(() => indexed.filter(item => item.identity.artistKey === scope.artist && item.identity.albumKey === scope.album).map(item => item.source), [indexed, scope.artist, scope.album]);
@@ -138,7 +150,7 @@ export function Library({ notify }: { notify: Notice }) {
       if (lyricsFilter !== "all" && lyricsMatchState(source) !== lyricsFilter) continue;
       if (search && !`${identity.artist} ${source.artist} ${identity.album} ${source.title} ${source.path}`.toLocaleLowerCase(locale).includes(search)) continue;
       rows.push(source);
-      if (isAlbum) continue;
+      if (showingTracks) continue;
       const key = showingArtists ? identity.artistKey : `${identity.artistKey}\0${identity.albumKey}`;
       let group = map.get(key);
       if (!group) {
@@ -158,8 +170,16 @@ export function Library({ notify }: { notify: Notice }) {
       return collator.compare(a.name, b.name) || collator.compare(a.artist, b.artist);
     });
     if (isAlbum) rows.sort((a, b) => (a.disc || 1) - (b.disc || 1) || a.track - b.track || collator.compare(a.path, b.path));
+    else if (showingTracks) rows.sort((a, b) => {
+      if (sort === "attention") {
+        const rank = (source: Source) => { const index = priority.indexOf(source.status); return index < 0 ? priority.length : index; };
+        const difference = rank(a) - rank(b);
+        if (difference) return difference;
+      }
+      return collator.compare(a.title || a.path, b.title || b.path) || collator.compare(a.path, b.path);
+    });
     return { rows, groups };
-  }, [indexed, scope.artist, scope.album, isAlbum, showingArtists, filter, lyricsFilter, search, sort, collator, locale]);
+  }, [indexed, scope.artist, scope.album, isAlbum, showingTracks, showingArtists, filter, lyricsFilter, search, sort, collator, locale]);
   const totals = useMemo(() => ({
     artists: new Set(indexed.map(item => item.identity.artistKey)).size,
     albums: new Set(indexed.map(item => `${item.identity.artistKey}\0${item.identity.albumKey}`)).size,
@@ -198,11 +218,11 @@ export function Library({ notify }: { notify: Notice }) {
     <div className="skeleton-toolbar" aria-hidden="true" />
     <div className="library-groups" aria-hidden="true">{Array.from({ length: 10 }, (_, index) => <div className="skeleton-card" key={index}><div /><span /><span /></div>)}</div>
   </div>;
-  const count = isAlbum ? rows.length : groups.length;
+  const count = showingTracks ? rows.length : groups.length;
   const safeOffset = Math.min(offset, Math.max(0, Math.ceil(count / 50) - 1) * 50);
   const shown = rows.slice(safeOffset, safeOffset + 50);
   const visibleGroups = groups.slice(safeOffset, safeOffset + 50);
-  const pageTracks = isAlbum ? shown : visibleGroups.flatMap(group => group.tracks);
+  const pageTracks = showingTracks ? shown : visibleGroups.flatMap(group => group.tracks);
   const chosen = data.filter(source => selected.has(source.id));
   const selectedExpired = chosen.filter(source => !source.present && source.output).length;
   const expired = data.filter(source => !source.present && source.output).length;
@@ -253,6 +273,7 @@ export function Library({ notify }: { notify: Notice }) {
       {!scope.artist && <div className="library-navigation"><div className="segmented" role="group" aria-label={t("library.browse")}>
         <button aria-pressed={scope.view === "artists"} onClick={() => navigate({ view: "artists" })}>{t("library.artists")}<span>{number(totals.artists)}</span></button>
         <button aria-pressed={scope.view === "albums"} onClick={() => navigate({ view: "albums" })}>{t("library.albums")}<span>{number(totals.albums)}</span></button>
+        <button aria-pressed={scope.view === "tracks"} onClick={() => navigate({ view: "tracks" })}>{t("library.allTracks")}<span>{number(data.length)}</span></button>
       </div></div>}
       <div className="table-toolbar library-toolbar">
         <div className="search"><Search size={17} aria-hidden="true" /><input type="search" aria-label={t("library.search")} placeholder={t("library.searchPlaceholder")} value={query} onChange={event => { setQuery(event.target.value); setOffset(0); }} />{query && <button aria-label={t("library.clearSearch")} title={t("library.clearSearch")} onClick={() => { setQuery(""); setOffset(0); }}><X size={16} /></button>}</div>
@@ -262,21 +283,21 @@ export function Library({ notify }: { notify: Notice }) {
             <select aria-label={t("library.filter")} value={filter} onChange={event => { setFilter(event.target.value); setOffset(0); setOptionsOpen(false); }}><option value="all">{t("library.allStatuses")}</option>{priority.slice().reverse().map(state => <option value={state} key={state}>{statusLabel(state)}</option>)}</select>
             <select aria-label={t("lyrics.filter")} value={lyricsFilter} onChange={event => { setLyricsFilter(event.target.value as LyricsMatchState | "all"); setOffset(0); setOptionsOpen(false); }}><option value="all">{t("lyrics.allStates")}</option>{lyricsMatchStates.map(state => <option value={state} key={state}>{t(`lyrics.state.${state}`)}</option>)}</select>
             {!isAlbum && <select aria-label={t("library.sort")} value={sort} onChange={event => { setSort(event.target.value); setOffset(0); setOptionsOpen(false); }}><option value="name">{t("library.sortName")}</option><option value="attention">{t("library.sortAttention")}</option></select>}
-            {!isAlbum && !compact && layout === "grid" && <select aria-label={t("library.coverSize")} value={density} onChange={event => { const value = event.target.value as Density; setDensity(value); savePreference("density", value); setOptionsOpen(false); }}>
+            {!showingTracks && !compact && layout === "grid" && <select aria-label={t("library.coverSize")} value={density} onChange={event => { const value = event.target.value as Density; setDensity(value); savePreference("density", value); setOptionsOpen(false); }}>
               <option value="compact">{t("library.coverCompact")}</option><option value="standard">{t("library.coverStandard")}</option><option value="large">{t("library.coverLarge")}</option>
             </select>}
           </div>
         </details>
-        {!isAlbum && <div className="segmented layout-control" role="group" aria-label={t("library.layout")}>
+        {!showingTracks && <div className="segmented layout-control" role="group" aria-label={t("library.layout")}>
           <button aria-label={t("library.grid")} title={t("library.grid")} aria-pressed={layout === "grid"} onClick={() => { setLayout("grid"); savePreference("layout", "grid"); }}><Grid2X2 size={17} /></button>
           <button aria-label={t("library.list")} title={t("library.list")} aria-pressed={layout === "list"} onClick={() => { setLayout("list"); savePreference("layout", "list"); }}><List size={17} /></button>
         </div>}
         <Button variant="outline" size="sm" disabled={busy} onClick={() => void action("/library/rebuild", { all: true }, "notice.rebuild")}><RefreshCw size={14} />{t("library.startRebuild")}</Button>
       </div>
-      {count > 0 && <div className="library-selection"><label className="check-field"><input type="checkbox" aria-label={t("library.selectPage")} checked={pageTracks.length > 0 && pageTracks.every(source => selected.has(source.id))} ref={node => { if (node) node.indeterminate = pageTracks.some(source => selected.has(source.id)) && !pageTracks.every(source => selected.has(source.id)); }} disabled={busy} onChange={event => toggle(pageTracks.map(source => source.id), event.target.checked)} /><span>{t("library.selectPage")}</span></label><span>{t(isAlbum ? "library.trackCount" : showingArtists ? "library.artistCount" : "library.albumCount", { count })}</span></div>}
+      {count > 0 && <div className="library-selection"><label className="check-field"><input type="checkbox" aria-label={t("library.selectPage")} checked={pageTracks.length > 0 && pageTracks.every(source => selected.has(source.id))} ref={node => { if (node) node.indeterminate = pageTracks.some(source => selected.has(source.id)) && !pageTracks.every(source => selected.has(source.id)); }} disabled={busy} onChange={event => toggle(pageTracks.map(source => source.id), event.target.checked)} /><span>{t("library.selectPage")}</span></label><span>{t(showingTracks ? "library.trackCount" : showingArtists ? "library.artistCount" : "library.albumCount", { count })}</span></div>}
       {chosen.length > 0 && <div className="selection-bar"><span>{t("library.selected", { count: chosen.length })}</span>{rows.length > pageTracks.length && <Button type="button" size="sm" variant="ghost" disabled={busy} onClick={() => setSelected(new Set(rows.map(source => source.id)))}>{t("library.selectMatching", { count: rows.length })}</Button>}<Button size="sm" variant="outline" disabled={busy} onClick={() => void action("/library/rebuild", { ids: [...selected] }, "notice.selectedBuild")}><RefreshCw size={14} />{t("library.buildSelected")}</Button><LyricsSearchButton ids={chosen.filter(source => source.output && source.output_present).map(source => source.id)} label="lyrics.searchSelected" notify={notify} disabled={busy} /><BatchRepairButton sources={chosen} notify={notify} disabled={busy} refresh={() => { setSelected(new Set()); retry(); }} /><Button size="sm" variant="destructive" disabled={busy || selectedExpired === 0} onClick={() => deleteSelected(false)}><Trash2 size={14} />{t("library.deleteSelected")}</Button>{selectedRemovable.length > 0 && <Button size="sm" variant="outline" disabled={busy} onClick={() => void forget(selectedRemovable.map(source => source.id))}><Trash2 size={14} />{t("library.forgetSelected", { count: selectedRemovable.length })}</Button>}<Button size="sm" variant="ghost" onClick={() => setSelected(new Set())}><X size={14} />{t("library.clearSelection")}</Button></div>}
       {count > 0 ? <>
-        {!isAlbum ? <div className={`library-groups library-${layout}`} data-density={density}>{visibleGroups.map(group => {
+        {!showingTracks ? <div className={`library-groups library-${layout}`} data-density={density}>{visibleGroups.map(group => {
           const ready = group.tracks.filter(source => source.status === "ready").length;
           const state = priority[group.rank] || "ready";
           const open = (origin: HTMLElement) => showingArtists ? navigate({ view: scope.view, artist: group.artistKey }) : navigate({ view: scope.view, artist: group.artistKey, album: group.albumKey }, origin);
@@ -291,20 +312,21 @@ export function Library({ notify }: { notify: Notice }) {
               <Badge status={state} />
             </div>
           </article>;
-        })}</div> : <div className="table-scroll"><table className="track-table"><thead><tr><th aria-label={t("library.selectedTracks")} /><th>{t("library.trackFile")}</th><th className="track-artist">{t("library.artistAlbum")}</th><th className="track-duration"><Clock3 size={15} aria-label={t("library.duration")} /></th><th>{t("library.artifact")}</th></tr></thead><tbody>{shown.map((source, index) => {
+        })}</div> : <div className="table-scroll"><table className="track-table"><thead><tr><th aria-label={t("library.selectedTracks")} /><th>{t("library.trackFile")}</th><th className="track-artist">{t("library.artistAlbum")}</th><th>{t("library.artifact")}</th></tr></thead><tbody>{shown.map((source, index) => {
           const disc = source.disc || 1;
-          const heading = discs.size > 1 && (index === 0 || disc !== (shown[index - 1].disc || 1));
+          const heading = isAlbum && discs.size > 1 && (index === 0 || disc !== (shown[index - 1].disc || 1));
           return <Fragment key={source.id}>{heading && <tr className="disc-heading"><th colSpan={trackColumns} scope="rowgroup"><Disc3 size={15} />{t("library.disc", { number: disc })}</th></tr>}<tr className={selected.has(source.id) ? "selected" : ""}>
             <td><input type="checkbox" aria-label={t("library.selectTrack", { title: source.title || source.path })} checked={selected.has(source.id)} disabled={busy} onChange={event => toggle([source.id], event.target.checked)} /></td>
             <td><div className="track-cell"><span className="track-number">{source.track || <Music2 size={15} />}</span><div><strong>{source.title || source.path.split("/").pop()}</strong><small className={source.present ? "source-present" : "source-missing"}>{source.present ? t("library.sourceOnline", { format: source.path.split(".").pop()?.toUpperCase() || "--" }) : t("library.sourceDeleted")}</small>
+              <small className="track-byline">{source.artist || t("library.unknownArtist")} · {source.album || t("library.unknownAlbum")}</small>
+              <TrackFacts source={source} />
               <TrackDetails source={source} />
             </div></div></td>
             <td className="track-artist"><strong>{source.artist || t("library.unknownArtist")}</strong><small>{source.album || t("library.unknownAlbum")}</small></td>
-            <td className="track-duration">{duration(source.duration || 0)}</td>
             <td><Badge status={source.status} />{source.output_present && source.status !== "ready" && source.status !== "possibly_damaged" && <small>{t("library.stillPlayable")}</small>}<RepairControls source={source} notify={notify} refresh={retry} /><LyricsTrack source={source} notify={notify} refresh={retry} />{!source.present && !source.output && !source.output_present && <Button className="forget-record" size="sm" variant="ghost" disabled={busy} onClick={() => void forget([source.id])}><Trash2 size={13} />{t("library.forgetRecord")}</Button>}{source.error && <details><summary>{t("library.errorDetails")}</summary><pre>{source.error}</pre></details>}</td>
           </tr>{(source.possibly_damaged || source.repair?.diagnostics) && <tr className="repair-detail-row"><td colSpan={trackColumns}><RepairDiagnostics source={source} /></td></tr>}</Fragment>;
         })}</tbody></table></div>}
-        <div className="pagination"><span>{t(isAlbum ? "library.pagination" : "library.groupPagination", { start: safeOffset + 1, end: Math.min(safeOffset + 50, count), total: count })}</span>
+        <div className="pagination"><span>{t(showingTracks ? "library.pagination" : "library.groupPagination", { start: safeOffset + 1, end: Math.min(safeOffset + 50, count), total: count })}</span>
           <Button variant="ghost" size="icon" aria-label={t("library.previous")} title={t("library.previous")} disabled={safeOffset === 0} onClick={() => setOffset(Math.max(0, safeOffset - 50))}><ChevronLeft size={16} /></Button>
           <Button variant="ghost" size="icon" aria-label={t("library.next")} title={t("library.next")} disabled={safeOffset + 50 >= count} onClick={() => setOffset(safeOffset + 50)}><ChevronRight size={16} /></Button>
         </div>

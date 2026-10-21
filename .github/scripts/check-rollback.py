@@ -20,6 +20,7 @@ NAME = "musicforge-rollback"
 CANDIDATE = "musicforge:validation"
 PASSWORD = "ci-rollback-password"
 LEGACY = {
+    "v0.2.25": "sha256:4b8851a44dbd5150def7dbccd5d26658ef5e1526cc840961d367ae763df3e662",
     "v0.2.24": "sha256:7871768e8e5491b6bfe90cc07560c822cd03f56557fe9db560d0c83df2a8a206",
     "v0.2.23": "sha256:7419b87ce48dd917af7b4c8b6ad73fe5808d23b19fa12f97d037debe850a7dac",
     "v0.2.22": "sha256:fe0dd1d3c10487f716e6979d0787ab59454c386caa930a5b2847d5f5a9955cb2",
@@ -144,8 +145,8 @@ def verification_queued(rel):
 
 
 def library_record(track):
-    # Optional artwork/lyrics UI data is absent in older API responses.
-    return {key: value for key, value in track.items() if key not in ("artwork_url", "lyrics")}
+    # Optional display annotations are absent in older API responses.
+    return {key: value for key, value in track.items() if key not in ("artwork_url", "lyrics", "source_bitrate", "output_size")}
 
 
 def seed_refresh():

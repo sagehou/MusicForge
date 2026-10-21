@@ -20,8 +20,8 @@ export function lyricsMatchState(source: Source): LyricsMatchState | undefined {
   return source.lyrics?.state || "unchecked";
 }
 
-export function LyricsSearchButton({ ids, all = false, refresh = false, disabled = false, label, notify, onStarted }: {
-  ids?: number[]; all?: boolean; refresh?: boolean; disabled?: boolean; label: MessageKey; notify: Notice; onStarted?: () => void;
+export function LyricsSearchButton({ ids, all = false, refresh = false, disabled = false, compact = false, shortLabel = "lyrics.searchShort", label, notify, onStarted }: {
+  ids?: number[]; all?: boolean; refresh?: boolean; disabled?: boolean; compact?: boolean; shortLabel?: MessageKey; label: MessageKey; notify: Notice; onStarted?: () => void;
 }) {
   const { t } = useI18n();
   const [busy, setBusy] = useState(false);
@@ -33,12 +33,11 @@ export function LyricsSearchButton({ ids, all = false, refresh = false, disabled
     } catch (err) { notify(err as Error, true); }
     finally { setBusy(false); }
   }
-  return <Button type="button" variant="outline" size="sm" disabled={disabled || busy || !all && !ids?.length} onClick={() => void search()}><Search size={13} />{t(label)}</Button>;
+  return <Button type="button" variant="outline" size="sm" className={compact ? "lyrics-action" : undefined} aria-label={t(label)} disabled={disabled || busy || !all && !ids?.length} onClick={() => void search()}><Search size={13} />{t(compact ? shortLabel : label)}</Button>;
 }
 
 export function LyricsMaintenance({ sources, notify }: { sources: Source[]; notify: Notice }) {
   const { t } = useI18n();
-  const [open, setOpen] = useState(false);
   const inventory = useMemo(() => {
     const counts: Record<LyricsMatchState, number> = { ready: 0, unchecked: 0, not_found: 0, instrumental: 0, needs_review: 0, failed: 0 };
     let total = 0;
@@ -50,17 +49,16 @@ export function LyricsMaintenance({ sources, notify }: { sources: Source[]; noti
     }
     return { counts, total, checked: total - counts.unchecked };
   }, [sources]);
-  return <details className="library-comparison lyrics-panel" onToggle={event => setOpen(event.currentTarget.open)}>
-    <summary><FileMusic size={18} /><span>{t("lyrics.title")}</span><ChevronRight size={16} /></summary>
-    {open && <>
+  return <section className="library-comparison lyrics-panel">
+    <details className="lyrics-settings"><summary><FileMusic size={18} /><span>{t("lyrics.title")}</span><ChevronRight size={16} /></summary>
       <section className="lyrics-library-summary" aria-label={t("lyrics.libraryStatus")}>
         <strong>{t("lyrics.coverage", { done: inventory.checked, total: inventory.total })}</strong>
         <p>{t("lyrics.inventory", { found: inventory.counts.ready, missing: inventory.counts.not_found, instrumental: inventory.counts.instrumental, review: inventory.counts.needs_review, failed: inventory.counts.failed, unchecked: inventory.counts.unchecked })}</p>
         <small>{t("lyrics.inventoryHint")}</small>
       </section>
-      <LyricsControls notify={notify} />
-    </>}
-  </details>;
+    </details>
+    <LyricsControls notify={notify} />
+  </section>;
 }
 
 function LyricsControls({ notify }: { notify: Notice }) {
@@ -82,14 +80,16 @@ function LyricsControls({ notify }: { notify: Notice }) {
     catch (err) { notify(err as Error, true); } finally { setBusy(false); }
   }
   return <div className="lyrics-body">
-    <p>{t("lyrics.hint")}</p>
-    <p>{t("lyrics.privacy")}</p>
-    <p>{t("lyrics.stopHint")}</p>
-    <label className="check-field"><input type="checkbox" checked={options.auto_search} disabled={busy} onChange={event => void automatic(event.target.checked)} /><span>{t("lyrics.automatic")}</span></label>
-    <div className="actions">
-      <LyricsSearchButton all label="lyrics.searchAll" notify={notify} disabled={busy || running} onStarted={resource.retry} />
-      {running && <Button variant="outline" size="sm" disabled={busy || report.stopping} onClick={() => void stop()}><Square size={13} />{t(report.stopping ? "lyrics.stopping" : "lyrics.stop")}</Button>}
+    <div className="actions lyrics-quick-actions">
+      <LyricsSearchButton all compact shortLabel="lyrics.fillShort" label="lyrics.searchAll" notify={notify} disabled={busy || running} onStarted={resource.retry} />
+      {running && <Button className="lyrics-action" variant="outline" size="sm" disabled={busy || report.stopping} onClick={() => void stop()}><Square size={13} />{t(report.stopping ? "lyrics.stopping" : "lyrics.stop")}</Button>}
     </div>
+    <details className="lyrics-options"><summary>{t("lyrics.options")}</summary>
+      <p>{t("lyrics.hint")}</p>
+      <p>{t("lyrics.privacy")}</p>
+      <p>{t("lyrics.stopHint")}</p>
+      <label className="check-field"><input type="checkbox" checked={options.auto_search} disabled={busy} onChange={event => void automatic(event.target.checked)} /><span>{t("lyrics.automatic")}</span></label>
+    </details>
     <ResourceWarning error={resource.error} retry={resource.retry} />
     {report.state !== "idle" && <div role="status" aria-label={t("lyrics.batchProgress")} aria-live="polite">
       <strong>{t(`lyrics.report.${report.state}`)}</strong>
@@ -104,16 +104,20 @@ export function LyricsTrack({ source, notify, refresh }: { source: Source; notif
   const { t, errorMessage } = useI18n();
   const [picker, setPicker] = useState(false);
   if (!source.output_present || !source.output) return null;
-  return <details className="lyrics-track">
-    <summary>{t("lyrics.title")} · {t(`lyrics.state.${source.lyrics?.state || "unchecked"}`)}</summary>
+  return <div className="lyrics-track">
+    <span className="lyrics-state">{t("lyrics.title")} · {t(`lyrics.state.${source.lyrics?.state || "unchecked"}`)}</span>
+    <div className="lyrics-actions">
+      <LyricsSearchButton ids={[source.id]} refresh compact label="lyrics.searchAgain" notify={notify} />
+      <Button type="button" variant="outline" size="sm" className="lyrics-action" aria-label={t("lyrics.choose")} onClick={() => setPicker(true)}><FileMusic size={13} />{t("lyrics.chooseShort")}</Button>
+    </div>
+    {source.lyrics && <details className="lyrics-details"><summary>{t("lyrics.details")}</summary>
     {source.lyrics?.path && <small>{source.lyrics.path}</small>}
     {source.lyrics?.provider && <small>{t(`lyrics.provider.${source.lyrics.provider}`)}</small>}
     {source.lyrics?.error && <p>{errorMessage(source.lyrics.error)}</p>}
     {source.lyrics?.attempts && <details><summary>{t("lyrics.attempts")}</summary>{source.lyrics.attempts.map(attempt => <p key={attempt.provider}>{t(`lyrics.provider.${attempt.provider}`)} · {t(`lyrics.state.${attempt.state}`)}{attempt.error && <> · {errorMessage(attempt.error)}</>}</p>)}</details>}
-    <LyricsSearchButton ids={[source.id]} refresh label="lyrics.searchAgain" notify={notify} />
-    <Button type="button" variant="outline" size="sm" onClick={() => setPicker(true)}>{t("lyrics.choose")}</Button>
+    </details>}
     {picker && <LyricsPicker key={`${source.id}:${source.output}`} source={source} notify={notify} close={() => setPicker(false)} saved={refresh} />}
-  </details>;
+  </div>;
 }
 
 const onlineProviders = ["lrclib", "qq", "kugou", "netease"] as const;

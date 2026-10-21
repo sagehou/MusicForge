@@ -1,6 +1,10 @@
 import { test, expect } from "@playwright/test";
 import type { Source } from "../src/types";
 
+test.beforeEach(async ({ page }) => {
+  await page.route("**/api/lyrics", route => route.fulfill({ json: { options: { auto_search: false }, report: { state: "idle", total: 0, processed: 0, found: 0, not_found: 0, failed: 0, stopping: false } } }));
+});
+
 test("lyrics filters compose with audio status and library coverage survives new batches and reloads", async ({ page }) => {
   await page.addInitScript(() => localStorage.setItem("musicforge.language", "en"));
   const base: Source = { id: 1, path: "Artist/Album/01.flac", artist: "Artist", album: "Album", title: "Track", track: 1, disc: 1, present: true, output: "Artist/Album/01.opus", output_present: true, status: "ready", error: "", size: 123, metadata: {} };
@@ -27,7 +31,7 @@ test("lyrics filters compose with audio status and library coverage survives new
   }
 
   await page.goto("/library");
-  await page.locator(".lyrics-panel > summary").click();
+  await page.locator(".lyrics-panel > .lyrics-settings > summary").click();
   const inventory = page.getByRole("region", { name: "Library lyrics status", exact: true });
   await expect(inventory).toContainText("Library checked 6/7 tracks");
   await expect(inventory).toContainText("Available 2 · No match 1 · Instrumental 1 · Review 1 · Failed 1 · Unchecked 1");
@@ -78,7 +82,7 @@ test("lyrics filters compose with audio status and library coverage survives new
 
   report = { ...report, state: "idle", total: 0, processed: 0, found: 0 };
   await page.reload();
-  await page.locator(".lyrics-panel > summary").click();
+  await page.locator(".lyrics-panel > .lyrics-settings > summary").click();
   await expect(inventory).toContainText("Library checked 7/8 tracks");
   await expect(page.getByRole("status", { name: "Current lyrics batch", exact: true })).toHaveCount(0);
   sources[0].output_present = false;
@@ -121,9 +125,10 @@ test("lyrics selection, background progress, stop, automatic option and bilingua
   await page.getByRole("button", { name: "Fill lyrics for selected artifacts", exact: true }).click();
   await expect.poll(() => requests.length).toBe(1);
   expect(requests).toEqual([{ ids: [1], refresh: false }]);
-  await page.locator(".lyrics-panel > summary").click();
+  await page.locator(".lyrics-panel > .lyrics-settings > summary").click();
   await expect(page.locator(".lyrics-panel")).toContainText("Searching for lyrics");
   await expect(page.getByRole("button", { name: "Fill lyrics for all artifacts", exact: true })).toBeDisabled();
+  await page.locator(".lyrics-options > summary").click();
   await page.getByLabel("Automatically fill lyrics for new and existing artifacts", { exact: true }).check();
   await page.getByRole("button", { name: "Stop lyrics search", exact: true }).click();
   await expect(page.locator(".lyrics-panel")).toContainText("Lyrics search stopped");
@@ -132,7 +137,7 @@ test("lyrics selection, background progress, stop, automatic option and bilingua
   await expect.poll(() => requests.length).toBe(2);
   expect(requests.at(-1)).toEqual({ all: true, refresh: false });
   await page.getByRole("button", { name: "Stop lyrics search", exact: true }).click();
-  await page.locator(".lyrics-track > summary").click();
+  await page.locator(".lyrics-details > summary").click();
   await expect(page.locator(".lyrics-track")).toContainText("No synchronized match");
   await page.getByRole("button", { name: "Search again", exact: true }).click();
   await expect.poll(() => requests.length).toBe(3);
@@ -172,7 +177,7 @@ test("lyrics candidates keep partial results, preview languages and save an expl
     return route.fulfill({ json: source.lyrics });
   });
   await page.goto("/library?view=albums&artist=Artist&album=Artist%2FAlbum");
-  await page.locator(".lyrics-track > summary").click();
+  await page.locator(".lyrics-details > summary").click();
   await page.getByRole("button", { name: "Choose lyrics", exact: true }).click();
   const picker = page.getByRole("dialog", { name: "Choose lyrics", exact: true });
   await picker.getByLabel("Title or artist", { exact: true }).fill("別名 Artist");
@@ -233,7 +238,7 @@ test("song details and saved recommendations survive reopening and page reload",
   for (const text of ["Artist", "Album", "3:04 (183.5 s)", "1 / 2", "2.5 MiB (2,621,440 bytes)", source.hash!, source.path, source.output]) await expect(details).toContainText(text);
   await details.getByText("All audio tags", { exact: true }).click();
   await expect(details).toContainText("Pop");
-  await page.locator(".lyrics-track > summary").click();
+  await page.locator(".lyrics-details > summary").click();
   await page.getByRole("button", { name: "Choose lyrics", exact: true }).click();
   let picker = page.getByRole("dialog", { name: "Choose lyrics", exact: true });
   await expect(picker.getByText("Saved search", { exact: false })).toHaveCount(2);
@@ -249,7 +254,7 @@ test("song details and saved recommendations survive reopening and page reload",
   await expect(picker.getByText("Recommended", { exact: true })).toBeVisible();
   expect(searches).toHaveLength(0);
   await page.reload();
-  await page.locator(".lyrics-track > summary").click();
+  await page.locator(".lyrics-details > summary").click();
   await page.getByRole("button", { name: "Choose lyrics", exact: true }).click();
   await expect(picker.getByText("Recommended", { exact: true })).toBeVisible();
   expect(searches).toHaveLength(0);

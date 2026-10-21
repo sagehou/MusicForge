@@ -9,6 +9,10 @@ async function setup(page: Page) {
   await page.route("**/api/settings", route => route.fulfill({ json: response }));
 }
 
+test.beforeEach(async ({ page }) => {
+  await page.route("**/api/lyrics", route => route.fulfill({ json: { options: { auto_search: false }, report: { state: "idle", total: 0, processed: 0, found: 0, not_found: 0, failed: 0, stopping: false } } }));
+});
+
 test("settings sections preserve drafts, reveal invalid controls, discard and save together", async ({ page }) => {
   await setup(page);
   const writes: Record<string, unknown>[] = [];

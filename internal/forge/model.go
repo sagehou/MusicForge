@@ -339,6 +339,8 @@ type Source struct {
 	Rel             string            `json:"path"`
 	Hash            string            `json:"hash"`
 	Size            int64             `json:"size"`
+	SourceBitrate   int64             `json:"source_bitrate,omitempty"`
+	OutputSize      *int64            `json:"output_size,omitempty"`
 	Mtime           int64             `json:"mtime"`
 	Artist          string            `json:"artist"`
 	Album           string            `json:"album"`
@@ -359,6 +361,8 @@ type Source struct {
 	Repair          *RepairStatus     `json:"repair,omitempty"`
 	PossiblyDamaged bool              `json:"possibly_damaged,omitempty"`
 	Lyrics          *LyricsStatus     `json:"lyrics,omitempty"`
+
+	mediaInfoKnown bool
 }
 
 type Job struct {

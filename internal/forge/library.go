@@ -104,6 +104,7 @@ type probeData struct {
 		Codec       string            `json:"codec_name"`
 		Type        string            `json:"codec_type"`
 		Duration    string            `json:"duration"`
+		Bitrate     string            `json:"bit_rate"`
 		Tags        map[string]string `json:"tags"`
 		Disposition struct {
 			Attached int `json:"attached_pic"`
@@ -111,6 +112,7 @@ type probeData struct {
 	} `json:"streams"`
 	Format struct {
 		Duration string            `json:"duration"`
+		Bitrate  string            `json:"bit_rate"`
 		Tags     map[string]string `json:"tags"`
 	} `json:"format"`
 }
@@ -120,7 +122,7 @@ func (a *App) probe(ctx context.Context, path string) (probeData, error) {
 	probeCtx, cancel := context.WithTimeout(ctx, a.sourceTimeout())
 	defer cancel()
 	// Request only used fields; artwork stream diagnostics can otherwise truncate JSON.
-	cmd := exec.CommandContext(probeCtx, a.cfg.FFprobe, "-v", "error", "-probesize", "65536", "-analyzeduration", "100000", "-show_entries", "stream=codec_name,codec_type,duration:stream_tags:stream_disposition=attached_pic:format=duration:format_tags", "-of", "json", path)
+	cmd := exec.CommandContext(probeCtx, a.cfg.FFprobe, "-v", "error", "-probesize", "65536", "-analyzeduration", "100000", "-show_entries", "stream=codec_name,codec_type,duration,bit_rate:stream_tags:stream_disposition=attached_pic:format=duration,bit_rate:format_tags", "-of", "json", path)
 	out := boundedLog{limit: 4 * 1024 * 1024}
 	var stderr boundedLog
 	cmd.Stdout, cmd.Stderr = &out, &stderr
@@ -291,6 +293,9 @@ func (a *App) scan(ctx context.Context, r ScanRequest) error {
 	if err != nil {
 		return err
 	}
+	if err = a.annotateMedia(ctx, existing); err != nil {
+		return err
+	}
 	byRel := map[string]Source{}
 	for _, source := range existing {
 		byRel[source.Rel] = source
@@ -336,7 +341,7 @@ func (a *App) scan(ctx context.Context, r ScanRequest) error {
 			quiet = true
 			continue
 		}
-		if changed {
+		if changed || !source.mediaInfoKnown && source.Error == "" && source.Duration > 0 {
 			activity.Phase = "probe"
 			a.reportProgress(jobID, activity, float64(index)/float64(len(paths)))
 			current, readErr := a.sourceStat(ctx, s.Source, rel)
@@ -381,17 +386,24 @@ func (a *App) scan(ctx context.Context, r ScanRequest) error {
 				quiet = true
 				continue
 			}
-			// An empty hash still means no verified current content fingerprint.
-			// Never queue a BuildRequest until full SHA-256 verification finishes.
-			// Persist the compatible verification request before the tag-only row,
-			// so an interruption followed by rollback cannot strand an empty hash.
-			key := prepareScanPrefix + digest(fmt.Sprintf("%s:%d:%d:%s", rel, info.Size(), info.ModTime().UnixNano(), s.Encoding.Fingerprint()))
-			if _, err = a.enqueueTask("scan", key, ScanRequest{Dirs: []string{rel}, Verify: true}, r.Verify, taskID); err != nil {
-				return err
-			}
-			source, err = a.indexTags(rel, info, p, "")
-			if err != nil {
-				return err
+			if !changed {
+				// Backfill older indexes without clearing hashes or queuing conversion.
+				if err = a.rememberSourceMedia(source, p); err != nil {
+					return err
+				}
+			} else {
+				// An empty hash still means no verified current content fingerprint.
+				// Never queue a BuildRequest until full SHA-256 verification finishes.
+				// Persist the compatible verification request before the tag-only row,
+				// so an interruption followed by rollback cannot strand an empty hash.
+				key := prepareScanPrefix + digest(fmt.Sprintf("%s:%d:%d:%s", rel, info.Size(), info.ModTime().UnixNano(), s.Encoding.Fingerprint()))
+				if _, err = a.enqueueTask("scan", key, ScanRequest{Dirs: []string{rel}, Verify: true}, r.Verify, taskID); err != nil {
+					return err
+				}
+				source, err = a.indexTags(rel, info, p, "")
+				if err != nil {
+					return err
+				}
 			}
 		}
 		if !source.Present {
@@ -407,6 +419,11 @@ func (a *App) scan(ctx context.Context, r ScanRequest) error {
 			}
 			fi, statErr := os.Stat(out)
 			present = statErr == nil && fi.Mode().IsRegular()
+			if present {
+				if err = a.rememberAudioSize(source.ID, source.Output, fi.Size()); err != nil {
+					return err
+				}
+			}
 			if statErr != nil && !os.IsNotExist(statErr) {
 				return later("Output storage unavailable: "+statErr.Error(), 30)
 			}
@@ -517,7 +534,11 @@ func (a *App) indexTags(rel string, info fs.FileInfo, p probeData, hash string) 
 	if err = a.rememberArtwork(rel, info.Size(), info.ModTime().UnixNano(), hash, p); err != nil {
 		return Source{}, err
 	}
-	return a.sourceRel(rel)
+	source, err := a.sourceRel(rel)
+	if err == nil {
+		err = a.rememberSourceMedia(source, p)
+	}
+	return source, err
 }
 
 func (a *App) prepare(ctx context.Context, j Job, r ScanRequest) error {
@@ -831,6 +852,14 @@ type promotion struct {
 }
 
 func (a *App) finalize(s Settings, p promotion) error {
+	path, err := safePath(s.Output, p.Target)
+	if err != nil {
+		return err
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		return err
+	}
 	tx, err := a.db.Begin()
 	if err != nil {
 		return err
@@ -848,6 +877,9 @@ func (a *App) finalize(s Settings, p promotion) error {
 		return err
 	}
 	if err = tx.Commit(); err != nil {
+		return err
+	}
+	if err = a.rememberAudioSize(p.ID, p.Target, info.Size()); err != nil {
 		return err
 	}
 	if err = a.dirty(p.Target); err != nil {

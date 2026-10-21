@@ -710,5 +710,14 @@
   "error.lyricsNetEaseLoginExpired": "NetEase login Cookie expired or was rejected; replace the Cookie file",
   "error.lyricsNetEaseGuestExpired": "NetEase guest session expired or was rejected; retry later",
   "error.lyricsNetEaseGuestMissing": "NetEase did not issue a guest session; retry later or configure a Cookie file",
-  "error.lyricsNetEaseRestricted": "NetEase temporarily restricted lyrics requests (code -460); retry later"
+  "error.lyricsNetEaseRestricted": "NetEase temporarily restricted lyrics requests (code -460); retry later",
+  "library.allTracks": "All songs",
+  "library.sourceBitrate": "Source bitrate",
+  "library.outputSize": "Output size",
+  "library.bitratePending": "Not available yet. Scan to refresh; some formats do not report a bitrate.",
+  "lyrics.searchShort": "Search",
+  "lyrics.chooseShort": "Choose",
+  "lyrics.details": "Lyrics details",
+  "lyrics.fillShort": "Fill lyrics",
+  "lyrics.options": "Search settings"
 }

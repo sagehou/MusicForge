@@ -662,5 +662,14 @@
   "error.lyricsNetEaseLoginExpired": "网易云登录 Cookie 已过期或被拒绝；请更新 Cookie 文件",
   "error.lyricsNetEaseGuestExpired": "网易云游客会话已过期或被拒绝；请稍后重试",
   "error.lyricsNetEaseGuestMissing": "网易云未提供游客会话；请稍后重试或配置 Cookie 文件",
-  "error.lyricsNetEaseRestricted": "网易云暂时限制了歌词请求（错误码 -460）；请稍后重试"
+  "error.lyricsNetEaseRestricted": "网易云暂时限制了歌词请求（错误码 -460）；请稍后重试",
+  "library.allTracks": "全部歌曲",
+  "library.sourceBitrate": "源码率",
+  "library.outputSize": "产物大小",
+  "library.bitratePending": "暂无数据。扫描可刷新；部分格式不提供码率。",
+  "lyrics.searchShort": "重搜",
+  "lyrics.chooseShort": "选择",
+  "lyrics.details": "歌词详情",
+  "lyrics.fillShort": "补全歌词",
+  "lyrics.options": "搜索设置"
 }

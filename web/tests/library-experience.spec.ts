@@ -30,6 +30,10 @@ async function mockLibrary(page: Page, library = sources) {
   });
 }
 
+test.beforeEach(async ({ page }) => {
+  await page.route("**/api/lyrics", route => route.fulfill({ json: { options: { auto_search: false }, report: { state: "idle", total: 0, processed: 0, found: 0, not_found: 0, failed: 0, stopping: false } } }));
+});
+
 test("artwork, hierarchy, multi-disc tracks, selection and browser history", async ({ page }) => {
   await mockLibrary(page);
   await page.goto("/library");
@@ -42,7 +46,7 @@ test("artwork, hierarchy, multi-disc tracks, selection and browser history", asy
   await expect(page.locator(".album-summary .cover img")).toBeVisible();
   await expect(page.getByRole("table").getByText("Disc 1", { exact: true })).toBeVisible();
   await expect(page.getByRole("table").getByText("Disc 2", { exact: true })).toBeVisible();
-  await expect(page.getByRole("table").getByText("3:21", { exact: true })).toBeVisible();
+  await expect(page.locator(".track-facts").getByText("3:21", { exact: true })).toBeVisible();
   await page.getByLabel("Select First Light", { exact: true }).check();
   await page.getByLabel("Search library", { exact: true }).fill("Light");
   await page.getByRole("combobox", { name: "Appearance", exact: true }).selectOption("dark");
@@ -79,6 +83,55 @@ test("all-album and list views, unverified filter, missing images and persisted 
   await page.reload();
   await expect(page.locator(".cover-fallback")).toHaveCount(3);
   await expect(page.getByRole("alert")).toHaveCount(0);
+});
+
+test("all songs share filters, pagination and batch lyrics with visible file facts", async ({ page }) => {
+  const library = collection.map(source => ({ ...source, title: source.id >= 100 ? `Song ${source.id}` : source.title }));
+  Object.assign(library[0], { size: 26214400, source_bitrate: 894123, output_size: 5242880, lyrics: { state: "not_found", output: library[0].output, signature: "first", checked: 1 } });
+  Object.assign(library[3], { lyrics: { state: "not_found", output: library[3].output, signature: "morning", checked: 1 } });
+  const searches: unknown[] = [];
+  await mockLibrary(page, library);
+  await page.route("**/api/lyrics/search", route => { searches.push(route.request().postDataJSON()); return route.fulfill({ status: 202, json: { selected: 2 } }); });
+  await page.goto("/library");
+  await expect(page.getByRole("button", { name: "Fill lyrics for all artifacts", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: /^All songs/ }).click();
+  await expect(page).toHaveURL(/view=tracks/);
+  const rows = page.locator(".track-table tbody > tr");
+  await expect(rows).toHaveCount(50);
+  await expect(page.locator(".album-summary, .disc-heading, .layout-control")).toHaveCount(0);
+  await page.getByRole("button", { name: "Next page", exact: true }).click();
+  await expect(rows).toHaveCount(18);
+  await page.getByLabel("Filter by lyrics status", { exact: true }).selectOption("not_found");
+  await expect(rows).toHaveCount(2);
+  const first = rows.filter({ has: page.locator(".track-cell strong").filter({ hasText: /^First Light$/ }) });
+  for (const text of ["3:21", "894 kbps", "25 MiB", "5 MiB"]) await expect(first.locator(".track-facts")).toContainText(text);
+  await expect(first.locator(".track-file")).not.toHaveAttribute("open", "");
+  await expect(first.getByRole("button", { name: "Choose lyrics", exact: true })).toBeVisible();
+  await expect(first.getByRole("button", { name: "Search again", exact: true })).toBeVisible();
+  await expect(first.locator(".lyrics-details")).not.toHaveAttribute("open", "");
+  await page.getByLabel("Select current page", { exact: true }).check();
+  await page.getByRole("button", { name: "Fill lyrics for selected artifacts", exact: true }).click();
+  await expect.poll(() => searches.length).toBe(1);
+  expect(searches[0]).toEqual({ ids: [1, 4], refresh: false });
+  await page.reload();
+  await expect(page.getByRole("button", { name: /^All songs/ })).toHaveAttribute("aria-pressed", "true");
+  await page.getByLabel("Filter by status", { exact: true }).selectOption("unverified");
+  await expect(rows).toHaveCount(1);
+  await expect(rows.locator(".track-facts")).toContainText("3:03");
+  await expect(rows.locator(".track-facts")).not.toContainText("Output size");
+  await expect(rows.locator(".track-facts")).toContainText("—");
+  await page.getByLabel("Filter by status", { exact: true }).selectOption("all");
+  await page.getByLabel("Filter by lyrics status", { exact: true }).selectOption("not_found");
+  await page.getByRole("combobox", { name: "Language", exact: true }).selectOption("zh-CN");
+  await page.setViewportSize({ width: 320, height: 844 });
+  for (const theme of ["light", "dark"]) {
+    await page.getByRole("combobox", { name: "外观", exact: true }).selectOption(theme);
+    await expect(first.locator(".track-facts")).toContainText("3:21");
+    await expect(first.getByRole("button", { name: "选择歌词", exact: true })).toBeVisible();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
+    expect(await page.locator(".table-scroll").evaluate(element => element.scrollWidth <= element.clientWidth + 1)).toBe(true);
+    await page.screenshot({ path: `test-results/all-songs-320-${theme}-zh.png`, fullPage: true });
+  }
 });
 
 test("expired session reauthentication keeps unsaved Settings and never replays a write", async ({ page }) => {

@@ -31,6 +31,7 @@ test("lyrics filters compose with audio status and library coverage survives new
   }
 
   await page.goto("/library");
+  await expect(page.locator(".maintenance-count")).toHaveText("6 / 7");
   await page.locator(".lyrics-panel > .lyrics-settings > summary").click();
   const inventory = page.getByRole("region", { name: "Library lyrics status", exact: true });
   await expect(inventory).toContainText("Library checked 6/7 tracks");
@@ -125,6 +126,7 @@ test("lyrics selection, background progress, stop, automatic option and bilingua
   await page.getByRole("button", { name: "Fill lyrics for selected artifacts", exact: true }).click();
   await expect.poll(() => requests.length).toBe(1);
   expect(requests).toEqual([{ ids: [1], refresh: false }]);
+  await expect(page.getByRole("status", { name: "Current lyrics batch", exact: true })).toBeVisible();
   await page.locator(".lyrics-panel > .lyrics-settings > summary").click();
   await expect(page.locator(".lyrics-panel")).toContainText("Searching for lyrics");
   await expect(page.getByRole("button", { name: "Fill lyrics for all artifacts", exact: true })).toBeDisabled();
@@ -248,7 +250,13 @@ test("song details and saved recommendations survive reopening and page reload",
   await expect(recommended).toContainText("Duration difference 0.5 s");
   expect(searches).toHaveLength(0);
   await recommended.getByRole("radio").check();
+  await expect(recommended).toHaveAttribute("data-selected", "true");
   await expect(picker.locator("pre")).toContainText("爱这风云");
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  const candidates = await picker.locator(".lyrics-candidate-groups").boundingBox();
+  const preview = await picker.locator(".lyrics-preview-pane").boundingBox();
+  expect(preview!.x).toBeGreaterThan(candidates!.x + candidates!.width);
+  await page.screenshot({ path: "test-results/lyrics-recommendations-1440-light.png", animations: "disabled" });
   await picker.getByRole("button", { name: "Close lyrics selection", exact: true }).click();
   await page.getByRole("button", { name: "Choose lyrics", exact: true }).click();
   await expect(picker.getByText("Recommended", { exact: true })).toBeVisible();

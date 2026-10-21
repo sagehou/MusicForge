@@ -50,7 +50,7 @@ export function LyricsMaintenance({ sources, notify }: { sources: Source[]; noti
     return { counts, total, checked: total - counts.unchecked };
   }, [sources]);
   return <section className="library-comparison lyrics-panel">
-    <details className="lyrics-settings"><summary><FileMusic size={18} /><span>{t("lyrics.title")}</span><ChevronRight size={16} /></summary>
+    <details className="lyrics-settings"><summary><FileMusic size={18} /><span>{t("lyrics.title")}</span><small className="maintenance-count" aria-label={t("lyrics.coverage", { done: inventory.checked, total: inventory.total })}>{inventory.checked} / {inventory.total}</small><ChevronRight size={16} /></summary>
       <section className="lyrics-library-summary" aria-label={t("lyrics.libraryStatus")}>
         <strong>{t("lyrics.coverage", { done: inventory.checked, total: inventory.total })}</strong>
         <p>{t("lyrics.inventory", { found: inventory.counts.ready, missing: inventory.counts.not_found, instrumental: inventory.counts.instrumental, review: inventory.counts.needs_review, failed: inventory.counts.failed, unchecked: inventory.counts.unchecked })}</p>
@@ -79,7 +79,7 @@ function LyricsControls({ notify }: { notify: Notice }) {
     try { await api("/lyrics/search", "DELETE"); resource.update(data => ({ ...data, options: { auto_search: false } })); resource.retry(); }
     catch (err) { notify(err as Error, true); } finally { setBusy(false); }
   }
-  return <div className="lyrics-body">
+  return <div className="lyrics-body" data-running={running}>
     <div className="actions lyrics-quick-actions">
       <LyricsSearchButton all compact iconOnly label="lyrics.searchAll" notify={notify} disabled={busy || running} onStarted={resource.retry} />
       {running && <Button className="lyrics-action" variant="outline" size="sm" aria-label={t(report.stopping ? "lyrics.stopping" : "lyrics.stop")} disabled={busy || report.stopping} onClick={() => void stop()}><Square size={13} /></Button>}
@@ -104,7 +104,7 @@ export function LyricsTrack({ source, notify, refresh }: { source: Source; notif
   const { t, errorMessage } = useI18n();
   const [picker, setPicker] = useState(false);
   if (!source.output_present || !source.output) return null;
-  return <div className="lyrics-track">
+  return <div className="lyrics-track" data-state={source.lyrics?.state || "unchecked"}>
     <span className="lyrics-state">{t("lyrics.title")} · {t(`lyrics.state.${source.lyrics?.state || "unchecked"}`)}</span>
     <div className="lyrics-actions">
       <LyricsSearchButton ids={[source.id]} refresh compact label="lyrics.searchAgain" notify={notify} />
@@ -204,9 +204,8 @@ function LyricsPicker({ source, notify, close, saved }: { source: Source; notify
     .sort((a, b) => Number(b.candidate.script === "simplified") - Number(a.candidate.script === "simplified") || Number(b.candidate.translation_script === "simplified") - Number(a.candidate.translation_script === "simplified") || b.candidate.match_score - a.candidate.match_score)[0];
   return createPortal(<dialog className="lyrics-picker" ref={dialog} aria-labelledby={`lyrics-picker-title-${source.id}`} onClose={close} onCancel={event => { if (saving) event.preventDefault(); }}>
     <div className="lyrics-picker-heading"><h2 id={`lyrics-picker-title-${source.id}`}>{t("lyrics.choose")}</h2><Button type="button" variant="ghost" size="icon" aria-label={t("lyrics.close")} disabled={saving} onClick={() => dialog.current?.close()}><X size={18} /></Button></div>
-    <p>{source.title} · {source.artist}{source.duration ? <> · {t("lyrics.targetDuration", { seconds: source.duration })}</> : null}</p><p>{t("lyrics.chooseHint")}</p>
-    <p>{t("lyrics.cacheHint")}</p>
-    <details><summary>{t("lyrics.recommendationInfo")}</summary><p>{t("lyrics.recommendationHint")}</p></details>
+    <p className="lyrics-target">{source.title} · {source.artist}{source.duration ? <> · {t("lyrics.targetDuration", { seconds: source.duration })}</> : null}</p><p className="lyrics-picker-hint">{t("lyrics.chooseHint")}</p>
+    <details className="lyrics-guidance"><summary>{t("lyrics.recommendationInfo")}</summary><p>{t("lyrics.recommendationHint")}</p><p>{t("lyrics.cacheHint")}</p></details>
     {restoring && <p role="status">{t("lyrics.restoring")}</p>}
     {restoreError && <p role="alert">{errorMessage(restoreError)}</p>}
     <form className="lyrics-query" onSubmit={event => { event.preventDefault(); void search(); }}>
@@ -215,25 +214,28 @@ function LyricsPicker({ source, notify, close, saved }: { source: Source; notify
       <Button type="button" variant="ghost" disabled={saving || restoring || loading || !query.trim()} onClick={() => void search(true)}>{t("lyrics.forceSearch")}</Button>
       {loading && <Button type="button" variant="ghost" onClick={cancelSearch}>{t("lyrics.cancelSearch")}</Button>}
     </form>
-    <div className="lyrics-candidate-groups" aria-live="polite">{groups.map(group => <fieldset key={group.provider} disabled={saving}>
-      <legend>{t(`lyrics.name.${group.provider}`)}</legend>
+    <div className="lyrics-picker-results"><div className="lyrics-candidate-groups" aria-live="polite">{groups.map(group => <fieldset key={group.provider} disabled={saving}>
+      <legend>{t(`lyrics.name.${group.provider}`)}{group.provider === "lrclib" && <span className="provider-priority">{t("lyrics.preferredSource")}</span>}</legend>
       {group.cached && <small>{t("lyrics.cached")}{group.searched ? <> · {new Date(group.searched * 1000).toLocaleString(locale)}</> : null}</small>}
       {group.loading && <p role="status">{t("app.loading")}</p>}
       {group.error && <p role="alert">{errorMessage(group.error)}</p>}
       {!group.loading && !group.error && group.candidates.length === 0 && <p>{t("lyrics.noCandidates")}</p>}
-      {group.candidates.map(candidate => <label className="lyrics-candidate" key={candidate.index}>
+      {group.candidates.map(candidate => <label className="lyrics-candidate" key={candidate.index} data-recommended={recommended?.token === group.token && recommended?.candidate.index === candidate.index} data-selected={selected?.token === group.token && selected?.candidate.index === candidate.index}>
         <input type="radio" name={`lyrics-candidate-${source.id}`} aria-label={t("lyrics.previewCandidate", { title: candidate.title, artist: candidate.artist, provider: t(`lyrics.name.${candidate.provider}`) })} checked={!!selected && selected.token === group.token && selected.candidate.index === candidate.index} onChange={() => group.token && void choose({ token: group.token, candidate })} />
-        <span><strong dir="auto">{candidate.title}{recommended && recommended.token === group.token && recommended.candidate.index === candidate.index && <em className="lyrics-recommended">{t("lyrics.recommended")}</em>}</strong><span dir="auto">{candidate.artist} · {candidate.album || "—"} · {candidateDuration(candidate.duration)}</span><small>{t(candidate.high_confidence ? "lyrics.matchHigh" : "lyrics.matchReview")}{candidate.match_score !== undefined && <> · {t("lyrics.matchScore", { score: candidate.match_score })}</>}{candidate.duration_delta !== undefined && <> · {t("lyrics.durationDelta", { seconds: Math.round(candidate.duration_delta * 100) / 100 })}</>}</small>
-          {candidate.script === "simplified" && <small>{t("lyrics.simplified")}</small>}{candidate.script === "traditional" && <small>{t("lyrics.traditional")}</small>}{candidate.translation_script === "simplified" && <small>{t("lyrics.simplifiedTranslation")}</small>}</span>
+        <span><strong dir="auto">{candidate.title}{recommended && recommended.token === group.token && recommended.candidate.index === candidate.index && <em className="lyrics-recommended">{t("lyrics.recommended")}</em>}</strong><span dir="auto">{candidate.artist} · {candidate.album || "—"} · {candidateDuration(candidate.duration)}</span><small className="candidate-confidence" data-high={candidate.high_confidence}>{t(candidate.high_confidence ? "lyrics.matchHigh" : "lyrics.matchReview")}{candidate.match_score !== undefined && <> · {t("lyrics.matchScore", { score: candidate.match_score })}</>}{candidate.duration_delta !== undefined && <> · {t("lyrics.durationDelta", { seconds: Math.round(candidate.duration_delta * 100) / 100 })}</>}</small>
+          {candidate.script === "simplified" && <small className="script-chip">{t("lyrics.simplified")}</small>}{candidate.script === "traditional" && <small className="script-chip">{t("lyrics.traditional")}</small>}{candidate.translation_script === "simplified" && <small className="script-chip">{t("lyrics.simplifiedTranslation")}</small>}</span>
       </label>)}
     </fieldset>)}</div>
+    <div className="lyrics-preview-pane">
     {previewing && <p role="status">{t("lyrics.loadingPreview")}</p>}
     {previewError && <p className="repair-warning" role="alert">{errorMessage(previewError)}</p>}
     {preview && <section className="lyrics-preview" aria-label={t("lyrics.preview")}>
       <h3>{t("lyrics.preview")}</h3>{preview.script === "simplified" && <p>{t("lyrics.simplified")}</p>}{preview.script === "traditional" && <p>{t("lyrics.traditional")}</p>}<pre dir="auto">{preview.original}</pre>
       {preview.translation && <><label className="check-field"><input type="checkbox" checked={translation} disabled={saving} onChange={event => setTranslation(event.target.checked)} /><span>{t("lyrics.includeTranslation")}</span></label>{translation && <pre dir="auto">{preview.translation}</pre>}</>}
       {preview.romanization && <><label className="check-field"><input type="checkbox" checked={romanization} disabled={saving} onChange={event => setRomanization(event.target.checked)} /><span>{t("lyrics.includeRomanization")}</span></label>{romanization && <pre dir="auto">{preview.romanization}</pre>}</>}
-      <p>{t("lyrics.saveHint")}</p><Button type="button" disabled={saving} onClick={() => void save()}>{t("lyrics.saveCandidate")}</Button>
+      <div className="lyrics-save"><p>{t("lyrics.saveHint")}</p><Button type="button" disabled={saving} onClick={() => void save()}>{t("lyrics.saveCandidate")}</Button></div>
     </section>}
+    {!preview && !previewing && <div className="lyrics-preview-empty"><FileMusic size={24} /><h3>{t("lyrics.preview")}</h3><p>{t("lyrics.selectToPreview")}</p></div>}
+    </div></div>
   </dialog>, document.body);
 }

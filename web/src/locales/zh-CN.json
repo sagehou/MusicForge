@@ -672,5 +672,10 @@
   "lyrics.searchShort": "重搜",
   "lyrics.chooseShort": "选择",
   "lyrics.details": "歌词详情",
-  "lyrics.options": "搜索设置"
+  "lyrics.options": "搜索设置",
+  "library.activeFilters": "当前筛选",
+  "library.removeFilter": "移除筛选：{name}",
+  "library.clearFilters": "清除筛选",
+  "lyrics.preferredSource": "优先来源",
+  "lyrics.selectToPreview": "选择一条候选，预览歌词后保存。"
 }

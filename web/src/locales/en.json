@@ -720,5 +720,10 @@
   "lyrics.searchShort": "Search",
   "lyrics.chooseShort": "Choose",
   "lyrics.details": "Lyrics details",
-  "lyrics.options": "Search settings"
+  "lyrics.options": "Search settings",
+  "library.activeFilters": "Active filters",
+  "library.removeFilter": "Remove filter: {name}",
+  "library.clearFilters": "Clear filters",
+  "lyrics.preferredSource": "Preferred",
+  "lyrics.selectToPreview": "Choose a candidate to preview the lyrics before saving."
 }

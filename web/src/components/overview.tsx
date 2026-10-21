@@ -35,23 +35,20 @@ export function Overview({ notify, navigate }: { notify: Notice; navigate: (path
       <div className="hero-copy">
         <div className="hero-kicker"><span><Waves size={16} />{t("overview.eyebrow")}</span><span className={`online ${data.online ? "is-online" : ""}`}><span />{data.online ? t("overview.online") : data.storage_checking ? t("overview.checkingShort") : t("overview.waiting")}</span></div>
         <h1>{t("overview.title")}</h1><p>{t("overview.description")}</p>
-        <div className="hero-actions"><Button className="hero-primary" onClick={() => void scan()} disabled={busy || !data.enabled}><RefreshCw size={16} className={busy ? "animate-spin" : ""} />{t("overview.scan")}</Button><Button className="hero-secondary" variant="outline" onClick={() => navigate("/library")}>{t("overview.viewLibrary")}<ArrowRight size={16} /></Button></div>
-        <div className="hero-profile"><span>{data.codec.toUpperCase()}</span><strong>{profile}</strong><span>{t("overview.buildEyebrow")}</span></div>
       </div>
-      <div className="hero-visual">
-        <div className="hero-completion" role="progressbar" aria-label={t("overview.complete")} aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent}>
-          <svg className="completion-orbit" viewBox="0 0 240 240" aria-hidden="true">
-            <circle className="orbit-track" cx="120" cy="120" r="90" />
-            <circle className="orbit-progress" cx="120" cy="120" r="90" transform="rotate(-90 120 120)" strokeDasharray={Math.PI * 180} strokeDashoffset={Math.PI * 180 * (1 - percent / 100)} />
-          </svg>
-          <div className="completion-value"><span>{t("overview.complete")}</span><strong>{percentLabel}</strong><small>{number(data.ready_count)} / {number(data.source_count)}</small></div>
-        </div>
-        <span className="hero-caption">{t("overview.currentProfile")}</span>
-      </div>
+      <div className="hero-actions"><Button variant="outline" onClick={() => navigate("/library")}>{t("overview.viewLibrary")}<ArrowRight size={15} /></Button><Button onClick={() => void scan()} disabled={busy || !data.enabled}><RefreshCw size={15} className={busy ? "animate-spin" : ""} />{t("overview.scan")}</Button></div>
     </section>
     {!data.online && <div className="banner"><HardDrive size={20} /><div><strong>{data.storage_checking ? t("overview.checking") : data.enabled ? t("overview.offline") : t("overview.configure")}</strong><p>{errorMessage(data.storage_message)}</p></div><Button variant="outline" size="sm" onClick={() => navigate("/settings")}>{t("overview.openSettings")}</Button></div>}
     {data.rebuild_count > 0 && <div className="banner"><RefreshCw size={20} /><div><strong>{t("overview.rebuildCount", { count: data.rebuild_count })}</strong><p>{t("overview.keepPlayable")}</p></div><Button variant="outline" size="sm" onClick={() => navigate("/library")}>{t("overview.viewLibrary")}</Button></div>}
     <div className="metrics overview-metrics">{metrics.map(metric => <div className="metric" data-tone={metric.tone} key={metric.tone}><div><span>{metric.label}</span><metric.icon size={18} /></div><strong>{number(metric.value)}</strong><small>{metric.note}</small></div>)}</div>
+    <section className="readiness-panel">
+      <div className="hero-completion" role="progressbar" aria-label={t("overview.complete")} aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent}>
+        <div className="completion-value"><span>{t("overview.complete")}</span><strong>{percentLabel}</strong></div>
+        <div className="completion-meter" aria-hidden="true"><span style={{ width: `${percent}%` }} /></div>
+        <small>{number(data.ready_count)} / {number(data.source_count)} · {t("overview.currentProfile")}</small>
+      </div>
+      <div className="hero-profile"><small>{t("overview.buildEyebrow")}</small><div><span>{data.codec.toUpperCase()}</span><strong>{profile}</strong><Button variant="ghost" size="icon" aria-label={t("overview.openSettings")} onClick={() => navigate("/settings")}><ArrowRight size={15} /></Button></div></div>
+    </section>
     <div className="overview-grid">
       <section className="panel forge-pipeline"><div className="panel-heading"><div><h2>{t("overview.pipeline")}</h2><p>{t("overview.pipelineDescription")}</p></div><Waves size={20} className="panel-mark" /></div>
         <div className="forge-stages">

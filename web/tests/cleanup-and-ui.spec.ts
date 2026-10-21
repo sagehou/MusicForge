@@ -140,7 +140,7 @@ for (const width of [1440, 1024, 768, 390, 320]) {
     await expect(page.locator(".task")).toHaveCount(5);
     await expect(page.locator('.task[data-state="running"] .task-activity')).toContainText("First Light");
     await expect(page.locator('.task[data-state="running"] [role="progressbar"]')).toHaveAttribute("aria-valuenow", "44");
-    const colors = await page.locator(".task-meter > span").evaluateAll(nodes => nodes.map(node => getComputedStyle(node).backgroundImage));
+    const colors = await page.locator(".task-meter > span").evaluateAll(nodes => nodes.map(node => getComputedStyle(node).backgroundColor));
     expect(new Set(colors).size).toBeGreaterThanOrEqual(4);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
     // A breakpoint change must settle immediately, without layout overflow.

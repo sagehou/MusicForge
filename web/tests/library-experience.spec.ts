@@ -103,6 +103,11 @@ test("all songs share filters, pagination and batch lyrics with visible file fac
   await expect(rows).toHaveCount(18);
   await page.getByLabel("Filter by lyrics status", { exact: true }).selectOption("not_found");
   await expect(rows).toHaveCount(2);
+  await expect(page.getByRole("group", { name: "Active filters", exact: true })).toContainText("No synchronized match");
+  await page.getByRole("button", { name: "Remove filter: No synchronized match", exact: true }).click();
+  await expect(page.getByLabel("Filter by lyrics status", { exact: true })).toHaveValue("all");
+  await expect(rows).toHaveCount(50);
+  await page.getByLabel("Filter by lyrics status", { exact: true }).selectOption("not_found");
   const first = rows.filter({ has: page.locator(".track-cell strong").filter({ hasText: /^First Light$/ }) });
   for (const text of ["3:21", "FLAC · 24 bit / 96 kHz · 2 ch", "894 kbps", "25 MiB", "5 MiB"]) await expect(first.locator(".track-facts")).toContainText(text);
   await expect(first.locator(".track-file")).not.toHaveAttribute("open", "");
@@ -133,6 +138,10 @@ test("all songs share filters, pagination and batch lyrics with visible file fac
     expect(await page.locator(".table-scroll").evaluate(element => element.scrollWidth <= element.clientWidth + 1)).toBe(true);
     await page.screenshot({ path: `test-results/all-songs-320-${theme}-zh.png`, fullPage: true });
   }
+  await page.getByRole("button", { name: "清除筛选", exact: true }).click();
+  await expect(page.locator(".active-filters")).toHaveCount(0);
+  await page.locator(".library-options > summary").click();
+  await expect(page.getByLabel("歌词匹配状态", { exact: true })).toHaveValue("all");
 });
 
 test("expired session reauthentication keeps unsaved Settings and never replays a write", async ({ page }) => {

@@ -168,15 +168,16 @@ test("repair queues share the Jobs list, filters and safe controls in both langu
   task.state = "stopped"; task.stopping = false; task.log = "Repair stopped; check Library for any output committed before cancellation";
   await expect(row.locator(".task-main .badge")).toHaveText("Stopped");
   await row.getByRole("button", { name: "Details", exact: true }).click();
-  await row.locator("summary").click(); await expect(row.locator("pre")).toContainText("Repair stopped");
-  await expect(row.getByRole("link")).toHaveAttribute("href", /album=Artist%2FAlbum/);
+  const inspector = page.locator(".task-inspector");
+  await inspector.locator(".task-diagnostic summary").click(); await expect(inspector.locator("pre")).toContainText("Repair stopped");
+  await expect(inspector.getByRole("link")).toHaveAttribute("href", /album=Artist%2FAlbum/);
   task.state = "success"; task.output = "Artist/Album/01.opus"; task.progress = 1;
   task.log = "Possibly damaged: imported using best-effort decoding\nPCM bytes: 100 of 120\nOriginal strict conversion failure: MD5 mismatch";
   await page.reload();
   await expect(row.locator(".task-main .badge")).toHaveText("Success");
   await expect(row).toContainText("Possibly damaged");
-  await row.getByRole("button", { name: "Details", exact: true }).click(); await row.locator("summary").click();
-  await expect(row.locator("pre")).toContainText("Original strict conversion failure");
+  await row.getByRole("button", { name: "Details", exact: true }).click(); await inspector.locator(".task-diagnostic summary").click();
+  await expect(inspector.locator("pre")).toContainText("Original strict conversion failure");
   await expect(row.getByRole("button", { name: "Retry", exact: true })).toHaveCount(0);
   for (const width of [1440, 768, 390, 320]) {
     await page.setViewportSize({ width, height: 900 });
@@ -186,6 +187,7 @@ test("repair queues share the Jobs list, filters and safe controls in both langu
   await expect(row).toContainText("尽力修复队列");
   await expect(row).toContainText("已导入输出库 · 可能损坏");
   await page.screenshot({ path: "test-results/unified-repair-tasks-320-zh.png", fullPage: true, animations: "disabled" });
+  await inspector.getByRole("button", { name: "关闭面板", exact: true }).click();
   page.once("dialog", dialog => dialog.accept());
   await row.getByRole("button", { name: "删除记录", exact: true }).click();
   await expect(row).toHaveCount(0); expect(deletions).toBe(1);

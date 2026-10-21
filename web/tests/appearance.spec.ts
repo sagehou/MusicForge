@@ -76,6 +76,8 @@ test("presets and custom colors persist, retain contrast and stay synchronized i
       await expect(page.locator("html")).toHaveAttribute("data-palette", value);
       await readable(page);
     }
+    await menu.getByRole("button", { name: "Custom", exact: true }).click();
+    await expect(page.locator("html")).toHaveAttribute("data-palette", "custom");
     await menu.getByLabel("Color hex code", { exact: true }).fill("#12ab7e");
     await expect(page.locator("html")).toHaveAttribute("data-palette", "custom");
     await readable(page);

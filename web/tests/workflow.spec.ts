@@ -192,6 +192,7 @@ test("bilingual setup, real incremental build, state preservation and login", as
   await page.getByLabel("Lidarr source path prefix", { exact: true }).fill("relative/flac");
   await page.getByRole("button", { name: "Save settings", exact: true }).click();
   await expect(page.getByRole("alert")).toContainText("Lidarr path prefix must be an absolute container path");
+  await expect(page.locator(".settings-save").getByRole("alert")).toBeVisible();
   await setPreference(page, "language", "zh-CN");
   await expect(page.getByRole("alert")).toContainText("Lidarr 路径前缀必须是容器内的绝对路径");
   await setPreference(page, "language", "en");

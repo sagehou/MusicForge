@@ -1036,7 +1036,8 @@ input[role="switch"]:checked::after { transform: translateX(14px); background: v
 .settings-panel .input-action .field-label { grid-template-columns: 180px minmax(0, 1fr); padding-bottom: 40px; }
 .settings-panel .input-action > .ui-button { position: absolute; bottom: 0; left: 200px; }
 .settings-panel .input-action + small { padding-top: 2px; }
-.settings-save { position: sticky; bottom: 16px; padding: 12px 16px; border-radius: 8px; }
+.settings-save { position: sticky; bottom: 16px; padding: 12px 16px; border-radius: 8px; flex-wrap: wrap; }
+.settings-save .toast { position: static; flex-basis: 100%; width: 100%; max-width: none; padding: 10px 12px; box-shadow: none; }
 .settings-save[data-dirty="false"] { box-shadow: none; }
 .settings-subheading { margin-top: 18px; border-top: 0; padding-top: 0; }
 .auth-card { max-width: 400px; border: 0; box-shadow: none; background: transparent; padding: 24px; }

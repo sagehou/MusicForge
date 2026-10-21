@@ -78,6 +78,7 @@ test("track inspectors keep the filtered list and restore keyboard focus without
 test("cached lyric review saves and advances in the same panel without repeating provider searches", async ({ page }) => {
   await setup(page);
   let searches = 0, saves = 0;
+  await page.route("**/api/library", route => route.fulfill({ json: tracks.map(source => saves && source.id === 1 ? { ...source, lyrics: { ...source.lyrics, state: "ready" } } : source) }));
   await page.route("**/api/library/*/lyrics/candidates", route => {
     if (route.request().method() !== "GET") searches++;
     const id = Number(new URL(route.request().url()).pathname.split("/")[3]);
@@ -101,6 +102,31 @@ test("cached lyric review saves and advances in the same panel without repeating
   await picker.getByRole("radio").check();
   await expect(picker.locator(".lyrics-preview pre")).toContainText("海岸与夜晚");
   await page.screenshot({ path: "test-results/workspace-lyrics-review.png", animations: "disabled" });
+});
+
+test("signing in after expiry restores the open lyric panel and its unsaved query", async ({ page }) => {
+  await setup(page);
+  let authenticated = true;
+  await page.route("**/api/auth/me", route => route.fulfill({ json: { initialized: true, authenticated, username: "admin", method: "local", csrf: "test", oidc: false, version: "test" } }));
+  await page.route("**/api/auth/login", route => { authenticated = true; return route.fulfill({ json: {} }); });
+  await page.route("**/api/library/*/lyrics/candidates", route => route.fulfill({ json: { query: "Song 01 River Ensemble", groups: [] } }));
+  await page.goto("/library");
+  await page.locator(".track-table tbody > tr").first().getByRole("button", { name: "Choose lyrics", exact: true }).click();
+  const picker = page.getByRole("dialog", { name: "Choose lyrics", exact: true });
+  await picker.getByLabel("Title or artist", { exact: true }).fill("Unsaved alternate title");
+  authenticated = false;
+  await page.evaluate(() => window.dispatchEvent(new Event("session-expired")));
+  const login = page.getByRole("dialog", { name: "Session expired", exact: true });
+  await expect(login).toBeVisible();
+  await expect(picker).toBeHidden();
+  await login.getByLabel("Password", { exact: true }).fill("test-password");
+  await login.getByRole("button", { name: "Log in", exact: true }).click();
+  await expect(login).toHaveCount(0);
+  await expect(picker).toBeVisible();
+  await expect(picker.getByLabel("Title or artist", { exact: true })).toHaveValue("Unsaved alternate title");
+  await expect(picker.getByLabel("Title or artist", { exact: true })).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(picker).toHaveCount(0);
 });
 
 test("phone pages retain real content, readable facts and full-screen inspectors in both themes", async ({ page }) => {

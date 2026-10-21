@@ -11,7 +11,7 @@ import { Library } from "./components/library";
 import { BatchRepairButton } from "./components/repair";
 import { RepairTaskDetails } from "./components/repair-tasks";
 import { Overview } from "./components/overview";
-import { DetailPanel } from "./components/detail-panel";
+import { DetailPanel, DetailPanelSuspended } from "./components/detail-panel";
 import { taskPercent } from "./lib/utils";
 
 function Field({ label, hint, children, action }: { label: string; hint?: string; children: ReactNode; action?: ReactNode }) { return <div className="field"><div className={action ? "input-action" : undefined}><label className="field-label"><span>{label}</span>{children}</label>{action}</div>{hint && <small>{hint}</small>}</div>; }
@@ -92,7 +92,7 @@ export function App() {
   if (!me.authenticated) return <Auth me={me} done={loadMe} recoveryError={authError} />;
   const nav = [{ path: "/", label: t("app.overview"), icon: LayoutDashboard }, { path: "/library", label: t("app.library"), icon: ListMusic }, { path: "/jobs", label: t("app.jobs"), icon: Activity }, { path: "/settings", label: t("app.settings"), icon: Settings2 }];
   const current = nav.find(item => item.path === page) || nav[0];
-  return <><div className="app-shell" data-sidebar-collapsed={sidebarCollapsed} inert={locked ? true : undefined} aria-hidden={locked ? true : undefined}><a className="skip-link" href="#main-content">{t("app.skipContent")}</a>
+  return <DetailPanelSuspended.Provider value={Boolean(locked)}><div className="app-shell" data-sidebar-collapsed={sidebarCollapsed} inert={locked ? true : undefined} aria-hidden={locked ? true : undefined}><a className="skip-link" href="#main-content">{t("app.skipContent")}</a>
     <aside className="sidebar">
       <div className="brand-row"><a className="brand" href="/" aria-label="MusicForge" title="MusicForge" onClick={e => { e.preventDefault(); navigate("/"); }}><span className="brand-icon"><Waves /></span><span>MusicForge</span></a><Button className="sidebar-toggle" variant="ghost" size="icon" aria-label={t(sidebarCollapsed ? "app.expandSidebar" : "app.collapseSidebar")} title={t(sidebarCollapsed ? "app.expandSidebar" : "app.collapseSidebar")} aria-expanded={!sidebarCollapsed} aria-controls="main-navigation" onClick={toggleSidebar}>{sidebarCollapsed ? <PanelLeftOpen size={18} /> : <PanelLeftClose size={18} />}</Button></div>
       <nav id="main-navigation" aria-label={t("app.navigation")}>{nav.map(item => <a key={item.path} href={item.path} aria-label={item.label} title={item.label} aria-current={current.path === item.path ? "page" : undefined} className={current.path === item.path ? "active" : ""} onClick={e => { e.preventDefault(); navigate(item.path); }}><item.icon size={19} /><span className="nav-label">{item.label}</span>{current.path === item.path && <span className="nav-dot" />}</a>)}</nav>
@@ -109,7 +109,7 @@ export function App() {
     const first = focusable[0], last = focusable[focusable.length - 1];
     if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
     if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
-  }}><Auth me={locked} done={loadMe} username={me.username} recoveryError={authError} expired /></div>}</>;
+  }}><Auth me={locked} done={loadMe} username={me.username} recoveryError={authError} expired /></div>}</DetailPanelSuspended.Provider>;
 }
 
 function Auth({ me, done, username, recoveryError = "", expired = false }: { me: Me; done: () => Promise<void>; username?: string; recoveryError?: string; expired?: boolean }) {

@@ -112,6 +112,7 @@ export function Library({ notify }: { notify: Notice }) {
   const trackColumns = 7;
   const [detailID, setDetailID] = useState<number>();
   const [lyricsID, setLyricsID] = useState<number>();
+  const lyricsOrder = useRef<number[]>([]);
   const [optionsOpen, setOptionsOpen] = useState(false);
   const [sort, setSort] = useState(() => new URLSearchParams(location.search).get("sort") === "attention" ? "attention" : "name");
   const [selected, setSelected] = useState<Set<number>>(new Set());
@@ -206,6 +207,9 @@ export function Library({ notify }: { notify: Notice }) {
     const params = new URLSearchParams({ view: next.view });
     if (next.artist !== undefined) params.set("artist", next.artist);
     if (next.album !== undefined) params.set("album", next.album);
+    if (filter !== "all") params.set("status", filter);
+    if (lyricsFilter !== "all") params.set("lyrics", lyricsFilter);
+    if (sort !== "name") params.set("sort", sort);
     history.pushState(null, "", `/library?${params}`);
     transition.current?.skipTransition();
     const revision = ++navigation.current;
@@ -267,14 +271,26 @@ export function Library({ notify }: { notify: Notice }) {
   const detailSource = data.find(source => source.id === detailID);
   const lyricsSource = data.find(source => source.id === lyricsID);
   function adjacent(id: number, direction: number, lyrics = false) {
-    const candidates = lyrics ? rows.filter(source => source.output_present && source.output) : rows;
-    const index = candidates.findIndex(source => source.id === id);
-    return index < 0 ? undefined : candidates[index + direction];
+    if (!lyrics) {
+      const index = rows.findIndex(source => source.id === id);
+      return index < 0 ? undefined : rows[index + direction];
+    }
+    const index = lyricsOrder.current.indexOf(id);
+    if (index < 0) return;
+    for (let i = index + direction; i >= 0 && i < lyricsOrder.current.length; i += direction) {
+      const source = data.find(source => source.id === lyricsOrder.current[i]);
+      if (source?.output_present && source.output) return source;
+    }
+  }
+  function openLyrics(id: number) {
+    lyricsOrder.current = rows.filter(source => source.output_present && source.output).map(source => source.id);
+    setLyricsID(id);
   }
   function step(source: Source | undefined, lyrics = false) {
     if (!source) return;
     if (lyrics) setLyricsID(source.id); else setDetailID(source.id);
-    if (showingTracks) setOffset(Math.floor(rows.findIndex(row => row.id === source.id) / 50) * 50);
+    const index = rows.findIndex(row => row.id === source.id);
+    if (showingTracks && index >= 0) setOffset(Math.floor(index / 50) * 50);
   }
   return <>
     <ResourceWarning error={error} retry={retry} />
@@ -356,7 +372,7 @@ export function Library({ notify }: { notify: Notice }) {
             <td className="track-title"><div className="track-cell"><span className="track-number">{source.track || <Music2 size={15} />}</span><div><button className="track-open" aria-label={t("library.openDetails", { title: source.title || source.path })} onClick={() => setDetailID(source.id)}><strong dir="auto">{source.title || source.path.split("/").pop()}</strong></button><small className="track-byline" dir="auto">{source.artist || t("library.unknownArtist")} · {source.album || t("library.unknownAlbum")}</small>{!source.present && <small className="source-missing">{t("library.sourceDeleted")}</small>}</div></div></td>
             <td className="track-facts-cell" colSpan={3}><TrackFacts source={source} /></td>
             <td className="track-output"><Badge status={source.status} />{source.output_present && source.status !== "ready" && source.status !== "possibly_damaged" && <small>{t("library.stillPlayable")}</small>}<RepairControls source={source} notify={notify} refresh={retry} />{!source.present && !source.output && !source.output_present && <Button className="forget-record" size="sm" variant="ghost" disabled={busy} onClick={() => void forget([source.id])}><Trash2 size={13} />{t("library.forgetRecord")}</Button>}{source.error && <Button variant="ghost" size="sm" onClick={() => setDetailID(source.id)}>{t("library.errorDetails")}</Button>}</td>
-            <td className="track-lyrics"><LyricsTrack source={source} notify={notify} refresh={retry} onChoose={() => setLyricsID(source.id)} /></td>
+            <td className="track-lyrics"><LyricsTrack source={source} notify={notify} refresh={retry} onChoose={() => openLyrics(source.id)} /></td>
           </tr></Fragment>;
         })}</tbody></table></div>}
         <div className="pagination"><span>{t(showingTracks ? "library.pagination" : "library.groupPagination", { start: safeOffset + 1, end: Math.min(safeOffset + 50, count), total: count })}</span>

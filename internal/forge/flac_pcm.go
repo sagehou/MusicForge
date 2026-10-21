@@ -27,8 +27,25 @@ func readFLACPCM(path string) (*flacPCM, error) {
 		return nil, err
 	}
 	defer f.Close()
+	p, err := readFLACStreamInfo(f)
+	if err != nil {
+		return nil, err
+	}
+	if p.Rate == 0 || p.Samples == 0 || p.MD5 == [16]byte{} {
+		return nil, nil
+	}
+	switch p.Bits {
+	case 8, 16, 24, 32:
+		return p, nil
+	default:
+		return nil, nil
+	}
+}
+
+// Native FLAC stores its audio specification before all tags and artwork.
+func readFLACStreamInfo(r io.Reader) (*flacPCM, error) {
 	var header [42]byte
-	if _, err = io.ReadFull(f, header[:]); err != nil {
+	if _, err := io.ReadFull(r, header[:]); err != nil {
 		return nil, fmt.Errorf("read FLAC STREAMINFO: %w", err)
 	}
 	if string(header[:4]) != "fLaC" || header[4]&0x7f != 0 || header[5] != 0 || header[6] != 0 || header[7] != 34 {
@@ -40,15 +57,7 @@ func readFLACPCM(path string) (*flacPCM, error) {
 		Bits: int(packed>>36&31) + 1, Samples: int64(packed & ((1 << 36) - 1)),
 	}
 	copy(p.MD5[:], header[26:42])
-	if p.Rate == 0 || p.Samples == 0 || p.MD5 == [16]byte{} {
-		return nil, nil
-	}
-	switch p.Bits {
-	case 8, 16, 24, 32:
-		return p, nil
-	default:
-		return nil, nil
-	}
+	return p, nil
 }
 
 func (p *flacPCM) byteCount() int64 {

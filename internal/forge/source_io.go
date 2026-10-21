@@ -47,14 +47,15 @@ func sourceSnapshot(path, rel string, info fs.FileInfo) sourceInfo {
 }
 
 type sourceEvent struct {
-	Info     *sourceInfo `json:"info,omitempty"`
-	Path     string      `json:"path,omitempty"`
-	Read     int64       `json:"read,omitempty"`
-	Hash     string      `json:"hash,omitempty"`
-	Error    string      `json:"error,omitempty"`
-	Missing  bool        `json:"missing,omitempty"`
-	Complete bool        `json:"complete,omitempty"`
-	Text     string      `json:"text,omitempty"`
+	Info     *sourceInfo  `json:"info,omitempty"`
+	Path     string       `json:"path,omitempty"`
+	Read     int64        `json:"read,omitempty"`
+	Hash     string       `json:"hash,omitempty"`
+	Error    string       `json:"error,omitempty"`
+	Missing  bool         `json:"missing,omitempty"`
+	Complete bool         `json:"complete,omitempty"`
+	Text     string       `json:"text,omitempty"`
+	Audio    *audioFormat `json:"audio,omitempty"`
 }
 
 // RunSourceIO handles only the internal child-process mode, before app startup.
@@ -84,6 +85,35 @@ func readSourceIO(operation, root, rel string, emit func(sourceEvent) error, sta
 		return err
 	}
 	switch operation {
+	case "flac-info":
+		file, err := os.Open(path)
+		if err != nil {
+			return err
+		}
+		defer file.Close()
+		info, err := file.Stat()
+		if err != nil {
+			return err
+		}
+		if !info.Mode().IsRegular() {
+			return errors.New("source is not a regular file")
+		}
+		p, err := readFLACStreamInfo(file)
+		if err != nil {
+			return err
+		}
+		if p.Rate <= 0 || p.Bits < 4 {
+			return errors.New("invalid FLAC audio specification")
+		}
+		after, err := os.Stat(path)
+		if err != nil {
+			return err
+		}
+		if !os.SameFile(info, after) || info.Size() != after.Size() || !info.ModTime().Equal(after.ModTime()) {
+			return errors.New("source changed while reading FLAC audio specification")
+		}
+		snapshot := sourceSnapshot(path, rel, info)
+		return emit(sourceEvent{Info: &snapshot, Audio: &audioFormat{Codec: "flac", SampleRate: p.Rate, BitDepth: p.Bits, Channels: p.Channels}})
 	case "lyrics":
 		file, err := os.Open(path)
 		if err != nil {

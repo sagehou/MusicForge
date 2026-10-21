@@ -98,3 +98,19 @@ func TestFLACPCMRequiresExactLengthAndMD5(t *testing.T) {
 type failingPCMReader struct{}
 
 func (failingPCMReader) Read([]byte) (int, error) { return 0, io.ErrUnexpectedEOF }
+
+func TestFLACSpecificationReadsOnly42BytesAndDoesNotRequireVerificationFields(t *testing.T) {
+	var header [42]byte
+	copy(header[:], "fLaC")
+	header[7] = 34 // More metadata follows; reading it must be unnecessary.
+	binary.BigEndian.PutUint64(header[18:26], uint64(44100)<<44|uint64(1)<<41|uint64(19)<<36)
+	p, err := readFLACStreamInfo(io.MultiReader(bytes.NewReader(header[:]), failingPCMReader{}))
+	if err != nil || p.Rate != 44100 || p.Bits != 20 || p.Channels != 2 || p.Samples != 0 || p.MD5 != [16]byte{} {
+		t.Fatal("display specification read tags or required PCM verification fields", p, err)
+	}
+	for _, raw := range [][]byte{header[:41], bytes.Repeat([]byte{0}, 42)} {
+		if _, err := readFLACStreamInfo(bytes.NewReader(raw)); err == nil {
+			t.Fatal("invalid STREAMINFO accepted")
+		}
+	}
+}

@@ -35,10 +35,16 @@ function fileSize(bytes: number, locale: string) {
   const unit = Math.min(4, Math.floor(Math.log2(Math.max(bytes, 1)) / 10));
   return `${new Intl.NumberFormat(locale, { maximumFractionDigits: 2 }).format(bytes / 1024 ** unit)} ${["B", "KiB", "MiB", "GiB", "TiB"][unit]}`;
 }
+function AudioSpec({ audio }: { audio: Source["source_audio"] }) {
+  const { t, number } = useI18n();
+  const resolution = [audio?.bit_depth ? `${number(audio.bit_depth)} bit` : "", audio?.sample_rate ? `${number(audio.sample_rate / 1000)} kHz` : ""].filter(Boolean).join(" / ");
+  return <>{[audio?.codec?.toUpperCase(), resolution, audio?.channels ? t("library.channels", { count: number(audio.channels) }) : ""].filter(Boolean).join(" · ") || "—"}</>;
+}
 function TrackFacts({ source }: { source: Source }) {
   const { t, locale, number } = useI18n();
   return <dl className="track-facts">
     <div><dt>{t("library.duration")}</dt><dd>{duration(source.duration || 0)}</dd></div>
+    <div><dt>{t("library.sourceAudio")}</dt><dd><AudioSpec audio={source.source_audio} /></dd></div>
     <div title={!source.source_bitrate ? t("library.bitratePending") : undefined}><dt>{t("library.sourceBitrate")}</dt><dd>{source.source_bitrate ? `${number(Math.round(source.source_bitrate / 1000))} kbps` : "—"}</dd></div>
     <div><dt>{t("library.sourceSize")}</dt><dd>{fileSize(source.size, locale)}</dd></div>
     {source.output_present && source.output_size !== undefined && <div><dt>{t("library.outputSize")}</dt><dd>{fileSize(source.output_size, locale)}</dd></div>}
@@ -52,6 +58,7 @@ function TrackDetails({ source }: { source: Source }) {
     <dt>{t("library.songAlbum")}</dt><dd>{source.album || t("library.unknownAlbum")}</dd>
     <dt>{t("library.duration")}</dt><dd>{source.duration ? t("library.exactDuration", { time: duration(source.duration), seconds: number(source.duration) }) : "—"}</dd>
     <dt>{t("library.trackDisc")}</dt><dd>{source.track || "—"} / {source.disc || "—"}</dd>
+    <dt>{t("library.sourceAudio")}</dt><dd><AudioSpec audio={source.source_audio} /></dd>
     <dt>{t("library.sourceBitrate")}</dt><dd>{source.source_bitrate ? `${number(source.source_bitrate)} bps` : t("library.bitratePending")}</dd>
     <dt>{t("library.sourceSize")}</dt><dd>{fileSize(source.size, locale)}{source.size >= 1024 && <> ({t("library.bytes", { size: source.size })})</>}</dd>
     {source.output_present && source.output_size !== undefined && <><dt>{t("library.outputSize")}</dt><dd>{fileSize(source.output_size, locale)} ({t("library.bytes", { size: source.output_size })})</dd></>}

@@ -340,6 +340,7 @@ type Source struct {
 	Hash            string            `json:"hash"`
 	Size            int64             `json:"size"`
 	SourceBitrate   int64             `json:"source_bitrate,omitempty"`
+	SourceAudio     *audioFormat      `json:"source_audio,omitempty"`
 	OutputSize      *int64            `json:"output_size,omitempty"`
 	Mtime           int64             `json:"mtime"`
 	Artist          string            `json:"artist"`

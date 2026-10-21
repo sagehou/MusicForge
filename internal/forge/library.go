@@ -105,6 +105,10 @@ type probeData struct {
 		Type        string            `json:"codec_type"`
 		Duration    string            `json:"duration"`
 		Bitrate     string            `json:"bit_rate"`
+		SampleRate  string            `json:"sample_rate"`
+		RawBits     string            `json:"bits_per_raw_sample"`
+		SampleBits  int               `json:"bits_per_sample"`
+		Channels    int               `json:"channels"`
 		Tags        map[string]string `json:"tags"`
 		Disposition struct {
 			Attached int `json:"attached_pic"`
@@ -118,11 +122,15 @@ type probeData struct {
 }
 
 func (a *App) probe(ctx context.Context, path string) (probeData, error) {
+	return a.probeEntries(ctx, path, "stream=codec_name,codec_type,duration,bit_rate,sample_rate,bits_per_raw_sample,bits_per_sample,channels:stream_tags:stream_disposition=attached_pic:format=duration,bit_rate:format_tags")
+}
+
+func (a *App) probeEntries(ctx context.Context, path, entries string) (probeData, error) {
 	var p probeData
 	probeCtx, cancel := context.WithTimeout(ctx, a.sourceTimeout())
 	defer cancel()
 	// Request only used fields; artwork stream diagnostics can otherwise truncate JSON.
-	cmd := exec.CommandContext(probeCtx, a.cfg.FFprobe, "-v", "error", "-probesize", "65536", "-analyzeduration", "100000", "-show_entries", "stream=codec_name,codec_type,duration,bit_rate:stream_tags:stream_disposition=attached_pic:format=duration,bit_rate:format_tags", "-of", "json", path)
+	cmd := exec.CommandContext(probeCtx, a.cfg.FFprobe, "-v", "error", "-probesize", "65536", "-analyzeduration", "100000", "-show_entries", entries, "-of", "json", path)
 	out := boundedLog{limit: 4 * 1024 * 1024}
 	var stderr boundedLog
 	cmd.Stdout, cmd.Stderr = &out, &stderr
@@ -341,7 +349,18 @@ func (a *App) scan(ctx context.Context, r ScanRequest) error {
 			quiet = true
 			continue
 		}
-		if changed || !source.mediaInfoKnown && source.Error == "" && source.Duration > 0 {
+		if !changed && !source.mediaInfoKnown && source.Error == "" && source.Duration > 0 {
+			activity.Phase = "probe"
+			a.reportProgress(jobID, activity, float64(index)/float64(len(paths)))
+			if mediaErr := a.backfillSourceMedia(ctx, s.Source, source); mediaErr != nil {
+				if ctx.Err() != nil {
+					return ctx.Err()
+				}
+				// Optional display information must not invalidate verified audio.
+				a.logger.Warn("source media information unavailable", "path", rel, "error", mediaErr)
+			}
+		}
+		if changed {
 			activity.Phase = "probe"
 			a.reportProgress(jobID, activity, float64(index)/float64(len(paths)))
 			current, readErr := a.sourceStat(ctx, s.Source, rel)
@@ -386,24 +405,17 @@ func (a *App) scan(ctx context.Context, r ScanRequest) error {
 				quiet = true
 				continue
 			}
-			if !changed {
-				// Backfill older indexes without clearing hashes or queuing conversion.
-				if err = a.rememberSourceMedia(source, p); err != nil {
-					return err
-				}
-			} else {
-				// An empty hash still means no verified current content fingerprint.
-				// Never queue a BuildRequest until full SHA-256 verification finishes.
-				// Persist the compatible verification request before the tag-only row,
-				// so an interruption followed by rollback cannot strand an empty hash.
-				key := prepareScanPrefix + digest(fmt.Sprintf("%s:%d:%d:%s", rel, info.Size(), info.ModTime().UnixNano(), s.Encoding.Fingerprint()))
-				if _, err = a.enqueueTask("scan", key, ScanRequest{Dirs: []string{rel}, Verify: true}, r.Verify, taskID); err != nil {
-					return err
-				}
-				source, err = a.indexTags(rel, info, p, "")
-				if err != nil {
-					return err
-				}
+			// An empty hash still means no verified current content fingerprint.
+			// Never queue a BuildRequest until full SHA-256 verification finishes.
+			// Persist the compatible verification request before the tag-only row,
+			// so an interruption followed by rollback cannot strand an empty hash.
+			key := prepareScanPrefix + digest(fmt.Sprintf("%s:%d:%d:%s", rel, info.Size(), info.ModTime().UnixNano(), s.Encoding.Fingerprint()))
+			if _, err = a.enqueueTask("scan", key, ScanRequest{Dirs: []string{rel}, Verify: true}, r.Verify, taskID); err != nil {
+				return err
+			}
+			source, err = a.indexTags(rel, info, p, "")
+			if err != nil {
+				return err
 			}
 		}
 		if !source.Present {

@@ -3,6 +3,8 @@ package forge
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"path/filepath"
 	"strconv"
 	"strings"
 )
@@ -10,12 +12,20 @@ import (
 // Optional display data stays outside source tags, ownership and recovery formats.
 // Older schema-2 applications can ignore it; snapshot mismatches hide stale data.
 type sourceMedia struct {
-	Version int    `json:"version"`
-	Path    string `json:"path"`
-	Hash    string `json:"hash"`
-	Size    int64  `json:"size"`
-	Mtime   int64  `json:"mtime"`
-	Bitrate int64  `json:"bitrate"` // bits per second, as reported by ffprobe
+	Version int          `json:"version"`
+	Path    string       `json:"path"`
+	Hash    string       `json:"hash"`
+	Size    int64        `json:"size"`
+	Mtime   int64        `json:"mtime"`
+	Bitrate int64        `json:"bitrate"` // bits per second, as reported by ffprobe
+	Audio   *audioFormat `json:"audio,omitempty"`
+}
+
+type audioFormat struct {
+	Codec      string `json:"codec,omitempty"`
+	SampleRate int    `json:"sample_rate,omitempty"` // Hz
+	BitDepth   int    `json:"bit_depth,omitempty"`
+	Channels   int    `json:"channels,omitempty"`
 }
 
 type audioSize struct {
@@ -41,8 +51,73 @@ func (p probeData) bitrate() int64 {
 }
 
 func (a *App) rememberSourceMedia(source Source, p probeData) error {
-	data, _ := json.Marshal(sourceMedia{1, source.Rel, source.Hash, source.Size, source.Mtime, p.bitrate()})
+	return a.cacheSourceMedia(source, p.bitrate(), p.audioFormat())
+}
+
+func (p probeData) audioFormat() *audioFormat {
+	for _, stream := range p.Streams {
+		if stream.Type != "audio" {
+			continue
+		}
+		rate, _ := strconv.Atoi(stream.SampleRate)
+		bits, _ := strconv.Atoi(stream.RawBits)
+		if bits <= 0 {
+			bits = stream.SampleBits
+		}
+		return &audioFormat{Codec: stream.Codec, SampleRate: max(0, rate), BitDepth: max(0, bits), Channels: max(0, stream.Channels)}
+	}
+	return &audioFormat{}
+}
+
+func (a *App) cacheSourceMedia(source Source, bitrate int64, audio *audioFormat) error {
+	data, _ := json.Marshal(sourceMedia{Version: 1, Path: source.Rel, Hash: source.Hash, Size: source.Size, Mtime: source.Mtime, Bitrate: bitrate, Audio: audio})
 	return a.setMeta("source-media:"+strconv.FormatInt(source.ID, 10), string(data))
+}
+
+// Backfill display fields separately from tag indexing, hashing and encoding.
+func (a *App) backfillSourceMedia(ctx context.Context, root string, source Source) error {
+	var audio *audioFormat
+	bitrate := source.SourceBitrate
+	if strings.EqualFold(filepath.Ext(source.Rel), ".flac") {
+		err := a.sourceIO(ctx, "flac-info", root, source.Rel, func(e sourceEvent) error {
+			if e.Info != nil && !sameStat(*e.Info, source) {
+				return errors.New("source changed while reading audio specification")
+			}
+			if e.Audio != nil {
+				audio = e.Audio
+			}
+			return nil
+		})
+		if err != nil {
+			return err
+		}
+		// STREAMINFO has no compressed bitrate. Preserve a measured value;
+		// never replace it with the uncompressed PCM rate or an estimate.
+	} else {
+		before, err := a.sourceStat(ctx, root, source.Rel)
+		if err != nil {
+			return err
+		}
+		if !sameStat(before, source) {
+			return errors.New("source changed before reading audio specification")
+		}
+		p, err := a.probeEntries(ctx, before.Path, "stream=codec_name,codec_type,bit_rate,sample_rate,bits_per_raw_sample,bits_per_sample,channels:format=bit_rate")
+		if err != nil {
+			return err
+		}
+		after, err := a.sourceStat(ctx, root, source.Rel)
+		if err != nil {
+			return err
+		}
+		if !sameStat(after, source) {
+			return errors.New("source changed while reading audio specification")
+		}
+		bitrate, audio = p.bitrate(), p.audioFormat()
+	}
+	if audio == nil {
+		return errors.New("missing source audio specification")
+	}
+	return a.cacheSourceMedia(source, bitrate, audio)
 }
 
 func (a *App) rememberAudioSize(id int64, path string, size int64) error {
@@ -88,7 +163,8 @@ func (a *App) annotateMedia(ctx context.Context, sources []Source) error {
 		if kind == "source-media" {
 			var media sourceMedia
 			if json.Unmarshal([]byte(raw), &media) == nil && media.Version == 1 && media.Path == source.Rel && media.Hash == source.Hash && media.Size == source.Size && media.Mtime == source.Mtime && media.Bitrate >= 0 {
-				source.SourceBitrate, source.mediaInfoKnown = media.Bitrate, true
+				source.SourceBitrate, source.SourceAudio = media.Bitrate, media.Audio
+				source.mediaInfoKnown = media.Audio != nil
 			}
 		} else {
 			var audio audioSize

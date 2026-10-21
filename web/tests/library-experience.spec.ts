@@ -87,7 +87,7 @@ test("all-album and list views, unverified filter, missing images and persisted 
 
 test("all songs share filters, pagination and batch lyrics with visible file facts", async ({ page }) => {
   const library = collection.map(source => ({ ...source, title: source.id >= 100 ? `Song ${source.id}` : source.title }));
-  Object.assign(library[0], { size: 26214400, source_bitrate: 894123, output_size: 5242880, lyrics: { state: "not_found", output: library[0].output, signature: "first", checked: 1 } });
+  Object.assign(library[0], { size: 26214400, source_bitrate: 894123, source_audio: { codec: "flac", bit_depth: 24, sample_rate: 96000, channels: 2 }, output_size: 5242880, lyrics: { state: "not_found", output: library[0].output, signature: "first", checked: 1 } });
   Object.assign(library[3], { lyrics: { state: "not_found", output: library[3].output, signature: "morning", checked: 1 } });
   const searches: unknown[] = [];
   await mockLibrary(page, library);
@@ -104,7 +104,7 @@ test("all songs share filters, pagination and batch lyrics with visible file fac
   await page.getByLabel("Filter by lyrics status", { exact: true }).selectOption("not_found");
   await expect(rows).toHaveCount(2);
   const first = rows.filter({ has: page.locator(".track-cell strong").filter({ hasText: /^First Light$/ }) });
-  for (const text of ["3:21", "894 kbps", "25 MiB", "5 MiB"]) await expect(first.locator(".track-facts")).toContainText(text);
+  for (const text of ["3:21", "FLAC · 24 bit / 96 kHz · 2 ch", "894 kbps", "25 MiB", "5 MiB"]) await expect(first.locator(".track-facts")).toContainText(text);
   await expect(first.locator(".track-file")).not.toHaveAttribute("open", "");
   await expect(first.getByRole("button", { name: "Choose lyrics", exact: true })).toBeVisible();
   await expect(first.getByRole("button", { name: "Search again", exact: true })).toBeVisible();
@@ -127,6 +127,7 @@ test("all songs share filters, pagination and batch lyrics with visible file fac
   for (const theme of ["light", "dark"]) {
     await page.getByRole("combobox", { name: "外观", exact: true }).selectOption(theme);
     await expect(first.locator(".track-facts")).toContainText("3:21");
+    await expect(first.locator(".track-facts")).toContainText("FLAC · 24 bit / 96 kHz · 2 声道");
     await expect(first.getByRole("button", { name: "选择歌词", exact: true })).toBeVisible();
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
     expect(await page.locator(".table-scroll").evaluate(element => element.scrollWidth <= element.clientWidth + 1)).toBe(true);

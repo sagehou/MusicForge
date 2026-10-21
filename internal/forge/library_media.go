@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"strconv"
+	"strings"
 )
 
 // Optional display data stays outside source tags, ownership and recovery formats.
@@ -61,31 +62,39 @@ func (a *App) annotateMedia(ctx context.Context, sources []Source) error {
 	for i := range sources {
 		byID[sources[i].ID] = &sources[i]
 	}
-	rows, err := a.reads.QueryContext(ctx, `SELECT s.id,coalesce(b.value,''),coalesce(z.value,''),coalesce(m.signature,'') FROM sources s
-	 LEFT JOIN meta b ON b.key='source-media:'||s.id
-	 LEFT JOIN managed m ON m.source_id=s.id AND m.path=s.output AND m.kind='audio'
-	 LEFT JOIN meta z ON z.key='audio-size:'||s.id`)
+	// Indexed prefix reads start with existing annotations, avoiding another walk
+	// of the source table (especially for large older libraries without caches).
+	rows, err := a.reads.QueryContext(ctx, `SELECT key,value,'' FROM meta WHERE key GLOB 'source-media:*'
+	 UNION ALL
+	 SELECT z.key,z.value,m.signature FROM meta z JOIN managed m
+	 ON m.path=json_extract(CASE WHEN json_valid(z.value) THEN z.value ELSE '{}' END,'$.path')
+	 AND z.key='audio-size:'||m.source_id AND m.kind='audio'
+	 WHERE z.key GLOB 'audio-size:*'`)
 	if err != nil {
 		return err
 	}
 	defer rows.Close()
 	for rows.Next() {
-		var id int64
-		var raw, size, signature string
-		if err = rows.Scan(&id, &raw, &size, &signature); err != nil {
+		var key, raw, signature string
+		if err = rows.Scan(&key, &raw, &signature); err != nil {
 			return err
 		}
+		kind, identifier, _ := strings.Cut(key, ":")
+		id, _ := strconv.ParseInt(identifier, 10, 64)
 		source := byID[id]
 		if source == nil {
 			continue
 		}
-		var media sourceMedia
-		if json.Unmarshal([]byte(raw), &media) == nil && media.Version == 1 && media.Path == source.Rel && media.Hash == source.Hash && media.Size == source.Size && media.Mtime == source.Mtime && media.Bitrate >= 0 {
-			source.SourceBitrate, source.mediaInfoKnown = media.Bitrate, true
-		}
-		var audio audioSize
-		if json.Unmarshal([]byte(size), &audio) == nil && audio.Version == 1 && audio.Path == source.Output && audio.Signature == signature && signature != "" && audio.Size >= 0 && source.OutputPresent {
-			source.OutputSize = &audio.Size
+		if kind == "source-media" {
+			var media sourceMedia
+			if json.Unmarshal([]byte(raw), &media) == nil && media.Version == 1 && media.Path == source.Rel && media.Hash == source.Hash && media.Size == source.Size && media.Mtime == source.Mtime && media.Bitrate >= 0 {
+				source.SourceBitrate, source.mediaInfoKnown = media.Bitrate, true
+			}
+		} else {
+			var audio audioSize
+			if json.Unmarshal([]byte(raw), &audio) == nil && audio.Version == 1 && audio.Path == source.Output && audio.Signature == signature && signature != "" && audio.Size >= 0 && source.OutputPresent {
+				source.OutputSize = &audio.Size
+			}
 		}
 	}
 	return rows.Err()

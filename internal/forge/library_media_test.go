@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strconv"
 	"testing"
 )
 
@@ -72,7 +73,13 @@ func TestLibraryMediaBackfillsWithoutRebuildingAndRejectsStaleSnapshots(t *testi
 	if offline := read(); offline.SourceBitrate != 0 || offline.OutputSize == nil || *offline.OutputSize != info.Size() {
 		t.Fatal("browsing depends on music mounts", offline)
 	}
-	if _, err = a.db.Exec("UPDATE sources SET mtime=mtime+1"); err != nil {
+	if _, err = a.db.Exec("UPDATE sources SET hash=hash||'-changed'"); err != nil {
+		t.Fatal(err)
+	}
+	if stale := read(); stale.mediaInfoKnown {
+		t.Fatal("changed content used a previous bitrate", stale)
+	}
+	if _, err = a.db.Exec("UPDATE sources SET hash=?,mtime=mtime+1", original.Hash); err != nil {
 		t.Fatal(err)
 	}
 	if stale := read(); stale.SourceBitrate != 0 || stale.mediaInfoKnown {
@@ -83,6 +90,12 @@ func TestLibraryMediaBackfillsWithoutRebuildingAndRejectsStaleSnapshots(t *testi
 	}
 	if stale := read(); stale.OutputSize != nil {
 		t.Fatal("replacement used previous artifact size", stale)
+	}
+	if err = a.setMeta("audio-size:"+strconv.FormatInt(original.ID, 10), "invalid optional annotation"); err != nil {
+		t.Fatal(err)
+	}
+	if malformed := read(); malformed.OutputSize != nil {
+		t.Fatal("invalid annotation supplied an output size", malformed)
 	}
 }
 

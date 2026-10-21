@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ChevronLeft, ChevronRight, FileMusic, Info, Search, Square } from "lucide-react";
 import { api } from "../api";
 import { useI18n, type MessageKey } from "../i18n";
@@ -136,6 +136,7 @@ export function LyricsPicker({ source, notify, close, saved, previous, next }: {
   const { t, errorMessage, locale } = useI18n();
   const searchController = useRef<AbortController | null>(null);
   const previewController = useRef<AbortController | null>(null);
+  const autoSelect = useRef(true);
   const [query, setQuery] = useState(`${source.title} ${source.artist}`.trim());
   const [groups, setGroups] = useState<CandidateGroup[]>([]);
   const [selected, setSelected] = useState<CandidateChoice>();
@@ -160,6 +161,7 @@ export function LyricsPicker({ source, notify, close, saved, previous, next }: {
   }, []);
   async function search(refresh = false) {
     searchController.current?.abort(); previewController.current?.abort();
+    autoSelect.current = true;
     const controller = new AbortController(); searchController.current = controller;
     setSelected(undefined); setPreview(undefined); setPreviewError(""); setPreviewing(false);
     setRestoreError("");
@@ -174,10 +176,11 @@ export function LyricsPicker({ source, notify, close, saved, previous, next }: {
     }));
   }
   function cancelSearch() {
+    autoSelect.current = false;
     searchController.current?.abort();
     setGroups(old => old.map(group => ({ ...group, loading: false })));
   }
-  async function choose(choice: CandidateChoice) {
+  const choose = useCallback(async (choice: CandidateChoice) => {
     previewController.current?.abort();
     const controller = new AbortController(); previewController.current = controller;
     setSavedSelection(false); setSelected(choice); setPreview(undefined); setPreviewing(true); setPreviewError(""); setTranslation(false); setRomanization(false);
@@ -189,7 +192,7 @@ export function LyricsPicker({ source, notify, close, saved, previous, next }: {
       }
     } catch (err) { if (!controller.signal.aborted) setPreviewError((err as Error).message); }
     finally { if (!controller.signal.aborted) setPreviewing(false); }
-  }
+  }, [base]);
   async function save(advance = false) {
     if (!selected || !preview) return;
     setSaving(true);
@@ -201,10 +204,12 @@ export function LyricsPicker({ source, notify, close, saved, previous, next }: {
     finally { setSaving(false); }
   }
   const loading = groups.some(group => group.loading);
-  const recommended = groups.flatMap(group => group.candidates.filter(candidate => candidate.high_confidence).map(candidate => ({ token: group.token, candidate })))
-    .sort((a, b) => Number(b.candidate.script === "simplified") - Number(a.candidate.script === "simplified") || Number(b.candidate.translation_script === "simplified") - Number(a.candidate.translation_script === "simplified") || b.candidate.match_score - a.candidate.match_score)[0];
-  const choices = groups.flatMap(group => group.candidates.map(candidate => ({ token: group.token, candidate })))
-    .sort((a, b) => Number(b.candidate.high_confidence) - Number(a.candidate.high_confidence) || Number(b.candidate.script === "simplified") - Number(a.candidate.script === "simplified") || Number(b.candidate.translation_script === "simplified") - Number(a.candidate.translation_script === "simplified") || (b.candidate.match_score || 0) - (a.candidate.match_score || 0) || onlineProviders.indexOf(a.candidate.provider) - onlineProviders.indexOf(b.candidate.provider));
+  const choices = useMemo(() => groups.flatMap(group => group.candidates.map(candidate => ({ token: group.token, candidate })))
+    .sort((a, b) => Number(b.candidate.high_confidence) - Number(a.candidate.high_confidence) || Number(b.candidate.script === "simplified") - Number(a.candidate.script === "simplified") || Number(b.candidate.translation_script === "simplified") - Number(a.candidate.translation_script === "simplified") || (b.candidate.match_score || 0) - (a.candidate.match_score || 0) || onlineProviders.indexOf(a.candidate.provider) - onlineProviders.indexOf(b.candidate.provider)), [groups]);
+  const recommended = choices.find(choice => choice.token && choice.candidate.high_confidence);
+  useEffect(() => {
+    if (autoSelect.current && !restoring && !loading && !selected && recommended?.token) void choose({ token: recommended.token, candidate: recommended.candidate });
+  }, [restoring, loading, selected, recommended, choose]);
   return <DetailPanel className="lyrics-picker" title={t("lyrics.choose")} subtitle={`${source.title} · ${source.artist}${source.duration ? ` · ${t("lyrics.targetDuration", { seconds: source.duration })}` : ""}`} close={close} closeLabel={t("lyrics.close")} busy={saving} actions={<><Button type="button" variant="ghost" size="icon" aria-label={t("library.previousTrack")} disabled={saving || !previous} onClick={previous}><ChevronLeft size={17} /></Button><Button type="button" variant="ghost" size="icon" aria-label={t("library.nextTrack")} disabled={saving || !next} onClick={next}><ChevronRight size={17} /></Button></>}>
     <details className="lyrics-guidance"><summary>{t("lyrics.recommendationInfo")}</summary><p>{t("lyrics.recommendationHint")}</p><p>{t("lyrics.cacheHint")}</p></details>
     {restoring && <p role="status">{t("lyrics.restoring")}</p>}

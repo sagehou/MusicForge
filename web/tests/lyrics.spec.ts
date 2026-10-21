@@ -164,7 +164,7 @@ test("lyrics candidates keep partial results, preview languages and save an expl
     expect(route.request().headers()["x-csrf-token"]).toBe("test");
     const body = route.request().postDataJSON(); searches.push(body);
     if (body.provider === "qq") return route.fulfill({ status: 502, json: { error: "qq lyrics service returned HTTP 403; retry later" } });
-    return route.fulfill({ json: { token: `${body.provider}-choices`, candidates: body.provider === "kugou" ? [] : [{ index: 0, provider: body.provider, title: "別名", artist: "Artist", album: "Album", duration: 183, high_confidence: false }] } });
+    return route.fulfill({ json: { token: `${body.provider}-choices`, candidates: body.provider === "kugou" ? [] : [{ index: 0, provider: body.provider, title: "別名", artist: "Artist", album: "Album", duration: 183, high_confidence: false, match_score: 100, script: "simplified" }] } });
   });
   const previews: unknown[] = [];
   await page.route("**/api/library/1/lyrics/preview", route => {
@@ -191,6 +191,9 @@ test("lyrics candidates keep partial results, preview languages and save an expl
   expect(searches.every(search => search.query === "別名 Artist")).toBe(true);
   await expect(picker).toContainText("QQ Music returned HTTP 403; retry later");
   await expect(picker).toContainText("No candidates found");
+  await expect(picker.getByRole("button", { name: "Search candidates", exact: true })).toBeEnabled();
+  await expect(picker.locator('input[type="radio"]:checked')).toHaveCount(0);
+  expect(previews).toHaveLength(0);
   await picker.getByRole("radio", { name: "Preview 別名 · Artist · NetEase", exact: true }).check();
   await expect(picker.getByRole("region", { name: "Lyrics preview", exact: true })).toContainText("こんにちは");
   expect(applied).toBeUndefined();
@@ -218,7 +221,62 @@ test("lyrics candidates keep partial results, preview languages and save an expl
   await expect(page.getByRole("dialog")).toHaveCount(0);
 });
 
-test("song details and saved recommendations survive reopening and page reload", async ({ page }) => {
+test("automatic lyric previews wait for all providers, preserve manual choices and respect cancellation", async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem("musicforge.language", "en"));
+  const source: Source = { id: 1, path: "Artist/Album/01.flac", artist: "Artist", album: "Album", title: "Track", track: 1, disc: 1, duration: 183, present: true, output: "Artist/Album/01.opus", output_present: true, status: "ready", error: "", size: 123, metadata: {} };
+  await page.route("**/api/auth/me", route => route.fulfill({ json: { initialized: true, authenticated: true, username: "admin", method: "local", csrf: "test", oidc: false, version: "test" } }));
+  await page.route("**/api/library", route => route.fulfill({ json: [source] }));
+  let delayed: Promise<void>, release: () => void;
+  await page.route("**/api/library/1/lyrics/candidates", async route => {
+    if (route.request().method() === "GET") return route.fulfill({ json: { query: "Track Artist", groups: [] } });
+    const { provider } = route.request().postDataJSON();
+    if (provider === "qq") await delayed;
+    return route.fulfill({ json: { provider, token: `${provider}-choices`, candidates: ["lrclib", "qq"].includes(provider) ? [{ index: 0, provider, title: "Track", artist: "Artist", album: "Album", duration: 183, high_confidence: true, match_score: provider === "lrclib" ? 100 : 99, script: provider === "lrclib" ? "traditional" : "simplified" }] : [] } });
+  });
+  const previews: unknown[] = [];
+  let saves = 0;
+  await page.route("**/api/library/1/lyrics/preview", route => {
+    const body = route.request().postDataJSON(); previews.push(body);
+    const simplified = body.token === "qq-choices";
+    return route.fulfill({ json: { original: simplified ? "[00:01.00]爱这风云" : "[00:01.00]愛這風雲", script: simplified ? "simplified" : "traditional" } });
+  });
+  await page.route("**/api/library/1/lyrics", route => { saves++; return route.fulfill({ json: {} }); });
+  await page.goto("/library?view=tracks");
+  await page.getByRole("button", { name: "Choose lyrics", exact: true }).click();
+  const picker = page.getByRole("dialog", { name: "Choose lyrics", exact: true });
+  const lrclib = picker.getByRole("radio", { name: "Preview Track · Artist · LRCLIB", exact: true });
+  const qq = picker.getByRole("radio", { name: "Preview Track · Artist · QQ Music", exact: true });
+  async function startSearch() {
+    delayed = new Promise<void>(resolve => { release = resolve; });
+    await picker.getByRole("button", { name: "Search candidates", exact: true }).click();
+    await expect(lrclib).toBeVisible();
+    await expect(picker.getByRole("button", { name: "Cancel search", exact: true })).toBeVisible();
+  }
+  await startSearch();
+  await expect(lrclib).not.toBeChecked();
+  expect(previews).toHaveLength(0);
+  release!();
+  await expect(qq).toBeChecked();
+  await expect(picker.locator("pre")).toContainText("爱这风云");
+  expect(previews).toEqual([{ token: "qq-choices", index: 0 }]);
+  await startSearch();
+  await lrclib.check();
+  await expect(picker.locator("pre")).toContainText("愛這風雲");
+  release!();
+  await expect(picker.getByRole("button", { name: "Search candidates", exact: true })).toBeEnabled();
+  await expect(qq).toBeVisible();
+  await expect(lrclib).toBeChecked();
+  expect(previews).toHaveLength(2);
+  await startSearch();
+  await picker.getByRole("button", { name: "Cancel search", exact: true }).click();
+  release!();
+  await expect(picker.getByRole("button", { name: "Search candidates", exact: true })).toBeEnabled();
+  await expect(picker.locator('input[type="radio"]:checked')).toHaveCount(0);
+  expect(previews).toHaveLength(2);
+  expect(saves).toBe(0);
+});
+
+test("song details and automatic saved recommendations survive reopening and page reload", async ({ page }) => {
   await page.addInitScript(() => localStorage.setItem("musicforge.language", "en"));
   const source: Source = { id: 1, path: "Artist/Album/01.flac", hash: "0123456789abcdef".repeat(4), artist: "Artist", album: "Album", title: "Track", track: 1, disc: 2, duration: 183.5, present: true, output: "Artist/Album/01.opus", output_present: true, status: "ready", error: "", size: 2621440, metadata: { genre: "Pop", date: "2026" }, lyrics: { state: "needs_review", output: "Artist/Album/01.opus", signature: "audio", checked: 1 } };
   await page.route("**/api/auth/me", route => route.fulfill({ json: { initialized: true, authenticated: true, username: "admin", method: "local", csrf: "test", oidc: false, version: "test" } }));
@@ -234,7 +292,11 @@ test("song details and saved recommendations survive reopening and page reload",
     const body = route.request().postDataJSON(); searches.push(body);
     return route.fulfill({ json: groups.find(group => group.provider === body.provider) || { provider: body.provider, token: `${body.provider}-empty`, cached: false, candidates: [] } });
   });
-  await page.route("**/api/library/1/lyrics/preview", route => route.fulfill({ json: { original: "[00:01.00]爱这风云", script: "simplified" } }));
+  const previews: unknown[] = [];
+  await page.route("**/api/library/1/lyrics/preview", route => {
+    previews.push(route.request().postDataJSON());
+    return route.fulfill({ json: { original: "[00:01.00]爱这风云", script: "simplified" } });
+  });
   await page.goto("/library?view=albums&artist=Artist&album=Artist%2FAlbum");
   const details = page.locator(".track-file").first();
   await page.locator(".track-open").first().click();
@@ -251,9 +313,10 @@ test("song details and saved recommendations survive reopening and page reload",
   await expect(recommended).toContainText("Match score 99/100");
   await expect(recommended).toContainText("Duration difference 0.5 s");
   expect(searches).toHaveLength(0);
-  await recommended.getByRole("radio").check();
+  await expect(recommended.getByRole("radio")).toBeChecked();
   await expect(recommended).toHaveAttribute("data-selected", "true");
   await expect(picker.locator("pre")).toContainText("爱这风云");
+  expect(previews).toEqual([{ token: "qq-saved", index: 0 }]);
   await page.setViewportSize({ width: 1440, height: 1000 });
   const candidates = await picker.locator(".lyrics-candidate-groups").boundingBox();
   const preview = await picker.locator(".lyrics-preview-pane").boundingBox();
@@ -262,11 +325,15 @@ test("song details and saved recommendations survive reopening and page reload",
   await picker.getByRole("button", { name: "Close lyrics selection", exact: true }).click();
   await page.getByRole("button", { name: "Choose lyrics", exact: true }).click();
   await expect(picker.getByText("Recommended", { exact: true })).toBeVisible();
+  await expect(recommended.getByRole("radio")).toBeChecked();
+  await expect(picker.locator("pre")).toContainText("爱这风云");
   expect(searches).toHaveLength(0);
   await page.reload();
   await page.locator(".lyrics-details > summary").click();
   await page.getByRole("button", { name: "Choose lyrics", exact: true }).click();
   await expect(picker.getByText("Recommended", { exact: true })).toBeVisible();
+  await expect(recommended.getByRole("radio")).toBeChecked();
+  await expect(picker.locator("pre")).toContainText("爱这风云");
   expect(searches).toHaveLength(0);
   await picker.getByRole("button", { name: "Force new search", exact: true }).click();
   await expect.poll(() => searches.length).toBe(4);

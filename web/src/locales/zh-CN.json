@@ -557,7 +557,7 @@
   "lyrics.title": "LRC 歌词",
   "lyrics.targetDuration": "歌曲时长：{seconds} 秒",
   "lyrics.recommendationInfo": "简中优先与匹配分说明",
-  "lyrics.recommendationHint": "高置信度匹配中优先已识别的简中原文，其次简中同步译文。匹配分综合歌名、歌手、专辑和时长，仅供比较，不代表正确概率。只有共用汉字的歌词可能无法识别简繁，仍需预览确认版本。",
+  "lyrics.recommendationHint": "结果加载完成后自动选中并预览高置信度推荐，不覆盖手动选择，确认后保存。优先已识别的简中原文，其次简中同步译文。匹配分综合歌名、歌手、专辑和时长，仅供比较，不代表正确概率。只有共用汉字的歌词可能无法识别简繁，仍需预览确认版本。",
   "lyrics.cacheHint": "搜索结果最多暂存 7 天，重启后仍可恢复。普通搜索复用暂存，强制重新搜索更新结果。",
   "lyrics.restoring": "正在恢复已暂存的搜索…",
   "lyrics.forceSearch": "强制重新搜索",

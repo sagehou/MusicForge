@@ -141,8 +141,7 @@ for (const width of [1440, 1024, 768, 390, 320]) {
     await expect(page.locator(".task")).toHaveCount(5);
     await expect(page.locator('.task[data-state="running"] .task-activity')).toContainText("First Light");
     await expect(page.locator('.task[data-state="running"] [role="progressbar"]')).toHaveAttribute("aria-valuenow", "44");
-    const colors = await page.locator(".task-meter > span").evaluateAll(nodes => nodes.map(node => getComputedStyle(node).backgroundColor));
-    expect(new Set(colors).size).toBeGreaterThanOrEqual(4);
+    await expect(page.locator('.task[data-state="success"] .badge > svg')).toHaveCount(1);
     await expect(page.locator('.task[data-state="success"] .task-meter')).toBeHidden();
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
     // A breakpoint change must settle immediately, without layout overflow.
@@ -163,3 +162,39 @@ for (const width of [1440, 1024, 768, 390, 320]) {
     expect(errors).toEqual([]);
   });
 }
+
+test("task states use the active palette and neutral completion across light and dark themes", async ({ page }) => {
+  await setup(page);
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.goto("/jobs");
+  await expect(page.locator(".task")).toHaveCount(5);
+  for (const mode of ["light", "dark"]) {
+    await setPreference(page, "theme", mode);
+    const menu = page.locator(".page-heading .palette-menu");
+    await menu.locator("summary").click();
+    for (const name of ["Apple Music", "Spotify", "Custom"]) {
+      await menu.getByRole("button", { name, exact: true }).click();
+      if (name === "Custom") await menu.getByLabel("Color hex code", { exact: true }).fill("#8975ce");
+      const colors = await page.evaluate(() => {
+        const sample = document.createElement("span");
+        document.body.append(sample);
+        function token(name: string) { sample.style.color = `var(--${name})`; return getComputedStyle(sample).color; }
+        function style(state: string, selector: string) { return getComputedStyle(document.querySelector(`.task[data-state="${state}"] ${selector}`)!); }
+        const result = {
+          accent: token("accent"), neutral: token("muted"), neutralFill: token("subtle"), warning: token("warning"), danger: token("danger"),
+          running: style("running", ".badge").color, runningIcon: style("running", ".job-symbol").color, progress: style("running", ".task-meter > span").backgroundColor,
+          success: style("success", ".badge").color, successIcon: style("success", ".job-symbol").color, successFill: style("success", ".badge").backgroundColor,
+          paused: style("paused", ".badge").color, failed: style("failed", ".badge").color,
+        };
+        sample.remove();
+        return result;
+      });
+      expect([colors.running, colors.runningIcon, colors.progress]).toEqual([colors.accent, colors.accent, colors.accent]);
+      expect([colors.success, colors.successIcon, colors.successFill]).toEqual([colors.neutral, colors.neutral, colors.neutralFill]);
+      expect(colors.paused).toBe(colors.warning);
+      expect(colors.failed).toBe(colors.danger);
+      await page.screenshot({ path: `test-results/task-colors-${name.replaceAll(" ", "-")}-${mode}.png`, animations: "disabled" });
+    }
+    await page.keyboard.press("Escape");
+  }
+});

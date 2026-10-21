@@ -605,7 +605,7 @@
   "lyrics.title": "LRC lyrics",
   "lyrics.targetDuration": "Track duration: {seconds} s",
   "lyrics.recommendationInfo": "Simplified Chinese preference and match scores",
-  "lyrics.recommendationHint": "Prefer identified Simplified Chinese lyrics, then synchronized Chinese translations among high-confidence matches. Scores use title, artist, album and duration; they are comparison scores, not probabilities. Shared Han characters may be unclassified. Preview to check the recording.",
+  "lyrics.recommendationHint": "Once results finish loading, automatically select and preview the high-confidence recommendation, preserving manual choices. Confirm before saving. Prefer identified Simplified Chinese lyrics, then synchronized Chinese translations. Scores use title, artist, album and duration; they are comparison scores, not probabilities. Shared Han characters may be unclassified. Preview to check the recording.",
   "lyrics.cacheHint": "Saved results last up to 7 days and survive restart. Search reuses them; force search updates them.",
   "lyrics.restoring": "Restoring saved searches…",
   "lyrics.forceSearch": "Force new search",

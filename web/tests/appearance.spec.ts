@@ -40,6 +40,8 @@ test("default albums, compact headings and the text account link retain settings
   await expect(page.getByRole("button", { name: /^Albums/ })).toHaveAttribute("aria-pressed", "true");
   await expect(page.locator(".library-group")).toHaveCount(1);
   await expect(page.locator("html")).toHaveAttribute("data-palette", "apple");
+  await expect(page.locator(".palette-menu > summary > svg")).toHaveCount(1);
+  await expect(page.locator(".palette-menu > summary .color-swatch")).toHaveCount(0);
   const controls = await page.locator(".page-heading .appearance-controls").boundingBox();
   expect(controls!.x + controls!.width).toBeGreaterThan(1400);
   expect(controls!.y).toBeLessThan(30);

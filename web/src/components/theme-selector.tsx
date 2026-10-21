@@ -1,5 +1,5 @@
 import { useEffect, useState, useSyncExternalStore } from "react";
-import { Monitor, Moon, Sun } from "lucide-react";
+import { Monitor, Moon, Paintbrush, Sun } from "lucide-react";
 import { LanguageSelector, useI18n, type MessageKey } from "../i18n";
 
 type Theme = "system" | "light" | "dark";
@@ -75,7 +75,7 @@ export function AppearanceControls() {
     <label className="theme-selector" title={t("theme.label")}><Icon size={15} aria-hidden="true" /><span>{t("theme.label")}</span><select aria-label={t("theme.label")} value={theme} onChange={event => updateAppearance({ theme: event.target.value as Theme })}><option value="system">{t("theme.system")}</option><option value="light">{t("theme.light")}</option><option value="dark">{t("theme.dark")}</option></select></label>
     <details className="palette-menu" onKeyDown={event => {
       if (event.key === "Escape" && event.currentTarget.open) { event.preventDefault(); event.stopPropagation(); event.currentTarget.open = false; event.currentTarget.querySelector("summary")?.focus(); }
-    }}><summary aria-label={t("theme.colors")} title={t("theme.colors")}><span className="color-swatch" aria-hidden="true" /><span className="palette-label">{t(`theme.${palette}` as MessageKey)}</span></summary>
+    }}><summary aria-label={t("theme.colors")} title={t("theme.colors")}><Paintbrush size={15} aria-hidden="true" /><span className="palette-label">{t(`theme.${palette}` as MessageKey)}</span></summary>
       <div className="palette-popover"><fieldset><legend>{t("theme.colors")}</legend><div className="palette-presets">{([...Object.keys(presets), "custom"] as Palette[]).map(name => <button type="button" key={name} aria-pressed={palette === name} onClick={() => updateAppearance({ palette: name })}><span className="color-swatch" style={{ background: name === "custom" ? custom : presets[name] }} aria-hidden="true" />{t(`theme.${name}` as MessageKey)}</button>)}</div></fieldset>
         <div className="custom-color"><label><span>{t("theme.customColor")}</span><input type="color" aria-label={t("theme.customColor")} value={custom} onChange={event => updateAppearance({ palette: "custom", custom: event.target.value })} /></label><input className="color-hex" type="text" aria-label={t("theme.hex")} aria-invalid={invalid || undefined} value={draft} spellCheck={false} maxLength={7} placeholder="#RRGGBB" onChange={event => { const value = event.target.value; setDraft(value); const valid = hex(value); if (valid) updateAppearance({ palette: "custom", custom: valid }); }} /></div>
         {invalid && <small className="color-error" role="alert">{t("theme.invalidColor")}</small>}

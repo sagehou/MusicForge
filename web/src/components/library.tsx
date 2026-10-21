@@ -278,7 +278,7 @@ export function Library({ notify }: { notify: Notice }) {
     const index = lyricsOrder.current.indexOf(id);
     if (index < 0) return;
     for (let i = index + direction; i >= 0 && i < lyricsOrder.current.length; i += direction) {
-      const source = data.find(source => source.id === lyricsOrder.current[i]);
+      const source = data?.find(source => source.id === lyricsOrder.current[i]);
       if (source?.output_present && source.output) return source;
     }
   }

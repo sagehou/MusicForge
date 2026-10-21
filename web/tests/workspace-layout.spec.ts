@@ -34,6 +34,7 @@ test("aligned records fit six tracks, and the icon rail keeps navigation and pre
   await expect(rows.first().locator(".track-facts")).toContainText("24 bit / 96 kHz");
   await expect(rows.first().locator(".track-facts")).toContainText("25 MiB");
   await expect(rows.first().locator(".track-facts")).toContainText("5 MiB");
+  expect(await rows.first().locator(".lyrics-action").evaluateAll(buttons => buttons.every(button => getComputedStyle(button).whiteSpace === "nowrap"))).toBe(true);
   await page.screenshot({ path: "test-results/workspace-records-desktop.png", animations: "disabled" });
   await page.getByRole("button", { name: "Collapse sidebar", exact: true }).click();
   await expect.poll(async () => (await page.locator(".sidebar").boundingBox())!.width).toBe(76);
@@ -161,6 +162,8 @@ test("phone pages retain real content, readable facts and full-screen inspectors
     for (const path of ["/", "/jobs", "/settings"]) {
       await page.goto(path);
       await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+      const heading = await page.getByRole("heading", { level: 1 }).boundingBox();
+      expect(heading!.height).toBeLessThan(100);
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
       await page.screenshot({ path: `test-results/workspace-${path.replaceAll("/", "") || "overview"}-${width}.png`, animations: "disabled" });
     }

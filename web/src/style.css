@@ -1073,7 +1073,7 @@ input[role="switch"]:checked::after { transform: translateX(22px); background: v
 .auth-card .field-label > span { font-size: 14px; }
 .auth-card input { min-height: 40px; font-size: var(--font-size-body); }
 @media (min-width: 801px) {
-  .app-shell { --sidebar-width: 216px; }
+  .app-shell { --sidebar-width: 236px; }
   .app-shell[data-sidebar-collapsed="true"] { --sidebar-width: 76px; }
   [data-sidebar-collapsed="true"] .sidebar { padding: 20px 10px 12px; }
   [data-sidebar-collapsed="true"] .brand-row { flex-direction: column; gap: 12px; }

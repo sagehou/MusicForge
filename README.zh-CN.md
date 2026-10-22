@@ -239,7 +239,11 @@ MUSICFORGE_ALLOWED_ORIGINS=https://musicforge.home.example.com,https://musicforg
 
 [CI](.github/workflows/ci.yml) 构建前后端，使用真实 ffmpeg 运行带竞态检测的 Go 测试，在 Chromium 中测试实际应用，并验证两个架构的原生容器。需要时从 `canonical-source` 获取 CI 生成的锁文件和格式化的 Go 源码。
 
-相对上一已发布稳定版本，全部持久化格式与语义未变时，可以跳过完整回滚验证；schema 编号未变本身不够。CI 仅对纯文档、前端展示和测试改动自动跳过，在 `rollback-scope` 中记录基线及判定，其余情况仍在双架构运行旧镜像往返验证。常规测试和镜像检查始终执行，详见[兼容规范](AGENTS.md#persistence-compatibility-and-rollback)。
+CI 自动按[变更分级规范](AGENTS.md#change-scoped-acceptance)执行：文档只检查本地链接、空白和分流规则，不安装依赖；CSS、翻译及通过保守语法树比较的 TSX 展示改动只运行前端类型检查、构建和相关已有 Chromium 用例，使用构建后的前端与模拟 API，保留截图。TSX 逻辑或结构变化、后端、依赖、部署、工作流、测试和未知文件走完整验收。汇总任务 `ci` 确认所有选定检查通过；版本标签始终验证双架构正式镜像。
+
+分级从最近已发布稳定版开始，包含尚未发布的变更；已有完整 CI 成功的祖先提交可覆盖此前工作，回滚基线仍保持已发布版本。同一提交、相同运行器镜像与环境的成功证据可在七天内复用，仅接受本仓库 push／dispatch 运行，排除 PR／fork 证据；证据不可用时正常验证。`rollback-scope` 记录分流及来源运行，`validation-evidence` 记录新验收成功，`browser-results` 保留截图。先验收候选提交、检查截图再打标签，版本标签本身不重复相同应用验收。
+
+相对上一已发布稳定版本，全部持久化格式与语义未变时，可以跳过完整回滚验证；schema 编号未变本身不够。CI 仅对纯文档、前端展示和测试改动自动跳过，在 `rollback-scope` 中记录基线及判定，其余情况仍在双架构运行旧镜像往返验证，详见[兼容规范](AGENTS.md#persistence-compatibility-and-rollback)。
 
 PR 和 `main` 提交仅验证，不发布。版本标签（如 `v0.1.0`）验证成功后发布对应 GHCR 镜像。稳定版本更新 `latest`，预发布版本不更新。
 

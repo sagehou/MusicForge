@@ -9,6 +9,7 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 concurrency:
   group: musicforge-${{ github.workflow }}-${{ github.ref }}
@@ -19,33 +20,59 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 40
     outputs:
-      rollback_required: ${{ steps.rollback.outputs.required }}
+      scope: ${{ steps.scope.outputs.scope }}
+      reuse_run: ${{ steps.plan.outputs.reuse_run }}
+      rollback_required: ${{ steps.plan.outputs.rollback_required }}
+      validation_run: ${{ steps.plan.outputs.reuse_run || github.run_id }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
-      - name: Rollback policy regression checks
-        run: python3 -m unittest discover -s .github/scripts -p 'test_rollback_scope.py' -v
-      - name: Determine persistence rollback scope
-        id: rollback
+      - name: CI scope and rollback policy regression checks
+        run: python3 -m unittest discover -s .github/scripts -p 'test_*.py' -v
+      - name: Plan acceptance and check documentation
+        id: plan
         env:
           GITHUB_TOKEN: ${{ github.token }}
-        run: python3 .github/scripts/check-rollback-scope.py
-      - name: Rollback scope evidence
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: rollback-scope
-          path: .ci/rollback-scope.json
-          retention-days: 14
+        run: python3 .github/scripts/check-ci-scope.py
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        if: steps.plan.outputs.scope != 'docs' && steps.plan.outputs.reuse_run == ''
         with:
           node-version-file: .node-version
+      - name: Frontend locked dependencies and audit
+        if: steps.plan.outputs.scope != 'docs' && steps.plan.outputs.reuse_run == ''
+        working-directory: web
+        run: |
+          if [ ! -f package-lock.json ]; then npm install --package-lock-only --ignore-scripts; fi
+          npm ci
+          npm audit --audit-level=high
+      - name: Check the presentation classifier
+        if: steps.plan.outputs.scope != 'docs' && steps.plan.outputs.reuse_run == ''
+        run: node --test .github/scripts/test_ui_scope.mjs
+      - name: Verify TSX changes preserve executable syntax
+        id: ui
+        if: steps.plan.outputs.scope == 'ui' && steps.plan.outputs.reuse_run == ''
+        run: node .github/scripts/check-ui-scope.mjs
+      - name: Final acceptance scope
+        id: scope
+        env:
+          SCOPE: ${{ steps.ui.outputs.scope || steps.plan.outputs.scope }}
+        run: |
+          echo "scope=$SCOPE" >> "$GITHUB_OUTPUT"
+          echo "Final application acceptance: **$SCOPE**." >> "$GITHUB_STEP_SUMMARY"
+      - name: Frontend typecheck and build
+        if: steps.scope.outputs.scope != 'docs' && steps.plan.outputs.reuse_run == ''
+        working-directory: web
+        run: npm run build
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        if: steps.scope.outputs.scope == 'full' && steps.plan.outputs.reuse_run == ''
         with:
           go-version-file: go.mod
           cache: false
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+        if: steps.scope.outputs.scope == 'full' && steps.plan.outputs.reuse_run == ''
       - name: Build pinned stable media tools in CI
+        if: steps.scope.outputs.scope == 'full' && steps.plan.outputs.reuse_run == ''
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
@@ -55,8 +82,10 @@ jobs:
           cache-to: type=gha,mode=max,scope=amd64
           pull: true
       - name: Use the release media tools for all executable validation
+        if: steps.scope.outputs.scope == 'full' && steps.plan.outputs.reuse_run == ''
         run: echo "$PWD/.ci/media/bin" >> "$GITHUB_PATH"
       - name: Generate initial source lockfiles in CI
+        if: steps.scope.outputs.scope == 'full' && steps.plan.outputs.reuse_run == ''
         run: |
           if [ ! -f web/package-lock.json ]; then
             (cd web && npm install --package-lock-only --ignore-scripts)
@@ -68,10 +97,8 @@ jobs:
           if git ls-files --error-unmatch go.sum >/dev/null 2>&1; then
             git diff --exit-code -- go.mod go.sum web/package-lock.json
           fi
-      - name: Frontend typecheck and build
-        working-directory: web
-        run: npm ci && npm audit --audit-level=high && npm run build
       - name: Start the real Navidrome integration service
+        if: steps.scope.outputs.scope == 'full' && steps.plan.outputs.reuse_run == ''
         run: |
           mkdir -p .ci/nav-output
           chmod 755 .ci/nav-output
@@ -85,6 +112,7 @@ jobs:
           done
           exit 1
       - name: Backend race, integration tests and vet
+        if: steps.scope.outputs.scope == 'full' && steps.plan.outputs.reuse_run == ''
         env:
           MUSICFORGE_TEST_NAV_URL: http://127.0.0.1:4533
           MUSICFORGE_TEST_NAV_OUTPUT: ${{ github.workspace }}/.ci/nav-output
@@ -93,12 +121,13 @@ jobs:
           go vet -mod=readonly ./...
           go build -mod=readonly -trimpath -o .ci/musicforge ./cmd/musicforge
       - name: Real rclone mount, stalled reads and responsive queue controls
+        if: steps.scope.outputs.scope == 'full' && steps.plan.outputs.reuse_run == ''
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends rclone fuse3
           python3 .github/scripts/check-rclone.py
       - name: Rclone acceptance evidence
-        if: always()
+        if: always() && steps.scope.outputs.scope == 'full' && steps.plan.outputs.reuse_run == ''
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: rclone-acceptance
@@ -107,6 +136,7 @@ jobs:
             .ci/rclone/*.log
           retention-days: 14
       - name: Browser validation against the actual application
+        if: steps.scope.outputs.scope == 'full' && steps.plan.outputs.reuse_run == ''
         run: |
           mkdir -p .ci/config .ci/source/Artist/Album .ci/output
           ffmpeg -v error -f lavfi -i sine=frequency=440:duration=2 -c:a flac -metadata artist='CI Artist' -metadata album='CI Album' -metadata title='CI Track' .ci/source/Artist/Album/01.flac
@@ -120,11 +150,29 @@ jobs:
           cd web
           npx playwright install --with-deps chromium
           MUSICFORGE_TEST_ROOT="$(dirname "$PWD")/.ci" npm test
+      - name: UI browser checks against the built frontend
+        if: steps.scope.outputs.scope == 'ui' && steps.plan.outputs.reuse_run == ''
+        run: |
+          python3 .github/scripts/browser-artwork.py
+          cd web
+          npx playwright install --with-deps chromium
+          npx vite preview --host 127.0.0.1 --port 8787 --strictPort >../.ci/preview.log 2>&1 &
+          preview_pid=$!
+          trap 'kill "$preview_pid" 2>/dev/null || true' EXIT
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:8787/library >/dev/null; then break; fi
+            sleep 1
+          done
+          curl -fsS http://127.0.0.1:8787/library >/dev/null
+          # The selected existing cases mock their API; no backend or audio is needed.
+          npm test -- language.spec.ts --grep 'translation catalogs' --reporter=list
+          mapfile -t ui_specs < ../.ci/ui-specs.txt
+          MUSICFORGE_TEST_ROOT="$(dirname "$PWD")/.ci" npm test -- "${ui_specs[@]}"
       - name: Stop the Navidrome validation service
-        if: always()
+        if: always() && steps.scope.outputs.scope == 'full' && steps.plan.outputs.reuse_run == ''
         run: docker rm -f musicforge-nav-validation || true
       - name: CI-generated source snapshot
-        if: always()
+        if: always() && steps.scope.outputs.scope == 'full' && steps.plan.outputs.reuse_run == ''
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: canonical-source
@@ -137,13 +185,36 @@ jobs:
             web/package-lock.json
           retention-days: 14
       - name: Browser reports
-        if: always()
+        if: always() && steps.scope.outputs.scope != 'docs' && steps.plan.outputs.reuse_run == ''
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: browser-results
           path: |
             web/test-results
             web/playwright-report
+          retention-days: 14
+      - name: Record successful application validation
+        if: steps.plan.outputs.reuse_run == ''
+        env:
+          VALIDATED_SCOPE: ${{ steps.scope.outputs.scope }}
+        run: python3 .github/scripts/check-ci-scope.py --record
+      - name: Successful validation evidence
+        if: steps.plan.outputs.reuse_run == ''
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: validation-evidence
+          path: .ci/validation-evidence.json
+          if-no-files-found: error
+          retention-days: 14
+      - name: Acceptance plan and rollback evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: rollback-scope
+          path: |
+            .ci/rollback-scope.json
+            .ci/ci-scope.json
+            .ci/ui-specs.txt
           retention-days: 14
       - name: Worker diagnostics
         if: failure()
@@ -154,6 +225,7 @@ jobs:
 
   image:
     needs: validate
+    if: (needs.validate.outputs.scope == 'full' && needs.validate.outputs.reuse_run == '') || startsWith(github.ref, 'refs/tags/v')
     strategy:
       fail-fast: false
       matrix:
@@ -166,13 +238,17 @@ jobs:
     timeout-minutes: 45
     permissions:
       contents: read
+      actions: read
       packages: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        if: needs.validate.outputs.scope == 'full'
         with:
           name: canonical-source
           path: .
+          run-id: ${{ needs.validate.outputs.validation_run }}
+          github-token: ${{ github.token }}
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
       - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         if: startsWith(github.ref, 'refs/tags/v')
@@ -280,9 +356,29 @@ jobs:
           docker tag musicforge:validation "ghcr.io/${GITHUB_REPOSITORY,,}:$VERSION-$ARCH"
           docker push "ghcr.io/${GITHUB_REPOSITORY,,}:$VERSION-$ARCH"
 
+  ci:
+    if: always()
+    needs: [validate, image]
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Require all selected checks
+        env:
+          VALIDATE: ${{ needs.validate.result }}
+          IMAGE: ${{ needs.image.result }}
+          SCOPE: ${{ needs.validate.outputs.scope }}
+          REUSED: ${{ needs.validate.outputs.reuse_run }}
+          RELEASE: ${{ startsWith(github.ref, 'refs/tags/v') }}
+        run: |
+          test "$VALIDATE" = success
+          if [[ "$SCOPE" == full && -z "$REUSED" || "$RELEASE" == true ]]; then
+            test "$IMAGE" = success
+          else
+            test "$IMAGE" = skipped
+          fi
+
   publish:
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: image
+    needs: [image, ci]
     runs-on: ubuntu-24.04
     permissions:
       contents: read

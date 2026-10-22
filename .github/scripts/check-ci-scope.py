@@ -101,6 +101,9 @@ def trusted(run, proof):
 def plan(result, runs):
     """The published baseline governs rollback; full CI evidence may cover inherited work."""
     scope = classify(result.get("changed_files", [])) if "changed_files" in result else "full"
+    if scope == "full" and any(path.startswith(("web/src/", "web/public/")) or path == "web/index.html"
+                               for path in result.get("changed_files", [])):
+        result.update(required=True, reason="frontend executable or uncertain changes may affect persisted settings")
     result.update(scope=scope, acceptance_base="refs/tags/" + result["baseline"] if "changed_files" in result else "",
                   reuse_run="", covered_by="", covered_at="")
     if "changed_files" not in result:

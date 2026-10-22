@@ -22,7 +22,7 @@ jobs:
     outputs:
       scope: ${{ steps.scope.outputs.scope }}
       reuse_run: ${{ steps.plan.outputs.reuse_run }}
-      rollback_required: ${{ steps.plan.outputs.rollback_required }}
+      rollback_required: ${{ steps.ui.outputs.rollback_required || steps.plan.outputs.rollback_required }}
       validation_run: ${{ steps.plan.outputs.reuse_run || github.run_id }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

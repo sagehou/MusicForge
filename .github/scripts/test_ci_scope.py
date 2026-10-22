@@ -30,6 +30,9 @@ class CIScopeTests(unittest.TestCase):
         for path in ("go.mod", "web/package-lock.json", ".node-version", "Dockerfile", "docker-compose.yml",
                      ".github/workflows/ci.yml", ".github/scripts/check-ci-scope.py", "unknown"):
             self.assertEqual(ci.classify(["README.md", path]), "full", path)
+        # The old rollback path allowlist alone cannot establish presentation-only semantics.
+        planned = ci.plan({"required": False, "baseline": "v0.2.35", "changed_files": ["web/src/api.ts"]}, [])
+        self.assertTrue(planned["required"])
 
     def test_trust_excludes_forks_prs_failed_runs_expired_proofs_and_environment_changes(self):
         with patch.dict(os.environ, ENV):

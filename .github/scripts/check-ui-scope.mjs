@@ -61,10 +61,15 @@ function main() {
   else for (const [part, names] of Object.entries(affected)) if (paths.some(path => path.includes(part))) for (const name of names) specs.add(`${name}.spec.ts`);
   writeFileSync(".ci/ui-specs.txt", [...specs].join("\n") + "\n");
   plan.scope = scope;
+  if (uncertain.length) {
+    plan.required = true;
+    plan.reason = "frontend executable or uncertain changes may affect persisted settings";
+  }
   plan.uncertain_ui_files = uncertain;
   plan.browser_specs = [...specs];
   writeFileSync(".ci/ci-scope.json", JSON.stringify(plan, null, 2) + "\n");
-  appendFileSync(process.env.GITHUB_OUTPUT, `scope=${scope}\n`);
+  writeFileSync(".ci/rollback-scope.json", JSON.stringify(plan, null, 2) + "\n");
+  appendFileSync(process.env.GITHUB_OUTPUT, `scope=${scope}\nrollback_required=${plan.required}\n`);
   appendFileSync(process.env.GITHUB_STEP_SUMMARY, uncertain.length
     ? `\nTSX/static-content gate: **full acceptance**; executable or uncertain changes: ${uncertain.map(path => `\`${path}\``).join(", ")}.\n`
     : `\nTSX gate: **presentation only**. UI browser checks: ${[...specs].join(", ")}.\n`);

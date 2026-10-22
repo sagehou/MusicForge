@@ -45,9 +45,14 @@ test("default albums, compact headings and the text account link retain settings
   const controls = await page.locator(".page-heading .appearance-controls").boundingBox();
   expect(controls!.x + controls!.width).toBeGreaterThan(1400);
   expect(controls!.y).toBeLessThan(30);
+  expect(controls!.height).toBeLessThanOrEqual(28);
+  const heading = await page.locator(".heading-content").boundingBox();
+  expect(heading!.y).toBeGreaterThanOrEqual(controls!.y + controls!.height);
   const albums = await page.locator(".library-groups").boundingBox();
-  expect(albums!.y).toBeLessThan(260);
+  // Keep the content density budget after the separate appearance row.
+  expect(albums!.y - (heading!.y - controls!.y)).toBeLessThan(260);
   await expect(page.locator(".account-link svg, .sidebar .appearance-controls")).toHaveCount(0);
+  await expect(page.locator(".account-link .account-version")).toHaveText("MusicForge test");
   await page.screenshot({ path: "test-results/appearance-default-albums.png", animations: "disabled" });
   await openAccount(page);
   await expect(page).toHaveURL(/section=security/);

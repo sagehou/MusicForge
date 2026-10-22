@@ -48,7 +48,7 @@ test("aligned records fit six tracks, and the icon rail keeps navigation and pre
   await expect(page.getByRole("heading", { name: "设置", exact: true })).toBeVisible();
   await page.screenshot({ path: "test-results/workspace-settings-collapsed-dark.png", animations: "disabled" });
   await page.getByRole("button", { name: "展开侧栏", exact: true }).click();
-  await expect.poll(async () => (await page.locator(".sidebar").boundingBox())!.width).toBe(216);
+  await expect.poll(async () => (await page.locator(".sidebar").boundingBox())!.width).toBe(236);
   await page.goto("/library?view=tracks");
   await expect(page.locator(".track-open").first()).toBeVisible();
   for (const width of [801, 900, 1024]) {

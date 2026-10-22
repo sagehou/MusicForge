@@ -243,7 +243,7 @@ Scope starts at the latest published stable release, including unreleased work. 
 
 Fast paths need no label or manual skip option. Non-release runs of the same accepted commit can also reuse the previous successful native-image checks; version tags build and check the final images again. Open the Actions run summary to see the selected scope, covered ancestor and source evidence.
 
-Fresh UI/full runs retain a separate required npm security audit using the lockfile. Audit service failures block the aggregate check and publication while allowing unrelated application/image checks to finish; rerun only the failed audit job after recovery.
+Fresh UI/full runs retain a separate required npm security audit using the lockfile. Audit service failures preserve completed application checks and block images and publication; after recovery, rerun the failed audit and its remaining dependent jobs without replaying successful application checks.
 
 Full rollback validation can be skipped when all persistence formats and meanings remain unchanged from the previous published stable release; an unchanged schema number alone is insufficient. CI automatically skips only documentation, frontend presentation and test changes, records its baseline and decision in `rollback-scope`, and otherwise runs the published-image round trips on both architectures. See [the compatibility rules](AGENTS.md#persistence-compatibility-and-rollback).
 

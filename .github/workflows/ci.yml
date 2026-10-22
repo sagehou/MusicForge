@@ -224,7 +224,7 @@ jobs:
 
   audit:
     needs: validate
-    if: needs.validate.outputs.scope != 'docs' && needs.validate.outputs.reuse_run == ''
+    if: startsWith(github.ref, 'refs/tags/v') || (needs.validate.outputs.scope != 'docs' && needs.validate.outputs.reuse_run == '')
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
@@ -234,6 +234,8 @@ jobs:
         with:
           name: canonical-source
           path: .
+          run-id: ${{ needs.validate.outputs.validation_run }}
+          github-token: ${{ github.token }}
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version-file: .node-version
@@ -366,7 +368,7 @@ jobs:
           path: .ci/rollback-evidence.json
           retention-days: 14
       - name: Push validated architecture on version tags
-        if: startsWith(github.ref, 'refs/tags/v') && (needs.audit.result == 'success' || needs.audit.result == 'skipped')
+        if: startsWith(github.ref, 'refs/tags/v') && needs.audit.result == 'success'
         env:
           VERSION: ${{ github.ref_name }}
           ARCH: ${{ matrix.arch }}
@@ -389,7 +391,7 @@ jobs:
           RELEASE: ${{ startsWith(github.ref, 'refs/tags/v') }}
         run: |
           test "$VALIDATE" = success
-          if [[ "$SCOPE" != docs && -z "$REUSED" ]]; then
+          if [[ "$RELEASE" == true || "$SCOPE" != docs && -z "$REUSED" ]]; then
             test "$AUDIT" = success
           else
             test "$AUDIT" = skipped

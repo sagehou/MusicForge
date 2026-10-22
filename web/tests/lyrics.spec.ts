@@ -23,6 +23,7 @@ test("incremental filling shows pending and skipped counts and succeeds when no 
     return route.fulfill({ status: 202, json: { selected: pending, skipped: 1 } });
   });
   await page.goto("/library?view=tracks");
+  await page.locator(".lyrics-panel > .lyrics-settings > summary").click();
   await page.getByRole("button", { name: "Fill lyrics for all artifacts", exact: true }).click();
   const progress = page.getByRole("status", { name: "Current lyrics batch", exact: true });
   await expect(progress).toContainText("No lyrics need filling. Existing results were retained.");

@@ -170,17 +170,17 @@ func TestOwnedLyricsWithoutStatusWinBeforeSourceLookup(t *testing.T) {
 func TestLyricsFillRetryPolicy(t *testing.T) {
 	now := time.Now()
 	for _, tc := range []struct {
-		state string
-		age time.Duration
+		state     string
+		age       time.Duration
 		automatic bool
-		want bool
+		want      bool
 	}{
-		{"ready", 30*24*time.Hour, false, false},
-		{"ready", 30*24*time.Hour, true, false},
-		{"failed", time.Hour-time.Second, true, false},
+		{"ready", 30 * 24 * time.Hour, false, false},
+		{"ready", 30 * 24 * time.Hour, true, false},
+		{"failed", time.Hour - time.Second, true, false},
 		{"failed", time.Hour, true, true},
-		{"not_found", 7*24*time.Hour-time.Second, true, false},
-		{"not_found", 7*24*time.Hour, true, true},
+		{"not_found", 7*24*time.Hour - time.Second, true, false},
+		{"not_found", 7 * 24 * time.Hour, true, true},
 		{"instrumental", time.Hour, true, false},
 		{"needs_review", time.Hour, true, false},
 		{"needs_review", time.Second, false, true},

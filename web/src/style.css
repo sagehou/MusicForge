@@ -981,7 +981,7 @@ input[role="switch"]:checked::after { transform: translateX(22px); background: v
 .library-grid .library-cover-open, .library-grid .cover { border-radius: var(--radius-artwork); }
 .library-grid .library-group[data-selected="true"] { background: var(--accent-soft); box-shadow: none; }
 .library-grid .library-group-body { padding: 8px 0 4px; }
-.library-grid .library-group-body > .badge { position: absolute; top: 6px; right: 6px; max-width: calc(100% - 12px); font-size: 10px; line-height: 16px; padding: 1px 4px; pointer-events: none; }
+.library-grid .library-group-body > .badge { position: absolute; top: 6px; right: 6px; max-width: calc(100% - 12px); font-size: 10px; line-height: 16px; padding: 1px 4px; background: var(--surface); pointer-events: none; }
 .library-group-body { padding-top: 8px; }
 .library-group-body strong { font-size: 12.5px; line-height: 18px; font-weight: 600; }
 .library-group-body small { font-size: 11px; line-height: 18px; margin-top: 1px; }

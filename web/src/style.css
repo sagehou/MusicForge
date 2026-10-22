@@ -929,7 +929,7 @@ input[role="switch"]:checked::after { transform: translateX(22px); background: v
 .library-toolbar .search { flex: 1; min-width: 180px; flex-basis: auto; }
 .library-options-body { gap: 8px; flex-wrap: nowrap; }
 .library-options-body select { min-width: 0; max-width: 160px; font-size: var(--font-size-body); }
-.library-selection { min-height: 32px; padding: 0; }
+.library-selection { min-height: var(--control-height-small); padding: 0; }
 .library-selection .check-field { margin: 0; }
 .active-filters { padding: 8px 0; }
 .selection-bar { border: 1px solid color-mix(in srgb, var(--accent) 20%, var(--line)); border-radius: var(--radius-control); padding: 8px 12px; margin-bottom: 8px; background: var(--accent-soft); }

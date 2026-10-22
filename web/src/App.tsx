@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { flushSync } from "react-dom";
-import { Activity, ArrowRight, Check, ChevronLeft, ChevronRight, Clock3, FileMusic, FolderOpen, HardDrive, LayoutDashboard, ListMusic, Loader2, PanelLeftClose, PanelLeftOpen, Pause, Play, RefreshCw, Settings2, ShieldCheck, Square, Trash2, Waves, X } from "lucide-react";
+import { Activity, ArrowRight, Check, ChevronLeft, ChevronRight, Clock3, FileMusic, FolderOpen, LayoutDashboard, ListMusic, Loader2, PanelLeftClose, PanelLeftOpen, Pause, Play, RefreshCw, Settings2, ShieldCheck, Square, Trash2, Waves, X } from "lucide-react";
 import { Button } from "./components/ui/button";
 import { api, loadSession, setCSRF } from "./api";
 import type { Activity as JobActivity, Encoding, Job, Me, Settings, TaskItem } from "./types";
@@ -99,7 +99,10 @@ export function App() {
     <aside className="sidebar">
       <div className="brand-row"><a className="brand" href="/" aria-label="MusicForge" title="MusicForge" onClick={e => { e.preventDefault(); navigate("/"); }}><span className="brand-icon"><Waves /></span><span>MusicForge</span></a><Button className="sidebar-toggle" variant="ghost" size="icon" aria-label={t(sidebarCollapsed ? "app.expandSidebar" : "app.collapseSidebar")} title={t(sidebarCollapsed ? "app.expandSidebar" : "app.collapseSidebar")} aria-expanded={!sidebarCollapsed} aria-controls="main-navigation" onClick={toggleSidebar}>{sidebarCollapsed ? <PanelLeftOpen size={18} /> : <PanelLeftClose size={18} />}</Button></div>
       <nav id="main-navigation" aria-label={t("app.navigation")}>{nav.map(item => <a key={item.path} href={item.path} aria-label={item.label} title={item.label} aria-current={current.path === item.path ? "page" : undefined} className={current.path === item.path ? "active" : ""} onClick={e => { e.preventDefault(); navigate(item.path); }}><item.icon size={19} /><span className="nav-label">{item.label}</span>{current.path === item.path && <span className="nav-dot" />}</a>)}</nav>
-      <div className="sidebar-bottom"><div className="single-host"><HardDrive size={16} /><span>MusicForge<small>{me.version}</small></span></div><a className="account-link" href="/settings?section=security" aria-label={t("app.account")} title={t("app.account")} onClick={event => { event.preventDefault(); navigate("/settings?section=security"); }}><span className="account-initial" aria-hidden="true">{me.username?.slice(0, 1).toUpperCase()}</span><span className="account-name">{me.username}<small>{t("app.account")}</small></span></a></div>
+      <div className="sidebar-bottom"><a className="account-link" href="/settings?section=security" aria-label={t("app.account")} title={t("app.account")} onClick={event => { event.preventDefault(); navigate("/settings?section=security"); }}>
+        <span className="account-initial" aria-hidden="true">{me.username?.slice(0, 1).toUpperCase()}</span>
+        <span className="account-name"><span className="account-identity"><span className="account-username">{me.username}</span><span className="account-version">MusicForge {me.version}</span></span><small>{t("app.account")}</small></span>
+      </a></div>
     </aside>
     <main className="main" id="main-content" tabIndex={-1}>
       <div className="page-content"><ResourceWarning error={authError} retry={() => void loadMe()} />{page === "/library" ? <Library notify={notify} /> : page === "/jobs" ? <Jobs notify={notify} /> : page === "/settings" ? <SettingsPage me={me} notify={notify} logout={logout} notification={notification} /> : <Overview notify={notify} navigate={navigate} />}</div>

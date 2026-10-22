@@ -42,7 +42,8 @@ class CIScopeTests(unittest.TestCase):
                                ("head_repository", {"full_name": "fork/MusicForge"})):
                 self.assertFalse(ci.trusted({**run, key: value}, proof), key)
             for key, value in (("sha", "other"), ("run_id", "11"), ("policy", 0), ("scope", "unknown"),
-                               ("created_at", "2020-01-01T00:00:00+00:00"), ("environment", {})):
+                               ("created_at", "2020-01-01T00:00:00+00:00"),
+                               ("covered_at", "2020-01-01T00:00:00+00:00"), ("environment", {})):
                 self.assertFalse(ci.trusted(run, {**proof, key: value}), key)
 
     def test_git_plans_cover_unreleased_work_without_hiding_mixed_changes(self):
@@ -95,6 +96,7 @@ class CIScopeTests(unittest.TestCase):
                     proof["baseline"] = "v0.2.33"
                     self.assertEqual(ci.plan(ci.rollback.compare("v0.2.35"), [run])["reuse_run"], "")
                 Path("README.md").write_text("[Missing](docs/missing.md)\n")
+                commit("broken documentation link")
                 with self.assertRaisesRegex(ValueError, "broken local link"):
                     ci.check_documents({"acceptance_base": sha})
                 git("mv", "backend.go", "docs/moved.md")

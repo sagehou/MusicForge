@@ -387,7 +387,7 @@ input[role="switch"]:checked::after { transform: translateX(22px); background: v
 .library-open:hover { color: var(--accent); }
 .library-open strong { font-size: var(--font-size-body); font-weight: 500; line-height: 22px; }
 .library-group-body small { margin-top: 3px; overflow-wrap: anywhere; }
-.library-group-body > .badge { grid-column: 2; }
+.library-group-body > .badge { grid-column: 2; justify-self: start; }
 .library-list[data-density] { grid-template-columns: 1fr; gap: 0; }
 .library-list .library-group { display: grid; grid-template-columns: 64px minmax(0, 1fr); gap: 18px; align-items: center; border-bottom: 1px solid var(--line); padding: 14px 0; }
 .library-list .library-group:last-child { border-bottom: 0; }
@@ -966,7 +966,7 @@ input[role="switch"]:checked::after { transform: translateX(22px); background: v
 .track-lyrics .lyrics-state { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .lyrics-actions .lyrics-action { min-height: var(--control-height-small); height: auto; font-size: var(--font-size-small); line-height: 20px; padding: 1px 6px; white-space: nowrap; flex-shrink: 0; overflow-wrap: normal; border-color: transparent; background: transparent; color: var(--accent); box-shadow: none; }
 .lyrics-details > summary { min-height: 24px; padding: 2px 0; font-size: 12px; }
-.library-groups { padding-top: 16px; gap: 16px; }
+.library-groups { padding-top: 8px; gap: 16px; }
 .library-grid .library-group { border: 1px solid var(--line); border-radius: var(--radius-card); overflow: hidden; background: var(--surface); }
 .library-grid .library-group:hover { border-color: var(--line-strong); box-shadow: 0 2px 8px #00000006; }
 .library-grid .library-cover-open, .library-grid .cover { border-radius: 0; }
@@ -1198,7 +1198,7 @@ input[role="switch"]:checked::after { transform: translateX(22px); background: v
   .library-toolbar .library-options > summary { width: 40px; height: 40px; }
   .library-options-body select, .detail-panel input:not([type="checkbox"], [type="radio"]), .settings-panel input, .settings-panel select, .auth-card input { font-size: 16px; }
   .library-navigation .segmented { width: 100%; gap: 0; justify-content: space-between; }
-  .library-navigation .segmented button { min-height: 32px; padding: 6px 8px; font-size: 12px; }
+  .library-navigation .segmented button { min-height: 32px; padding: 4px 8px; gap: 4px; font-size: 12px; }
   .library-selection { min-height: 36px; }
   .library-selection .check-field { margin: 0; }
   .active-filters { padding: 4px 0; gap: 4px; }

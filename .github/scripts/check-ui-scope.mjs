@@ -4,33 +4,35 @@ import { execFileSync } from "node:child_process";
 import { appendFileSync, readFileSync, writeFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 
-const ts = createRequire(new URL("../../web/package.json", import.meta.url))("typescript");
+const require = createRequire(new URL("../../web/package.json", import.meta.url));
+const { parseSync } = await import(pathToFileURL(require.resolve("rolldown/utils")).href);
 
 export function presentationSignature(source) {
-  const file = ts.createSourceFile("ui.tsx", source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
-  if (file.parseDiagnostics.length) throw new Error("Invalid TSX");
-  const literal = node => ts.isStringLiteral(node) || ts.isNumericLiteral(node)
-    || ts.isPrefixUnaryExpression(node) && node.operator === ts.SyntaxKind.MinusToken && ts.isNumericLiteral(node.operand);
-  const transformed = ts.transform(file, [context => {
-    function visit(node) {
-      if (ts.isJsxText(node)) return ts.factory.createJsxText("presentation");
-      if (ts.isJsxAttribute(node)) {
-        const name = node.name.getText(file);
-        const value = node.initializer;
-        const staticText = value && (ts.isStringLiteral(value) || ts.isJsxExpression(value) && value.expression && ts.isStringLiteral(value.expression));
-        const staticStyle = name === "style" && value && ts.isJsxExpression(value) && value.expression
-          && ts.isObjectLiteralExpression(value.expression) && value.expression.properties.every(property =>
-            ts.isPropertyAssignment(property) && !ts.isComputedPropertyName(property.name) && literal(property.initializer));
-        if (["className", "title", "aria-label", "placeholder"].includes(name) && staticText || staticStyle) {
-          return ts.factory.updateJsxAttribute(node, node.name, ts.factory.createStringLiteral("presentation"));
-        }
+  // Reuse Vite's locked parser: TypeScript 7 no longer exposes the old JS compiler API.
+  const result = parseSync("ui.tsx", source);
+  if (result.errors.length) throw new Error("Invalid TSX");
+  const literal = node => node?.type === "Literal" && ["string", "number"].includes(typeof node.value)
+    || node?.type === "UnaryExpression" && node.operator === "-" && typeof node.argument?.value === "number";
+  function normalize(node) {
+    if (Array.isArray(node)) return node.map(normalize);
+    if (!node || typeof node !== "object") return node;
+    if (node.type === "JSXText") return { type: "JSXText" };
+    if (node.type === "JSXAttribute") {
+      const name = node.name.name;
+      const value = node.value;
+      const staticText = value?.type === "Literal" && typeof value.value === "string"
+        || value?.type === "JSXExpressionContainer" && value.expression?.type === "Literal" && typeof value.expression.value === "string";
+      const staticStyle = name === "style" && value?.type === "JSXExpressionContainer" && value.expression?.type === "ObjectExpression"
+        && value.expression.properties.every(property => property.type === "Property" && property.kind === "init"
+          && !property.method && !property.computed && literal(property.value));
+      if (["className", "title", "aria-label", "placeholder"].includes(name) && staticText || staticStyle) {
+        return { type: node.type, name, value: "presentation" };
       }
-      return ts.visitEachChild(node, visit, context);
     }
-    return root => ts.visitNode(root, visit);
-  }]);
-  try { return ts.createPrinter().printFile(transformed.transformed[0]); }
-  finally { transformed.dispose(); }
+    return Object.fromEntries(Object.keys(node).sort().filter(key => !["start", "end", "loc", "range", "raw"].includes(key))
+      .map(key => [key, normalize(node[key])]));
+  }
+  return JSON.stringify(normalize({ program: result.program, comments: result.comments }));
 }
 
 export function presentationOnly(before, after) {

@@ -242,8 +242,8 @@ jobs:
         run: npm audit --audit-level=high --fetch-timeout=30000 --fetch-retries=2
 
   image:
-    needs: validate
-    if: (needs.validate.outputs.scope == 'full' && needs.validate.outputs.reuse_run == '') || startsWith(github.ref, 'refs/tags/v')
+    needs: [validate, audit]
+    if: ${{ !cancelled() && needs.validate.result == 'success' && ((needs.validate.outputs.scope == 'full' && needs.validate.outputs.reuse_run == '') || startsWith(github.ref, 'refs/tags/v')) }}
     strategy:
       fail-fast: false
       matrix:
@@ -366,7 +366,7 @@ jobs:
           path: .ci/rollback-evidence.json
           retention-days: 14
       - name: Push validated architecture on version tags
-        if: startsWith(github.ref, 'refs/tags/v')
+        if: startsWith(github.ref, 'refs/tags/v') && (needs.audit.result == 'success' || needs.audit.result == 'skipped')
         env:
           VERSION: ${{ github.ref_name }}
           ARCH: ${{ matrix.arch }}

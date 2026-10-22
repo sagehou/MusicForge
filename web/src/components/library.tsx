@@ -50,6 +50,18 @@ function TrackFacts({ source }: { source: Source }) {
     <div className="track-fact-sizes"><dt>{t("library.sourceSize")}</dt><dd>{fileSize(source.size, locale)}</dd>{source.output_present && source.output_size !== undefined && <><dt>{t("library.outputSize")}</dt><dd className="track-output-size">{fileSize(source.output_size, locale)}</dd></>}</div>
   </dl>;
 }
+function GroupFacts({ tracks }: { tracks: Source[] }) {
+  const { t, locale, number } = useI18n();
+  const audio = [...new Map(tracks.map(source => [JSON.stringify([source.source_audio?.codec, source.source_audio?.bit_depth, source.source_audio?.sample_rate, source.source_audio?.channels]), source.source_audio])).values()];
+  const playable = tracks.filter(source => source.output_present && source.output);
+  const formats = [...new Set(playable.map(source => source.output.split(".").pop()?.toUpperCase()))];
+  return <dl className="group-facts">
+    <div><dt>{t("library.duration")}</dt><dd>{t("library.trackCount", { count: tracks.length })}<small>{tracks.every(source => source.duration) ? duration(tracks.reduce((sum, source) => sum + (source.duration || 0), 0)) : "—"}</small></dd></div>
+    <div><dt>{t("library.sourceAudio")}</dt><dd>{audio.slice(0, 3).map((value, index) => <span className="group-audio-spec" key={index}><AudioSpec audio={value} /></span>)}{audio.length > 3 && <small>+{number(audio.length - 3)}</small>}</dd></div>
+    <div><dt>{t("library.artifact")}</dt><dd>{formats.join(" / ") || "—"}<small>{playable.length && playable.every(source => source.output_size !== undefined) ? fileSize(playable.reduce((sum, source) => sum + source.output_size!, 0), locale) : "—"}</small></dd></div>
+    <div><dt>{t("lyrics.title")}</dt><dd>{playable.length ? `${number(playable.filter(source => source.lyrics?.state === "ready").length)} / ${number(playable.length)}` : "—"}</dd></div>
+  </dl>;
+}
 function TrackDetails({ source, notify }: { source: Source; notify: Notice }) {
   const { t, locale, number } = useI18n();
   async function copyHash() {
@@ -325,6 +337,7 @@ export function Library({ notify }: { notify: Notice }) {
       </div>
     </section>}
     <section className="library-surface">
+      <div className="library-toolbar-box">
       {!scope.artist && <div className="library-navigation"><div className="segmented" role="group" aria-label={t("library.browse")}>
         <button aria-pressed={scope.view === "albums"} onClick={() => navigate({ view: "albums" })}>{t("library.albums")}<span>{number(totals.albums)}</span></button>
         <button aria-pressed={scope.view === "tracks"} onClick={() => navigate({ view: "tracks" })}>{t("library.allTracks")}<span>{number(data.length)}</span></button>
@@ -356,6 +369,7 @@ export function Library({ notify }: { notify: Notice }) {
         <button className="clear-filters" onClick={() => { setFilter("all"); setLyricsFilter("all"); setScriptFilter("all"); setOffset(0); }}>{t("library.clearFilters")}</button>
       </div>}
       {count > 0 && <div className="library-selection"><label className="check-field"><input type="checkbox" aria-label={t("library.selectPage")} checked={pageTracks.length > 0 && pageTracks.every(source => selected.has(source.id))} ref={node => { if (node) node.indeterminate = pageTracks.some(source => selected.has(source.id)) && !pageTracks.every(source => selected.has(source.id)); }} disabled={busy} onChange={event => toggle(pageTracks.map(source => source.id), event.target.checked)} /><span>{t("library.selectPage")}</span></label><span>{t(showingTracks ? "library.trackCount" : showingArtists ? "library.artistCount" : "library.albumCount", { count })}</span></div>}
+      </div>
       {chosen.length > 0 && <div className="selection-bar"><span>{t("library.selected", { count: chosen.length })}</span>{rows.length > pageTracks.length && <Button type="button" size="sm" variant="ghost" disabled={busy} onClick={() => setSelected(new Set(rows.map(source => source.id)))}>{t("library.selectMatching", { count: rows.length })}</Button>}<Button size="sm" variant="outline" disabled={busy} onClick={() => void action("/library/rebuild", { ids: [...selected] }, "notice.selectedBuild")}><RefreshCw size={14} />{t("library.buildSelected")}</Button><LyricsSearchButton ids={chosen.filter(source => source.output && source.output_present).map(source => source.id)} label="lyrics.searchSelected" notify={notify} disabled={busy} />{chosen.some(source => source.lyrics_script === "traditional" && source.output_present) && <LyricsSearchButton ids={chosen.filter(source => source.lyrics_script === "traditional" && source.output_present).map(source => source.id)} replaceTraditional label="lyrics.replaceSelected" notify={notify} disabled={busy} />}<BatchRepairButton sources={chosen} notify={notify} disabled={busy} refresh={() => { setSelected(new Set()); retry(); }} /><Button size="sm" variant="destructive" disabled={busy || selectedExpired === 0} onClick={() => deleteSelected(false)}><Trash2 size={14} />{t("library.deleteSelected")}</Button>{selectedRemovable.length > 0 && <Button size="sm" variant="outline" disabled={busy} onClick={() => void forget(selectedRemovable.map(source => source.id))}><Trash2 size={14} />{t("library.forgetSelected", { count: selectedRemovable.length })}</Button>}<Button size="sm" variant="ghost" onClick={() => setSelected(new Set())}><X size={14} />{t("library.clearSelection")}</Button></div>}
       {count > 0 ? <>
         {!showingTracks ? <div className={`library-groups library-${layout}`} data-density={density}>{visibleGroups.map(group => {
@@ -370,6 +384,7 @@ export function Library({ notify }: { notify: Notice }) {
                 <small>{t("library.groupCounts", { ready, total: group.tracks.length })}</small>
                 {state !== "possibly_damaged" && group.tracks.some(source => source.possibly_damaged) && <small className="repair-warning">{t("repair.damaged")}</small>}
               </div>
+              {layout === "list" && <GroupFacts tracks={group.tracks} />}
               <Badge status={state} />
             </div>
           </article>;

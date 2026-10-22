@@ -98,7 +98,7 @@ test("sidebar collapse persists and icon navigation stays accessible across lang
   await expect(page.locator(".sidebar .nav-label").first()).toBeVisible();
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.getByRole("button", { name: "展开侧栏", exact: true }).click();
-  await expect.poll(async () => (await page.locator(".sidebar").boundingBox())?.width).toBe(216);
+  await expect.poll(async () => (await page.locator(".sidebar").boundingBox())?.width).toBe(236);
 });
 
 test("dashboard uses real clamped completion and functional quick actions", async ({ page }) => {
@@ -109,6 +109,7 @@ test("dashboard uses real clamped completion and functional quick actions", asyn
   await page.route("**/api/library/scan", route => { scans.push(route.request().postDataJSON()); return route.fulfill({ status: 202, json: { job_id: 1 } }); });
   await page.goto("/");
   await expect(page.getByRole("progressbar", { name: "Build completion", exact: true })).toHaveAttribute("aria-valuenow", "100");
+  await expect(page.locator(".active-tracks")).toContainText("First Light");
   await page.getByRole("button", { name: "Scan library", exact: true }).click();
   await expect.poll(() => scans.length).toBe(1);
   await expect(page.locator(".toast")).toContainText("Scan queued");
@@ -163,7 +164,7 @@ for (const width of [1440, 1024, 768, 390, 320]) {
   });
 }
 
-test("task states use the active palette and neutral completion across light and dark themes", async ({ page }) => {
+test("task states use the active palette and Canvas status tones across light and dark themes", async ({ page }) => {
   await setup(page);
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.goto("/jobs");
@@ -181,7 +182,7 @@ test("task states use the active palette and neutral completion across light and
         function token(name: string) { sample.style.color = `var(--${name})`; return getComputedStyle(sample).color; }
         function style(state: string, selector: string) { return getComputedStyle(document.querySelector(`.task[data-state="${state}"] ${selector}`)!); }
         const result = {
-          accent: token("accent"), neutral: token("muted"), neutralFill: token("subtle"), warning: token("warning"), danger: token("danger"),
+          accent: token("accent"), successTone: token("success"), successToneFill: token("success-soft"), warning: token("warning"), danger: token("danger"),
           running: style("running", ".badge").color, runningIcon: style("running", ".job-symbol").color, progress: style("running", ".task-meter > span").backgroundColor,
           success: style("success", ".badge").color, successIcon: style("success", ".job-symbol").color, successFill: style("success", ".badge").backgroundColor,
           paused: style("paused", ".badge").color, failed: style("failed", ".badge").color,
@@ -190,7 +191,7 @@ test("task states use the active palette and neutral completion across light and
         return result;
       });
       expect([colors.running, colors.runningIcon, colors.progress]).toEqual([colors.accent, colors.accent, colors.accent]);
-      expect([colors.success, colors.successIcon, colors.successFill]).toEqual([colors.neutral, colors.neutral, colors.neutralFill]);
+      expect([colors.success, colors.successIcon, colors.successFill]).toEqual([colors.successTone, colors.successTone, colors.successToneFill]);
       expect(colors.paused).toBe(colors.warning);
       expect(colors.failed).toBe(colors.danger);
       await page.screenshot({ path: `test-results/task-colors-${name.replaceAll(" ", "-")}-${mode}.png`, animations: "disabled" });

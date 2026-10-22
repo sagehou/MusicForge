@@ -29,7 +29,7 @@ function applyAppearance() {
   const dark = appearance.theme === "dark" || appearance.theme === "system" && media.matches;
   const color = appearance.palette === "custom" ? appearance.custom : presets[appearance.palette];
   const ink = contrast(color, "#ffffff") >= 4.5 ? "#ffffff" : "#000000";
-  const surface = dark ? "#202024" : "#ffffff", canvas = dark ? "#18181b" : "#fafafa";
+  const surface = dark ? "#121215" : "#ffffff", canvas = dark ? "#09090b" : "#f6f7f9";
   // Keep custom colors, adapting small text and focus rings to the page surface.
   let accent = color;
   for (let step = 1; step <= 20; step++) {

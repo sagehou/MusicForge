@@ -28,6 +28,7 @@ export function Overview({ notify, navigate }: { notify: Notice; navigate: (path
   const playable = library.data?.filter(source => source.output_present && source.output);
   const lyricReady = playable?.filter(source => source.lyrics?.state === "ready").length;
   const review = playable?.filter(source => source.lyrics?.state === "needs_review").length;
+  const active = jobs.data?.jobs.filter(job => job.state === "running").flatMap(job => job.current.map(activity => ({ job, activity }))).slice(0, 4) || [];
   const attention = [
     { state: "failed", count: data.failed_count },
     { state: "needs_rebuild", count: data.rebuild_count },
@@ -45,8 +46,19 @@ export function Overview({ notify, navigate }: { notify: Notice; navigate: (path
     {!data.online && <div className="banner"><HardDrive size={20} /><div><strong>{data.storage_checking ? t("overview.checking") : data.enabled ? t("overview.offline") : t("overview.configure")}</strong><p>{errorMessage(data.storage_message)}</p></div><Button variant="outline" size="sm" onClick={() => navigate("/settings")}>{t("overview.openSettings")}</Button></div>}
     <div className="metrics overview-metrics">{metrics.map(metric => <button className="metric" key={metric.label} onClick={() => navigate(metric.path)}><div><span>{metric.label}</span><metric.icon size={17} /></div><strong>{number(metric.value)}</strong><small>{metric.note}</small></button>)}</div>
     <section className="readiness-panel">
+      <div className="readiness-heading">
       <div className="hero-completion" role="progressbar" aria-label={t("overview.complete")} aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent}><div className="completion-value"><span>{t("overview.complete")}</span><strong>{percentLabel}</strong></div><div className="completion-meter" aria-hidden="true"><span style={{ width: `${percent}%` }} /></div></div>
       <button className="hero-profile" onClick={() => navigate("/settings?section=encoding")}><span>{data.codec.toUpperCase()}</span><strong>{profile}</strong><ArrowRight size={14} /></button>
+      </div>
+      <div className="readiness-counts">{number(data.ready_count)} / {number(data.source_count)} · {t("overview.currentProfile")}</div>
+      {active.length > 0 && <div className="active-tracks">{active.map(({ job, activity }, index) => {
+        const source = library.data?.find(source => source.path === activity.path);
+        return <div className="active-track" key={`${job.repair_id || job.id}:${activity.path}:${index}`}>
+          <span className="active-track-artwork" aria-hidden="true">{source?.artwork_url ? <img src={source.artwork_url} alt="" loading="lazy" /> : <Music2 size={20} />}</span>
+          <div className="active-track-title"><strong>{activity.title || activity.path || kind(job.kind)}</strong><small>{[activity.artist, activity.album].filter(Boolean).join(" · ") || kind(job.kind)}</small></div>
+          <Badge status="running" /><strong className="active-track-percent">{number(Math.round(activity.phase === "convert" ? activity.percent : taskPercent(job)))}%</strong>
+        </div>;
+      })}</div>}
     </section>
     <div className="overview-workspace">
       <section className="recent-panel"><div className="section-heading"><h2>{t("overview.recent")}</h2><Button variant="ghost" size="sm" onClick={() => navigate("/jobs")}>{t("overview.allJobs")}<ArrowRight size={14} /></Button></div>
@@ -55,10 +67,11 @@ export function Overview({ notify, navigate }: { notify: Notice; navigate: (path
           <span className={`job-symbol ${job.state}`}>{job.state === "running" ? <Loader2 size={17} className="animate-spin" /> : job.state === "success" ? <Check size={17} /> : <Activity size={17} />}</span><div><strong>{kind(job.kind)}</strong><small>{job.current[0]?.title || job.current[0]?.path || t("overview.job", { id: job.repair_id?.slice(0, 8) || String(job.id), date: date(job.updated) })}</small>{job.state === "running" && <div className="recent-meter" aria-hidden="true"><span style={{ width: `${taskPercent(job)}%` }} /></div>}</div><Badge status={job.state} /><ArrowRight className="recent-arrow" size={15} />
         </button>)}</div> : <Empty title={t("overview.noJobs")}>{t("overview.noJobsHint")}</Empty>}
       </section>
-      <aside className="overview-attention"><div className="section-heading"><h2>{t("overview.attention")}</h2><Clock3 size={17} /></div><div className="attention-list">{attention.map(item => <button key={item.state} onClick={() => navigate(`/library?view=tracks&status=${item.state}`)}><Badge status={item.state} /><strong>{number(item.count)}</strong><ArrowRight size={14} /></button>)}</div>
-        <div className="section-heading lyrics-overview-heading"><h2><FileMusic size={16} />{t("lyrics.title")}</h2></div><ResourceWarning error={library.error} retry={library.retry} /><button className="lyrics-overview" onClick={() => navigate("/library?view=tracks&lyrics=needs_review")}><span>{t("overview.lyricCoverage")}</span><strong>{playable ? `${number(lyricReady || 0)} / ${number(playable.length)}` : "—"}</strong><small>{t("overview.lyricReview", { count: review === undefined ? "—" : number(review) })}</small><ArrowRight size={15} /></button>
+      <aside className="overview-side">
+        <section className="lyrics-summary"><div className="section-heading"><h2><FileMusic size={16} />{t("lyrics.title")}</h2></div><ResourceWarning error={library.error} retry={library.retry} /><button className="lyrics-overview" onClick={() => navigate("/library?view=tracks&lyrics=needs_review")}><span>{t("overview.lyricCoverage")}</span><strong>{playable ? `${number(lyricReady || 0)} / ${number(playable.length)}` : "—"}</strong><small>{t("overview.lyricReview", { count: review === undefined ? "—" : number(review) })}</small><ArrowRight size={15} /></button><Button variant="outline" size="sm" onClick={() => navigate("/settings?section=lyrics")}>{t("lyrics.settings")}</Button></section>
+        <section className="storage-summary"><div className="section-heading"><h2>{t("overview.storage")}</h2><Button variant="ghost" size="sm" onClick={() => navigate("/settings")}>{t("app.settings")}<ArrowRight size={14} /></Button></div><ResourceWarning error={config.error} retry={config.retry} /><dl><div><dt>{t("overview.flac")}</dt><dd><code>{config.data?.settings.source || "—"}</code></dd></div><div><dt>{t("overview.streaming")}</dt><dd><code>{config.data?.settings.output || "—"}</code></dd></div></dl></section>
+        <section className="overview-attention"><div className="section-heading"><h2>{t("overview.attention")}</h2><Clock3 size={17} /></div><div className="attention-list">{attention.map(item => <button key={item.state} onClick={() => navigate(`/library?view=tracks&status=${item.state}`)}><Badge status={item.state} /><strong>{number(item.count)}</strong><ArrowRight size={14} /></button>)}</div></section>
       </aside>
     </div>
-    <section className="storage-summary"><div className="section-heading"><h2>{t("overview.storage")}</h2><Button variant="ghost" size="sm" onClick={() => navigate("/settings")}>{t("app.settings")}<ArrowRight size={14} /></Button></div><ResourceWarning error={config.error} retry={config.retry} /><dl><div><dt>{t("overview.flac")}</dt><dd><code>{config.data?.settings.source || "—"}</code></dd></div><div><dt>{t("overview.streaming")}</dt><dd><code>{config.data?.settings.output || "—"}</code></dd></div></dl></section>
   </div>;
 }

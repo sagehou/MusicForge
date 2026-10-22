@@ -70,11 +70,14 @@ test("artwork, hierarchy, multi-disc tracks, selection and browser history", asy
 });
 
 test("all-album and list views, unverified filter, missing images and persisted theme", async ({ page }) => {
-  await mockLibrary(page);
+  const detailed = sources.map(source => ({ ...source, ...(source.id <= 2 ? { source_audio: { codec: "flac", bit_depth: 24, sample_rate: 96000, channels: 2 } } : {}), ...(source.id === 1 ? { output_size: 5242880, lyrics: { state: "ready" as const, output: source.output, signature: "night", checked: 1 } } : {}) }));
+  await mockLibrary(page, detailed);
   await page.goto("/library?view=albums");
   await expect(page.locator(".library-group")).toHaveCount(3);
   await page.getByRole("button", { name: "List view", exact: true }).click();
   await expect(page.locator(".library-groups")).toHaveClass(/library-list/);
+  const facts = page.locator(".library-group").filter({ has: page.getByRole("button", { name: "Night Studies", exact: true }) }).locator(".group-facts");
+  for (const text of ["2 tracks", "6:24", "24 bit / 96 kHz", "OPUS", "5 MiB", "1 / 1"]) await expect(facts).toContainText(text);
   await page.getByLabel("Filter by status", { exact: true }).selectOption("unverified");
   await expect(page.locator(".library-group")).toHaveCount(1);
   await setPreference(page, "theme", "dark");
@@ -317,9 +320,9 @@ test("cover density and list preferences persist, pagination and polling retain 
   await page.goto("/library?view=albums");
   await expect(page.locator(".library-group")).toHaveCount(50);
   const columns = () => page.locator(".library-groups").evaluate(node => getComputedStyle(node).gridTemplateColumns.split(" ").length);
-  expect(await columns()).toBe(6);
+  expect(await columns()).toBe(7);
   await page.getByLabel("Cover size", { exact: true }).selectOption("compact");
-  expect(await columns()).toBe(8);
+  expect(await columns()).toBe(10);
   await page.getByLabel("Cover size", { exact: true }).selectOption("large");
   expect(await columns()).toBe(5);
   await page.reload();

@@ -1,0 +1,1491 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark" data-variant="a3" data-palette="apple" data-viewport="desktop">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>方案 A3 · 先锋工单手册 (Technical Sheet) · MusicForge (3 Distinct Variations) · shadcn/ui</title>
+  <style>
+    /* Reset & Base System */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+      --font-mono: "SFMono-Regular", Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      --ease: cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    body {
+      font-family: var(--font-sans);
+      background: #09090b;
+      color: #fafafa;
+      min-height: 100vh;
+      line-height: 1.5;
+      overflow-x: hidden;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* TOP CONTROLLER BAR */
+    #showcase-bar {
+      position: sticky;
+      top: 0;
+      z-index: 9999;
+      background: rgba(10, 10, 12, 0.94);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+      padding: 10px 24px;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+    .bar-brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-weight: 600;
+      font-size: 13.5px;
+      color: #fafafa;
+    }
+    .bar-brand .tag {
+      font-size: 10.5px;
+      padding: 2px 7px;
+      border-radius: 4px;
+      background: rgba(255, 255, 255, 0.08);
+      color: #a1a1aa;
+      font-family: var(--font-mono);
+    }
+    .bar-controls {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 14px;
+    }
+    .ctrl-label {
+      font-size: 11px;
+      color: #71717a;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    .btn-group {
+      display: inline-flex;
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 6px;
+      padding: 2px;
+      gap: 1px;
+    }
+    .btn-group button {
+      background: transparent;
+      border: none;
+      color: #a1a1aa;
+      padding: 5px 11px;
+      font-size: 12px;
+      font-weight: 500;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: all 0.15s var(--ease);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .btn-group button:hover {
+      color: #fafafa;
+      background: rgba(255, 255, 255, 0.06);
+    }
+    .btn-group button.active {
+      background: var(--accent);
+      color: #ffffff;
+      font-weight: 600;
+    }
+    .pal-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      display: inline-block;
+    }
+
+    /* THEME PALETTES (Apple Music, Spotify, Slate, Indigo) */
+    html[data-palette="apple"] {
+      --accent: #e6213c;
+      --accent-hover: #d11c34;
+      --accent-soft: rgba(230, 33, 60, 0.12);
+      --accent-subtle: rgba(230, 33, 60, 0.05);
+      --accent-border: rgba(230, 33, 60, 0.25);
+    }
+    html[data-palette="spotify"] {
+      --accent: #1db954;
+      --accent-hover: #19a34a;
+      --accent-soft: rgba(29, 185, 84, 0.12);
+      --accent-subtle: rgba(29, 185, 84, 0.05);
+      --accent-border: rgba(29, 185, 84, 0.25);
+    }
+    html[data-palette="slate"] {
+      --accent: #71717a;
+      --accent-hover: #52525b;
+      --accent-soft: rgba(113, 113, 122, 0.14);
+      --accent-subtle: rgba(113, 113, 122, 0.05);
+      --accent-border: rgba(113, 113, 122, 0.25);
+    }
+    html[data-palette="indigo"] {
+      --accent: #6366f1;
+      --accent-hover: #4f46e5;
+      --accent-soft: rgba(99, 102, 241, 0.14);
+      --accent-subtle: rgba(99, 102, 241, 0.05);
+      --accent-border: rgba(99, 102, 241, 0.25);
+    }
+
+    /* HARMONIOUS MUTED STATUS COLORS (No radioactive greens/reds, high harmony) */
+    :root {
+      /* Muted harmonious success */
+      --status-success-bg: rgba(34, 197, 94, 0.10);
+      --status-success-border: rgba(34, 197, 94, 0.22);
+      --status-success-text: #86efac;
+      --status-success-dot: #4ade80;
+
+      /* Muted harmonious failure */
+      --status-fail-bg: rgba(239, 68, 68, 0.10);
+      --status-fail-border: rgba(239, 68, 68, 0.22);
+      --status-fail-text: #fca5a5;
+      --status-fail-dot: #f87171;
+
+      /* Muted harmonious warning */
+      --status-warn-bg: rgba(245, 158, 11, 0.10);
+      --status-warn-border: rgba(245, 158, 11, 0.22);
+      --status-warn-text: #fde68a;
+      --status-warn-dot: #fbbf24;
+    }
+    html[data-theme="light"] {
+      --status-success-bg: rgba(22, 101, 52, 0.08);
+      --status-success-border: rgba(22, 101, 52, 0.2);
+      --status-success-text: #166534;
+      --status-success-dot: #15803d;
+
+      --status-fail-bg: rgba(153, 27, 27, 0.08);
+      --status-fail-border: rgba(153, 27, 27, 0.2);
+      --status-fail-text: #991b1b;
+      --status-fail-dot: #b91c1c;
+
+      --status-warn-bg: rgba(146, 64, 14, 0.08);
+      --status-warn-border: rgba(146, 64, 14, 0.2);
+      --status-warn-text: #92400e;
+      --status-warn-dot: #b45309;
+    }
+
+    /* =============================================================== */
+    /* 3 DISTINCT VARIATIONS (All rooted in Direction A)               */
+    /* =============================================================== */
+
+    /* VARIATION A1: STUDIO COMPACT (极简高密录音台 / Dense Console) */
+    /* Focus: 4px tight radius, dense horizontal spec strip, DAW feel */
+    html[data-variant="a1"] {
+      --radius: 4px;
+      --radius-sm: 3px;
+      --radius-lg: 5px;
+      --gap-page: 14px;
+      --pad-card: 14px 16px;
+    }
+    html[data-variant="a1"][data-theme="dark"] {
+      --bg-canvas: #090a0d;
+      --bg-surface: #101116;
+      --bg-subtle: #16181f;
+      --bg-hover: #1c1f28;
+      --border: #22252f;
+      --border-strong: #323746;
+      --text: #f1f3f7;
+      --text-muted: #9aa1b2;
+      --text-dim: #6c7385;
+    }
+    html[data-variant="a1"][data-theme="light"] {
+      --bg-canvas: #f4f5f8;
+      --bg-surface: #ffffff;
+      --bg-subtle: #eaedf2;
+      --bg-hover: #e0e4ec;
+      --border: #d4d8e2;
+      --border-strong: #bcc2d1;
+      --text: #0d0f14;
+      --text-muted: #5e6678;
+      --text-dim: #8b93a5;
+    }
+
+    /* VARIATION A2: STUDIO CANVAS (模块化艺术工作区 / Spatial Card Canvas) */
+    /* Focus: 9px harmonious radius, elevated cards, clear visual hierarchy, artwork-led */
+    html[data-variant="a2"] {
+      --radius: 9px;
+      --radius-sm: 6px;
+      --radius-lg: 12px;
+      --gap-page: 22px;
+      --pad-card: 20px 22px;
+    }
+    html[data-variant="a2"][data-theme="dark"] {
+      --bg-canvas: #08080a;
+      --bg-surface: #121215;
+      --bg-subtle: #19191e;
+      --bg-hover: #22222a;
+      --border: #24242c;
+      --border-strong: #383845;
+      --text: #f5f5f7;
+      --text-muted: #9e9ea8;
+      --text-dim: #6d6d78;
+    }
+    html[data-variant="a2"][data-theme="light"] {
+      --bg-canvas: #f8f9fa;
+      --bg-surface: #ffffff;
+      --bg-subtle: #f1f3f5;
+      --bg-hover: #e6e9ed;
+      --border: #e0e3e8;
+      --border-strong: #caced5;
+      --text: #121316;
+      --text-muted: #646873;
+      --text-dim: #9095a1;
+    }
+
+    /* VARIATION A3: STUDIO SHEET (先锋排版与母带工单手册 / Technical Sheet & Master Log) */
+    /* Focus: 5px radius, hairline divider layout, editorial sheet columns, ruler scale */
+    html[data-variant="a3"] {
+      --radius: 5px;
+      --radius-sm: 3px;
+      --radius-lg: 6px;
+      --gap-page: 18px;
+      --pad-card: 16px 20px;
+    }
+    html[data-variant="a3"][data-theme="dark"] {
+      --bg-canvas: #0b0c0e;
+      --bg-surface: #141519;
+      --bg-subtle: #1c1d23;
+      --bg-hover: #24262e;
+      --border: #23252d;
+      --border-strong: #393c4a;
+      --text: #eff1f5;
+      --text-muted: #9196a6;
+      --text-dim: #646977;
+    }
+    html[data-variant="a3"][data-theme="light"] {
+      --bg-canvas: #ffffff;
+      --bg-surface: #fbfbfc;
+      --bg-subtle: #f0f2f5;
+      --bg-hover: #e5e8ee;
+      --border: #dce0e8;
+      --border-strong: #c4cad5;
+      --text: #0b0c0e;
+      --text-muted: #575c69;
+      --text-dim: #8b91a0;
+    }
+
+    /* FRAME & VIEWPORT */
+    #viewport-wrapper {
+      padding: 24px;
+      display: flex;
+      justify-content: center;
+      transition: all 0.25s var(--ease);
+    }
+    html[data-viewport="mobile"] #viewport-wrapper {
+      max-width: 420px;
+      margin: 0 auto;
+      padding: 16px 0;
+    }
+    .app-frame {
+      width: 100%;
+      max-width: 1440px;
+      background: var(--bg-canvas);
+      color: var(--text);
+      border-radius: var(--radius-lg);
+      border: 1px solid var(--border);
+      overflow: hidden;
+      display: flex;
+      min-height: 870px;
+      position: relative;
+    }
+    html[data-viewport="mobile"] .app-frame {
+      max-width: 390px;
+      min-height: 844px;
+      border-radius: 36px;
+      box-shadow: 0 25px 60px rgba(0,0,0,0.7), 0 0 0 6px #27272a;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* SIDEBAR */
+    .app-sidebar {
+      width: 230px;
+      flex-shrink: 0;
+      background: var(--bg-surface);
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      padding: 18px 12px;
+    }
+    html[data-viewport="mobile"] .app-sidebar { display: none; }
+
+    .brand-box {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 4px 8px 16px;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 12px;
+    }
+    .brand-icon {
+      width: 28px;
+      height: 28px;
+      border-radius: var(--radius);
+      background: var(--accent);
+      color: #fff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .brand-name {
+      font-size: 14px;
+      font-weight: 600;
+      letter-spacing: -0.01em;
+      color: var(--text);
+    }
+    .brand-ver {
+      font-size: 10.5px;
+      color: var(--text-dim);
+      font-family: var(--font-mono);
+    }
+    .nav-list {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+    .nav-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 7px 10px;
+      border-radius: var(--radius);
+      color: var(--text-muted);
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      text-decoration: none;
+      transition: all 0.15s var(--ease);
+    }
+    .nav-item:hover {
+      background: var(--bg-hover);
+      color: var(--text);
+    }
+    .nav-item.active {
+      background: var(--accent-soft);
+      color: var(--accent);
+      font-weight: 600;
+    }
+    .nav-badge {
+      margin-left: auto;
+      font-size: 11px;
+      font-family: var(--font-mono);
+      padding: 1px 6px;
+      border-radius: var(--radius-sm);
+      background: var(--bg-subtle);
+      color: var(--text-muted);
+    }
+    .nav-item.active .nav-badge {
+      background: var(--accent);
+      color: #fff;
+    }
+
+    /* MAIN APP REGION */
+    .app-main {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      background: var(--bg-canvas);
+      overflow-y: auto;
+      max-height: 870px;
+    }
+    html[data-viewport="mobile"] .app-main {
+      max-height: none;
+      padding-bottom: 74px;
+    }
+
+    /* HEADER */
+    .app-header {
+      padding: 16px 26px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid var(--border);
+      background: var(--bg-surface);
+    }
+    html[data-viewport="mobile"] .app-header { padding: 14px 16px; }
+    .header-title-box h1 {
+      font-size: 18px;
+      font-weight: 600;
+      letter-spacing: -0.015em;
+      color: var(--text);
+    }
+    .header-title-box p {
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-top: 1px;
+    }
+
+    /* BUTTONS */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      padding: 6px 12px;
+      border-radius: var(--radius);
+      font-size: 12.5px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.15s var(--ease);
+      border: 1px solid transparent;
+      outline: none;
+      white-space: nowrap;
+    }
+    .btn-default {
+      background: var(--accent);
+      color: #fff;
+    }
+    .btn-default:hover {
+      background: var(--accent-hover);
+    }
+    .btn-outline {
+      background: var(--bg-surface);
+      border-color: var(--border);
+      color: var(--text);
+    }
+    .btn-outline:hover {
+      background: var(--bg-subtle);
+      border-color: var(--border-strong);
+    }
+    .btn-ghost {
+      background: transparent;
+      color: var(--text-muted);
+    }
+    .btn-ghost:hover {
+      background: var(--bg-hover);
+      color: var(--text);
+    }
+    .btn-sm {
+      padding: 4px 8px;
+      font-size: 11.5px;
+      border-radius: var(--radius-sm);
+    }
+
+    /* CONTENT BODY */
+    .content-body {
+      padding: 22px 26px;
+      display: flex;
+      flex-direction: column;
+      gap: var(--gap-page);
+    }
+    html[data-viewport="mobile"] .content-body { padding: 14px; }
+
+    /* CARD SYSTEM (Flat, Clean 1px border, NO Drop Shadow, NO left color stripes) */
+    .card {
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: var(--pad-card);
+      position: relative;
+    }
+
+    /* HARMONIOUS BADGES (Soft dot + text, no eye-blinding colors) */
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 2px 7px;
+      border-radius: var(--radius-sm);
+      font-size: 11px;
+      font-weight: 500;
+      font-family: var(--font-mono);
+      background: var(--bg-subtle);
+      color: var(--text-muted);
+      border: 1px solid var(--border);
+    }
+    .badge-dot {
+      width: 5px;
+      height: 5px;
+      border-radius: 50%;
+    }
+    .badge-running {
+      background: var(--accent-subtle);
+      color: var(--accent);
+      border-color: var(--accent-border);
+    }
+    .badge-running .badge-dot { background: var(--accent); }
+
+    .badge-success {
+      background: var(--status-success-bg);
+      color: var(--status-success-text);
+      border-color: var(--status-success-border);
+    }
+    .badge-success .badge-dot { background: var(--status-success-dot); }
+
+    .badge-fail {
+      background: var(--status-fail-bg);
+      color: var(--status-fail-text);
+      border-color: var(--status-fail-border);
+    }
+    .badge-fail .badge-dot { background: var(--status-fail-dot); }
+
+    .badge-warn {
+      background: var(--status-warn-bg);
+      color: var(--status-warn-text);
+      border-color: var(--status-warn-border);
+    }
+    .badge-warn .badge-dot { background: var(--status-warn-dot); }
+
+    /* =============================================================== */
+    /* SPECIFIC VARIATION PRESENTATIONS (A1, A2, A3)                   */
+    /* =============================================================== */
+
+    /* --- A1: STUDIO COMPACT (Horizontal Spec Bar) --- */
+    .a1-spec-strip {
+      display: none;
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 12px 18px;
+      align-items: center;
+      justify-content: space-between;
+      gap: 20px;
+    }
+    html[data-variant="a1"] .a1-spec-strip { display: flex; }
+    html[data-variant="a1"] .metrics-standard-grid { display: none; }
+
+    .a1-metric-item {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+    .a1-metric-label {
+      font-size: 11px;
+      color: var(--text-dim);
+      font-family: var(--font-mono);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+    .a1-metric-val {
+      font-size: 22px;
+      font-weight: 700;
+      color: var(--text);
+      font-family: var(--font-mono);
+      letter-spacing: -0.02em;
+    }
+    .a1-metric-sub {
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+    .a1-divider {
+      width: 1px;
+      height: 38px;
+      background: var(--border);
+    }
+
+    /* --- Standard Grid (For A2 & A3) --- */
+    .metrics-standard-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 12px;
+    }
+    html[data-viewport="mobile"] .metrics-standard-grid {
+      grid-template-columns: 1fr 1fr;
+    }
+    .m-card {
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: var(--pad-card);
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .m-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--text-dim);
+    }
+    .m-val {
+      font-size: 26px;
+      font-weight: 700;
+      color: var(--text);
+      font-family: var(--font-mono);
+      letter-spacing: -0.02em;
+    }
+    .m-sub {
+      font-size: 11.5px;
+      color: var(--text-muted);
+    }
+
+    /* PROGRESS METERS BY VARIATION */
+    .progress-box {
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: var(--pad-card);
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .p-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 12.5px;
+    }
+
+    /* A1 Progress: Tight 4px continuous bar */
+    .p-bar-track {
+      height: 4px;
+      background: var(--bg-subtle);
+      border-radius: 2px;
+      overflow: hidden;
+    }
+    .p-bar-fill {
+      height: 100%;
+      background: var(--accent);
+      border-radius: 2px;
+    }
+
+    /* A3 Progress: Audio Ruler Scale */
+    .a3-ruler-scale {
+      display: none;
+      flex-direction: column;
+      gap: 4px;
+    }
+    html[data-variant="a3"] .a3-ruler-scale { display: flex; }
+    html[data-variant="a3"] .p-bar-track { height: 6px; }
+    .ruler-ticks {
+      display: flex;
+      justify-content: space-between;
+      font-size: 9px;
+      font-family: var(--font-mono);
+      color: var(--text-dim);
+    }
+
+    /* TASKS TABLE SYSTEM */
+    .table-container {
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+    }
+    .table-head {
+      padding: 10px 16px;
+      border-bottom: 1px solid var(--border);
+      background: var(--bg-subtle);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-muted);
+    }
+    .table-row {
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      background: var(--bg-surface);
+      transition: background 0.14s var(--ease);
+    }
+    .table-row:last-child { border-bottom: none; }
+    .table-row:hover { background: var(--bg-hover); }
+
+    /* Variation A3: Clean sheet style (extra light borders, tabular mono focus) */
+    html[data-variant="a3"] .table-row {
+      padding: 10px 14px;
+      font-size: 12.5px;
+    }
+
+    /* ALBUM GRID */
+    .album-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+      gap: 16px;
+    }
+    html[data-viewport="mobile"] .album-grid {
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+    .album-item {
+      cursor: pointer;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .album-cover {
+      width: 100%;
+      aspect-ratio: 1/1;
+      border-radius: var(--radius);
+      overflow: hidden;
+      border: 1px solid var(--border);
+      position: relative;
+      background: var(--bg-subtle);
+    }
+    .album-cover svg {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+    .album-badge-corner {
+      position: absolute;
+      top: 6px;
+      right: 6px;
+      padding: 1px 5px;
+      font-size: 9.5px;
+      font-family: var(--font-mono);
+      font-weight: 600;
+      border-radius: var(--radius-sm);
+    }
+    .album-title {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .album-sub {
+      font-size: 11.5px;
+      color: var(--text-muted);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    /* SETTINGS LAYOUT */
+    .settings-grid {
+      display: grid;
+      grid-template-columns: 210px 1fr;
+      gap: 18px;
+    }
+    html[data-viewport="mobile"] .settings-grid { grid-template-columns: 1fr; }
+    .set-nav {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+    .set-nav-btn {
+      text-align: left;
+      padding: 7px 11px;
+      border-radius: var(--radius);
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      font-size: 12.5px;
+      font-weight: 500;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .set-nav-btn:hover { background: var(--bg-hover); color: var(--text); }
+    .set-nav-btn.active { background: var(--bg-subtle); color: var(--text); font-weight: 600; }
+
+    .form-panel {
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: var(--pad-card);
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+    .input-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+    }
+    html[data-viewport="mobile"] .input-row { grid-template-columns: 1fr; }
+    .input-grp {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .input-lbl {
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--text);
+    }
+    .input-ctrl {
+      background: var(--bg-canvas);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 7px 10px;
+      font-size: 12.5px;
+      color: var(--text);
+      outline: none;
+      transition: border-color 0.15s var(--ease);
+    }
+    .input-ctrl:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 1px var(--accent);
+    }
+
+    /* MOBILE DOCK */
+    .mobile-dock {
+      display: none;
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      height: 58px;
+      background: var(--bg-surface);
+      border-top: 1px solid var(--border);
+      z-index: 100;
+      padding: 0 14px;
+      align-items: center;
+      justify-content: space-around;
+    }
+    html[data-viewport="mobile"] .mobile-dock { display: flex; }
+    .m-tab {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 2px;
+      color: var(--text-muted);
+      font-size: 10px;
+      cursor: pointer;
+    }
+    .m-tab.active { color: var(--accent); font-weight: 600; }
+  </style>
+</head>
+<body>
+
+  <!-- TOP SHOWCASE CONTROL BAR -->
+  <header id="showcase-bar">
+    <div class="bar-brand">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M2 12c2.5 0 2.5-4 5-4s2.5 4 5 4 2.5-4 5-4 2.5 4 5 4"/></svg>
+      <span>MusicForge · 方案 A 三版探索</span>
+      <span class="tag">shadcn Pro</span>
+    </div>
+
+    <div class="bar-controls">
+      <!-- VARIANT SELECTOR -->
+      <div style="display:flex;align-items:center;gap:6px;">
+        <span class="ctrl-label">方案A细分版：</span>
+        <div class="btn-group" id="grp-var">
+          <button data-var="a1" onclick="setVar('a1')">A1 · 极简高密 (Compact Console)</button>
+          <button data-var="a2" onclick="setVar('a2')">A2 · 艺术工作区 (Studio Canvas)</button>
+          <button data-var="a3" class="active" onclick="setVar('a3')">A3 · 先锋工单手册 (Technical Sheet)</button>
+        </div>
+      </div>
+
+      <!-- PALETTE SELECTOR -->
+      <div style="display:flex;align-items:center;gap:6px;">
+        <span class="ctrl-label">低饱和预设：</span>
+        <div class="btn-group" id="grp-pal">
+          <button data-palette="apple" class="active" onclick="setPalette('apple')"><span class="pal-dot" style="background:#e6213c;"></span>Apple Music 红</button>
+          <button data-palette="spotify" onclick="setPalette('spotify')"><span class="pal-dot" style="background:#1db954;"></span>Spotify 绿</button>
+          <button data-palette="slate" onclick="setPalette('slate')"><span class="pal-dot" style="background:#71717a;"></span>低饱和灰石 (Slate)</button>
+          <button data-palette="indigo" onclick="setPalette('indigo')"><span class="pal-dot" style="background:#6366f1;"></span>深紫罗兰 (Indigo)</button>
+        </div>
+      </div>
+
+      <!-- PAGE SELECTOR -->
+      <div class="btn-group" id="grp-page">
+        <button data-page="overview" class="active" onclick="setPage('overview')">概览</button>
+        <button data-page="jobs" onclick="setPage('jobs')">任务</button>
+        <button data-page="settings" onclick="setPage('settings')">设置</button>
+        <button data-page="library" onclick="setPage('library')">音乐库</button>
+      </div>
+
+      <!-- THEME & VIEWPORT -->
+      <div class="btn-group" id="grp-theme">
+        <button data-theme="dark" class="active" onclick="setTheme('dark')">Dark</button>
+        <button data-theme="light" onclick="setTheme('light')">Light</button>
+      </div>
+      <div class="btn-group" id="grp-vp">
+        <button data-vp="desktop" class="active" onclick="setVp('desktop')">1440 宽屏</button>
+        <button data-vp="mobile" onclick="setVp('mobile')">390 窄屏</button>
+      </div>
+    </div>
+  </header>
+
+  <!-- WORKSPACE FRAME -->
+  <main id="viewport-wrapper">
+    <div class="app-frame">
+
+      <!-- SIDEBAR -->
+      <aside class="app-sidebar">
+        <div>
+          <div class="brand-box">
+            <div class="brand-icon">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M2 12c2.5 0 2.5-4 5-4s2.5 4 5 4 2.5-4 5-4 2.5 4 5 4"/></svg>
+            </div>
+            <div>
+              <div class="brand-name">MusicForge</div>
+              <div class="brand-ver">v0.2.35 · Precision Studio</div>
+            </div>
+          </div>
+
+          <nav class="nav-list">
+            <a class="nav-item active" id="nav-overview" onclick="setPage('overview')">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="7" height="9" x="3" y="3" rx="1"/><rect width="7" height="5" x="14" y="3" rx="1"/><rect width="7" height="9" x="14" y="12" rx="1"/><rect width="7" height="5" x="3" y="16" rx="1"/></svg>
+              <span>概览</span>
+            </a>
+            <a class="nav-item" id="nav-library" onclick="setPage('library')">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M6 12c0-3.3 2.7-6 6-6"/><circle cx="12" cy="12" r="2"/></svg>
+              <span>音乐库</span>
+              <span class="nav-badge">1,215</span>
+            </a>
+            <a class="nav-item" id="nav-jobs" onclick="setPage('jobs')">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+              <span>后台任务</span>
+              <span class="nav-badge" style="background:var(--accent);color:#fff;">1</span>
+            </a>
+            <a class="nav-item" id="nav-settings" onclick="setPage('settings')">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
+              <span>系统设置</span>
+            </a>
+          </nav>
+        </div>
+
+        <div style="border-top:1px solid var(--border);padding-top:10px;display:flex;align-items:center;justify-content:space-between;">
+          <div style="display:flex;align-items:center;gap:8px;">
+            <div style="width:24px;height:24px;border-radius:var(--radius-sm);background:var(--bg-subtle);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:600;">AD</div>
+            <div style="font-size:11.5px;font-weight:500;">admin</div>
+          </div>
+          <button class="btn btn-ghost btn-sm">退出</button>
+        </div>
+      </aside>
+
+      <!-- MAIN AREA -->
+      <section class="app-main">
+
+        <!-- HEADER -->
+        <header class="app-header">
+          <div class="header-title-box">
+            <h1 id="page-h1">系统概览</h1>
+            <p id="page-desc">自动化音乐转码、FLAC 母带存储与 Navidrome 同步监控</p>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;">
+            <button class="btn btn-outline btn-sm" onclick="setPage('library')">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="2"/></svg>
+              <span>浏览母库</span>
+            </button>
+            <button class="btn btn-default btn-sm">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 21h5v-5"/></svg>
+              <span>扫描母库</span>
+            </button>
+          </div>
+        </header>
+
+        <!-- PAGE 1: OVERVIEW -->
+        <div class="content-body" id="page-overview">
+
+          <!-- A1 DENSE HORIZONTAL SPEC STRIP -->
+          <div class="a1-spec-strip">
+            <div class="a1-metric-item">
+              <span class="a1-metric-label">AUDIO MASTERS</span>
+              <span class="a1-metric-val">1,215</span>
+              <span class="a1-metric-sub">FLAC 只读源库</span>
+            </div>
+            <div class="a1-divider"></div>
+            <div class="a1-metric-item">
+              <span class="a1-metric-label">STREAMING ARTIFACTS</span>
+              <span class="a1-metric-val">1,149</span>
+              <span class="a1-metric-sub">OPUS VBR 192k</span>
+            </div>
+            <div class="a1-divider"></div>
+            <div class="a1-metric-item">
+              <span class="a1-metric-label">PROFILE MATCHED</span>
+              <span class="a1-metric-val">1,103</span>
+              <span class="a1-metric-sub">构建就绪率 91%</span>
+            </div>
+            <div class="a1-divider"></div>
+            <div class="a1-metric-item">
+              <span class="a1-metric-label" style="color:var(--status-warn-dot);">NEEDS ATTENTION</span>
+              <span class="a1-metric-val" style="color:var(--status-warn-text);">62</span>
+              <span class="a1-metric-sub">46 待重建 · 12 失败</span>
+            </div>
+          </div>
+
+          <!-- A2 & A3 STANDARD METRICS GRID -->
+          <div class="metrics-standard-grid">
+            <div class="m-card">
+              <div class="m-header"><span>音频源文件</span><span style="font-family:var(--font-mono);font-size:10.5px;">FLAC</span></div>
+              <div class="m-val">1,215</div>
+              <div class="m-sub">只读源文件库</div>
+            </div>
+            <div class="m-card">
+              <div class="m-header"><span>流媒体产物</span><span style="font-family:var(--font-mono);font-size:10.5px;">OPUS</span></div>
+              <div class="m-val">1,149</div>
+              <div class="m-sub">192 kbps VBR</div>
+            </div>
+            <div class="m-card">
+              <div class="m-header"><span>配置命中</span><span style="font-family:var(--font-mono);font-size:10.5px;">91%</span></div>
+              <div class="m-val">1,103</div>
+              <div class="m-sub">匹配当前构建参数</div>
+            </div>
+            <div class="m-card">
+              <div class="m-header"><span style="color:var(--status-warn-text);">待处理事项</span><span style="font-family:var(--font-mono);font-size:10.5px;color:var(--status-warn-dot);">62</span></div>
+              <div class="m-val" style="color:var(--status-warn-text);">62</div>
+              <div class="m-sub">46 需重建 · 12 失败</div>
+            </div>
+          </div>
+
+          <!-- TRANSCODE PROGRESS -->
+          <div class="progress-box">
+            <div class="p-head">
+              <div style="display:flex;align-items:center;gap:8px;">
+                <span style="font-weight:600;color:var(--text);">构建完成度 91%</span>
+                <span class="badge badge-running"><span class="badge-dot"></span>转码中</span>
+              </div>
+              <div style="font-family:var(--font-mono);font-size:11.5px;color:var(--text-muted);">
+                OPUS VBR · 192 kbps · 1,103 / 1,215
+              </div>
+            </div>
+
+            <!-- Continuous Bar -->
+            <div class="p-bar-track">
+              <div class="p-bar-fill" style="width:91%;"></div>
+            </div>
+
+            <!-- A3 Ruler Scale -->
+            <div class="a3-ruler-scale">
+              <div class="ruler-ticks">
+                <span>0% (IDLE)</span><span>25%</span><span>50% (HALFWAY)</span><span>75%</span><span>91% (ACTIVE)</span><span>100%</span>
+              </div>
+            </div>
+
+            <div style="display:flex;align-items:center;justify-content:space-between;font-size:11.5px;color:var(--text-muted);border-top:1px solid var(--border);padding-top:8px;">
+              <div>处理中：<strong style="color:var(--text);">First Light · 海岸与夜晚的音乐记录</strong> (61%)</div>
+              <div style="font-family:var(--font-mono);">Worker #2 · 2.4 MB/s · 44/100</div>
+            </div>
+          </div>
+
+          <!-- JOBS & STORAGE SPLIT -->
+          <div style="display:grid;grid-template-columns:2fr 1fr;gap:14px;">
+
+            <!-- RECENT JOBS (Harmonious status contrast, no color clash) -->
+            <div class="table-container">
+              <div class="table-head">
+                <span>近期流水线任务</span>
+                <button class="btn btn-ghost btn-sm" onclick="setPage('jobs')">查看全部 ➔</button>
+              </div>
+
+              <div class="table-row">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/></svg>
+                <div style="flex:1;">
+                  <div style="font-size:12.5px;font-weight:600;color:var(--text);">扫描与转码队列 #130</div>
+                  <div style="font-size:11px;color:var(--text-muted);">First Light · 海岸与夜晚的音乐记录 (44/100 完成)</div>
+                </div>
+                <span class="badge badge-running"><span class="badge-dot"></span>运行中 (44%)</span>
+              </div>
+
+              <div class="table-row">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--status-success-dot)" stroke-width="2"><path d="M20 6 9 17l-5-5"/></svg>
+                <div style="flex:1;">
+                  <div style="font-size:12.5px;font-weight:600;color:var(--text);">音频构建队列 #129</div>
+                  <div style="font-size:11px;color:var(--text-muted);">100/100 完成 · 所有产物校验通过</div>
+                </div>
+                <!-- Harmonious Muted Success Badge -->
+                <span class="badge badge-success"><span class="badge-dot"></span>成功</span>
+              </div>
+
+              <div class="table-row">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--status-fail-dot)" stroke-width="2"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/></svg>
+                <div style="flex:1;">
+                  <div style="font-size:12.5px;font-weight:600;color:var(--text);">音频构建队列 #128</div>
+                  <div style="font-size:11px;color:var(--status-fail-text);">44/100 完成 · 12 首 PCM 截断失败</div>
+                </div>
+                <!-- Harmonious Muted Fail Badge -->
+                <span class="badge badge-fail"><span class="badge-dot"></span>失败 (12)</span>
+              </div>
+            </div>
+
+            <!-- LRC & STORAGE ASIDE -->
+            <div style="display:flex;flex-direction:column;gap:12px;">
+              <div class="card" style="display:flex;flex-direction:column;gap:6px;">
+                <div style="display:flex;justify-content:space-between;align-items:center;">
+                  <span style="font-size:12px;color:var(--text-dim);font-weight:500;">LRC 歌词覆盖</span>
+                  <span style="font-size:10.5px;font-family:var(--font-mono);color:var(--text-dim);">网易云 / 搜狗</span>
+                </div>
+                <div style="font-size:20px;font-weight:700;color:var(--text);font-family:var(--font-mono);">0 / 66</div>
+                <div style="font-size:11px;color:var(--text-muted);">0 首待审核</div>
+                <button class="btn btn-outline btn-sm" style="margin-top:6px;width:100%;justify-content:center;" onclick="setPage('settings')">配置歌词源</button>
+              </div>
+
+              <div class="card" style="display:flex;flex-direction:column;gap:6px;">
+                <div style="display:flex;justify-content:space-between;align-items:center;">
+                  <span style="font-size:12px;color:var(--text-dim);font-weight:500;">存储挂载</span>
+                  <span style="font-size:10.5px;color:var(--status-success-dot);font-weight:500;">双卷在线</span>
+                </div>
+                <div style="font-family:var(--font-mono);font-size:11px;display:flex;flex-direction:column;gap:3px;">
+                  <div><span style="color:var(--text-dim);">源:</span> <code>/music/source</code></div>
+                  <div><span style="color:var(--text-dim);">产:</span> <code>/music/output</code></div>
+                </div>
+              </div>
+            </div>
+
+          </div>
+
+        </div>
+
+        <!-- PAGE 2: JOBS -->
+        <div class="content-body" id="page-jobs" style="display:none;">
+          <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">
+            <div class="btn-group">
+              <button class="active">全部 (5)</button>
+              <button>运行中 (1)</button>
+              <button>待处理 (1)</button>
+              <button>已暂停 (1)</button>
+              <button>失败 (1)</button>
+              <button>成功 (1)</button>
+            </div>
+            <div style="display:flex;gap:6px;">
+              <button class="btn btn-outline btn-sm" style="color:var(--status-fail-text);border-color:var(--status-fail-border);">重试失败任务 (12)</button>
+              <button class="btn btn-outline btn-sm">暂停队列</button>
+            </div>
+          </div>
+
+          <!-- DETAILED ACTIVE TASK -->
+          <div class="card">
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px;">
+              <div>
+                <div style="display:flex;align-items:center;gap:8px;">
+                  <span style="font-size:14px;font-weight:600;color:var(--text);">扫描与转码队列 #130</span>
+                  <span class="badge badge-running"><span class="badge-dot"></span>44% 运行中</span>
+                </div>
+                <div style="font-size:11.5px;color:var(--text-muted);font-family:var(--font-mono);margin-top:2px;">
+                  参数: OPUS VBR 192kbps · 4 线程并发 · 启动于 08:01:00 AM
+                </div>
+              </div>
+              <div style="display:flex;gap:6px;">
+                <button class="btn btn-outline btn-sm">暂停</button>
+                <button class="btn btn-outline btn-sm" style="color:var(--status-fail-text);">终止</button>
+              </div>
+            </div>
+
+            <div style="background:var(--bg-canvas);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px;margin-top:10px;font-family:var(--font-mono);font-size:11.5px;display:flex;flex-direction:column;gap:6px;">
+              <div style="display:flex;justify-content:space-between;color:var(--text-muted);">
+                <span>进度：44 / 100 首曲目</span>
+                <span style="color:var(--accent);">First Light (61%)</span>
+              </div>
+              <div class="p-bar-track">
+                <div class="p-bar-fill" style="width:44%;"></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- OTHER JOBS -->
+          <div class="table-container">
+            <div class="table-row">
+              <input type="checkbox">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--status-success-dot)" stroke-width="2"><path d="M20 6 9 17l-5-5"/></svg>
+              <div style="flex:1;">
+                <div style="font-size:12.5px;font-weight:600;color:var(--text);">音频构建队列 #129</div>
+                <div style="font-size:11px;color:var(--text-muted);font-family:var(--font-mono);">100/100 完成 · 耗时 3m 42s</div>
+              </div>
+              <span class="badge badge-success"><span class="badge-dot"></span>成功</span>
+              <button class="btn btn-ghost btn-sm">详情</button>
+            </div>
+
+            <div class="table-row">
+              <input type="checkbox">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--status-fail-dot)" stroke-width="2"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/></svg>
+              <div style="flex:1;">
+                <div style="font-size:12.5px;font-weight:600;color:var(--text);">音频构建队列 #128</div>
+                <div style="font-size:11px;color:var(--status-fail-text);font-family:var(--font-mono);">12 首 FLAC 头截断失败 (truncated stream)</div>
+              </div>
+              <span class="badge badge-fail"><span class="badge-dot"></span>失败</span>
+              <button class="btn btn-outline btn-sm" style="color:var(--status-fail-text);border-color:var(--status-fail-border);">重试</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- PAGE 3: SETTINGS -->
+        <div class="content-body" id="page-settings" style="display:none;">
+          <div class="settings-grid">
+            <div class="set-nav">
+              <button class="set-nav-btn active">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z"/></svg>
+                <span>音乐库路径</span>
+              </button>
+              <button class="set-nav-btn">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12c2.5 0 2.5-4 5-4s2.5 4 5 4 2.5-4 5-4 2.5 4 5 4"/></svg>
+                <span>编码引擎参数</span>
+              </button>
+              <button class="set-nav-btn">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/></svg>
+                <span>LRC 歌词源</span>
+              </button>
+              <button class="set-nav-btn">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/></svg>
+                <span>集成 (Lidarr / Navidrome)</span>
+              </button>
+              <button class="set-nav-btn">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+                <span>账户与安全</span>
+              </button>
+            </div>
+
+            <!-- FORM PANEL -->
+            <div class="form-panel">
+              <div>
+                <h3 style="font-size:14px;font-weight:600;color:var(--text);">编码引擎参数 (Audio Encoding Profile)</h3>
+                <p style="font-size:11.5px;color:var(--text-muted);margin-top:2px;">配置无损母带转码至目标流媒体文件的质量与并发限制</p>
+              </div>
+
+              <div class="input-row">
+                <div class="input-grp">
+                  <label class="input-lbl">目标编码格式</label>
+                  <select class="input-ctrl">
+                    <option value="opus" selected>OPUS (推荐 / 最优压缩比与声学保真)</option>
+                    <option value="mp3">MP3 (通用兼容)</option>
+                  </select>
+                </div>
+                <div class="input-grp">
+                  <label class="input-lbl">码率模式</label>
+                  <select class="input-ctrl">
+                    <option value="vbr" selected>VBR (动态比特率)</option>
+                    <option value="cbr">CBR (固定比特率)</option>
+                  </select>
+                </div>
+                <div class="input-grp">
+                  <label class="input-lbl">目标码率 (kbps)</label>
+                  <input class="input-ctrl" type="number" value="192">
+                </div>
+                <div class="input-grp">
+                  <label class="input-lbl">并发转码线程</label>
+                  <input class="input-ctrl" type="number" value="4" min="1" max="16">
+                </div>
+              </div>
+
+              <div style="border-top:1px solid var(--border);padding-top:12px;display:flex;justify-content:space-between;align-items:center;">
+                <span style="font-size:11.5px;color:var(--text-muted);">所有配置参数已同步</span>
+                <div style="display:flex;gap:6px;">
+                  <button class="btn btn-outline btn-sm">放弃更改</button>
+                  <button class="btn btn-default btn-sm">保存设置</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- PAGE 4: LIBRARY -->
+        <div class="content-body" id="page-library" style="display:none;">
+          <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">
+            <div style="display:flex;align-items:center;gap:8px;">
+              <div class="btn-group">
+                <button class="active">专辑 (67)</button>
+                <button>曲目 (68)</button>
+                <button>艺术家 (10)</button>
+              </div>
+              <span style="font-size:11.5px;color:var(--text-muted);font-family:var(--font-mono);">68 个已索引曲目</span>
+            </div>
+
+            <div style="display:flex;gap:6px;align-items:center;">
+              <div style="position:relative;width:200px;">
+                <input class="input-ctrl" placeholder="快速搜索..." style="padding-left:26px;font-size:11.5px;width:100%;">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="position:absolute;left:8px;top:8px;color:var(--text-dim);"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+              </div>
+              <select class="input-ctrl" style="width:110px;font-size:11.5px;">
+                <option>全部状态</option>
+                <option>就绪</option>
+                <option>待重建</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- ALBUM GRID -->
+          <div class="album-grid">
+            <div class="album-item">
+              <div class="album-cover">
+                <svg viewBox="0 0 100 100">
+                  <rect width="100" height="100" fill="#1c2622"/>
+                  <circle cx="50" cy="50" r="30" fill="#c4d6bd"/>
+                  <path d="M50 20v60" stroke="#1c2622" stroke-width="4"/>
+                </svg>
+                <span class="album-badge-corner" style="background:var(--status-success-bg);color:var(--status-success-text);border:1px solid var(--status-success-border);">READY</span>
+              </div>
+              <div>
+                <div class="album-title">Night Studies</div>
+                <div class="album-sub">River Ensemble · 2 首</div>
+              </div>
+            </div>
+
+            <div class="album-item">
+              <div class="album-cover">
+                <svg viewBox="0 0 100 100">
+                  <rect width="100" height="100" fill="#2d1e18"/>
+                  <circle cx="50" cy="50" r="30" fill="#e2beab"/>
+                  <path d="M50 20v60" stroke="#2d1e18" stroke-width="4"/>
+                </svg>
+                <span class="album-badge-corner" style="background:var(--status-fail-bg);color:var(--status-fail-text);border:1px solid var(--status-fail-border);">REBUILD</span>
+              </div>
+              <div>
+                <div class="album-title">Field Notes</div>
+                <div class="album-sub">River Ensemble · 1 首待重建</div>
+              </div>
+            </div>
+
+            <div class="album-item">
+              <div class="album-cover">
+                <svg viewBox="0 0 100 100">
+                  <rect width="100" height="100" fill="#171f2d"/>
+                  <circle cx="50" cy="50" r="30" fill="#acc1d8"/>
+                  <path d="M50 20v60" stroke="#171f2d" stroke-width="4"/>
+                </svg>
+                <span class="album-badge-corner" style="background:var(--status-success-bg);color:var(--status-success-text);border:1px solid var(--status-success-border);">READY</span>
+              </div>
+              <div>
+                <div class="album-title">Morning Set</div>
+                <div class="album-sub">Alma Ensemble · 1 首</div>
+              </div>
+            </div>
+
+            <div class="album-item">
+              <div class="album-cover">
+                <svg viewBox="0 0 100 100">
+                  <rect width="100" height="100" fill="#261a29"/>
+                  <circle cx="50" cy="50" r="30" fill="#d3bad9"/>
+                  <path d="M50 20v60" stroke="#261a29" stroke-width="4"/>
+                </svg>
+                <span class="album-badge-corner" style="background:var(--status-success-bg);color:var(--status-success-text);border:1px solid var(--status-success-border);">READY</span>
+              </div>
+              <div>
+                <div class="album-title">Study 02 & 03</div>
+                <div class="album-sub">Ensemble 2 · 2 首</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- TRACK TABLE -->
+          <div class="table-container" style="margin-top:6px;">
+            <div class="table-head">
+              <span>专辑音轨明细 · NIGHT STUDIES</span>
+              <span style="font-family:var(--font-mono);font-size:11px;">2 首 · FLAC 24-bit / 96 kHz</span>
+            </div>
+
+            <div class="table-row">
+              <span style="font-family:var(--font-mono);color:var(--text-dim);width:20px;">01</span>
+              <div style="flex:2;">
+                <div style="font-size:12.5px;font-weight:600;color:var(--text);">First Light</div>
+                <div style="font-size:10.5px;color:var(--text-dim);font-family:var(--font-mono);">/music/source/River Ensemble/Night Studies/01-first-light.flac</div>
+              </div>
+              <div style="flex:1;font-size:11px;font-family:var(--font-mono);color:var(--text-muted);">
+                24-bit / 96 kHz · 2ch
+              </div>
+              <span style="font-size:11.5px;font-family:var(--font-mono);width:50px;">03:21</span>
+              <span class="badge badge-success"><span class="badge-dot"></span>已就绪</span>
+            </div>
+
+            <div class="table-row">
+              <span style="font-family:var(--font-mono);color:var(--text-dim);width:20px;">02</span>
+              <div style="flex:2;">
+                <div style="font-size:12.5px;font-weight:600;color:var(--text);">Second Light</div>
+                <div style="font-size:10.5px;color:var(--text-dim);font-family:var(--font-mono);">/music/source/River Ensemble/Night Studies/02-second-light.flac</div>
+              </div>
+              <div style="flex:1;font-size:11px;font-family:var(--font-mono);color:var(--text-muted);">
+                24-bit / 96 kHz · 2ch
+              </div>
+              <span style="font-size:11.5px;font-family:var(--font-mono);width:50px;">03:03</span>
+              <span class="badge badge-running"><span class="badge-dot"></span>转码中</span>
+            </div>
+          </div>
+        </div>
+
+      </section>
+
+      <!-- MOBILE BOTTOM DOCK -->
+      <nav class="mobile-dock">
+        <a class="m-tab active" id="mob-overview" onclick="setPage('overview')">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="7" height="9" x="3" y="3" rx="1"/><rect width="7" height="5" x="14" y="3" rx="1"/><rect width="7" height="9" x="14" y="12" rx="1"/><rect width="7" height="5" x="3" y="16" rx="1"/></svg>
+          <span>概览</span>
+        </a>
+        <a class="m-tab" id="mob-library" onclick="setPage('library')">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M6 12c0-3.3 2.7-6 6-6"/><circle cx="12" cy="12" r="2"/></svg>
+          <span>音乐库</span>
+        </a>
+        <a class="m-tab" id="mob-jobs" onclick="setPage('jobs')">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+          <span>任务</span>
+        </a>
+        <a class="m-tab" id="mob-settings" onclick="setPage('settings')">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+          <span>设置</span>
+        </a>
+      </nav>
+
+    </div>
+  </main>
+
+  <!-- CONTROLLER SCRIPT -->
+  <script>
+    const state = {
+      variant: 'a1',
+      palette: 'apple',
+      page: 'overview',
+      theme: 'dark',
+      vp: 'desktop'
+    };
+
+    const titles = {
+      overview: { h1: '系统概览', desc: '自动化音乐转码、FLAC 母带存储与 Navidrome 同步监控' },
+      jobs: { h1: '后台任务', desc: '并发转码队列、错误诊断与批量恢复' },
+      settings: { h1: '系统设置', desc: '编码参数、音乐源库、LRC 歌词与集成配置' },
+      library: { h1: '音乐母库', desc: '68 个已索引音轨 · 专辑封面与流媒体产物' }
+    };
+
+    function setVar(v) {
+      state.variant = v;
+      document.documentElement.setAttribute('data-variant', v);
+      document.querySelectorAll('#grp-var button').forEach(b => {
+        b.classList.toggle('active', b.getAttribute('data-var') === v);
+      });
+    }
+
+    function setPalette(p) {
+      state.palette = p;
+      document.documentElement.setAttribute('data-palette', p);
+      document.querySelectorAll('#grp-pal button').forEach(b => {
+        b.classList.toggle('active', b.getAttribute('data-palette') === p);
+      });
+    }
+
+    function setPage(p) {
+      state.page = p;
+      ['overview', 'jobs', 'settings', 'library'].forEach(item => {
+        const el = document.getElementById('page-' + item);
+        if (el) el.style.display = item === p ? 'flex' : 'none';
+
+        const nav = document.getElementById('nav-' + item);
+        if (nav) nav.classList.toggle('active', item === p);
+
+        const mob = document.getElementById('mob-' + item);
+        if (mob) mob.classList.toggle('active', item === p);
+      });
+
+      document.getElementById('page-h1').textContent = titles[p].h1;
+      document.getElementById('page-desc').textContent = titles[p].desc;
+
+      document.querySelectorAll('#grp-page button').forEach(b => {
+        b.classList.toggle('active', b.getAttribute('data-page') === p);
+      });
+    }
+
+    function setTheme(t) {
+      state.theme = t;
+      document.documentElement.setAttribute('data-theme', t);
+      document.querySelectorAll('#grp-theme button').forEach(b => {
+        b.classList.toggle('active', b.getAttribute('data-theme') === t);
+      });
+    }
+
+    function setVp(v) {
+      state.vp = v;
+      document.documentElement.setAttribute('data-viewport', v);
+      document.querySelectorAll('#grp-vp button').forEach(b => {
+        b.classList.toggle('active', b.getAttribute('data-vp') === v);
+      });
+    }
+  </script>
+</body>
+</html>

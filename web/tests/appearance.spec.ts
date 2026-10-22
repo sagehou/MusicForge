@@ -1,5 +1,7 @@
 import { test, expect, type Page } from "@playwright/test";
 import { openAccount, setPreference } from "./preferences";
+import { readFile } from "node:fs/promises";
+import { resolve } from "node:path";
 
 const settings = { enabled: true, source: "/music/source", output: "/music/output", encoding: { codec: "opus", mode: "vbr", bitrate: 192, quality: 2 }, concurrency: 1, scan_minutes: 60, lidarr_prefix: "", nav_url: "", nav_user: "", nav_library: 1, oidc_issuer: "", oidc_client_id: "" };
 async function setup(page: Page) {
@@ -54,6 +56,18 @@ test("default albums, compact headings and the text account link retain settings
   await expect(page.locator(".account-link svg, .sidebar .appearance-controls")).toHaveCount(0);
   await expect(page.locator(".account-link .account-version")).toHaveText("MusicForge test");
   await page.screenshot({ path: "test-results/appearance-default-albums.png", animations: "disabled" });
+  const reference = await page.context().newPage();
+  const design = await readFile(resolve("../designs/index.html"), "utf8");
+  for (const width of [1440, 390]) {
+    await reference.setViewportSize({ width, height: 1000 });
+    await reference.setContent(design);
+    await reference.evaluate(`setVp('${width === 390 ? "mobile" : "desktop"}'); setTheme('dark')`);
+    for (const screen of ["overview", "library", "settings", "jobs"]) {
+      await reference.evaluate(`setPage('${screen}')`);
+      await reference.locator(".app-frame").screenshot({ path: `test-results/design-a2-${screen}-${width}.png`, animations: "disabled" });
+    }
+  }
+  await reference.close();
   await openAccount(page);
   await expect(page).toHaveURL(/section=security/);
   await expect(page.locator(".account-summary")).toContainText("admin");

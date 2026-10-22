@@ -44,8 +44,8 @@ jobs:
         working-directory: web
         run: |
           if [ ! -f package-lock.json ]; then npm install --package-lock-only --ignore-scripts; fi
-          npm ci
-          npm audit --audit-level=high
+          npm ci --no-audit --no-fund
+          npm audit --audit-level=high --fetch-timeout=30000 --fetch-retries=2
       - name: Check the presentation classifier
         if: steps.plan.outputs.scope != 'docs' && steps.plan.outputs.reuse_run == ''
         run: node --test .github/scripts/test_ui_scope.mjs

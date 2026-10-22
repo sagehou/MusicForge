@@ -184,7 +184,7 @@ func TestTraditionalReplacementBypassesSourceAndReusesSearchAtNewThreshold(t *te
 	})
 	run := func() lyricsReport {
 		t.Helper()
-		if !a.startLyrics(settings, []Source{source}, lyricsBatchOptions{ReplaceTraditional: true}, false) {
+		if _, started := a.startLyrics(settings, []Source{source}, lyricsBatchOptions{ReplaceTraditional: true}, false); !started {
 			t.Fatal("batch did not start")
 		}
 		return waitLyrics(t, a)

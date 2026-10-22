@@ -20,6 +20,7 @@ NAME = "musicforge-rollback"
 CANDIDATE = "musicforge:validation"
 PASSWORD = "ci-rollback-password"
 LEGACY = {
+    "v0.2.32": "sha256:43c37db7ffa658d89500a8a8df4785b7768a215bf502b120c208ae5bcb672b5f",
     "v0.2.31": "sha256:9cbedabe9900f2023177def997dd03068fb0f2ff183b80cc225e8c17e2d6d557",
     "v0.2.26": "sha256:0a08c8bd29344bef6eb9f3fbd8f0104082763a6b1b31d88bc50f0603d64bb1ce",
     "v0.2.25": "sha256:4b8851a44dbd5150def7dbccd5d26658ef5e1526cc840961d367ae763df3e662",
@@ -297,7 +298,7 @@ def main():
                 api, running = start(actual_image)
                 if actual_image == image:
                     assert running == version, "wrong rollback release"
-                if actual_image == image and version == "v0.2.31":
+                if actual_image == image and version in ("v0.2.31", "v0.2.32"):
                     api("/api/lyrics/options", "PUT", {"auto_search": False})
                     api("/api/lyrics/search", "DELETE")
                 verify(api, tracks, pending, stopped)

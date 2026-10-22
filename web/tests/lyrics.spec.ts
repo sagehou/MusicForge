@@ -8,6 +8,38 @@ test.beforeEach(async ({ page }) => {
   await page.route("**/api/lyrics", route => route.fulfill({ json: { options: { auto_search: false }, report: { state: "idle", total: 0, processed: 0, found: 0, not_found: 0, failed: 0, stopping: false } } }));
 });
 
+test("incremental filling shows pending and skipped counts and succeeds when no work remains", async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem("musicforge.language", "en"));
+  const source: Source = { id: 1, path: "Album/01.flac", artist: "Artist", album: "Album", title: "Track", track: 1, disc: 1, present: true, output: "Album/01.opus", output_present: true, status: "ready", error: "", size: 123, metadata: {}, lyrics: { state: "ready", output: "Album/01.opus", signature: "audio", checked: 1 } };
+  let report = { state: "idle", total: 0, processed: 0, found: 0, not_found: 0, failed: 0, stopping: false, skipped: 0 };
+  let pending = 0;
+  const searches: unknown[] = [];
+  await page.route("**/api/auth/me", route => route.fulfill({ json: { initialized: true, authenticated: true, username: "admin", method: "local", csrf: "test", oidc: false, version: "test" } }));
+  await page.route("**/api/library", route => route.fulfill({ json: [source] }));
+  await page.route("**/api/lyrics", route => route.fulfill({ json: { options: { auto_search: false, min_score: 96 }, report } }));
+  await page.route("**/api/lyrics/search", route => {
+    searches.push(route.request().postDataJSON());
+    report = { ...report, state: "complete", total: pending, processed: pending, found: pending, skipped: 1 };
+    return route.fulfill({ status: 202, json: { selected: pending, skipped: 1 } });
+  });
+  await page.goto("/library?view=tracks");
+  await page.getByRole("button", { name: "Fill lyrics for all artifacts", exact: true }).click();
+  const progress = page.getByRole("status", { name: "Current lyrics batch", exact: true });
+  await expect(progress).toContainText("No lyrics need filling. Existing results were retained.");
+  await expect(progress).toContainText("Skipped 1 tracks with lyrics or no work due");
+  await expect(progress).not.toContainText("0/0");
+  await expect(page.locator(".toast")).toContainText("No lyrics need filling");
+  pending = 1;
+  await page.getByRole("button", { name: "Fill lyrics for all artifacts", exact: true }).click();
+  await expect(progress).toContainText("This batch: checked 1/1");
+  await expect(progress).toContainText("Skipped 1 tracks with lyrics or no work due");
+  expect(searches).toEqual([{ all: true, refresh: false }, { all: true, refresh: false }]);
+  await setPreference(page, "language", "zh-CN");
+  await expect(page.getByRole("status", { name: "本次补齐进度", exact: true })).toContainText("已跳过 1 首");
+  await page.setViewportSize({ width: 320, height: 844 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
+});
+
 test("lyrics settings save thresholds, retain drafts and offer output-only inspection", async ({ page }) => {
   await page.addInitScript(() => localStorage.setItem("musicforge.language", "en"));
   await page.route("**/api/auth/me", route => route.fulfill({ json: { initialized: true, authenticated: true, username: "admin", method: "local", csrf: "test", oidc: false, version: "test" } }));

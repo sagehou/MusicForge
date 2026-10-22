@@ -53,6 +53,7 @@ type lyricsReport struct {
 	Mode      string `json:"mode"`
 	Replaced  int    `json:"replaced"`
 	Unchanged int    `json:"unchanged"`
+	Skipped   int    `json:"skipped"`
 }
 
 type lyricsState struct {
@@ -199,7 +200,7 @@ func (a *App) requestLyrics(w http.ResponseWriter, r *http.Request) {
 		apiError(w, 409, errors.New("Enable the library before searching for lyrics"))
 		return
 	}
-	all, err := a.allSources()
+	all, err := a.sourcesWhereContext(r.Context(), " WHERE output<>'' AND output_present=1")
 	if err != nil {
 		apiError(w, 500, err)
 		return
@@ -214,11 +215,12 @@ func (a *App) requestLyrics(w http.ResponseWriter, r *http.Request) {
 		apiError(w, 409, errors.New("No playable artifacts selected"))
 		return
 	}
-	if !a.startLyrics(s, chosen, body.lyricsBatchOptions, false) {
+	selected, started := a.startLyrics(s, chosen, body.lyricsBatchOptions, false)
+	if !started {
 		apiError(w, 409, errors.New("Lyrics search already running or application is stopping"))
 		return
 	}
-	respond(w, 202, map[string]int{"selected": len(chosen)})
+	respond(w, 202, map[string]int{"selected": selected, "skipped": len(chosen) - selected})
 }
 
 func (a *App) stopLyrics(w http.ResponseWriter, r *http.Request) {
@@ -238,6 +240,15 @@ func (a *App) stopLyrics(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *App) annotateLyrics(ctx context.Context, sources []Source) error {
+	if err := a.annotateLyricsStatuses(ctx, sources); err != nil {
+		return err
+	}
+	return a.annotateLyricsScripts(ctx, sources)
+}
+
+// Planning reads persisted results only; it must not touch source/output files
+// or load script annotations just to decide whether a track needs filling.
+func (a *App) annotateLyricsStatuses(ctx context.Context, sources []Source) error {
 	rows, err := a.reads.QueryContext(ctx, `SELECT s.id,s.output,m.signature,l.value FROM sources s JOIN managed m ON m.source_id=s.id AND m.path=s.output AND m.kind='audio' JOIN meta l ON l.key='lyrics-status:'||s.id WHERE s.output_present=1`)
 	if err != nil {
 		return err
@@ -256,6 +267,7 @@ func (a *App) annotateLyrics(ctx context.Context, sources []Source) error {
 		}
 	}
 	for i := range sources {
+		sources[i].Lyrics = nil
 		if status, ok := statuses[sources[i].ID]; ok && sources[i].Output == status.Output && sources[i].OutputPresent {
 			copy := status
 			sources[i].Lyrics = &copy
@@ -265,7 +277,7 @@ func (a *App) annotateLyrics(ctx context.Context, sources []Source) error {
 		return err
 	}
 	rows.Close()
-	return a.annotateLyricsScripts(ctx, sources)
+	return nil
 }
 
 func (a *App) scheduleLyrics(s Settings) {
@@ -280,43 +292,76 @@ func (a *App) scheduleLyrics(s Settings) {
 	if err != nil || !options.AutoSearch {
 		return
 	}
-	sources, err := a.allSources()
-	if err != nil || a.annotateLyrics(a.ioContext, sources) != nil {
+	sources, err := a.sourcesWhereContext(a.ioContext, " WHERE output<>'' AND output_present=1 AND hash=built_hash")
+	if err != nil {
 		return
 	}
-	var chosen []Source
-	for _, source := range sources {
-		if source.Output == "" || !source.OutputPresent {
-			continue
-		}
-		status := source.Lyrics
-		if status == nil || (status.State == "failed" && time.Since(time.Unix(status.Checked, 0)) >= time.Hour) ||
-			(status.State == "not_found" || status.State == "instrumental" || status.State == "needs_review") && time.Since(time.Unix(status.Checked, 0)) >= 7*24*time.Hour {
-			chosen = append(chosen, source)
-		}
-	}
-	if len(chosen) > 0 {
-		a.startLyrics(s, chosen, lyricsBatchOptions{}, true)
+	if len(sources) > 0 {
+		a.startLyrics(s, sources, lyricsBatchOptions{}, true)
 	}
 }
 
-func (a *App) startLyrics(s Settings, sources []Source, batch lyricsBatchOptions, automatic bool) bool {
+func lyricsNeedsFilling(source Source, automatic bool, now time.Time) bool {
+	if source.Output == "" || !source.OutputPresent || source.Hash != source.BuiltHash {
+		return false
+	}
+	status := source.Lyrics
+	if status == nil {
+		return true
+	}
+	if status.State == "ready" {
+		return false
+	}
+	if !automatic {
+		return true // Explicit filling may retry unfinished tracks using their cache.
+	}
+	age := now.Sub(time.Unix(status.Checked, 0))
+	switch status.State {
+	case "failed":
+		return age >= time.Hour
+	case "not_found", "instrumental", "needs_review":
+		return age >= 7*24*time.Hour
+	default:
+		return true
+	}
+}
+
+func (a *App) startLyrics(s Settings, sources []Source, batch lyricsBatchOptions, automatic bool) (int, bool) {
 	a.lyricsMu.Lock()
 	defer a.lyricsMu.Unlock()
 	if a.lyricsCancel != nil || a.ioContext.Err() != nil {
-		return false
+		return 0, false
 	}
 	options, err := a.lyricsOptions(a.ioContext)
 	if err != nil {
-		return false
+		return 0, false
 	}
 	batch.MinScore = options.MinScore
 	if automatic {
 		// Stop/options writes share this lock: a previously selected automatic
 		// batch must not start after the administrator disables filling.
 		if !options.AutoSearch {
-			return false
+			return 0, false
 		}
+	}
+	skipped := 0
+	if !batch.Refresh && !batch.ReplaceTraditional && !batch.InspectOnly {
+		if err = a.annotateLyricsStatuses(a.ioContext, sources); err != nil {
+			return 0, false
+		}
+		pending := make([]Source, 0, len(sources))
+		now := time.Now()
+		for _, source := range sources {
+			if lyricsNeedsFilling(source, automatic, now) {
+				pending = append(pending, source)
+			} else {
+				skipped++
+			}
+		}
+		sources = pending
+	}
+	if automatic && len(sources) == 0 {
+		return 0, true // Keep the last useful batch report when nothing is due.
 	}
 	ctx, cancel := context.WithCancel(a.ioContext)
 	mode := "fill"
@@ -326,8 +371,14 @@ func (a *App) startLyrics(s Settings, sources []Source, batch lyricsBatchOptions
 	if batch.InspectOnly {
 		mode = "inspect"
 	}
-	report := &lyricsReport{State: "running", Total: len(sources), Mode: mode}
+	report := &lyricsReport{State: "running", Total: len(sources), Mode: mode, Skipped: skipped}
 	a.lyricsReport, a.lyricsCancel = report, cancel
+	if len(sources) == 0 {
+		report.State = "complete"
+		a.lyricsCancel = nil
+		cancel()
+		return 0, true
+	}
 	a.lyricsWG.Add(1)
 	go func() {
 		defer a.lyricsWG.Done()
@@ -393,7 +444,7 @@ func (a *App) startLyrics(s Settings, sources []Source, batch lyricsBatchOptions
 		}
 		a.lyricsCancel = nil
 	}()
-	return true
+	return len(sources), true
 }
 
 func (a *App) maintainLyrics(ctx context.Context, s Settings, id int64, batch lyricsBatchOptions) (status LyricsStatus) {
@@ -408,6 +459,12 @@ func (a *App) maintainLyrics(ctx context.Context, s Settings, id int64, batch ly
 	}
 	if err == nil {
 		var text string
+		// A valid owned LRC also wins if a previous publication stopped before
+		// saving its ready status. Only explicit refresh/replacement may replace it.
+		if target.FilePresent && !batch.Refresh && !batch.ReplaceTraditional && target.File.SourceHash == target.Source.BuiltHash {
+			status.State = "ready"
+			return
+		}
 		if batch.ReplaceTraditional && (!target.FilePresent || target.FileScript != "traditional") {
 			status.State = "not_found"
 			if target.FilePresent {
@@ -419,13 +476,6 @@ func (a *App) maintainLyrics(ctx context.Context, s Settings, id int64, batch ly
 			text, err = a.sourceLyrics(ctx, s, target.Source)
 		}
 		provider := "source"
-		if err == nil && text == "" && target.FilePresent && !batch.Refresh && !batch.ReplaceTraditional && target.File.SourceHash == target.Source.BuiltHash {
-			status.State = "ready"
-			if _, err = a.inspectLyricsScript(ctx, s, id); err != nil {
-				status.State, status.Error = "failed", err.Error()
-			}
-			return
-		}
 		if err == nil && text == "" {
 			text, provider, status.State, status.Attempts, err = a.searchOnlineLyrics(ctx, target, batch)
 			if text == "" && err == nil {

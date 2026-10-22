@@ -9,7 +9,7 @@ import { DetailPanel } from "./detail-panel";
 
 type LyricsResponse = {
   options: { auto_search: boolean; min_score: number };
-  report: { state: "idle" | "running" | "complete" | "stopped"; total: number; processed: number; found: number; not_found: number; failed: number; needs_review?: number; current?: string; error?: string; stopping: boolean; mode?: "fill" | "replace" | "inspect"; replaced?: number; unchanged?: number };
+  report: { state: "idle" | "running" | "complete" | "stopped"; total: number; processed: number; found: number; not_found: number; failed: number; needs_review?: number; current?: string; error?: string; stopping: boolean; mode?: "fill" | "replace" | "inspect"; replaced?: number; unchanged?: number; skipped?: number };
 };
 
 export const lyricsMatchStates = ["ready", "unchecked", "not_found", "instrumental", "needs_review", "failed"] as const;
@@ -28,8 +28,8 @@ export function LyricsSearchButton({ ids, all = false, refresh = false, replaceT
   async function search() {
     setBusy(true);
     try {
-      await api("/lyrics/search", "POST", { ...(all ? { all: true } : { ids }), refresh, ...(replaceTraditional ? { replace_traditional: true } : {}), ...(inspectOnly ? { inspect_only: true } : {}) });
-      notify("lyrics.started"); onStarted?.();
+      const result = await api<{ selected: number; skipped?: number }>("/lyrics/search", "POST", { ...(all ? { all: true } : { ids }), refresh, ...(replaceTraditional ? { replace_traditional: true } : {}), ...(inspectOnly ? { inspect_only: true } : {}) });
+      notify(result.selected === 0 ? "lyrics.nothingPending" : "lyrics.started"); onStarted?.();
     } catch (err) { notify(err as Error, true); }
     finally { setBusy(false); }
   }
@@ -82,8 +82,9 @@ function LyricsControls({ notify, settings = false }: { notify: Notice; settings
     </div>
     <ResourceWarning error={resource.error} retry={resource.retry} />
     {report.state !== "idle" && <div role="status" aria-label={t("lyrics.batchProgress")} aria-live="polite">
-      <strong>{t(report.mode === "inspect" ? `lyrics.inspectReport.${report.state}` : report.mode === "replace" ? `lyrics.replaceReport.${report.state}` : `lyrics.report.${report.state}`)}</strong>
-      <p>{report.mode === "replace" ? t("lyrics.replaceProgress", { done: report.processed, total: report.total, replaced: report.replaced ?? 0, unchanged: report.unchanged ?? 0, failed: report.failed }) : report.mode === "inspect" ? t("lyrics.inspectProgress", { done: report.processed, total: report.total, found: report.found, failed: report.failed }) : t("lyrics.progress", { done: report.processed, total: report.total, found: report.found, missing: report.not_found, failed: report.failed, review: report.needs_review ?? 0 })}</p>
+      <strong>{t(report.total === 0 && report.skipped ? "lyrics.nothingPending" : report.mode === "inspect" ? `lyrics.inspectReport.${report.state}` : report.mode === "replace" ? `lyrics.replaceReport.${report.state}` : `lyrics.report.${report.state}`)}</strong>
+      {report.total > 0 && <p>{report.mode === "replace" ? t("lyrics.replaceProgress", { done: report.processed, total: report.total, replaced: report.replaced ?? 0, unchanged: report.unchanged ?? 0, failed: report.failed }) : report.mode === "inspect" ? t("lyrics.inspectProgress", { done: report.processed, total: report.total, found: report.found, failed: report.failed }) : t("lyrics.progress", { done: report.processed, total: report.total, found: report.found, missing: report.not_found, failed: report.failed, review: report.needs_review ?? 0 })}</p>}
+      {(report.skipped ?? 0) > 0 && <small>{t("lyrics.skipped", { count: report.skipped ?? 0 })}</small>}
       {report.current && <code>{report.current}</code>}
       {report.error && <p className="repair-warning">{errorMessage(report.error)}</p>}
     </div>}

@@ -211,7 +211,7 @@ func TestLyricsSourceUpdatesAndArtifactLifecycle(t *testing.T) {
 	}
 	settingsBefore, _ := json.Marshal(s)
 	mockLRCLIB(t, a, func(w http.ResponseWriter, r *http.Request) { t.Error("local LRC should not query the internet") })
-	if !a.startLyrics(s, []Source{source}, lyricsBatchOptions{}, false) {
+	if _, started := a.startLyrics(s, []Source{source}, lyricsBatchOptions{}, false); !started {
 		t.Fatal("lyrics did not start")
 	}
 	if report := waitLyrics(t, a); report.Found != 1 || report.Failed != 0 {
@@ -224,7 +224,7 @@ func TestLyricsSourceUpdatesAndArtifactLifecycle(t *testing.T) {
 	if err := os.WriteFile(local, []byte("[00:01.00]更新歌词\n"), 0644); err != nil {
 		t.Fatal(err)
 	}
-	if !a.startLyrics(s, []Source{source}, lyricsBatchOptions{}, false) {
+	if _, started := a.startLyrics(s, []Source{source}, lyricsBatchOptions{Refresh: true}, false); !started {
 		t.Fatal("update did not start")
 	}
 	if report := waitLyrics(t, a); report.Found != 1 {
@@ -427,7 +427,7 @@ func TestLyricsSearchRejectsChangedArtifactAndStopsWithoutBlockingAPI(t *testing
 		}
 		respond(w, 200, lrclibRecord{Title: source.Title, Artist: source.Artist, Album: source.Album, Duration: source.Duration, Synced: "[00:01.00]Network"})
 	})
-	if !a.startLyrics(s, []Source{source}, lyricsBatchOptions{}, false) {
+	if _, started := a.startLyrics(s, []Source{source}, lyricsBatchOptions{}, false); !started {
 		t.Fatal("did not start")
 	}
 	select {
@@ -452,7 +452,7 @@ func TestLyricsSearchRejectsChangedArtifactAndStopsWithoutBlockingAPI(t *testing
 	}
 	// A source-side stalled LRC read is cancellable too, without an audio retry.
 	sourceFault(t, "lyrics", "Album/01.lrc", 10000, 0)
-	if !a.startLyrics(s, []Source{source}, lyricsBatchOptions{}, false) {
+	if _, started := a.startLyrics(s, []Source{source}, lyricsBatchOptions{}, false); !started {
 		t.Fatal("second search did not start")
 	}
 	issued := httptest.NewRecorder()
@@ -485,7 +485,7 @@ func TestLyricsSearchRejectsChangedArtifactAndStopsWithoutBlockingAPI(t *testing
 	if options, err := a.lyricsOptions(context.Background()); err != nil || options.AutoSearch {
 		t.Fatal("stop did not persistently disable automatic filling", options, err)
 	}
-	if a.startLyrics(s, []Source{source}, lyricsBatchOptions{}, true) {
+	if _, started := a.startLyrics(s, []Source{source}, lyricsBatchOptions{}, true); started {
 		t.Fatal("a previously selected automatic batch restarted after stop")
 	}
 }

@@ -50,7 +50,7 @@ export function Overview({ notify, navigate }: { notify: Notice; navigate: (path
         <div className="completion-value"><span>{t("overview.complete")} <strong>{percentLabel}</strong></span>{active.length > 0 && <Badge status="running" />}</div>
         <button className="hero-profile" onClick={() => navigate("/settings?section=encoding")}><span>{data.codec.toUpperCase()} {profile}</span><span>{number(data.ready_count)} / {number(data.source_count)}</span><ArrowRight size={14} /></button>
       </div>
-      <div className="hero-completion" role="progressbar" aria-label={t("overview.complete")} aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent}><span className="sr-only">{percentLabel}</span><div className="completion-meter" aria-hidden="true"><span style={{ width: `${percent}%` }} /></div></div>
+      <div className="hero-completion" role="progressbar" aria-label={t("overview.complete")} aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent}><div className="completion-meter" aria-hidden="true"><span style={{ width: `${percent}%` }} /></div></div>
       {active.length > 0 && <div className="active-tracks">{active.map(({ job, activity }, index) => {
         const source = library.data?.find(source => source.path === activity.path);
         return <div className="active-track" key={`${job.repair_id || job.id}:${activity.path}:${index}`}>

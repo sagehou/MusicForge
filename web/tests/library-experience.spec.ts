@@ -401,6 +401,7 @@ test("narrow-screen filter and display menu stays usable and inside the viewport
   await openLibraryOptions(page);
   await page.getByLabel("Sort library", { exact: true }).selectOption("attention");
   await expect(page.locator(".library-options")).not.toHaveAttribute("open", "");
+  await expect(summary).toBeFocused();
   await summary.click();
   await openLibraryOptions(page);
   await page.getByLabel("Filter by status", { exact: true }).selectOption("failed");

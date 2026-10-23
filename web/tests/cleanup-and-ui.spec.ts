@@ -118,7 +118,7 @@ test("dashboard uses real clamped completion and functional quick actions", asyn
   data = { ...data, source_count: 0, ready_count: 0 };
   await page.goto("/");
   await expect(page.getByRole("progressbar", { name: "Build completion", exact: true })).toHaveAttribute("aria-valuenow", "0");
-  await expect(page.locator(".hero-completion")).toContainText("0%");
+  await expect(page.locator(".completion-value")).toContainText("0%");
 });
 
 for (const width of [1440, 1024, 768, 390, 320]) {
@@ -136,7 +136,11 @@ for (const width of [1440, 1024, 768, 390, 320]) {
       await page.screenshot({ path: `test-results/forge-overview-${width}-${theme}.png`, fullPage: true, animations: "disabled" });
     }
     await setPreference(page, "language", "zh-CN");
-    await expect(page.locator(".hero-completion")).toContainText("91%");
+    await expect(page.locator(".completion-value")).toContainText("91%");
+    if (width <= 600) {
+      const title = await page.getByRole("heading", { level: 1 }).boundingBox();
+      expect(title!.width).toBeGreaterThan(90);
+    }
     await page.screenshot({ path: `test-results/forge-overview-${width}-dark-zh.png`, fullPage: true, animations: "disabled" });
     await page.getByRole("link", { name: "任务", exact: true }).click();
     await expect(page.locator(".task")).toHaveCount(5);
@@ -153,6 +157,13 @@ for (const width of [1440, 1024, 768, 390, 320]) {
     if (width >= 1440) {
       const success = await page.locator('.task[data-state="success"]').boundingBox();
       expect(success!.height).toBeLessThan(150);
+    }
+    if (width <= 600) {
+      for (const task of await page.locator('.task:not([data-state="running"])').all()) {
+        const badge = await task.locator(".task-title > .badge").boundingBox();
+        const progress = await task.locator(".task-progress").boundingBox();
+        expect(progress!.y).toBeGreaterThanOrEqual(badge!.y + badge!.height);
+      }
     }
     await page.screenshot({ path: `test-results/forge-jobs-${width}-dark-zh.png`, fullPage: true, animations: "disabled" });
     await setPreference(page, "language", "en");

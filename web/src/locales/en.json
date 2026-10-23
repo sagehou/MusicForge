@@ -444,6 +444,8 @@
   "library.coverColumn": "Cover",
   "library.albumArtistColumn": "Album / Artist",
   "library.tracksDurationColumn": "Tracks / Time",
+  "library.outputColumn": "Target output",
+  "library.statusColumn": "Build status",
   "library.coverSize": "Cover size",
   "library.options": "Filter and display options",
   "library.coverCompact": "Small",

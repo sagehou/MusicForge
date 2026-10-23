@@ -411,6 +411,8 @@
   "library.coverColumn": "封面",
   "library.albumArtistColumn": "专辑 / 艺术家",
   "library.tracksDurationColumn": "曲目 / 时长",
+  "library.outputColumn": "目标产物",
+  "library.statusColumn": "转码状态",
   "library.coverSize": "封面大小",
   "library.options": "筛选与显示选项",
   "library.coverCompact": "小",

@@ -1148,6 +1148,7 @@ input[role="switch"]:checked::after { transform: translateX(22px); background: v
 .settings-panel .input-action > .ui-button { position: absolute; bottom: 0; left: 0; }
 .settings-panel input:not([type="checkbox"], [type="radio"]), .settings-panel select, .settings-panel textarea { background-color: var(--canvas); border-color: var(--line); }
 .settings-panel > small { margin-top: 0; }
+.settings-panel > .ui-button { align-self: flex-start; }
 .settings-save { position: static; bottom: 16px; padding: 14px 0 0; margin-top: 0; border: 0; border-top: 1px solid var(--line); border-radius: 0; flex-wrap: wrap; }
 .settings-save[data-dirty="true"] { padding: 12px 16px; border: 1px solid var(--line); border-radius: var(--radius-card); }
 .settings-save .toast { position: static; flex-basis: 100%; width: 100%; max-width: none; padding: 10px 12px; box-shadow: none; }
@@ -1157,6 +1158,11 @@ input[role="switch"]:checked::after { transform: translateX(22px); background: v
 .auth-card h1 { font-size: var(--font-size-heading); line-height: 28px; }
 .auth-card .field-label > span { font-size: 14px; }
 .auth-card input { min-height: 40px; font-size: var(--font-size-body); }
+@media (min-width: 1200px) {
+  .library-toolbar-box { position: relative; }
+  .library-navigation { padding-right: 276px; }
+  .library-toolbar-box:has(.library-navigation) .library-selection { position: absolute; top: 14px; right: 16px; min-height: 30px; gap: 14px; border: 0; }
+}
 @media (min-width: 801px) {
   .app-shell { --sidebar-width: 236px; }
   .app-shell[data-sidebar-collapsed="true"] { --sidebar-width: 76px; }

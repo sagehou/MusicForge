@@ -1,6 +1,6 @@
 import { useDeferredValue, useEffect, useMemo, useRef, useState, Fragment, memo } from "react";
 import { flushSync } from "react-dom";
-import { ArrowLeft, ChevronLeft, ChevronRight, Clock3, Copy, Disc3, Ellipsis, Grid2X2, List, Music2, RefreshCw, Search, ShieldCheck, SlidersHorizontal, Trash2, X } from "lucide-react";
+import { ArrowLeft, ChevronLeft, ChevronRight, Clock3, Copy, Info, Disc3, Ellipsis, Grid2X2, List, Music2, RefreshCw, Search, ShieldCheck, SlidersHorizontal, Trash2, X } from "lucide-react";
 import { api } from "../api";
 import { useI18n, type MessageKey } from "../i18n";
 import type { Source } from "../types";
@@ -8,7 +8,7 @@ import { Badge, Empty, Loading, ResourceWarning, useResource, type Notice } from
 import { Button } from "./ui/button";
 import { BatchRepairButton, RepairControls, RepairDiagnostics } from "./repair";
 import { LibraryComparison } from "./library-comparison";
-import { DetailPanel } from "./detail-panel";
+import { InlineDetails } from "./inline-details";
 import { PageHeading } from "./page-heading";
 import { LyricsMaintenance, LyricsPicker, LyricsSearchButton, LyricsTrack, lyricsMatchState, lyricsMatchStates, type LyricsMatchState } from "./lyrics";
 
@@ -42,12 +42,12 @@ function AudioSpec({ audio }: { audio: Source["source_audio"] }) {
   const resolution = [audio?.bit_depth ? `${number(audio.bit_depth)} bit` : "", audio?.sample_rate ? `${number(audio.sample_rate / 1000)} kHz` : ""].filter(Boolean).join(" / ");
   return <>{[audio?.codec?.toUpperCase(), resolution, audio?.channels ? t("library.channels", { count: number(audio.channels) }) : ""].filter(Boolean).join(" · ") || "—"}</>;
 }
-function TrackFacts({ source }: { source: Source }) {
+function TrackFacts({ source, compact = false }: { source: Source; compact?: boolean }) {
   const { t, locale, number } = useI18n();
-  return <dl className="track-facts">
+  return <dl className={`track-facts ${compact ? "track-facts-compact" : ""}`}>
     <div className="track-fact-duration"><dt>{t("library.duration")}</dt><dd>{duration(source.duration || 0)}</dd></div>
-    <div className="track-fact-audio"><dt>{t("library.sourceAudio")}</dt><dd><AudioSpec audio={source.source_audio} /></dd><dd className="track-bitrate" title={!source.source_bitrate ? t("library.bitratePending") : undefined}><span>{t("library.sourceBitrate")} </span>{source.source_bitrate ? `${number(Math.round(source.source_bitrate / 1000))} kbps` : "—"}</dd></div>
-    <div className="track-fact-sizes"><dt>{t("library.sourceSize")}</dt><dd>{fileSize(source.size, locale)}</dd>{source.output_present && source.output_size !== undefined && <><dt>{t("library.outputSize")}</dt><dd className="track-output-size">{fileSize(source.output_size, locale)}</dd></>}</div>
+    <div className="track-fact-audio"><dt>{t("library.sourceAudio")}</dt><dd className="track-spec-chip"><AudioSpec audio={source.source_audio} /></dd><dd className="track-bitrate" title={!source.source_bitrate ? t("library.bitratePending") : undefined}><span>{t("library.sourceBitrate")} </span>{source.source_bitrate ? `${number(Math.round(source.source_bitrate / 1000))} kbps` : "—"}</dd></div>
+    <div className="track-fact-sizes"><dt>{t(compact ? "library.sourceSizeShort" : "library.sourceSize")}</dt><dd>{fileSize(source.size, locale)}</dd>{source.output_present && source.output_size !== undefined && <><dt>{t(compact ? "library.outputSizeShort" : "library.outputSize")}</dt><dd className="track-output-size">{fileSize(source.output_size, locale)}</dd></>}</div>
   </dl>;
 }
 function GroupFacts({ tracks }: { tracks: Source[] }) {
@@ -128,6 +128,7 @@ export function Library({ notify }: { notify: Notice }) {
   const [detailID, setDetailID] = useState<number>();
   const [lyricsID, setLyricsID] = useState<number>();
   const lyricsOrder = useRef<number[]>([]);
+  const [lyricsBusy, setLyricsBusy] = useState(false);
   const [optionsOpen, setOptionsOpen] = useState(false);
   const [sort, setSort] = useState(() => new URLSearchParams(location.search).get("sort") === "attention" ? "attention" : "name");
   const [selected, setSelected] = useState<Set<number>>(new Set());
@@ -170,10 +171,11 @@ export function Library({ notify }: { notify: Notice }) {
     for (const item of indexed) {
       const { source, identity } = item;
       if (scope.artist && identity.artistKey !== scope.artist || isAlbum && identity.albumKey !== scope.album) continue;
-      if (filter !== "all" && (filter === "possibly_damaged" ? !source.possibly_damaged : source.status !== filter)) continue;
-      if (lyricsFilter !== "all" && lyricsMatchState(source) !== lyricsFilter) continue;
-      if (scriptFilter !== "all" && (!source.output || !source.output_present || (source.lyrics_script || "unidentified") !== scriptFilter)) continue;
-      if (search && !`${identity.artist} ${source.artist} ${identity.album} ${source.title} ${source.path}`.toLocaleLowerCase(locale).includes(search)) continue;
+      const expanded = source.id === detailID || source.id === lyricsID;
+      if (!expanded && filter !== "all" && (filter === "possibly_damaged" ? !source.possibly_damaged : source.status !== filter)) continue;
+      if (!expanded && lyricsFilter !== "all" && lyricsMatchState(source) !== lyricsFilter) continue;
+      if (!expanded && scriptFilter !== "all" && (!source.output || !source.output_present || (source.lyrics_script || "unidentified") !== scriptFilter)) continue;
+      if (!expanded && search && !`${identity.artist} ${source.artist} ${identity.album} ${source.title} ${source.path}`.toLocaleLowerCase(locale).includes(search)) continue;
       rows.push(source);
       if (showingTracks) continue;
       const key = showingArtists ? identity.artistKey : `${identity.artistKey}\0${identity.albumKey}`;
@@ -204,7 +206,7 @@ export function Library({ notify }: { notify: Notice }) {
       return collator.compare(a.title || a.path, b.title || b.path) || collator.compare(a.path, b.path);
     });
     return { rows, groups };
-  }, [indexed, scope.artist, scope.album, isAlbum, showingTracks, showingArtists, filter, lyricsFilter, scriptFilter, search, sort, collator, locale]);
+  }, [indexed, scope.artist, scope.album, isAlbum, showingTracks, showingArtists, filter, lyricsFilter, scriptFilter, search, sort, collator, locale, detailID, lyricsID]);
   const totals = useMemo(() => ({
     artists: new Set(indexed.map(item => item.identity.artistKey)).size,
     albums: new Set(indexed.map(item => `${item.identity.artistKey}\0${item.identity.albumKey}`)).size,
@@ -216,6 +218,8 @@ export function Library({ notify }: { notify: Notice }) {
     catch (err) { notify(err as Error, true); } finally { setBusy(false); }
   }
   function navigate(next: Scope, origin?: HTMLElement) {
+    if (lyricsBusy) return;
+    setDetailID(undefined); setLyricsID(undefined);
     const params = new URLSearchParams({ view: next.view });
     if (next.artist !== undefined) params.set("artist", next.artist);
     if (next.album !== undefined) params.set("album", next.album);
@@ -256,7 +260,9 @@ export function Library({ notify }: { notify: Notice }) {
     <div className="library-groups" aria-hidden="true">{Array.from({ length: 10 }, (_, index) => <div className="skeleton-card" key={index}><div /><span /><span /></div>)}</div>
   </div>;
   const count = showingTracks ? rows.length : groups.length;
-  const safeOffset = Math.min(offset, Math.max(0, Math.ceil(count / 50) - 1) * 50);
+  const expandedIndex = rows.findIndex(source => source.id === (lyricsID ?? detailID));
+  const visibleOffset = expandedIndex < 0 ? offset : Math.floor(expandedIndex / 50) * 50;
+  const safeOffset = Math.min(visibleOffset, Math.max(0, Math.ceil(count / 50) - 1) * 50);
   const shown = rows.slice(safeOffset, safeOffset + 50);
   const visibleGroups = groups.slice(safeOffset, safeOffset + 50);
   const pageTracks = showingTracks ? shown : visibleGroups.flatMap(group => group.tracks);
@@ -281,8 +287,12 @@ export function Library({ notify }: { notify: Notice }) {
       setSelected(new Set()); retry();
     } catch (err) { notify(err as Error, true); } finally { setBusy(false); }
   }
-  const detailSource = data.find(source => source.id === detailID);
-  const lyricsSource = data.find(source => source.id === lyricsID);
+  function clearDetails() { if (!lyricsBusy) { setOffset(safeOffset); setDetailID(undefined); setLyricsID(undefined); } }
+  function openDetails(id: number) {
+    if (lyricsBusy) return;
+    setLyricsID(undefined); setDetailID(current => current === id ? undefined : id);
+  }
+  function changePage(next: number) { if (!lyricsBusy) { clearDetails(); setOffset(next); } }
   function adjacent(id: number, direction: number, lyrics = false) {
     if (!lyrics) {
       const index = rows.findIndex(source => source.id === id);
@@ -296,11 +306,13 @@ export function Library({ notify }: { notify: Notice }) {
     }
   }
   function openLyrics(id: number) {
+    if (lyricsBusy) return;
+    setDetailID(undefined);
     lyricsOrder.current = rows.filter(source => source.output_present && source.output).map(source => source.id);
-    setLyricsID(id);
+    setLyricsID(current => current === id ? undefined : id);
   }
   function step(source: Source | undefined, lyrics = false) {
-    if (!source) return;
+    if (!source || lyricsBusy) return;
     if (lyrics) setLyricsID(source.id); else setDetailID(source.id);
     const index = rows.findIndex(row => row.id === source.id);
     if (showingTracks && index >= 0) setOffset(Math.floor(index / 50) * 50);
@@ -341,13 +353,13 @@ export function Library({ notify }: { notify: Notice }) {
         </div></div>}
         <div className="library-display-actions">
 
-        <details className="library-options" data-filtered={filter !== "all" || lyricsFilter !== "all" || scriptFilter !== "all"} open={optionsOpen} onChange={event => { if (event.target instanceof HTMLSelectElement) event.currentTarget.querySelector("summary")?.focus(); }} onKeyDown={event => { if (event.key === "Escape") { setOptionsOpen(false); event.currentTarget.querySelector("summary")?.focus(); } }}>
+        <details className="library-options" data-filtered={filter !== "all" || lyricsFilter !== "all" || scriptFilter !== "all"} open={optionsOpen} onChange={event => { if (event.target instanceof HTMLSelectElement) event.currentTarget.querySelector("summary")?.focus(); }} onKeyDown={event => { if (event.key === "Escape" && event.currentTarget.open) { event.preventDefault(); event.stopPropagation(); setOptionsOpen(false); event.currentTarget.querySelector("summary")?.focus(); } }}>
           <summary aria-label={t("library.options")} title={[t("library.options"), filter !== "all" ? statusLabel(filter) : "", lyricsFilter !== "all" ? t(`lyrics.state.${lyricsFilter}`) : "", scriptFilter !== "all" ? t(`lyrics.script.${scriptFilter}`) : ""].filter(Boolean).join(" · ")} onClick={event => { event.preventDefault(); setOptionsOpen(open => !open); }}><SlidersHorizontal size={17} /></summary>
           <div className="library-options-body">
-            <select aria-label={t("library.filter")} value={filter} onChange={event => { setFilter(event.target.value); setOffset(0); setOptionsOpen(false); }}><option value="all">{t("library.allStatuses")}</option>{priority.slice().reverse().map(state => <option value={state} key={state}>{statusLabel(state)}</option>)}</select>
-            <select aria-label={t("lyrics.filter")} value={lyricsFilter} onChange={event => { setLyricsFilter(event.target.value as LyricsMatchState | "all"); setOffset(0); setOptionsOpen(false); }}><option value="all">{t("lyrics.allStates")}</option>{lyricsMatchStates.map(state => <option value={state} key={state}>{t(`lyrics.state.${state}`)}</option>)}</select>
-            <select aria-label={t("lyrics.scriptFilter")} value={scriptFilter} onChange={event => { setScriptFilter(event.target.value as ScriptFilter); setOffset(0); setOptionsOpen(false); }}>{scriptFilters.map(script => <option value={script} key={script}>{t(`lyrics.script.${script}`)}</option>)}</select>
-            {!isAlbum && <select aria-label={t("library.sort")} value={sort} onChange={event => { setSort(event.target.value); setOffset(0); setOptionsOpen(false); }}><option value="name">{t("library.sortName")}</option><option value="attention">{t("library.sortAttention")}</option></select>}
+            <select disabled={lyricsBusy} aria-label={t("library.filter")} value={filter} onChange={event => { clearDetails(); setFilter(event.target.value); setOffset(0); setOptionsOpen(false); }}><option value="all">{t("library.allStatuses")}</option>{priority.slice().reverse().map(state => <option value={state} key={state}>{statusLabel(state)}</option>)}</select>
+            <select disabled={lyricsBusy} aria-label={t("lyrics.filter")} value={lyricsFilter} onChange={event => { clearDetails(); setLyricsFilter(event.target.value as LyricsMatchState | "all"); setOffset(0); setOptionsOpen(false); }}><option value="all">{t("lyrics.allStates")}</option>{lyricsMatchStates.map(state => <option value={state} key={state}>{t(`lyrics.state.${state}`)}</option>)}</select>
+            <select disabled={lyricsBusy} aria-label={t("lyrics.scriptFilter")} value={scriptFilter} onChange={event => { clearDetails(); setScriptFilter(event.target.value as ScriptFilter); setOffset(0); setOptionsOpen(false); }}>{scriptFilters.map(script => <option value={script} key={script}>{t(`lyrics.script.${script}`)}</option>)}</select>
+            {!isAlbum && <select disabled={lyricsBusy} aria-label={t("library.sort")} value={sort} onChange={event => { clearDetails(); setSort(event.target.value); setOffset(0); setOptionsOpen(false); }}><option value="name">{t("library.sortName")}</option><option value="attention">{t("library.sortAttention")}</option></select>}
 
           </div>
         </details>
@@ -357,12 +369,12 @@ export function Library({ notify }: { notify: Notice }) {
         </div>}
         </div>
       </div>
-        <div className="search"><Search size={17} aria-hidden="true" /><input type="search" aria-label={t("library.search")} placeholder={t("library.searchPlaceholder")} value={query} onChange={event => { setQuery(event.target.value); setOffset(0); }} />{query && <button aria-label={t("library.clearSearch")} title={t("library.clearSearch")} onClick={() => { setQuery(""); setOffset(0); }}><X size={16} /></button>}</div>
+        <div className="search"><Search size={17} aria-hidden="true" /><input type="search" disabled={lyricsBusy} aria-label={t("library.search")} placeholder={t("library.searchPlaceholder")} value={query} onChange={event => { clearDetails(); setQuery(event.target.value); setOffset(0); }} />{query && <button disabled={lyricsBusy} aria-label={t("library.clearSearch")} title={t("library.clearSearch")} onClick={() => { clearDetails(); setQuery(""); setOffset(0); }}><X size={16} /></button>}</div>
       {(filter !== "all" || lyricsFilter !== "all" || scriptFilter !== "all") && <div className="active-filters" role="group" aria-label={t("library.activeFilters")}>
-        {filter !== "all" && <button aria-label={t("library.removeFilter", { name: statusLabel(filter) })} onClick={() => { setFilter("all"); setOffset(0); }}><span>{t("library.filter")} · {statusLabel(filter)}</span><X size={12} /></button>}
-        {lyricsFilter !== "all" && <button aria-label={t("library.removeFilter", { name: t(`lyrics.state.${lyricsFilter}`) })} onClick={() => { setLyricsFilter("all"); setOffset(0); }}><span>{t("lyrics.filter")} · {t(`lyrics.state.${lyricsFilter}`)}</span><X size={12} /></button>}
-        {scriptFilter !== "all" && <button aria-label={t("library.removeFilter", { name: t(`lyrics.script.${scriptFilter}`) })} onClick={() => { setScriptFilter("all"); setOffset(0); }}><span>{t("lyrics.scriptFilter")} · {t(`lyrics.script.${scriptFilter}`)}</span><X size={12} /></button>}
-        <button className="clear-filters" onClick={() => { setFilter("all"); setLyricsFilter("all"); setScriptFilter("all"); setOffset(0); }}>{t("library.clearFilters")}</button>
+        {filter !== "all" && <button disabled={lyricsBusy} aria-label={t("library.removeFilter", { name: statusLabel(filter) })} onClick={() => { clearDetails(); setFilter("all"); setOffset(0); }}><span>{t("library.filter")} · {statusLabel(filter)}</span><X size={12} /></button>}
+        {lyricsFilter !== "all" && <button disabled={lyricsBusy} aria-label={t("library.removeFilter", { name: t(`lyrics.state.${lyricsFilter}`) })} onClick={() => { clearDetails(); setLyricsFilter("all"); setOffset(0); }}><span>{t("lyrics.filter")} · {t(`lyrics.state.${lyricsFilter}`)}</span><X size={12} /></button>}
+        {scriptFilter !== "all" && <button disabled={lyricsBusy} aria-label={t("library.removeFilter", { name: t(`lyrics.script.${scriptFilter}`) })} onClick={() => { clearDetails(); setScriptFilter("all"); setOffset(0); }}><span>{t("lyrics.scriptFilter")} · {t(`lyrics.script.${scriptFilter}`)}</span><X size={12} /></button>}
+        <button disabled={lyricsBusy} className="clear-filters" onClick={() => { clearDetails(); setFilter("all"); setLyricsFilter("all"); setScriptFilter("all"); setOffset(0); }}>{t("library.clearFilters")}</button>
       </div>}
 
       </div>
@@ -391,21 +403,22 @@ export function Library({ notify }: { notify: Notice }) {
         })}</div> : <div className={`table-scroll ${isAlbum ? "album-tracks" : ""}`}>{isAlbum && <div className="album-tracks-heading"><h3>{t("library.albumTracks")}</h3><span>{t("library.trackCount", { count: rows.length })}</span></div>}<table className={`track-table ${isAlbum ? "album-track-table" : ""}`}>{isAlbum && <colgroup><col className="album-select-column" /><col /><col className="album-status-column" /><col className="album-lyrics-column" /></colgroup>}<thead><tr><th aria-label={t("library.selectedTracks")} /><th className="track-title-column">{t("library.trackFile")}</th>{!isAlbum && <><th className="track-duration-column">{t("library.duration")}</th><th className="track-audio-column">{t("library.audioColumn")}</th><th className="track-size-column">{t("library.sizesColumn")}</th></>}<th className="track-status-column">{t("library.artifact")}</th><th className="track-lyrics-column">{t("lyrics.title")}</th></tr></thead><tbody>{shown.map((source, index) => {
           const disc = source.disc || 1;
           const heading = isAlbum && discs.size > 1 && (index === 0 || disc !== (shown[index - 1].disc || 1));
-          return <Fragment key={source.id}>{heading && <tr className="disc-heading"><th colSpan={trackColumns} scope="rowgroup"><Disc3 size={15} />{t("library.disc", { number: disc })}</th></tr>}<tr className={selected.has(source.id) ? "selected" : ""}>
+          return <Fragment key={source.id}>{heading && <tr className="disc-heading"><th colSpan={trackColumns} scope="rowgroup"><Disc3 size={15} />{t("library.disc", { number: disc })}</th></tr>}<tr className={`track-row ${selected.has(source.id) ? "selected" : ""}`} data-expanded={detailID === source.id || lyricsID === source.id}>
             <td><input type="checkbox" aria-label={t("library.selectTrack", { title: source.title || source.path })} checked={selected.has(source.id)} disabled={busy} onChange={event => toggle([source.id], event.target.checked)} /></td>
-            <td className="track-title"><div className="track-cell"><span className="track-number">{source.track || <Music2 size={15} />}</span><div><div className="track-title-line"><button className="track-open" aria-label={t("library.openDetails", { title: source.title || source.path })} onClick={() => setDetailID(source.id)}><strong dir="auto">{source.title || source.path.split("/").pop()}</strong></button>{isAlbum && <span className="track-duration">{duration(source.duration || 0)}</span>}</div>{isAlbum ? <div className="track-sub-details"><span className="track-spec-chip"><AudioSpec audio={source.source_audio} /></span><code className="track-source-path" title={source.path}>{source.path}</code></div> : <small className="track-byline" dir="auto">{source.artist || t("library.unknownArtist")} · {source.album || t("library.unknownAlbum")}</small>}{!source.present && <small className="source-missing">{t("library.sourceDeleted")}</small>}</div></div></td>
+            <td className="track-title"><div className="track-cell"><span className="track-number">{source.track || <Music2 size={15} />}</span><div><div className="track-title-line"><button id={`track-title-${source.id}`} className="track-open" aria-expanded={detailID === source.id} aria-controls={detailID === source.id ? `track-details-${source.id}` : undefined} disabled={lyricsBusy} aria-label={t("library.openDetails", { title: source.title || source.path })} onClick={() => openDetails(source.id)}><strong dir="auto">{source.title || source.path.split("/").pop()}</strong><ChevronRight className="track-expand-icon" size={14} aria-hidden="true" /></button>{isAlbum && <span className="track-duration">{duration(source.duration || 0)}</span>}</div>{isAlbum ? <TrackFacts source={source} compact /> : <small className="track-byline" dir="auto">{source.artist || t("library.unknownArtist")} · {source.album || t("library.unknownAlbum")}</small>}{!source.present && <small className="source-missing">{t("library.sourceDeleted")}</small>}</div></div></td>
             {!isAlbum && <td className="track-facts-cell" colSpan={3}><TrackFacts source={source} /></td>}
-            <td className="track-output"><Badge status={source.status} />{source.output_present && source.status !== "ready" && source.status !== "possibly_damaged" && <small>{t("library.stillPlayable")}</small>}<RepairControls source={source} notify={notify} refresh={retry} />{!source.present && !source.output && !source.output_present && <Button className="forget-record" size="sm" variant="ghost" disabled={busy} onClick={() => void forget([source.id])}><Trash2 size={13} />{t("library.forgetRecord")}</Button>}{source.error && <Button variant="ghost" size="sm" onClick={() => setDetailID(source.id)}>{t("library.errorDetails")}</Button>}</td>
-            <td className="track-lyrics"><LyricsTrack source={source} notify={notify} refresh={retry} onChoose={() => openLyrics(source.id)} /></td>
-          </tr></Fragment>;
+            <td className="track-output"><Badge status={source.status} />{source.output_present && source.status !== "ready" && source.status !== "possibly_damaged" && <small>{t("library.stillPlayable")}</small>}<RepairControls source={source} notify={notify} refresh={retry} compact />{!source.present && !source.output && !source.output_present && <Button className="forget-record" size="icon" variant="ghost" aria-label={t("library.forgetRecord")} title={t("library.forgetRecord")} disabled={busy} onClick={() => void forget([source.id])}><Trash2 size={15} /></Button>}{source.error && <Button variant="ghost" size="icon" aria-label={t("library.errorDetails")} title={t("library.errorDetails")} disabled={lyricsBusy} onClick={() => openDetails(source.id)}><Info size={15} /></Button>}</td>
+            <td className="track-lyrics"><LyricsTrack source={source} notify={notify} onChoose={() => openLyrics(source.id)} expanded={lyricsID === source.id} disabled={lyricsBusy} /></td>
+          </tr>{(detailID === source.id || lyricsID === source.id) && <tr className="track-expanded-row"><td colSpan={trackColumns}>
+            {detailID === source.id && <InlineDetails id={`track-details-${source.id}`} returnFocusID={`track-title-${source.id}`} title={t("library.fileDetails")} subtitle={source.title || source.path} close={clearDetails} actions={<><Button variant="ghost" size="icon" aria-label={t("library.previousTrack")} disabled={!adjacent(source.id, -1)} onClick={() => step(adjacent(source.id, -1))}><ChevronLeft size={17} /></Button><Button variant="ghost" size="icon" aria-label={t("library.nextTrack")} disabled={!adjacent(source.id, 1)} onClick={() => step(adjacent(source.id, 1))}><ChevronRight size={17} /></Button></>}><TrackDetails source={source} notify={notify} /></InlineDetails>}
+            {lyricsID === source.id && <LyricsPicker onBusyChange={setLyricsBusy} key={`${source.id}:${source.output}`} source={source} notify={notify} close={clearDetails} saved={retry} previous={adjacent(source.id, -1, true) ? () => step(adjacent(source.id, -1, true), true) : undefined} next={adjacent(source.id, 1, true) ? () => step(adjacent(source.id, 1, true), true) : undefined} />}
+          </td></tr>}</Fragment>;
         })}</tbody></table></div>}
         <div className="pagination"><span>{t(showingTracks ? "library.pagination" : "library.groupPagination", { start: safeOffset + 1, end: Math.min(safeOffset + 50, count), total: count })}</span>
-          <Button variant="ghost" size="icon" aria-label={t("library.previous")} title={t("library.previous")} disabled={safeOffset === 0} onClick={() => setOffset(Math.max(0, safeOffset - 50))}><ChevronLeft size={16} /></Button>
-          <Button variant="ghost" size="icon" aria-label={t("library.next")} title={t("library.next")} disabled={safeOffset + 50 >= count} onClick={() => setOffset(safeOffset + 50)}><ChevronRight size={16} /></Button>
+          <Button variant="ghost" size="icon" aria-label={t("library.previous")} title={t("library.previous")} disabled={lyricsBusy || safeOffset === 0} onClick={() => changePage(Math.max(0, safeOffset - 50))}><ChevronLeft size={16} /></Button>
+          <Button variant="ghost" size="icon" aria-label={t("library.next")} title={t("library.next")} disabled={lyricsBusy || safeOffset + 50 >= count} onClick={() => changePage(safeOffset + 50)}><ChevronRight size={16} /></Button>
         </div>
       </> : <Empty title={data.length ? t("library.noMatch") : t("library.empty")}>{data.length ? t("library.noMatchHint") : t("library.emptyHint")}</Empty>}
     </section>
-    {detailSource && <DetailPanel title={t("library.fileDetails")} subtitle={detailSource.title || detailSource.path} close={() => setDetailID(undefined)} actions={<><Button variant="ghost" size="icon" aria-label={t("library.previousTrack")} disabled={!adjacent(detailSource.id, -1)} onClick={() => step(adjacent(detailSource.id, -1))}><ChevronLeft size={17} /></Button><Button variant="ghost" size="icon" aria-label={t("library.nextTrack")} disabled={!adjacent(detailSource.id, 1)} onClick={() => step(adjacent(detailSource.id, 1))}><ChevronRight size={17} /></Button></>}><TrackDetails source={detailSource} notify={notify} /></DetailPanel>}
-    {lyricsSource && <LyricsPicker key={`${lyricsSource.id}:${lyricsSource.output}`} source={lyricsSource} notify={notify} close={() => setLyricsID(undefined)} saved={retry} previous={adjacent(lyricsSource.id, -1, true) ? () => step(adjacent(lyricsSource.id, -1, true), true) : undefined} next={adjacent(lyricsSource.id, 1, true) ? () => step(adjacent(lyricsSource.id, 1, true), true) : undefined} />}
   </>;
 }

@@ -438,6 +438,8 @@
   "library.songAlbum": "专辑",
   "library.exactDuration": "{time}（{seconds} 秒）",
   "library.trackDisc": "曲序 / 碟号",
+  "library.sourceSizeShort": "源",
+  "library.outputSizeShort": "产物",
   "library.sourceSize": "源文件大小",
   "library.bytes": "{size} 字节",
   "library.sourceSHA256": "源文件 SHA-256",

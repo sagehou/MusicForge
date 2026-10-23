@@ -5,7 +5,7 @@ import { useI18n, type MessageKey } from "../i18n";
 import type { LyricsProvider, Source } from "../types";
 import { Loading, ResourceWarning, useResource, type Notice } from "./resource";
 import { Button } from "./ui/button";
-import { DetailPanel } from "./detail-panel";
+import { InlineDetails } from "./inline-details";
 
 type LyricsResponse = {
   options: { auto_search: boolean; min_score: number };
@@ -33,7 +33,7 @@ export function LyricsSearchButton({ ids, all = false, refresh = false, replaceT
     } catch (err) { notify(err as Error, true); }
     finally { setBusy(false); }
   }
-  return <Button type="button" variant="outline" size="sm" className={compact ? "lyrics-action" : undefined} aria-label={t(label)} disabled={disabled || busy || !all && !ids?.length} onClick={() => void search()}><Search size={13} />{!iconOnly && t(compact ? "lyrics.searchShort" : label)}</Button>;
+  return <Button type="button" variant="outline" size="sm" className={compact ? "lyrics-action" : undefined} aria-label={t(label)} title={t(label)} disabled={disabled || busy || !all && !ids?.length} onClick={() => void search()}><Search size={13} />{!iconOnly && t(compact ? "lyrics.searchShort" : label)}</Button>;
 }
 
 export function LyricsMaintenance({ sources, scope, notify }: { sources: Source[]; scope?: "album" | "artist"; notify: Notice }) {
@@ -126,15 +126,14 @@ export function LyricsSettings({ notify, notification }: { notify: Notice; notif
   </div>;
 }
 
-export function LyricsTrack({ source, notify, refresh, onChoose }: { source: Source; notify: Notice; refresh: () => void; onChoose?: () => void }) {
+export function LyricsTrack({ source, notify, onChoose, expanded = false, disabled = false }: { source: Source; notify: Notice; onChoose: () => void; expanded?: boolean; disabled?: boolean }) {
   const { t, errorMessage } = useI18n();
-  const [picker, setPicker] = useState(false);
   if (!source.output_present || !source.output) return null;
   return <div className="lyrics-track" data-state={source.lyrics?.state || "unchecked"}>
     <span className="lyrics-state">{t(`lyrics.state.${source.lyrics?.state || "unchecked"}`)}{source.lyrics_script && <small className="lyrics-script"> · {t(`lyrics.script.${source.lyrics_script}`)}</small>}</span>
     <div className="lyrics-actions">
-      <LyricsSearchButton ids={[source.id]} refresh compact label="lyrics.searchAgain" notify={notify} />
-      <Button type="button" variant="outline" size="sm" className="lyrics-action" aria-label={t("lyrics.choose")} onClick={() => onChoose ? onChoose() : setPicker(true)}><FileMusic size={13} />{t("lyrics.chooseShort")}</Button>
+      <LyricsSearchButton ids={[source.id]} refresh compact iconOnly disabled={disabled} label="lyrics.searchAgain" notify={notify} />
+      <Button type="button" variant="outline" size="sm" className="lyrics-action" id={`track-lyrics-trigger-${source.id}`} aria-label={t("lyrics.choose")} title={t("lyrics.choose")} aria-expanded={expanded} aria-controls={expanded ? `track-lyrics-${source.id}` : undefined} disabled={disabled} onClick={onChoose}><FileMusic size={15} /></Button>
     {source.lyrics && <details className="lyrics-details"><summary aria-label={t("lyrics.details")} title={t("lyrics.details")}><Info size={14} /></summary><div className="lyrics-status-popover">
     {source.lyrics?.path && <small>{source.lyrics.path}</small>}
     {source.lyrics?.provider && <small>{t(`lyrics.provider.${source.lyrics.provider}`)}</small>}
@@ -142,7 +141,6 @@ export function LyricsTrack({ source, notify, refresh, onChoose }: { source: Sou
     {source.lyrics?.attempts && <details><summary>{t("lyrics.attempts")}</summary>{source.lyrics.attempts.map(attempt => <p key={attempt.provider}>{t(`lyrics.provider.${attempt.provider}`)} · {t(`lyrics.state.${attempt.state}`)}{attempt.error && <> · {errorMessage(attempt.error)}</>}</p>)}</details>}
     </div></details>}
     </div>
-    {picker && <LyricsPicker key={`${source.id}:${source.output}`} source={source} notify={notify} close={() => setPicker(false)} saved={refresh} />}
   </div>;
 }
 
@@ -158,7 +156,7 @@ function candidateDuration(value: number) {
   return seconds > 0 ? `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}` : "—";
 }
 
-export function LyricsPicker({ source, notify, close, saved, previous, next }: { source: Source; notify: Notice; close: () => void; saved: () => void; previous?: () => void; next?: () => void }) {
+export function LyricsPicker({ source, notify, close, saved, previous, next, onBusyChange }: { source: Source; notify: Notice; close: () => void; saved: () => void; previous?: () => void; next?: () => void; onBusyChange: (busy: boolean) => void }) {
   const { t, errorMessage, locale } = useI18n();
   const options = useResource<LyricsResponse>("/lyrics");
   const searchController = useRef<AbortController | null>(null);
@@ -222,13 +220,16 @@ export function LyricsPicker({ source, notify, close, saved, previous, next }: {
   }, [base]);
   async function save(advance = false) {
     if (!selected || !preview) return;
-    setSaving(true);
+    setSaving(true); onBusyChange(true);
     try {
       await api(base, "PUT", { token: selected.token, index: selected.candidate.index, translation, romanization });
       notify("lyrics.saved"); saved(); setSavedSelection(true);
-      if (advance && next) next(); else if (!previous && !next) close();
+      if (advance && next) next(); else if (!previous && !next) {
+        close();
+        requestAnimationFrame(() => (document.getElementById(`track-lyrics-trigger-${source.id}`) || document.getElementById("library-title"))?.focus({ preventScroll: true }));
+      }
     } catch (err) { setPreviewError((err as Error).message); }
-    finally { setSaving(false); }
+    finally { setSaving(false); onBusyChange(false); }
   }
   const loading = groups.some(group => group.loading);
   const choices = useMemo(() => groups.flatMap(group => group.candidates.map(candidate => ({ token: group.token, candidate })))
@@ -238,7 +239,7 @@ export function LyricsPicker({ source, notify, close, saved, previous, next }: {
   useEffect(() => {
     if (autoSelect.current && !restoring && !loading && !selected && recommended?.token) void choose({ token: recommended.token, candidate: recommended.candidate });
   }, [restoring, loading, selected, recommended, choose]);
-  return <DetailPanel className="lyrics-picker" title={t("lyrics.choose")} subtitle={`${source.title} · ${source.artist}${source.duration ? ` · ${t("lyrics.targetDuration", { seconds: source.duration })}` : ""}`} close={close} closeLabel={t("lyrics.close")} busy={saving} actions={<><Button type="button" variant="ghost" size="icon" aria-label={t("library.previousTrack")} disabled={saving || !previous} onClick={previous}><ChevronLeft size={17} /></Button><Button type="button" variant="ghost" size="icon" aria-label={t("library.nextTrack")} disabled={saving || !next} onClick={next}><ChevronRight size={17} /></Button></>}>
+  return <InlineDetails id={`track-lyrics-${source.id}`} returnFocusID={`track-lyrics-trigger-${source.id}`} className="lyrics-picker" title={t("lyrics.choose")} subtitle={`${source.title} · ${source.artist}${source.duration ? ` · ${t("lyrics.targetDuration", { seconds: source.duration })}` : ""}`} close={close} closeLabel={t("lyrics.close")} busy={saving} actions={<><Button type="button" variant="ghost" size="icon" aria-label={t("library.previousTrack")} disabled={saving || !previous} onClick={previous}><ChevronLeft size={17} /></Button><Button type="button" variant="ghost" size="icon" aria-label={t("library.nextTrack")} disabled={saving || !next} onClick={next}><ChevronRight size={17} /></Button></>}>
     <details className="lyrics-guidance"><summary>{t("lyrics.recommendationInfo")}</summary><p>{t("lyrics.recommendationHint")}</p><p>{t("lyrics.cacheHint")}</p></details>
     <ResourceWarning error={options.error} retry={options.retry} />
     {restoring && <p role="status">{t("lyrics.restoring")}</p>}
@@ -265,5 +266,5 @@ export function LyricsPicker({ source, notify, close, saved, previous, next }: {
     </section>}
     {!preview && !previewing && <div className="lyrics-preview-empty"><FileMusic size={24} /><h3>{t("lyrics.preview")}</h3><p>{t("lyrics.selectToPreview")}</p></div>}
     </div></div>
-  </DetailPanel>;
+  </InlineDetails>;
 }

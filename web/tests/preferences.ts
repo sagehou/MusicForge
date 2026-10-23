@@ -12,8 +12,7 @@ export async function openAccount(page: Page) {
 
 export async function setPreference(page: Page, kind: "language" | "theme", value: string) {
   const login = page.locator(".session-dialog");
-  const panel = page.locator(".detail-panel[open]");
-  const root = await login.count() ? login : await panel.count() ? panel : page.locator("body");
+  const root = await login.count() ? login : page.locator("body");
   const preferences = root.locator(".heading-preferences");
   if (await preferences.count() && !await preferences.locator(`.${kind}-selector select`).isVisible()) await preferences.locator(":scope > summary").click();
   const control = root.locator(`.${kind}-selector select`).filter({ visible: true }).first();

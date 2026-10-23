@@ -25,7 +25,7 @@ export function BatchRepairButton({ sources, notify, refresh, disabled = false }
   return <Button type="button" size="sm" variant="outline" disabled={disabled || busy || eligible.length === 0} onClick={() => void start()}>{busy ? <Loader2 size={14} className="animate-spin" /> : <Wrench size={14} />}{t("repair.bulkStart", { count: eligible.length })}</Button>;
 }
 
-export function RepairControls({ source, notify, refresh }: { source: Source; notify: Notice; refresh: () => void }) {
+export function RepairControls({ source, notify, refresh, compact = false }: { source: Source; notify: Notice; refresh: () => void; compact?: boolean }) {
   const { t } = useI18n();
   const [busy, setBusy] = useState(false);
   const repair = source.repair;
@@ -55,7 +55,7 @@ export function RepairControls({ source, notify, refresh }: { source: Source; no
         {source.status !== "possibly_damaged" && <span className="repair-warning"><AlertTriangle size={14} />{t("repair.damaged")}</span>}
       </> : <>
         {repair?.state === "failed" && <span className="repair-warning" role="status"><AlertTriangle size={14} />{t("repair.failed")}</span>}
-        <Button variant="outline" size="sm" disabled={busy || !source.can_repair} onClick={() => void start()}>{busy ? <Loader2 size={14} className="animate-spin" /> : <Wrench size={14} />}{t("repair.start")}</Button>
+        <Button variant="outline" size={compact ? "icon" : "sm"} aria-label={t("repair.start")} title={t("repair.start")} disabled={busy || !source.can_repair} onClick={() => void start()}>{busy ? <Loader2 size={14} className="animate-spin" /> : <Wrench size={14} />}{!compact && t("repair.start")}</Button>
       </>}
   </div>;
 }

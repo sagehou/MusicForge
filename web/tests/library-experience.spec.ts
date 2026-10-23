@@ -157,7 +157,7 @@ test("all songs share filters, pagination and batch lyrics with visible file fac
   const first = rows.filter({ has: page.locator(".track-cell strong").filter({ hasText: /^First Light$/ }) });
   for (const text of ["3:21", "FLAC · 24 bit / 96 kHz · 2 ch", "894 kbps", "25 MiB", "5 MiB"]) await expect(first.locator(".track-facts")).toContainText(text);
   await expect(first.locator(".track-open")).toBeVisible();
-  await expect(page.locator(".detail-panel")).toHaveCount(0);
+  await expect(page.locator(".inline-details")).toHaveCount(0);
   await expect(first.getByRole("button", { name: "Choose lyrics", exact: true })).toBeVisible();
   await expect(first.getByRole("button", { name: "Search again", exact: true })).toBeVisible();
   await expect(first.locator(".lyrics-details")).not.toHaveAttribute("open", "");

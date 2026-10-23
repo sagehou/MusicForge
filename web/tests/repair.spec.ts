@@ -79,18 +79,18 @@ test("best-effort repair requires consent and imports normal audio with a persis
   await setPreference(page, "theme", "dark");
   for (const width of [320, 768, 390]) {
     await page.setViewportSize({ width, height: 844 });
-    await expect(page.getByRole("dialog", { name: "歌曲详情", exact: true })).toBeVisible();
+    await expect(page.getByRole("region", { name: "歌曲详情", exact: true })).toBeVisible();
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
-    expect(await page.locator(".repair-diagnostic").evaluate(element => element.getBoundingClientRect().width / element.closest("dialog")!.getBoundingClientRect().width)).toBeGreaterThan(0.8);
-    expect(await page.locator(".detail-panel").evaluate(element => element.scrollWidth <= element.clientWidth + 1)).toBe(true);
+    expect(await page.locator(".repair-diagnostic").evaluate(element => element.getBoundingClientRect().width / element.closest(".inline-details")!.getBoundingClientRect().width)).toBeGreaterThan(0.8);
+    expect(await page.locator(".inline-details").evaluate(element => element.scrollWidth <= element.clientWidth + 1)).toBe(true);
   }
   await page.evaluate(() => window.scrollTo(0, 0));
   await page.screenshot({ path: "test-results/repair-import-390-dark-zh.png", fullPage: true, animations: "disabled" });
   await page.setViewportSize({ width: 1440, height: 1000 });
   await setPreference(page, "language", "en");
   await setPreference(page, "theme", "light");
-  await expect(page.getByRole("dialog", { name: "Song details", exact: true })).toBeVisible();
-  expect(await page.locator(".repair-diagnostic").evaluate(element => element.getBoundingClientRect().width / element.closest("dialog")!.getBoundingClientRect().width)).toBeGreaterThan(0.8);
+  await expect(page.getByRole("region", { name: "Song details", exact: true })).toBeVisible();
+  expect(await page.locator(".repair-diagnostic").evaluate(element => element.getBoundingClientRect().width / element.closest(".inline-details")!.getBoundingClientRect().width)).toBeGreaterThan(0.8);
   await page.evaluate(() => window.scrollTo(0, 0));
   await page.screenshot({ path: "test-results/repair-import-1440-light.png", fullPage: true, animations: "disabled" });
   await page.getByRole("button", { name: "Close panel", exact: true }).click();

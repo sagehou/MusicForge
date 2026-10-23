@@ -483,6 +483,8 @@
   "library.songAlbum": "Album",
   "library.exactDuration": "{time} ({seconds} s)",
   "library.trackDisc": "Track / disc number",
+  "library.sourceSizeShort": "Source",
+  "library.outputSizeShort": "Output",
   "library.sourceSize": "Source file size",
   "library.bytes": "{size} bytes",
   "library.sourceSHA256": "Source SHA-256",

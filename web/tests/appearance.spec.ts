@@ -12,8 +12,7 @@ async function setup(page: Page) {
   await page.route("**/api/lyrics", route => route.fulfill({ json: { options: { auto_search: false }, report: { state: "idle", total: 0, processed: 0, found: 0, not_found: 0, failed: 0, stopping: false } } }));
 }
 async function colors(page: Page) {
-  const panel = page.locator(".detail-panel[open]");
-  const root = await panel.count() ? panel : page.locator(".page-heading");
+  const root = page.locator(".page-heading");
   const preferences = root.locator(".heading-preferences");
   if (await preferences.count() && !await preferences.locator(".appearance-controls").isVisible()) await preferences.locator(":scope > summary").click();
   const menu = root.locator(".palette-menu");
@@ -98,7 +97,7 @@ test("default albums, compact headings and the text account link retain settings
   await expect(page.getByLabel("Source audio directory", { exact: true })).toHaveValue("/keep-this-draft");
 });
 
-test("presets and custom colors persist, retain contrast and stay synchronized inside inspectors", async ({ page, context }) => {
+test("presets and custom colors persist, retain contrast and stay synchronized while song details are expanded", async ({ page, context }) => {
   await setup(page);
   await page.goto("/library?view=tracks");
   for (const mode of ["light", "dark"]) {
@@ -126,7 +125,7 @@ test("presets and custom colors persist, retain contrast and stay synchronized i
   await expect(page.locator("html")).toHaveAttribute("data-palette", "custom");
   expect(await page.evaluate(() => localStorage.getItem("musicforge.custom-color"))).toBe("#12ab7e");
   await page.locator(".track-open").first().click();
-  const panel = page.getByRole("dialog");
+  const panel = page.locator(".inline-details");
   await expect(panel).toHaveAccessibleName("Song details");
   const panelMenu = await colors(page);
   await panelMenu.getByRole("button", { name: "Spotify", exact: true }).click();
@@ -135,7 +134,7 @@ test("presets and custom colors persist, retain contrast and stay synchronized i
   await expect(panelMenu.locator("summary")).toBeFocused();
   await setPreference(page, "language", "zh-CN");
   await expect(panel).toHaveAccessibleName("歌曲详情");
-  await expect(panel.locator(".palette-label")).toHaveText("Spotify");
+  await expect(page.locator(".page-heading .palette-label")).toHaveText("Spotify");
   await page.keyboard.press("Escape");
   await expect(panel).toHaveCount(0);
   await expect(page.locator(".page-heading .palette-label")).toHaveText("Spotify");

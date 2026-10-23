@@ -59,7 +59,7 @@ test("aligned records fit six tracks, and the icon rail keeps navigation and pre
   await page.screenshot({ path: "test-results/workspace-records-tablet.png", animations: "disabled" });
 });
 
-test("track inspectors keep the filtered list and restore keyboard focus without a source read", async ({ page }) => {
+test("inline song details keep the filtered list and restore keyboard focus without a source read", async ({ page }) => {
   await setup(page);
   await page.setViewportSize({ width: 1440, height: 900 });
   const unexpected: string[] = [];
@@ -71,7 +71,7 @@ test("track inspectors keep the filtered list and restore keyboard focus without
   await title.focus();
   const scroll = await page.evaluate(() => scrollY);
   await title.press("Enter");
-  const inspector = page.getByRole("dialog", { name: "Song details", exact: true });
+  const inspector = page.getByRole("region", { name: "Song details", exact: true });
   await expect(inspector).toContainText("Song 08");
   await expect(inspector).toContainText(tracks[0].hash!);
   await inspector.getByRole("button", { name: "Next track", exact: true }).click();
@@ -79,12 +79,12 @@ test("track inspectors keep the filtered list and restore keyboard focus without
   await expect(page.getByLabel("Search library", { exact: true })).toHaveValue("Song");
   await page.keyboard.press("Escape");
   await expect(inspector).toHaveCount(0);
-  await expect(title).toBeFocused();
-  expect(await page.evaluate(() => scrollY)).toBe(scroll);
+  await expect(page.getByRole("button", { name: "View details for Song 09", exact: true })).toBeFocused();
+  expect(Math.abs(await page.evaluate(() => scrollY) - scroll)).toBeLessThan(140);
   expect(unexpected).toEqual([]);
 });
 
-test("cached lyric review saves and advances in the same panel without repeating provider searches", async ({ page }) => {
+test("cached lyric review saves and advances in the same inline region without repeating provider searches", async ({ page }) => {
   await setup(page);
   let searches = 0, saves = 0;
   await page.route("**/api/library", route => route.fulfill({ json: tracks.map(source => saves && source.id === 1 ? { ...source, lyrics: { ...source.lyrics, state: "ready" } } : source) }));
@@ -97,7 +97,7 @@ test("cached lyric review saves and advances in the same panel without repeating
   await page.route("**/api/library/*/lyrics", route => { saves++; return route.fulfill({ json: {} }); });
   await page.goto("/library?view=tracks&lyrics=needs_review");
   await page.locator(".track-table tbody > tr").first().getByRole("button", { name: "Choose lyrics", exact: true }).click();
-  const picker = page.getByRole("dialog", { name: "Choose lyrics", exact: true });
+  const picker = page.getByRole("region", { name: "Choose lyrics", exact: true });
   await expect(picker.getByRole("radio")).toBeChecked();
   await expect(picker.locator(".lyrics-preview pre")).toContainText("海岸与夜晚");
   await picker.getByRole("button", { name: "Save and next", exact: true }).click();
@@ -115,7 +115,7 @@ test("cached lyric review saves and advances in the same panel without repeating
   await page.screenshot({ path: "test-results/workspace-lyrics-review.png", animations: "disabled" });
 });
 
-test("signing in after expiry restores the open lyric panel and its unsaved query", async ({ page }) => {
+test("signing in after expiry restores the open inline lyric selection and its unsaved query", async ({ page }) => {
   await setup(page);
   let authenticated = true;
   await page.route("**/api/auth/me", route => route.fulfill({ json: { initialized: true, authenticated, username: "admin", method: "local", csrf: "test", oidc: false, version: "test" } }));
@@ -123,7 +123,7 @@ test("signing in after expiry restores the open lyric panel and its unsaved quer
   await page.route("**/api/library/*/lyrics/candidates", route => route.fulfill({ json: { query: "Song 01 River Ensemble", groups: [] } }));
   await page.goto("/library?view=tracks");
   await page.locator(".track-table tbody > tr").first().getByRole("button", { name: "Choose lyrics", exact: true }).click();
-  const picker = page.getByRole("dialog", { name: "Choose lyrics", exact: true });
+  const picker = page.getByRole("region", { name: "Choose lyrics", exact: true });
   await picker.getByLabel("Title or artist", { exact: true }).fill("Unsaved alternate title");
   authenticated = false;
   await page.evaluate(() => window.dispatchEvent(new Event("session-expired")));
@@ -140,7 +140,7 @@ test("signing in after expiry restores the open lyric panel and its unsaved quer
   await expect(picker).toHaveCount(0);
 });
 
-test("phone pages retain real content, readable facts and full-screen inspectors in both themes", async ({ page }) => {
+test("phone pages retain real content, readable facts and inline song details in both themes", async ({ page }) => {
   await setup(page);
   for (const width of [390, 320]) {
     await page.setViewportSize({ width, height: 844 });
@@ -156,10 +156,14 @@ test("phone pages retain real content, readable facts and full-screen inspectors
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
       await page.screenshot({ path: `test-results/workspace-songs-${width}-${theme}.png`, animations: "disabled" });
       await page.locator(".track-open").first().click();
-      const panel = page.getByRole("dialog", { name: "Song details", exact: true });
+      const panel = page.getByRole("region", { name: "Song details", exact: true });
       await expect(panel).toBeVisible();
       const box = await panel.boundingBox();
-      expect(box!.width).toBe(width);
+      expect(box!.x).toBeGreaterThanOrEqual(12);
+      expect(box!.x + box!.width).toBeLessThanOrEqual(width - 12);
+      expect(box!.width).toBeGreaterThan(width - 90);
+      expect(await panel.evaluate(element => getComputedStyle(element).position)).toBe("static");
+      await expect(page.getByRole("dialog")).toHaveCount(0);
       expect(await panel.evaluate(element => element.scrollWidth <= element.clientWidth + 1)).toBe(true);
       await page.screenshot({ path: `test-results/workspace-details-${width}-${theme}.png`, animations: "disabled" });
       await page.keyboard.press("Escape");
@@ -173,4 +177,73 @@ test("phone pages retain real content, readable facts and full-screen inspectors
       await page.screenshot({ path: `test-results/workspace-${path.replaceAll("/", "") || "overview"}-${width}.png`, animations: "disabled" });
     }
   }
+});
+
+test("album rows expose useful audio facts and toggle song and lyric details directly below the row", async ({ page }) => {
+  await setup(page);
+  await page.route("**/api/library", route => route.fulfill({ json: tracks.slice(0, 3) }));
+  await page.route("**/api/library/*/lyrics/candidates", route => route.fulfill({ json: { query: "Song 01", groups: [] } }));
+  await page.goto("/library?view=albums&artist=Artist&album=Artist%2FAlbum");
+  const row = page.locator(".track-row").first();
+  for (const text of ["3:21", "24 bit / 96 kHz", "894 kbps", "25 MiB", "5 MiB"]) await expect(row).toContainText(text);
+  await expect(row).not.toContainText(tracks[0].path);
+  for (const button of await row.locator(".lyrics-action").all()) {
+    await expect(button).toHaveAttribute("title", /.+/);
+    expect(await button.innerText()).toBe("");
+  }
+  const title = row.locator(".track-open");
+  await title.click();
+  const details = page.getByRole("region", { name: "Song details", exact: true });
+  await expect(title).toHaveAttribute("aria-expanded", "true");
+  await expect(row.locator("xpath=following-sibling::tr[1]").getByRole("region", { name: "Song details", exact: true })).toBeVisible();
+  await expect(details).toContainText(tracks[0].path);
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  expect(await page.evaluate(() => document.body.style.overflow)).not.toBe("hidden");
+  await title.click();
+  await expect(details).toHaveCount(0);
+  await expect(title).toHaveAttribute("aria-expanded", "false");
+  await title.click();
+  await row.getByRole("button", { name: "Choose lyrics", exact: true }).click();
+  await expect(details).toHaveCount(0);
+  const lyrics = page.getByRole("region", { name: "Choose lyrics", exact: true });
+  await expect(row.locator("xpath=following-sibling::tr[1]").locator(".lyrics-picker")).toBeVisible();
+  await lyrics.getByLabel("Title or artist", { exact: true }).fill("Unsaved lyric query");
+  await setPreference(page, "language", "zh-CN");
+  await setPreference(page, "theme", "dark");
+  await expect(page.locator(".lyrics-query input")).toHaveValue("Unsaved lyric query");
+  for (const width of [1440, 390]) {
+    await page.setViewportSize({ width, height: 1000 });
+    await page.locator(".inline-details h2").focus();
+    await page.screenshot({ path: `test-results/album-lyrics-inline-${width}-dark-zh.png`, animations: "disabled" });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
+  }
+  await page.keyboard.press("Escape");
+  await expect(page.locator(".inline-details")).toHaveCount(0);
+  await expect(row.getByRole("button", { name: "选择歌词", exact: true })).toBeFocused();
+  for (const width of [1440, 390]) {
+    await page.setViewportSize({ width, height: 1000 });
+    await title.click();
+    await page.screenshot({ path: `test-results/album-song-inline-${width}-dark-zh.png`, animations: "disabled" });
+    await page.keyboard.press("Escape");
+  }
+});
+
+test("inline track navigation crosses pages and explicit filters dismiss the expanded row", async ({ page }) => {
+  await setup(page);
+  const library = Array.from({ length: 65 }, (_, index) => ({ ...tracks[0], id: index + 1, track: index + 1, title: `Song ${String(index + 1).padStart(2, "0")}` }));
+  await page.route("**/api/library", route => route.fulfill({ json: library }));
+  await page.goto("/library?view=tracks");
+  await page.getByRole("button", { name: "View details for Song 50", exact: true }).click();
+  const details = page.getByRole("region", { name: "Song details", exact: true });
+  await details.getByRole("button", { name: "Next track", exact: true }).click();
+  await expect(details.locator(".detail-heading")).toContainText("Song 51");
+  await expect(page.locator(".track-row").first()).toContainText("Song 51");
+  await details.getByRole("button", { name: "Previous track", exact: true }).click();
+  await expect(details.locator(".detail-heading")).toContainText("Song 50");
+  await page.getByLabel("Search library", { exact: true }).fill("Song 01");
+  await expect(details).toHaveCount(0);
+  await expect(page.locator(".track-row")).toHaveCount(1);
+  await page.locator(".track-open").click();
+  await expect(details.locator(".detail-heading")).toContainText("Song 01");
+  await expect(details.getByRole("button", { name: "Next track", exact: true })).toBeDisabled();
 });

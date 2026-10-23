@@ -126,7 +126,7 @@ for (const { threshold, score, selected } of [{ threshold: 96, score: 90, select
     await page.route("**/api/library/1/lyrics/preview", route => { previews++; return route.fulfill({ json: { original: "[00:01.00]爱这风云", script: "simplified" } }); });
     await page.goto("/library?view=tracks");
     await page.getByRole("button", { name: "Choose lyrics", exact: true }).click();
-    const picker = page.getByRole("dialog", { name: "Choose lyrics", exact: true });
+    const picker = page.getByRole("region", { name: "Choose lyrics", exact: true });
     await expect(picker.getByRole("radio")).toHaveCount(1);
     if (selected) { await expect(picker.getByRole("radio")).toBeChecked(); await expect.poll(() => previews).toBe(1); }
     else { await expect(picker.getByRole("radio")).not.toBeChecked(); expect(previews).toBe(0); }
@@ -326,7 +326,7 @@ test("lyrics candidates keep partial results, preview languages and save an expl
   await page.goto("/library?view=albums&artist=Artist&album=Artist%2FAlbum");
   await page.locator(".lyrics-details > summary").click();
   await page.getByRole("button", { name: "Choose lyrics", exact: true }).click();
-  const picker = page.getByRole("dialog", { name: "Choose lyrics", exact: true });
+  const picker = page.getByRole("region", { name: "Choose lyrics", exact: true });
   await picker.getByLabel("Title or artist", { exact: true }).fill("別名 Artist");
   await picker.getByRole("button", { name: "Search candidates", exact: true }).click();
   await expect.poll(() => searches.length).toBe(4);
@@ -359,7 +359,7 @@ test("lyrics candidates keep partial results, preview languages and save an expl
   await setPreference(page, "language", "zh-CN");
   await page.setViewportSize({ width: 320, height: 844 });
   await page.getByRole("button", { name: "选择歌词", exact: true }).click();
-  await expect(page.getByRole("dialog", { name: "选择歌词", exact: true })).toBeVisible();
+  await expect(page.getByRole("region", { name: "选择歌词", exact: true })).toBeVisible();
   expect(await page.locator(".lyrics-picker").evaluate(element => element.scrollWidth <= element.clientWidth + 1)).toBe(true);
   await page.keyboard.press("Escape");
   await expect(page.getByRole("dialog")).toHaveCount(0);
@@ -387,7 +387,7 @@ test("automatic lyric previews wait for all providers, preserve manual choices a
   await page.route("**/api/library/1/lyrics", route => { saves++; return route.fulfill({ json: {} }); });
   await page.goto("/library?view=tracks");
   await page.getByRole("button", { name: "Choose lyrics", exact: true }).click();
-  const picker = page.getByRole("dialog", { name: "Choose lyrics", exact: true });
+  const picker = page.getByRole("region", { name: "Choose lyrics", exact: true });
   const lrclib = picker.getByRole("radio", { name: "Preview Track · Artist · LRCLIB", exact: true });
   const qq = picker.getByRole("radio", { name: "Preview Track · Artist · QQ Music", exact: true });
   async function startSearch() {
@@ -450,7 +450,7 @@ test("song details and automatic saved recommendations survive reopening and pag
   await page.getByRole("button", { name: "Close panel", exact: true }).click();
   await page.locator(".lyrics-details > summary").click();
   await page.getByRole("button", { name: "Choose lyrics", exact: true }).click();
-  let picker = page.getByRole("dialog", { name: "Choose lyrics", exact: true });
+  let picker = page.getByRole("region", { name: "Choose lyrics", exact: true });
   await expect(picker.getByText("Saved search", { exact: false })).toHaveCount(2);
   const recommended = picker.locator(".lyrics-candidate").filter({ hasText: "Recommended" });
   await expect(recommended).toContainText("Simplified Chinese characters detected");
@@ -495,7 +495,7 @@ test("song details and automatic saved recommendations survive reopening and pag
   await page.screenshot({ path: "test-results/song-details-mobile-zh-CN.png", fullPage: true });
   await page.getByRole("button", { name: "关闭面板", exact: true }).click();
   await page.getByRole("button", { name: "选择歌词", exact: true }).click();
-  picker = page.getByRole("dialog", { name: "选择歌词", exact: true });
+  picker = page.getByRole("region", { name: "选择歌词", exact: true });
   await expect(picker.getByText("推荐", { exact: true })).toBeVisible();
   expect(await picker.evaluate(element => element.scrollWidth <= element.clientWidth + 1)).toBe(true);
   await page.screenshot({ path: "test-results/lyrics-recommendations-mobile-zh-CN.png", fullPage: true });

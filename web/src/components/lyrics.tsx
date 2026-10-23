@@ -38,6 +38,7 @@ export function LyricsSearchButton({ ids, all = false, refresh = false, replaceT
 
 export function LyricsMaintenance({ sources, scope, notify }: { sources: Source[]; scope?: "album" | "artist"; notify: Notice }) {
   const { t } = useI18n();
+  const coverage = scope === "album" ? "lyrics.albumCoverage" : scope === "artist" ? "lyrics.artistCoverage" : "lyrics.coverage";
   const inventory = useMemo(() => {
     const counts: Record<LyricsMatchState, number> = { ready: 0, unchecked: 0, not_found: 0, instrumental: 0, needs_review: 0, failed: 0 };
     let total = 0;
@@ -50,9 +51,9 @@ export function LyricsMaintenance({ sources, scope, notify }: { sources: Source[
     return { counts, total, checked: total - counts.unchecked };
   }, [sources]);
   return <section className="library-comparison lyrics-panel">
-    <details className="lyrics-settings"><summary><FileMusic size={18} /><span>{t("lyrics.title")}</span><small className="maintenance-count" aria-label={t("lyrics.coverage", { done: inventory.checked, total: inventory.total })}>{inventory.checked} / {inventory.total}</small><ChevronRight size={16} /></summary>
-      <section className="lyrics-library-summary" aria-label={t("lyrics.libraryStatus")}>
-        <strong>{t("lyrics.coverage", { done: inventory.checked, total: inventory.total })}</strong>
+    <details className="lyrics-settings"><summary><FileMusic size={18} /><span>{t("lyrics.title")}</span><small className="maintenance-count" aria-label={t(coverage, { done: inventory.checked, total: inventory.total })}>{inventory.checked} / {inventory.total}</small><ChevronRight size={16} /></summary>
+      <section className="lyrics-library-summary" aria-label={t(scope === "album" ? "lyrics.albumStatus" : scope === "artist" ? "lyrics.artistStatus" : "lyrics.libraryStatus")}>
+        <strong>{t(coverage, { done: inventory.checked, total: inventory.total })}</strong>
         <p>{t("lyrics.inventory", { found: inventory.counts.ready, missing: inventory.counts.not_found, instrumental: inventory.counts.instrumental, review: inventory.counts.needs_review, failed: inventory.counts.failed, unchecked: inventory.counts.unchecked })}</p>
         <small>{t("lyrics.inventoryHint")}</small>
       </section>

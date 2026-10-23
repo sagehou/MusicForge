@@ -370,7 +370,7 @@
   "error.sourceReadPrefix": "暂时无法读取源文件：",
   "error.scanIncomplete": "扫描发现 {unavailable} 个源文件无法读取、{invalid} 个音频文件无效。正常曲目已加入队列，本次跳过源文件删除判定。下方列出失败文件路径和错误，完整详情保留在媒体库中。",
   "phase.storage": "检查媒体目录",
-  "status.unverified": "等待校验和转换",
+  "status.unverified": "待校验",
   "phase.staging_wait": "等待本地暂存空间",
   "jobs.selectPage": "全选本页",
   "jobs.selectMatching": "选择筛选结果中的全部 {count} 项任务",
@@ -747,5 +747,9 @@
   "library.albumTracks": "专辑曲目",
   "lyrics.searchAlbum": "补齐本专辑歌词",
   "lyrics.searchArtist": "补齐此歌手歌词",
-  "lyrics.globalProgress": "查看后台歌词任务"
+  "lyrics.globalProgress": "查看后台歌词任务",
+  "lyrics.albumStatus": "本专辑歌词匹配状态",
+  "lyrics.artistStatus": "此歌手歌词匹配状态",
+  "lyrics.albumCoverage": "本专辑已检查 {done}/{total} 首",
+  "lyrics.artistCoverage": "此歌手已检查 {done}/{total} 首"
 }

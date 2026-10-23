@@ -314,10 +314,10 @@ async function exerciseTaskQueue(page: import("@playwright/test").Page, root: st
     await page.getByRole("button", { name: "Browse artist Queue Artist", exact: true }).click();
     await page.getByRole("button", { name: "Browse album Queue Album", exact: true }).click();
     await expect(page.locator(".track-cell strong").filter({ hasText: /^Queue Track 1$/ })).toBeVisible();
-    await expect(page.getByRole("table").locator(".track-facts").filter({ hasText: "MP3" })).toBeVisible();
-    await expect(page.getByRole("table").locator(".track-facts").filter({ hasText: "AAC" })).toBeVisible();
+    await expect(page.getByRole("table").locator(".track-spec-chip").filter({ hasText: "MP3" })).toBeVisible();
+    await expect(page.getByRole("table").locator(".track-spec-chip").filter({ hasText: "AAC" })).toBeVisible();
     await setPreference(page, "language", "zh-CN");
-    await expect(page.getByRole("table").locator(".track-facts").filter({ hasText: "MP3" })).toBeVisible();
+    await expect(page.getByRole("table").locator(".track-spec-chip").filter({ hasText: "MP3" })).toBeVisible();
     await setPreference(page, "language", "en");
     await page.screenshot({ path: "test-results/library-album-en.png", fullPage: true });
     await page.setViewportSize({ width: 390, height: 844 });

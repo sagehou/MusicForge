@@ -1,4 +1,4 @@
-import { setPreference } from "./preferences";
+import { openLibraryOptions, setPreference } from "./preferences";
 import { test, expect } from "@playwright/test";
 import type { Source } from "../src/types";
 
@@ -103,6 +103,7 @@ test("traditional script filter supports cross-page batch replacement and shared
   await expect.poll(() => batches.length).toBe(1);
   expect(batches[0]).toEqual({ ids: Array.from({ length: 60 }, (_, index) => index + 1), refresh: false, replace_traditional: true });
   await page.getByRole("button", { name: "Clear selection", exact: true }).click();
+  await openLibraryOptions(page);
   await filter.selectOption("simplified");
   await expect(page.locator(".track-table tbody > tr")).toHaveCount(4);
   await expect(page).toHaveURL(/lyrics_script=simplified/);
@@ -164,20 +165,25 @@ test("lyrics filters compose with audio status and library coverage survives new
   await expect(inventory).toContainText("Library checked 6/7 tracks");
   await expect(inventory).toContainText("Available 2 · No match 1 · Instrumental 1 · Review 1 · Failed 1 · Unchecked 1");
   const lyricsFilter = page.getByLabel("Filter by lyrics status", { exact: true });
+  await openLibraryOptions(page);
   await lyricsFilter.selectOption("failed");
   await expect(page.locator(".library-group")).toHaveCount(1);
   await page.getByRole("button", { name: "Browse artist Artist", exact: true }).click();
   await page.getByRole("button", { name: "Browse album Album", exact: true }).click();
   const rows = page.locator(".track-table tbody > tr");
+  await openLibraryOptions(page);
   await page.getByLabel("Filter by status", { exact: true }).selectOption("ready");
   await expect(rows).toHaveCount(0);
+  await openLibraryOptions(page);
   await page.getByLabel("Filter by status", { exact: true }).selectOption("all");
   for (const state of states) {
+    await openLibraryOptions(page);
     await lyricsFilter.selectOption(state || "unchecked");
     await expect(rows).toHaveCount(1);
     await expect(rows).toContainText(`Lyrics ${state || "unchecked"}`);
     await expect(inventory).toContainText("Library checked 6/7 tracks");
   }
+  await openLibraryOptions(page);
   await lyricsFilter.selectOption("not_found");
   await page.getByLabel("Search library", { exact: true }).fill("Lyrics ready");
   await expect(rows).toHaveCount(0);
@@ -187,6 +193,7 @@ test("lyrics filters compose with audio status and library coverage survives new
   await expect.poll(() => searches.length).toBe(1);
   expect(searches).toEqual([{ ids: [2], refresh: false }]);
   await page.getByRole("button", { name: "Clear selection", exact: true }).click();
+  await openLibraryOptions(page);
   await lyricsFilter.selectOption("all");
   await expect(rows).toHaveCount(7);
 
@@ -220,6 +227,7 @@ test("lyrics filters compose with audio status and library coverage survives new
   await setPreference(page, "language", "zh-CN");
   await page.setViewportSize({ width: 320, height: 844 });
   await page.locator(".library-options > summary").click();
+  await openLibraryOptions(page);
   await page.getByLabel("歌词匹配状态", { exact: true }).selectOption("failed");
   await expect(rows).toHaveCount(1);
   await expect(page.locator(".library-options")).toHaveAttribute("data-filtered", "true");

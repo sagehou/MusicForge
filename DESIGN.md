@@ -131,19 +131,22 @@ Desktop has a fixed 236px sidebar, a fluid canvas and 28px horizontal insets.
 Manual collapse retains a 76px icon rail. At 800px navigation is icon-only
 (72px); at 600px it moves to a 64px bottom dock with four equal tracks.
 Phone content reserves 76px plus the safe-area inset below the final item.
-Appearance controls remain on the header's top-right row; title and actions
-share the next row. Insets reduce to 20px, 16px and 12px at narrower breakpoints.
+The surface header spans the main area, with title and actions in one row.
+A compact top-right disclosure keeps appearance and language controls available
+without adding a separate header row. Insets reduce to 20px, 16px and 14px.
 The overview groups real build completion and active tracks above the recent
 jobs and lyric/storage cards. Settings use two columns of stacked labels and
 fields on desktop, and one column on narrow screens.
 
 Library cover grids use square media and adaptive minimum tracks (95px small,
-136px medium, 185px large), then two equal columns at 800px and below. The medium
-layout shows seven columns at 1440px and ten at 1920px. Desktop grids retain small/medium/large density choices; compact
-two-column grids omit that inert control. Cover size and grid/list preferences
+136px medium, 185px large), with small/medium/large segmented controls in a separate toolbar row above
+full-width search. Phone grids use four/three/two columns respectively; small
+grids use five columns on wider tablets. The medium layout shows seven columns
+at 1440px and ten at 1920px. Cover size and grid/list preferences
 persist in browser storage and remain available when returning to desktop.
-List view combines compact square artwork with track totals, actual cached
-audio specifications, known output formats/sizes and lyric coverage. Missing
+Desktop list view aligns selection, artwork, album/artist, tracks/duration,
+source audio, output, lyrics and status with one shared column header. Narrow
+list rows wrap these real cached values into a cover-and-details layout. Missing
 values remain unknown; mixed source specifications remain visible. Album details
 use cover/metadata columns and a fixed-layout track table. Smaller screens hide
 redundant artist/duration columns; file details remain accessible.
@@ -152,14 +155,14 @@ redundant artist/duration columns; file details remain accessible.
 
 Operational sections use flat surface panels with thin borders and 9px corners.
 The cover grid stays on the canvas, with 8px artwork corners and no enclosing
-card around each album. Toasts and the dirty-settings save area retain the
-shared soft shadow; regular panels stay flat.
+card around each album. Toasts retain the shared soft shadow. Settings keep their save/discard footer
+inside the same bordered form box in both saved and dirty states.
 
 ## Shapes
 
 Artwork uses gently softened square corners (8px), and controls use restrained
 corners (6px), including the segmented-control shell. Dots indicate status;
-circular initials identify the administrator.
+square initials identify the administrator.
 Repeated library items are unframed, not nested cards.
 
 ## Components
@@ -173,9 +176,10 @@ use danger tones. Focus uses a visible two-pixel accent outline. Controls retain
 loading/disabled states, 32px standard and 24px compact controls. Phone page
 actions use 36px heights; the library options trigger retains a 44px target.
 
-At 800px and below, library filter and sort controls use a native details
-disclosure with a localized icon summary. Choosing an option closes it; Escape
-closes it and restores focus to the summary. Desktop options stay inline.
+Library filter and sort controls use a native details disclosure with a
+localized icon summary on all screen sizes. Choosing an option closes it;
+Escape closes it and restores focus to the summary. Density and grid/list
+controls stay outside the disclosure.
 
 ### Navigation
 
@@ -228,7 +232,7 @@ shared artwork transitions and disables CSS animation without removing feedback.
 - Do keep long translated text and file paths inside their layout.
 - Do retain state and provide recovery during temporary failures.
 - Do close compact library options on selection and restore summary focus on Escape.
-- Do keep density choices in desktop grids while preserving density and layout preferences.
+- Do keep density choices on desktop and mobile while preserving stored density and layout values.
 - Do retain error toasts until dismissal and expire success toasts after six seconds.
 - Do lead pipeline stages with headings, without redundant above-heading labels.
 

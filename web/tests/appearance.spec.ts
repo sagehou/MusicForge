@@ -13,7 +13,10 @@ async function setup(page: Page) {
 }
 async function colors(page: Page) {
   const panel = page.locator(".detail-panel[open]");
-  const menu = (await panel.count() ? panel : page.locator(".page-heading")).locator(".palette-menu");
+  const root = await panel.count() ? panel : page.locator(".page-heading");
+  const preferences = root.locator(".heading-preferences");
+  if (await preferences.count() && !await preferences.locator(".appearance-controls").isVisible()) await preferences.locator(":scope > summary").click();
+  const menu = root.locator(".palette-menu");
   if (!await menu.evaluate(element => (element as HTMLDetailsElement).open)) await menu.locator("summary").click();
   return menu;
 }
@@ -44,23 +47,32 @@ test("default albums, compact headings and the text account link retain settings
   await expect(page.locator("html")).toHaveAttribute("data-palette", "apple");
   await expect(page.locator(".palette-menu > summary > svg")).toHaveCount(1);
   await expect(page.locator(".palette-menu > summary .color-swatch")).toHaveCount(0);
-  const controls = await page.locator(".page-heading .appearance-controls").boundingBox();
-  expect(controls!.x + controls!.width).toBeGreaterThan(1400);
-  expect(controls!.y).toBeLessThan(30);
-  expect(controls!.height).toBeLessThanOrEqual(28);
+  const header = await page.locator(".page-heading").boundingBox();
   const heading = await page.locator(".heading-content").boundingBox();
-  expect(heading!.y).toBeGreaterThanOrEqual(controls!.y + controls!.height);
-  const albums = await page.locator(".library-groups").boundingBox();
-  // Keep the content density budget after the separate appearance row.
-  expect(albums!.y - (heading!.y - controls!.y)).toBeLessThan(260);
+  const trigger = page.locator(".heading-preferences > summary");
+  const control = await trigger.boundingBox();
+  expect(header!.x).toBe(236);
+  expect(header!.width).toBe(1440 - 236);
+  expect(header!.height).toBeLessThanOrEqual(82);
+  expect(Math.abs(heading!.y + heading!.height / 2 - control!.y - control!.height / 2)).toBeLessThan(2);
+  const toolbar = await page.locator(".library-toolbar-box").boundingBox();
+  expect(toolbar!.y - header!.height).toBe(24);
+  const search = await page.locator(".library-toolbar-box > .search").boundingBox();
+  expect(search!.width).toBeGreaterThan(toolbar!.width - 36);
+  await expect(page.locator(".library-group").first()).toBeInViewport();
+  await trigger.click();
+  expect((await page.locator(".page-heading").boundingBox())!.height).toBe(header!.height);
+  await trigger.click();
   await expect(page.locator(".account-link svg, .sidebar .appearance-controls")).toHaveCount(0);
-  await expect(page.locator(".account-link .account-version")).toHaveText("MusicForge test");
+  await expect(page.locator(".brand-version")).toHaveText("test");
   await page.screenshot({ path: "test-results/appearance-default-albums.png", animations: "disabled" });
   const reference = await page.context().newPage();
   const design = await readFile(resolve("../designs/index.html"), "utf8");
   for (const width of [1440, 390]) {
     await reference.setViewportSize({ width, height: 1000 });
     await reference.setContent(design);
+    // Remove only the demo controller and device frame when reviewing actual pages.
+    await reference.addStyleTag({ content: `#showcase-bar { display: none !important; } #viewport-wrapper { padding: 0 !important; max-width: none !important; } .app-frame { max-width: none !important; min-height: 100vh !important; border: 0 !important; border-radius: 0 !important; box-shadow: none !important; } .app-main { max-height: none !important; }` });
     await reference.evaluate(`setVp('${width === 390 ? "mobile" : "desktop"}'); setTheme('dark')`);
     for (const screen of ["overview", "library", "settings", "jobs"]) {
       await reference.evaluate(`setPage('${screen}')`);
@@ -194,7 +206,8 @@ test("top-right controls and color menus fit narrow screens in either language a
         await page.keyboard.press("Escape");
         expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
         const controls = await page.locator(".page-heading .appearance-controls").boundingBox();
-        expect(controls!.y).toBeLessThan(30);
+        const trigger = await page.locator(".heading-preferences > summary").boundingBox();
+        expect(controls!.y).toBeGreaterThanOrEqual(trigger!.y + trigger!.height);
         expect(controls!.x + controls!.width).toBeGreaterThan(width - 24);
       }
     }

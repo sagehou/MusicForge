@@ -171,8 +171,9 @@ test("task states use the active palette and Canvas status tones across light an
   await expect(page.locator(".task")).toHaveCount(5);
   for (const mode of ["light", "dark"]) {
     await setPreference(page, "theme", mode);
+    await page.locator(".heading-preferences > summary").click();
     const menu = page.locator(".page-heading .palette-menu");
-    await menu.locator("summary").click();
+    if (!await menu.evaluate(node => (node as HTMLDetailsElement).open)) await menu.locator("summary").click();
     for (const name of ["Apple Music", "Spotify", "Custom"]) {
       await menu.getByRole("button", { name, exact: true }).click();
       if (name === "Custom") await menu.getByLabel("Color hex code", { exact: true }).fill("#8975ce");
@@ -183,14 +184,16 @@ test("task states use the active palette and Canvas status tones across light an
         function style(state: string, selector: string) { return getComputedStyle(document.querySelector(`.task[data-state="${state}"] ${selector}`)!); }
         const result = {
           accent: token("accent"), successTone: token("success"), successToneFill: token("success-soft"), warning: token("warning"), danger: token("danger"),
-          running: style("running", ".badge").color, runningIcon: style("running", ".job-symbol").color, progress: style("running", ".task-meter > span").backgroundColor,
+          running: style("running", ".badge").color, runningIcon: style("running", ".job-symbol").color, progress: style("running", ".task-meter > span").backgroundColor, fill: token("accent-fill"),
           success: style("success", ".badge").color, successIcon: style("success", ".job-symbol").color, successFill: style("success", ".badge").backgroundColor,
           paused: style("paused", ".badge").color, failed: style("failed", ".badge").color,
         };
         sample.remove();
         return result;
       });
-      expect([colors.running, colors.runningIcon, colors.progress]).toEqual([colors.accent, colors.accent, colors.accent]);
+      expect([colors.running, colors.runningIcon]).toEqual([colors.accent, colors.accent]);
+      // Progress is a solid fill; small accent text separately adapts for contrast.
+      expect(colors.progress).toBe(colors.fill);
       expect([colors.success, colors.successIcon, colors.successFill]).toEqual([colors.successTone, colors.successTone, colors.successToneFill]);
       expect(colors.paused).toBe(colors.warning);
       expect(colors.failed).toBe(colors.danger);

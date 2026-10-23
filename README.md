@@ -104,7 +104,7 @@ Navigation, forms, statuses, confirmations, notifications, common API errors, da
 | Jobs | Queue progress, page/filter selection, bulk pause/resume/stop/retry and history cleanup |
 | Settings | Paths, encoding, scans, concurrency, integrations, OIDC and password |
 
-The desktop sidebar can collapse to icons with the top-left toggle and remembers the choice in the browser. Overview shows actual profile completion in a circular meter, encoding settings and recent jobs. Compact task cards use state colors, live track details and progress bars; mobile navigation and reduced-motion preferences remain supported.
+The desktop sidebar can collapse to icons with the top-left toggle and remembers the choice in the browser. Overview shows actual profile completion in a horizontal meter, encoding settings and recent jobs. Compact task cards use state colors, live track details and progress bars; mobile navigation and reduced-motion preferences remain supported.
 
 ## Incremental builds and file lifecycle
 

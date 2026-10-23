@@ -117,9 +117,10 @@ export function LyricsSettings({ notify, notification }: { notify: Notice; notif
         <small>{t("lyrics.thresholdHint")}</small><small>{t("lyrics.privacy")}</small><small>{t("lyrics.stopHint")}</small>
       </section>
 
+      <div className="settings-save" data-dirty={dirty}>{notification}<span>{t(dirty ? "settings.unsaved" : "settings.savedIn")}</span><Button type="button" variant="ghost" disabled={busy || !dirty} onClick={() => setDraft(undefined)}>{t("settings.discard")}</Button><Button type="submit" form="lyrics-options-form" disabled={busy || !dirty}><Check size={16} />{t("settings.save")}</Button></div>
     </form>
     <section className="panel settings-panel lyrics-batch-settings"><div className="settings-title"><Search /><div><h2>{t("lyrics.batchTitle")}</h2><p>{t("lyrics.batchHint")}</p></div></div><LyricsControls notify={notify} settings /><small>{t("lyrics.inspectHint")}</small><div className="actions"><Button asChild variant="outline" size="sm"><a href="/library?view=tracks&lyrics_script=traditional">{t("lyrics.filterTraditional")}</a></Button></div><small>{t("lyrics.replaceHint")}</small></section>
-      <div className="settings-save" data-dirty={dirty}>{notification}<span>{t(dirty ? "settings.unsaved" : "settings.savedIn")}</span><Button type="button" variant="ghost" disabled={busy || !dirty} onClick={() => setDraft(undefined)}>{t("settings.discard")}</Button><Button type="submit" form="lyrics-options-form" disabled={busy || !dirty}><Check size={16} />{t("settings.save")}</Button></div>
+
   </div>;
 }
 

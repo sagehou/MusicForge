@@ -1,4 +1,4 @@
-import { setPreference } from "./preferences";
+import { openLibraryOptions, setPreference } from "./preferences";
 import { test, expect } from "@playwright/test";
 
 test.beforeEach(async ({ page }) => {
@@ -94,6 +94,7 @@ test("best-effort repair requires consent and imports normal audio with a persis
   await page.evaluate(() => window.scrollTo(0, 0));
   await page.screenshot({ path: "test-results/repair-import-1440-light.png", fullPage: true, animations: "disabled" });
   await page.getByRole("button", { name: "Close panel", exact: true }).click();
+  await openLibraryOptions(page);
   await page.locator(".library-options-body select").first().selectOption("possibly_damaged");
   await expect(page.locator(".badge-possibly_damaged")).toBeVisible();
   await page.reload();
@@ -101,6 +102,7 @@ test("best-effort repair requires consent and imports normal audio with a persis
   await expect(page.getByRole("link", { name: "Download preview", exact: true })).toHaveCount(0);
   strictRebuildFailed = true;
   await page.reload();
+  await openLibraryOptions(page);
   await page.locator(".library-options-body select").first().selectOption("possibly_damaged");
   await expect(page.locator(".track-cell strong").filter({ hasText: /^Dear My Friend$/ })).toBeVisible();
   await expect(page.locator(".badge-failed")).toBeVisible();
@@ -205,6 +207,7 @@ test("filtered failed tracks can be selected across pages and repaired with one 
     return route.fulfill({ status: 202, json: { repair_id: "c".repeat(64), queued: 60, skipped: 0 } });
   });
   await page.goto("/library?view=albums&artist=Artist&album=Artist%2FAlbum");
+  await openLibraryOptions(page);
   await page.locator(".library-options-body select").first().selectOption("failed");
   await page.getByRole("checkbox", { name: "Select current page", exact: true }).check();
   await page.getByRole("button", { name: "Select all 65 matching tracks", exact: true }).click();

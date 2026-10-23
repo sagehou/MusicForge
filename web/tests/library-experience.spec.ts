@@ -1,4 +1,4 @@
-import { setPreference } from "./preferences";
+import { openLibraryOptions, setPreference } from "./preferences";
 import { test, expect, type Page } from "@playwright/test";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
@@ -78,6 +78,7 @@ test("all-album and list views, unverified filter, missing images and persisted 
   await expect(page.locator(".library-groups")).toHaveClass(/library-list/);
   const facts = page.locator(".library-group").filter({ has: page.getByRole("button", { name: "Night Studies", exact: true }) }).locator(".group-facts");
   for (const text of ["2 tracks", "6:24", "24 bit / 96 kHz", "OPUS", "5 MiB", "1 / 1"]) await expect(facts).toContainText(text);
+  await openLibraryOptions(page);
   await page.getByLabel("Filter by status", { exact: true }).selectOption("unverified");
   await expect(page.locator(".library-group")).toHaveCount(1);
   await setPreference(page, "theme", "dark");
@@ -85,6 +86,7 @@ test("all-album and list views, unverified filter, missing images and persisted 
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
   await expect(page.getByLabel("Filter by status", { exact: true })).toHaveValue("unverified");
   await expect(page.locator(".library-group")).toHaveCount(1);
+  await openLibraryOptions(page);
   await page.getByLabel("Filter by status", { exact: true }).selectOption("all");
   await page.route("**/api/library/*/artwork?*", route => route.fulfill({ status: 404, json: { error: "artwork not found" } }));
   await page.reload();
@@ -108,12 +110,14 @@ test("all songs share filters, pagination and batch lyrics with visible file fac
   await expect(page.locator(".album-summary, .disc-heading, .layout-control")).toHaveCount(0);
   await page.getByRole("button", { name: "Next page", exact: true }).click();
   await expect(rows).toHaveCount(18);
+  await openLibraryOptions(page);
   await page.getByLabel("Filter by lyrics status", { exact: true }).selectOption("not_found");
   await expect(rows).toHaveCount(2);
   await expect(page.getByRole("group", { name: "Active filters", exact: true })).toContainText("No synchronized match");
   await page.getByRole("button", { name: "Remove filter: No synchronized match", exact: true }).click();
   await expect(page.getByLabel("Filter by lyrics status", { exact: true })).toHaveValue("all");
   await expect(rows).toHaveCount(50);
+  await openLibraryOptions(page);
   await page.getByLabel("Filter by lyrics status", { exact: true }).selectOption("not_found");
   const first = rows.filter({ has: page.locator(".track-cell strong").filter({ hasText: /^First Light$/ }) });
   for (const text of ["3:21", "FLAC · 24 bit / 96 kHz · 2 ch", "894 kbps", "25 MiB", "5 MiB"]) await expect(first.locator(".track-facts")).toContainText(text);
@@ -130,13 +134,17 @@ test("all songs share filters, pagination and batch lyrics with visible file fac
   expect(searches[0]).toEqual({ ids: [1, 4], refresh: false });
   await page.reload();
   await expect(page.getByRole("button", { name: /^All songs/ })).toHaveAttribute("aria-pressed", "true");
+  await openLibraryOptions(page);
   await page.getByLabel("Filter by lyrics status", { exact: true }).selectOption("all");
+  await openLibraryOptions(page);
   await page.getByLabel("Filter by status", { exact: true }).selectOption("unverified");
   await expect(rows).toHaveCount(1);
   await expect(rows.locator(".track-facts")).toContainText("3:03");
   await expect(rows.locator(".track-facts")).not.toContainText("Output size");
   await expect(rows.locator(".track-facts")).toContainText("—");
+  await openLibraryOptions(page);
   await page.getByLabel("Filter by status", { exact: true }).selectOption("all");
+  await openLibraryOptions(page);
   await page.getByLabel("Filter by lyrics status", { exact: true }).selectOption("not_found");
   await setPreference(page, "language", "zh-CN");
   await page.setViewportSize({ width: 320, height: 844 });
@@ -321,12 +329,12 @@ test("cover density and list preferences persist, pagination and polling retain 
   await expect(page.locator(".library-group")).toHaveCount(50);
   const columns = () => page.locator(".library-groups").evaluate(node => getComputedStyle(node).gridTemplateColumns.split(" ").length);
   expect(await columns()).toBe(7);
-  await page.getByLabel("Cover size", { exact: true }).selectOption("compact");
+  await page.getByRole("group", { name: "Cover size", exact: true }).getByRole("button", { name: "Small", exact: true }).click();
   expect(await columns()).toBe(10);
-  await page.getByLabel("Cover size", { exact: true }).selectOption("large");
+  await page.getByRole("group", { name: "Cover size", exact: true }).getByRole("button", { name: "Large", exact: true }).click();
   expect(await columns()).toBe(5);
   await page.reload();
-  await expect(page.getByLabel("Cover size", { exact: true })).toHaveValue("large");
+  await expect(page.getByRole("group", { name: "Cover size", exact: true }).getByRole("button", { name: "Large", exact: true })).toHaveAttribute("aria-pressed", "true");
   await page.getByLabel("Select album Night Studies", { exact: true }).check();
   const image = page.locator(".cover img").first();
   await expect(image).toHaveClass("cover-loaded");
@@ -380,19 +388,27 @@ test("narrow-screen filter and display menu stays usable and inside the viewport
   await expect(summary).toBeVisible();
   await summary.focus();
   await page.keyboard.press("Enter");
-  await expect(page.getByLabel("Cover size", { exact: true })).toHaveCount(0);
+  const density = page.getByRole("group", { name: "Cover size", exact: true });
+  await expect(density).toBeVisible();
+  for (const [label, columns] of [["Small", 4], ["Medium", 3], ["Large", 2]] as const) {
+    await density.getByRole("button", { name: label, exact: true }).click();
+    expect(await page.locator(".library-groups").evaluate(node => getComputedStyle(node).gridTemplateColumns.split(" ").length)).toBe(columns);
+  }
   await expect(page.getByLabel("Sort library", { exact: true })).toBeVisible();
   const menu = await page.locator(".library-options-body").boundingBox();
   expect(menu!.x).toBeGreaterThanOrEqual(0);
   expect(menu!.x + menu!.width).toBeLessThanOrEqual(320);
+  await openLibraryOptions(page);
   await page.getByLabel("Sort library", { exact: true }).selectOption("attention");
   await expect(page.locator(".library-options")).not.toHaveAttribute("open", "");
   await summary.click();
+  await openLibraryOptions(page);
   await page.getByLabel("Filter by status", { exact: true }).selectOption("failed");
   await expect(page.locator(".library-group")).toHaveCount(1);
   await expect(page.locator(".library-options")).toHaveAttribute("data-filtered", "true");
   for (const state of ["all", "failed", "all"]) {
     await summary.click();
+    await openLibraryOptions(page);
     await page.getByLabel("Filter by status", { exact: true }).selectOption(state);
     await expect(page.locator(".library-group")).toHaveCount(state === "failed" ? 1 : 50);
     await expect(page.locator(".library-options")).not.toHaveAttribute("open", "");

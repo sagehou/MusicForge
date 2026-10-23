@@ -1,4 +1,4 @@
-import { setPreference, openAccount } from "./preferences";
+import { openLibraryOptions, setPreference, openAccount } from "./preferences";
 import { test, expect } from "@playwright/test";
 import { readFileSync, unlinkSync, writeFileSync, utimesSync, mkdirSync, existsSync } from "node:fs";
 import { join } from "node:path";
@@ -88,6 +88,7 @@ test("bilingual setup, real incremental build, state preservation and login", as
   await setPreference(page, "theme", "system");
   await setPreference(page, "language", "zh-CN");
   await page.getByLabel("搜索音乐库", { exact: true }).fill("CI Track");
+  await openLibraryOptions(page);
   await page.getByLabel("状态筛选", { exact: true }).selectOption("ready");
   await page.getByLabel("选择 CI Track", { exact: true }).check();
   await setPreference(page, "language", "en");
@@ -102,6 +103,7 @@ test("bilingual setup, real incremental build, state preservation and login", as
   const sourceBytes = readFileSync(sourcePath);
   unlinkSync(sourcePath);
   await page.getByRole("button", { name: "Scan", exact: true }).click();
+  await openLibraryOptions(page);
   await page.getByLabel("Filter by status", { exact: true }).selectOption("expired");
   await expect(page.getByText("Source deleted", { exact: true })).toBeVisible({ timeout: 30000 });
   await page.getByLabel("Select CI Track", { exact: true }).check();
@@ -122,6 +124,7 @@ test("bilingual setup, real incremental build, state preservation and login", as
   const stable = new Date(Date.now() - 120000);
   utimesSync(sourcePath, stable, stable);
   await page.getByRole("button", { name: "扫描", exact: true }).click();
+  await openLibraryOptions(page);
   await page.getByLabel("状态筛选", { exact: true }).selectOption("ready");
   await expect(page.getByRole("table").getByText("已就绪", { exact: true })).toBeVisible({ timeout: 30000 });
   await page.getByRole("link", { name: "概览", exact: true }).click();

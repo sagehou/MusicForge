@@ -14,9 +14,17 @@ export async function setPreference(page: Page, kind: "language" | "theme", valu
   const login = page.locator(".session-dialog");
   const panel = page.locator(".detail-panel[open]");
   const root = await login.count() ? login : await panel.count() ? panel : page.locator("body");
+  const preferences = root.locator(".heading-preferences");
+  if (await preferences.count() && !await preferences.locator(`.${kind}-selector select`).isVisible()) await preferences.locator(":scope > summary").click();
   const control = root.locator(`.${kind}-selector select`).filter({ visible: true }).first();
   await expect(control).toBeVisible();
   await control.selectOption(value);
+  if (await preferences.count() && await preferences.evaluate(node => (node as HTMLDetailsElement).open)) await preferences.locator(":scope > summary").click();
+}
+
+export async function openLibraryOptions(page: Page) {
+  const menu = page.locator(".library-options");
+  if (!await menu.evaluate(node => (node as HTMLDetailsElement).open)) await menu.locator(":scope > summary").click();
 }
 
 export async function openLibraryTools(page: Page) {

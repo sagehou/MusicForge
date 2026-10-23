@@ -226,7 +226,7 @@ export function LyricsPicker({ source, notify, close, saved, previous, next, onB
       notify("lyrics.saved"); saved(); setSavedSelection(true);
       if (advance && next) next(); else if (!previous && !next) {
         close();
-        requestAnimationFrame(() => (document.getElementById(`track-lyrics-trigger-${source.id}`) || document.getElementById("library-title"))?.focus({ preventScroll: true }));
+        requestAnimationFrame(() => (document.getElementById(`track-lyrics-trigger-${source.id}`) || document.getElementById("library-title"))?.focus());
       }
     } catch (err) { setPreviewError((err as Error).message); }
     finally { setSaving(false); onBusyChange(false); }
@@ -239,7 +239,7 @@ export function LyricsPicker({ source, notify, close, saved, previous, next, onB
   useEffect(() => {
     if (autoSelect.current && !restoring && !loading && !selected && recommended?.token) void choose({ token: recommended.token, candidate: recommended.candidate });
   }, [restoring, loading, selected, recommended, choose]);
-  return <InlineDetails id={`track-lyrics-${source.id}`} returnFocusID={`track-lyrics-trigger-${source.id}`} className="lyrics-picker" title={t("lyrics.choose")} subtitle={`${source.title} · ${source.artist}${source.duration ? ` · ${t("lyrics.targetDuration", { seconds: source.duration })}` : ""}`} close={close} closeLabel={t("lyrics.close")} busy={saving} actions={<><Button type="button" variant="ghost" size="icon" aria-label={t("library.previousTrack")} disabled={saving || !previous} onClick={previous}><ChevronLeft size={17} /></Button><Button type="button" variant="ghost" size="icon" aria-label={t("library.nextTrack")} disabled={saving || !next} onClick={next}><ChevronRight size={17} /></Button></>}>
+  return <InlineDetails id={`track-lyrics-${source.id}`} returnFocusID={`track-lyrics-trigger-${source.id}`} className="lyrics-picker" title={t("lyrics.choose")} subtitle={`${source.title} · ${source.artist}${source.duration ? ` · ${t("lyrics.targetDuration", { seconds: source.duration })}` : ""}`} close={close} closeLabel={t("lyrics.close")} busy={saving} actions={<><Button type="button" variant="ghost" size="icon" aria-label={t("library.previousTrack")} title={t("library.previousTrack")} disabled={saving || !previous} onClick={previous}><ChevronLeft size={17} /></Button><Button type="button" variant="ghost" size="icon" aria-label={t("library.nextTrack")} title={t("library.nextTrack")} disabled={saving || !next} onClick={next}><ChevronRight size={17} /></Button></>}>
     <details className="lyrics-guidance"><summary>{t("lyrics.recommendationInfo")}</summary><p>{t("lyrics.recommendationHint")}</p><p>{t("lyrics.cacheHint")}</p></details>
     <ResourceWarning error={options.error} retry={options.retry} />
     {restoring && <p role="status">{t("lyrics.restoring")}</p>}

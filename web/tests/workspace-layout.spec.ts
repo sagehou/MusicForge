@@ -80,6 +80,7 @@ test("inline song details keep the filtered list and restore keyboard focus with
   await page.keyboard.press("Escape");
   await expect(inspector).toHaveCount(0);
   await expect(page.getByRole("button", { name: "View details for Song 09", exact: true })).toBeFocused();
+  await expect(page.getByRole("button", { name: "View details for Song 09", exact: true })).toBeInViewport();
   expect(Math.abs(await page.evaluate(() => scrollY) - scroll)).toBeLessThan(140);
   expect(unexpected).toEqual([]);
 });
@@ -246,4 +247,50 @@ test("inline track navigation crosses pages and explicit filters dismiss the exp
   await page.locator(".track-open").click();
   await expect(details.locator(".detail-heading")).toContainText("Song 01");
   await expect(details.getByRole("button", { name: "Next track", exact: true })).toBeDisabled();
+});
+
+test("saving inline lyrics protects the editor and preserves its review order across a filtered page boundary", async ({ page }) => {
+  await setup(page);
+  const ready = new Set<number>();
+  const library = Array.from({ length: 52 }, (_, index) => ({ ...tracks[0], id: index + 1, track: index + 1, title: `Song ${String(index + 1).padStart(2, "0")}`, path: `Artist/Album/${index + 1}.flac`, output: `Artist/Album/${index + 1}.opus` }));
+  await page.route("**/api/library", route => route.fulfill({ json: library.map(source => ready.has(source.id) ? { ...source, lyrics: { ...source.lyrics, state: "ready" } } : source) }));
+  let searches = 0;
+  await page.route("**/api/library/*/lyrics/candidates", route => {
+    if (route.request().method() !== "GET") searches++;
+    const id = Number(new URL(route.request().url()).pathname.split("/")[3]);
+    return route.fulfill({ json: { query: `Song ${id}`, groups: [{ provider: "lrclib", token: `cache-${id}`, cached: true, candidates: [{ index: 0, provider: "lrclib", title: `Song ${id}`, artist: "River Ensemble", duration: 201, high_confidence: true, match_score: 100, duration_delta: 0, script: "simplified" }] }] } });
+  });
+  await page.route("**/api/library/*/lyrics/preview", route => route.fulfill({ json: { original: "[00:01.00]海岸与夜晚", script: "simplified" } }));
+  let saving = false;
+  let releaseSave!: () => void;
+  const heldSave = new Promise<void>(resolve => { releaseSave = resolve; });
+  await page.route("**/api/library/50/lyrics", async route => {
+    saving = true;
+    await heldSave;
+    ready.add(50);
+    await route.fulfill({ json: {} });
+  });
+  await page.goto("/library?view=tracks&lyrics=needs_review");
+  await page.locator(".track-row").filter({ has: page.getByRole("button", { name: "View details for Song 50", exact: true }) }).getByRole("button", { name: "Choose lyrics", exact: true }).click();
+  const picker = page.getByRole("region", { name: "Choose lyrics", exact: true });
+  await expect(picker.getByRole("radio")).toBeChecked();
+  await expect(picker.locator(".lyrics-preview pre")).toContainText("海岸与夜晚");
+  await picker.getByRole("button", { name: "Save and next", exact: true }).click();
+  await expect.poll(() => saving).toBe(true);
+  await expect(picker.getByRole("button", { name: "Close lyrics selection", exact: true })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "View details for Song 01", exact: true })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Next page", exact: true })).toBeDisabled();
+  await page.keyboard.press("Escape");
+  await expect(picker).toBeVisible();
+  releaseSave();
+  await expect(picker.locator(".detail-heading")).toContainText("Song 51");
+  await expect(page.locator(".track-row[data-expanded=true]")).toContainText("Song 51");
+  await picker.getByRole("button", { name: "Previous track", exact: true }).click();
+  await expect(picker.locator(".detail-heading")).toContainText("Song 50");
+  await expect(page.locator(".track-row[data-expanded=true]")).toContainText("Available");
+  await expect(picker.getByRole("radio")).toBeChecked();
+  expect(searches).toBe(0);
+  await picker.getByRole("button", { name: "Close lyrics selection", exact: true }).click();
+  await expect(picker).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "View details for Song 50", exact: true })).toHaveCount(0);
 });

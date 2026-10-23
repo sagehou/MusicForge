@@ -39,7 +39,10 @@ export function App() {
   const sessionFocus = useRef<HTMLElement | null>(null);
   const acceptSession = (value: Me) => {
     if (!value.authenticated && lastMe.current?.authenticated) {
-      if (!wasLocked.current) sessionFocus.current = document.activeElement as HTMLElement;
+      if (!wasLocked.current) {
+        const active = document.activeElement;
+        sessionFocus.current = active instanceof HTMLElement && active.closest(".inline-details") ? active : null;
+      }
       setLocked(value); setToast(undefined);
     } else {
       lastMe.current = value; setMe(value); setLocked(undefined);
@@ -86,7 +89,7 @@ export function App() {
   }, [locked]);
   useEffect(() => {
     const outside = (event: PointerEvent) => {
-      document.querySelectorAll<HTMLDetailsElement>(".palette-menu[open], .page-tools[open], .heading-preferences[open]").forEach(menu => {
+      document.querySelectorAll<HTMLDetailsElement>(".palette-menu[open], .page-tools[open], .heading-preferences[open], .lyrics-details[open]").forEach(menu => {
         if (!menu.contains(event.target as Node)) menu.open = false;
       });
     };

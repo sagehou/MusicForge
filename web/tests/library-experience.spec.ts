@@ -507,6 +507,7 @@ for (const width of [1920, 1440, 768, 390, 320]) {
     await page.getByRole("button", { name: "Grid view", exact: true }).click();
     await page.getByRole("button", { name: "Browse album Night Studies", exact: true }).click();
     await expect(page.getByRole("table")).toBeVisible();
+    await page.evaluate(() => Promise.allSettled(document.getAnimations().filter(animation => animation.effect?.getComputedTiming().iterations !== Infinity).map(animation => animation.finished)));
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
     if (width >= 1440) expect((await page.locator(".album-library .search").boundingBox())!.width).toBeLessThanOrEqual(320);
     await page.screenshot({ path: `test-results/album-${width}-dark.png`, fullPage: true, animations: "disabled" });

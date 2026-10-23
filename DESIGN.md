@@ -149,7 +149,14 @@ source audio, output, lyrics and status with one shared column header. Narrow
 list rows wrap these real cached values into a cover-and-details layout. Missing
 values remain unknown; mixed source specifications remain visible. Album details
 use cover/metadata columns and a fixed-layout track table. Smaller screens hide
-redundant artist/duration columns; file details remain accessible.
+redundant artist/duration columns. Collapsed song rows show title, duration, actual
+source audio/bitrate and source/output sizes; full paths, hashes and raw tags
+stay in expanded details. Song details and lyric selection expand directly below
+their track on desktop and phones. Task details expand within their task. Detail
+drawers, overlays and full-screen inspectors are not used. Compact right-side
+actions use localized icon names and title tooltips. Closing returns focus to
+the current visible track; filter changes close the expansion, while polling
+and reauthentication preserve lyric drafts.
 
 ## Elevation & Depth
 

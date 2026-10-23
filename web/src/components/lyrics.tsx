@@ -36,7 +36,7 @@ export function LyricsSearchButton({ ids, all = false, refresh = false, replaceT
   return <Button type="button" variant="outline" size="sm" className={compact ? "lyrics-action" : undefined} aria-label={t(label)} disabled={disabled || busy || !all && !ids?.length} onClick={() => void search()}><Search size={13} />{!iconOnly && t(compact ? "lyrics.searchShort" : label)}</Button>;
 }
 
-export function LyricsMaintenance({ sources, notify }: { sources: Source[]; notify: Notice }) {
+export function LyricsMaintenance({ sources, scope, notify }: { sources: Source[]; scope?: "album" | "artist"; notify: Notice }) {
   const { t } = useI18n();
   const inventory = useMemo(() => {
     const counts: Record<LyricsMatchState, number> = { ready: 0, unchecked: 0, not_found: 0, instrumental: 0, needs_review: 0, failed: 0 };
@@ -57,11 +57,11 @@ export function LyricsMaintenance({ sources, notify }: { sources: Source[]; noti
         <small>{t("lyrics.inventoryHint")}</small>
       </section>
     </details>
-    <LyricsControls notify={notify} />
+    <LyricsControls notify={notify} ids={scope ? sources.filter(source => lyricsMatchState(source)).map(source => source.id) : undefined} label={scope === "album" ? "lyrics.searchAlbum" : scope === "artist" ? "lyrics.searchArtist" : "lyrics.searchAll"} />
   </section>;
 }
 
-function LyricsControls({ notify, settings = false }: { notify: Notice; settings?: boolean }) {
+function LyricsControls({ notify, settings = false, ids, label = "lyrics.searchAll" }: { notify: Notice; settings?: boolean; ids?: number[]; label?: MessageKey }) {
   const { t, errorMessage } = useI18n();
   const resource = useResource<LyricsResponse>("/lyrics", 2000);
   const [busy, setBusy] = useState(false);
@@ -75,13 +75,14 @@ function LyricsControls({ notify, settings = false }: { notify: Notice; settings
   }
   return <div className="lyrics-body" data-running={running}>
     <div className="actions lyrics-quick-actions">
-      <LyricsSearchButton all compact={!settings} iconOnly={!settings} label="lyrics.searchAll" notify={notify} disabled={busy || running} onStarted={resource.retry} />
+      <LyricsSearchButton all={ids === undefined} ids={ids} compact={!settings && ids === undefined} iconOnly={!settings && ids === undefined} label={label} notify={notify} disabled={busy || running} onStarted={resource.retry} />
       {settings && <LyricsSearchButton all inspectOnly label="lyrics.inspect" notify={notify} disabled={busy || running} onStarted={resource.retry} />}
-      {running && <Button className="lyrics-action" variant="outline" size="sm" aria-label={t(report.stopping ? "lyrics.stopping" : "lyrics.stop")} disabled={busy || report.stopping} onClick={() => void stop()}><Square size={13} /></Button>}
+      {running && ids === undefined && <Button className="lyrics-action" variant="outline" size="sm" aria-label={t(report.stopping ? "lyrics.stopping" : "lyrics.stop")} disabled={busy || report.stopping} onClick={() => void stop()}><Square size={13} /></Button>}
       {!settings && <a className="lyrics-settings-link" href="/settings?section=lyrics" aria-label={t("lyrics.settings")} title={t("lyrics.settings")}><Settings2 size={14} /></a>}
     </div>
     <ResourceWarning error={resource.error} retry={resource.retry} />
-    {report.state !== "idle" && <div role="status" aria-label={t("lyrics.batchProgress")} aria-live="polite">
+    {running && ids !== undefined && <a className="lyrics-global-progress" href="/settings?section=lyrics">{t("lyrics.globalProgress")}</a>}
+    {ids === undefined && report.state !== "idle" && <div role="status" aria-label={t("lyrics.batchProgress")} aria-live="polite">
       <strong>{t(report.total === 0 && report.skipped ? "lyrics.nothingPending" : report.mode === "inspect" ? `lyrics.inspectReport.${report.state}` : report.mode === "replace" ? `lyrics.replaceReport.${report.state}` : `lyrics.report.${report.state}`)}</strong>
       {report.total > 0 && <p>{report.mode === "replace" ? t("lyrics.replaceProgress", { done: report.processed, total: report.total, replaced: report.replaced ?? 0, unchanged: report.unchanged ?? 0, failed: report.failed }) : report.mode === "inspect" ? t("lyrics.inspectProgress", { done: report.processed, total: report.total, found: report.found, failed: report.failed }) : t("lyrics.progress", { done: report.processed, total: report.total, found: report.found, missing: report.not_found, failed: report.failed, review: report.needs_review ?? 0 })}</p>}
       {(report.skipped ?? 0) > 0 && <small>{t("lyrics.skipped", { count: report.skipped ?? 0 })}</small>}

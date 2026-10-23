@@ -170,7 +170,7 @@ test("repair queues share the Jobs list, filters and safe controls in both langu
   task.state = "stopped"; task.stopping = false; task.log = "Repair stopped; check Library for any output committed before cancellation";
   await expect(row.locator(".task-main .badge")).toHaveText("Stopped");
   await row.getByRole("button", { name: "Details", exact: true }).click();
-  const inspector = page.locator(".task-inspector");
+  const inspector = row.getByRole("region");
   await inspector.locator(".task-diagnostic summary").click(); await expect(inspector.locator("pre")).toContainText("Repair stopped");
   await expect(inspector.getByRole("link")).toHaveAttribute("href", /album=Artist%2FAlbum/);
   task.state = "success"; task.output = "Artist/Album/01.opus"; task.progress = 1;
@@ -189,7 +189,7 @@ test("repair queues share the Jobs list, filters and safe controls in both langu
   await expect(row).toContainText("尽力修复队列");
   await expect(row).toContainText("已导入输出库 · 可能损坏");
   await page.screenshot({ path: "test-results/unified-repair-tasks-320-zh.png", fullPage: true, animations: "disabled" });
-  await inspector.getByRole("button", { name: "关闭面板", exact: true }).click();
+  await row.getByRole("button", { name: "收起", exact: true }).click();
   page.once("dialog", dialog => dialog.accept());
   await row.getByRole("button", { name: "删除记录", exact: true }).click();
   await expect(row).toHaveCount(0); expect(deletions).toBe(1);

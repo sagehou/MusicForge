@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Activity, ArrowRight, Check, Clock3, Disc3, FileMusic, HardDrive, Loader2, Music2, RefreshCw } from "lucide-react";
+import { Activity, ArrowRight, Check, Clock3, Disc3, FileMusic, Loader2, Music2, RefreshCw } from "lucide-react";
 import { api } from "../api";
 import { useI18n } from "../i18n";
 import { PageHeading } from "./page-heading";
@@ -43,7 +43,6 @@ export function Overview({ notify, navigate }: { notify: Notice; navigate: (path
   return <div className="overview-page">
     <ResourceWarning error={error} retry={retry} />
     <PageHeading><div><h1>{t("app.overview")}</h1><p>{t("overview.description")}</p></div><div className="actions hero-actions"><Button variant="outline" onClick={() => navigate("/library")}>{t("overview.viewLibrary")}<ArrowRight size={15} /></Button><Button onClick={() => void scan()} disabled={busy || !data.enabled}><RefreshCw size={15} className={busy ? "animate-spin" : ""} />{t("overview.scan")}</Button></div></PageHeading>
-    {!data.online && <div className="banner"><HardDrive size={20} /><div><strong>{data.storage_checking ? t("overview.checking") : data.enabled ? t("overview.offline") : t("overview.configure")}</strong><p>{errorMessage(data.storage_message)}</p></div><Button variant="outline" size="sm" onClick={() => navigate("/settings")}>{t("overview.openSettings")}</Button></div>}
     <div className="metrics overview-metrics">{metrics.map(metric => <button className="metric" key={metric.label} onClick={() => navigate(metric.path)}><div><span>{metric.label}</span><metric.icon size={17} /></div><strong>{number(metric.value)}</strong><small>{metric.note}</small></button>)}</div>
     <section className="readiness-panel">
       <div className="readiness-heading">
@@ -69,7 +68,7 @@ export function Overview({ notify, navigate }: { notify: Notice; navigate: (path
       </section>
       <aside className="overview-side">
         <section className="lyrics-summary"><div className="section-heading"><h2><FileMusic size={16} />{t("lyrics.title")}</h2></div><ResourceWarning error={library.error} retry={library.retry} /><button className="lyrics-overview" onClick={() => navigate("/library?view=tracks&lyrics=needs_review")}><span>{t("overview.lyricCoverage")}</span><strong>{playable ? `${number(lyricReady || 0)} / ${number(playable.length)}` : "—"}</strong><small>{t("overview.lyricReview", { count: review === undefined ? "—" : number(review) })}</small><ArrowRight size={15} /></button><Button variant="outline" size="sm" onClick={() => navigate("/settings?section=lyrics")}>{t("lyrics.settings")}</Button></section>
-        <section className="storage-summary"><div className="section-heading"><h2>{t("overview.storage")}</h2><span className={`online ${data.online ? "is-online" : ""}`}><span />{data.online ? t("overview.online") : data.storage_checking ? t("overview.checkingShort") : t("overview.waiting")}</span></div><ResourceWarning error={config.error} retry={config.retry} /><dl><div><dt>{t("overview.flac")}</dt><dd><code>{config.data?.settings.source || "—"}</code></dd></div><div><dt>{t("overview.streaming")}</dt><dd><code>{config.data?.settings.output || "—"}</code></dd></div></dl></section>
+        <section className="storage-summary"><div className="section-heading"><h2>{t("overview.storage")}</h2><span className={`online ${data.online ? "is-online" : ""}`}><span />{data.online ? t("overview.online") : data.storage_checking ? t("overview.checkingShort") : t("overview.waiting")}</span></div><ResourceWarning error={config.error} retry={config.retry} /><dl><div><dt>{t("overview.flac")}</dt><dd><code>{config.data?.settings.source || "—"}</code></dd></div><div><dt>{t("overview.streaming")}</dt><dd><code>{config.data?.settings.output || "—"}</code></dd></div></dl><div className="storage-status" data-online={data.online} role="status" aria-live="polite">{!data.online && <><strong>{t(data.storage_checking ? "overview.checking" : data.enabled ? "overview.offline" : "overview.configure")}</strong><p>{errorMessage(data.storage_message)}</p><Button variant="ghost" size="sm" onClick={() => navigate("/settings")}>{t("overview.openSettings")}<ArrowRight size={13} /></Button></>}</div></section>
         <details className="overview-attention"><summary>{t("overview.attention")}</summary><div className="attention-list">{attention.map(item => <button key={item.state} onClick={() => navigate(`/library?view=tracks&status=${item.state}`)}><Badge status={item.state} /><strong>{number(item.count)}</strong><ArrowRight size={14} /></button>)}</div></details>
       </aside>
     </div>

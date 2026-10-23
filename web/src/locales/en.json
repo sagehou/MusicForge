@@ -791,5 +791,9 @@
   "lyrics.inspectReport.stopped": "Lyric script identification stopped",
   "lyrics.replaceReport.running": "Replacing traditional lyrics",
   "lyrics.replaceReport.complete": "Traditional lyric replacement complete",
-  "lyrics.replaceReport.stopped": "Traditional lyric replacement stopped"
+  "lyrics.replaceReport.stopped": "Traditional lyric replacement stopped",
+  "library.albumTracks": "Album tracks",
+  "lyrics.searchAlbum": "Fill album lyrics",
+  "lyrics.searchArtist": "Fill artist lyrics",
+  "lyrics.globalProgress": "View background lyrics task"
 }

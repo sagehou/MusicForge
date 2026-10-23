@@ -47,7 +47,7 @@ test("artwork, hierarchy, multi-disc tracks, selection and browser history", asy
   await expect(page.locator(".album-summary .cover img")).toBeVisible();
   await expect(page.getByRole("table").getByText("Disc 1", { exact: true })).toBeVisible();
   await expect(page.getByRole("table").getByText("Disc 2", { exact: true })).toBeVisible();
-  await expect(page.locator(".track-facts").getByText("3:21", { exact: true })).toBeVisible();
+  await expect(page.locator(".track-duration").filter({ hasText: /^3:21$/ })).toBeVisible();
   await page.getByLabel("Select First Light", { exact: true }).check();
   await page.getByLabel("Search library", { exact: true }).fill("Light");
   await setPreference(page, "theme", "dark");
@@ -92,6 +92,41 @@ test("all-album and list views, unverified filter, missing images and persisted 
   await page.reload();
   await expect(page.locator(".cover-fallback")).toHaveCount(3);
   await expect(page.getByRole("alert")).toHaveCount(0);
+});
+
+test("album and artist lyrics actions use all playable tracks in their scope, independent of search and pagination", async ({ page }) => {
+  const album = Array.from({ length: 64 }, (_, index) => ({ ...sources[0], id: index + 100, title: `Song ${String(index + 1).padStart(2, "0")}`, path: `River Ensemble/Night Studies/${index + 1}.flac`, output: `River Ensemble/Night Studies/${index + 1}.opus`, output_present: index < 63 }));
+  const otherAlbum = { ...sources[2], output: "River Ensemble/Field Notes/01.opus", output_present: true };
+  await mockLibrary(page, [...album, otherAlbum, sources[3]]);
+  const searches: unknown[] = [];
+  let running = false;
+  await page.route("**/api/lyrics/search", route => { searches.push(route.request().postDataJSON()); return route.fulfill({ status: 202, json: { selected: 63 } }); });
+  await page.route("**/api/lyrics", route => route.fulfill({ json: { options: { auto_search: false }, report: { state: running ? "running" : "idle", total: 63, processed: 1, found: 1, not_found: 0, failed: 0, stopping: false } } }));
+  await page.goto("/library?view=albums&artist=River+Ensemble&album=River+Ensemble%2FNight+Studies");
+  await expect(page.locator(".track-table tbody > tr")).toHaveCount(50);
+  await expect(page.locator(".lyrics-settings")).toContainText("0 / 63");
+  await page.getByLabel("Search library", { exact: true }).fill("Song 01");
+  await expect(page.locator(".track-table tbody > tr")).toHaveCount(1);
+  await expect(page.getByRole("button", { name: "Fill lyrics for all artifacts", exact: true })).toHaveCount(0);
+  await page.getByRole("button", { name: "Fill album lyrics", exact: true }).click();
+  await expect.poll(() => searches.length).toBe(1);
+  expect(searches[0]).toEqual({ ids: album.slice(0, 63).map(source => source.id), refresh: false });
+  await page.getByLabel("Select Song 01", { exact: true }).check();
+  await page.getByRole("button", { name: "Fill lyrics for selected artifacts", exact: true }).click();
+  await expect.poll(() => searches.length).toBe(2);
+  expect(searches[1]).toEqual({ ids: [100], refresh: false });
+  await page.goto("/library?view=albums&artist=River+Ensemble");
+  await page.getByRole("button", { name: "Fill artist lyrics", exact: true }).click();
+  await expect.poll(() => searches.length).toBe(3);
+  expect(searches[2]).toEqual({ ids: [...album.slice(0, 63).map(source => source.id), otherAlbum.id], refresh: false });
+  await page.goto("/library?view=albums&artist=River+Ensemble&album=missing");
+  await expect(page.getByRole("button", { name: "Fill album lyrics", exact: true })).toBeDisabled();
+  expect(searches).toHaveLength(3);
+  running = true;
+  await page.goto("/library?view=albums&artist=River+Ensemble&album=River+Ensemble%2FNight+Studies");
+  await expect(page.getByRole("button", { name: "Fill album lyrics", exact: true })).toBeDisabled();
+  await expect(page.getByRole("link", { name: "View background lyrics task", exact: true })).toHaveAttribute("href", "/settings?section=lyrics");
+  await expect(page.getByRole("button", { name: "Stop lyrics search", exact: true })).toHaveCount(0);
 });
 
 test("all songs share filters, pagination and batch lyrics with visible file facts", async ({ page }) => {
@@ -440,7 +475,7 @@ test("Navidrome waiting is a localized non-error state", async ({ page }) => {
 
 for (const width of [1920, 1440, 768, 390, 320]) {
   test(`library theme, responsive layout and screenshot evidence at ${width}px`, async ({ page }) => {
-    await mockLibrary(page, collection);
+    await mockLibrary(page, collection.map(source => ({ ...source, source_audio: { codec: "flac", bit_depth: 24, sample_rate: 96000, channels: 2 }, source_bitrate: 894000, size: 26214400, output_size: source.output_present ? 5242880 : undefined, lyrics: source.output_present ? { state: "ready" as const, output: source.output, signature: "album", checked: 1 } : undefined })));
     const errors: string[] = [];
     page.on("pageerror", error => errors.push(error.message));
     page.on("console", message => { if (message.type() === "error") errors.push(message.text()); });
@@ -473,7 +508,13 @@ for (const width of [1920, 1440, 768, 390, 320]) {
     await page.getByRole("button", { name: "Browse album Night Studies", exact: true }).click();
     await expect(page.getByRole("table")).toBeVisible();
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
+    if (width >= 1440) expect((await page.locator(".album-library .search").boundingBox())!.width).toBeLessThanOrEqual(320);
     await page.screenshot({ path: `test-results/album-${width}-dark.png`, fullPage: true, animations: "disabled" });
+    if (width === 1440 || width === 390) {
+      await setPreference(page, "theme", "light");
+      await page.screenshot({ path: `test-results/album-${width}-light.png`, fullPage: true, animations: "disabled" });
+      await setPreference(page, "theme", "dark");
+    }
     await page.goto("/library?view=artists");
     await expect(page.getByRole("button", { name: "Browse artist River Ensemble", exact: true })).toBeVisible();
     await expect(page.locator(".cover-mosaic").first().locator("img.cover-loaded")).toHaveCount(4);

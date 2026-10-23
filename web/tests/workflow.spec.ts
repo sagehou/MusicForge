@@ -144,7 +144,7 @@ test("bilingual setup, real incremental build, state preservation and login", as
   await setPreference(page, "language", "en");
   await expect(page.getByText("Job logs", { exact: true })).toBeVisible();
   await expect(page.locator(".task-outcome")).toHaveText(rawLog === "任务成功完成。" ? "Job completed successfully." : rawLog!);
-  await page.getByRole("button", { name: "Close panel", exact: true }).click();
+  await page.getByRole("button", { name: "Collapse", exact: true }).click();
   await exerciseTaskQueue(page, root);
   await page.reload();
   await expect(page.locator("html")).toHaveAttribute("lang", "en");
@@ -335,10 +335,10 @@ async function exerciseTaskQueue(page: import("@playwright/test").Page, root: st
       return items.some(item => item.activity.phase === "convert" && item.log === "Paused by administrator");
     }).toBe(true);
     await task.getByRole("button", { name: "Details", exact: true }).click();
-    const inspector = page.locator(".task-inspector");
+    const inspector = page.locator(".task-expanded");
     await expect(inspector.getByRole("heading", { name: "Track results and operations", exact: true })).toBeVisible();
     await page.screenshot({ path: "test-results/jobs-paused-en.png", fullPage: true });
-    await inspector.getByRole("button", { name: "Close panel", exact: true }).click();
+    await task.getByRole("button", { name: "Collapse", exact: true }).click();
     await task.getByRole("button", { name: "Resume", exact: true }).click();
     await expect.poll(async () => (await read()).find(job => job.id === id)?.counts.done, { timeout: 30000 }).toBeGreaterThanOrEqual(1);
     page.once("dialog", dialog => dialog.accept());
@@ -363,7 +363,7 @@ async function exerciseTaskQueue(page: import("@playwright/test").Page, root: st
     await page.screenshot({ path: "test-results/mobile-jobs-complete-zh-CN.png", fullPage: true });
     await page.setViewportSize({ width: 1280, height: 800 });
     await setPreference(page, "language", "en");
-    await inspector.getByRole("button", { name: "Close panel", exact: true }).click();
+    await task.getByRole("button", { name: "Collapse", exact: true }).click();
     page.once("dialog", dialog => dialog.accept());
     await task.getByRole("button", { name: "Delete history", exact: true }).click();
     await expect(task).toHaveCount(0);

@@ -743,5 +743,9 @@
   "lyrics.inspectReport.stopped": "歌词简繁识别已停止",
   "lyrics.replaceReport.running": "正在替换繁体歌词",
   "lyrics.replaceReport.complete": "繁体歌词替换完成",
-  "lyrics.replaceReport.stopped": "繁体歌词替换已停止"
+  "lyrics.replaceReport.stopped": "繁体歌词替换已停止",
+  "library.albumTracks": "专辑曲目",
+  "lyrics.searchAlbum": "补齐本专辑歌词",
+  "lyrics.searchArtist": "补齐此歌手歌词",
+  "lyrics.globalProgress": "查看后台歌词任务"
 }

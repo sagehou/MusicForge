@@ -125,7 +125,6 @@ export function Library({ notify }: { notify: Notice }) {
   });
   const transition = useRef<ViewTransition | null>(null);
   const navigation = useRef(0);
-  const trackColumns = 7;
   const [detailID, setDetailID] = useState<number>();
   const [lyricsID, setLyricsID] = useState<number>();
   const lyricsOrder = useRef<number[]>([]);
@@ -157,6 +156,8 @@ export function Library({ notify }: { notify: Notice }) {
     return { source, identity };
   }), [data, locale]);
   const isAlbum = scope.album !== undefined;
+  const trackColumns = isAlbum ? 4 : 7;
+  const scopedSources = useMemo(() => indexed.filter(({ identity }) => (!scope.artist || identity.artistKey === scope.artist) && (!isAlbum || identity.albumKey === scope.album)).map(({ source }) => source), [indexed, scope.artist, scope.album, isAlbum]);
   const showingTracks = isAlbum || scope.view === "tracks";
   const showingArtists = !scope.artist && scope.view === "artists" && !isAlbum;
   const artist = indexed.find(item => item.identity.artistKey === scope.artist)?.identity;
@@ -325,7 +326,7 @@ export function Library({ notify }: { notify: Notice }) {
         </div>
       </div>
     </section>}
-    <section className="library-surface">
+    <section className={`library-surface ${isAlbum ? "album-library" : ""}`}>
       <div className="library-toolbar-box">
       <div className="library-navigation">{!scope.artist && <div className="segmented" role="group" aria-label={t("library.browse")}>
         <button aria-pressed={scope.view === "albums"} onClick={() => navigate({ view: "albums" })}>{t("library.albums")}<span>{number(totals.albums)}</span></button>
@@ -367,7 +368,7 @@ export function Library({ notify }: { notify: Notice }) {
       </div>
     <div className="library-maintenance">
       {!scope.artist && !isAlbum && <LibraryComparison sources={data} notify={notify} />}
-      <LyricsMaintenance sources={data} notify={notify} />
+      <LyricsMaintenance sources={scopedSources} scope={isAlbum ? "album" : scope.artist ? "artist" : undefined} notify={notify} />
     </div>
       {chosen.length > 0 && <div className="selection-bar"><span>{t("library.selected", { count: chosen.length })}</span>{rows.length > pageTracks.length && <Button type="button" size="sm" variant="ghost" disabled={busy} onClick={() => setSelected(new Set(rows.map(source => source.id)))}>{t("library.selectMatching", { count: rows.length })}</Button>}<Button size="sm" variant="outline" disabled={busy} onClick={() => void action("/library/rebuild", { ids: [...selected] }, "notice.selectedBuild")}><RefreshCw size={14} />{t("library.buildSelected")}</Button><LyricsSearchButton ids={chosen.filter(source => source.output && source.output_present).map(source => source.id)} label="lyrics.searchSelected" notify={notify} disabled={busy} />{chosen.some(source => source.lyrics_script === "traditional" && source.output_present) && <LyricsSearchButton ids={chosen.filter(source => source.lyrics_script === "traditional" && source.output_present).map(source => source.id)} replaceTraditional label="lyrics.replaceSelected" notify={notify} disabled={busy} />}<BatchRepairButton sources={chosen} notify={notify} disabled={busy} refresh={() => { setSelected(new Set()); retry(); }} /><Button size="sm" variant="destructive" disabled={busy || selectedExpired === 0} onClick={() => deleteSelected(false)}><Trash2 size={14} />{t("library.deleteSelected")}</Button>{selectedRemovable.length > 0 && <Button size="sm" variant="outline" disabled={busy} onClick={() => void forget(selectedRemovable.map(source => source.id))}><Trash2 size={14} />{t("library.forgetSelected", { count: selectedRemovable.length })}</Button>}<Button size="sm" variant="ghost" onClick={() => setSelected(new Set())}><X size={14} />{t("library.clearSelection")}</Button></div>}
       {count > 0 ? <>
@@ -387,13 +388,13 @@ export function Library({ notify }: { notify: Notice }) {
               <Badge status={state} />
             </div>
           </article>;
-        })}</div> : <div className="table-scroll"><table className="track-table"><thead><tr><th aria-label={t("library.selectedTracks")} /><th className="track-title-column">{t("library.trackFile")}</th><th className="track-duration-column">{t("library.duration")}</th><th className="track-audio-column">{t("library.audioColumn")}</th><th className="track-size-column">{t("library.sizesColumn")}</th><th className="track-status-column">{t("library.artifact")}</th><th className="track-lyrics-column">{t("lyrics.title")}</th></tr></thead><tbody>{shown.map((source, index) => {
+        })}</div> : <div className={`table-scroll ${isAlbum ? "album-tracks" : ""}`}>{isAlbum && <div className="album-tracks-heading"><h3>{t("library.albumTracks")}</h3><span>{t("library.trackCount", { count: rows.length })}</span></div>}<table className={`track-table ${isAlbum ? "album-track-table" : ""}`}><thead><tr><th aria-label={t("library.selectedTracks")} /><th className="track-title-column">{t("library.trackFile")}</th>{!isAlbum && <><th className="track-duration-column">{t("library.duration")}</th><th className="track-audio-column">{t("library.audioColumn")}</th><th className="track-size-column">{t("library.sizesColumn")}</th></>}<th className="track-status-column">{t("library.artifact")}</th><th className="track-lyrics-column">{t("lyrics.title")}</th></tr></thead><tbody>{shown.map((source, index) => {
           const disc = source.disc || 1;
           const heading = isAlbum && discs.size > 1 && (index === 0 || disc !== (shown[index - 1].disc || 1));
           return <Fragment key={source.id}>{heading && <tr className="disc-heading"><th colSpan={trackColumns} scope="rowgroup"><Disc3 size={15} />{t("library.disc", { number: disc })}</th></tr>}<tr className={selected.has(source.id) ? "selected" : ""}>
             <td><input type="checkbox" aria-label={t("library.selectTrack", { title: source.title || source.path })} checked={selected.has(source.id)} disabled={busy} onChange={event => toggle([source.id], event.target.checked)} /></td>
-            <td className="track-title"><div className="track-cell"><span className="track-number">{source.track || <Music2 size={15} />}</span><div><button className="track-open" aria-label={t("library.openDetails", { title: source.title || source.path })} onClick={() => setDetailID(source.id)}><strong dir="auto">{source.title || source.path.split("/").pop()}</strong></button><small className="track-byline" dir="auto">{source.artist || t("library.unknownArtist")} · {source.album || t("library.unknownAlbum")}</small>{!source.present && <small className="source-missing">{t("library.sourceDeleted")}</small>}</div></div></td>
-            <td className="track-facts-cell" colSpan={3}><TrackFacts source={source} /></td>
+            <td className="track-title"><div className="track-cell"><span className="track-number">{source.track || <Music2 size={15} />}</span><div><div className="track-title-line"><button className="track-open" aria-label={t("library.openDetails", { title: source.title || source.path })} onClick={() => setDetailID(source.id)}><strong dir="auto">{source.title || source.path.split("/").pop()}</strong></button>{isAlbum && <span className="track-duration">{duration(source.duration || 0)}</span>}</div>{isAlbum ? <div className="track-sub-details"><span className="track-spec-chip"><AudioSpec audio={source.source_audio} /></span><code className="track-source-path" title={source.path}>{source.path}</code></div> : <small className="track-byline" dir="auto">{source.artist || t("library.unknownArtist")} · {source.album || t("library.unknownAlbum")}</small>}{!source.present && <small className="source-missing">{t("library.sourceDeleted")}</small>}</div></div></td>
+            {!isAlbum && <td className="track-facts-cell" colSpan={3}><TrackFacts source={source} /></td>}
             <td className="track-output"><Badge status={source.status} />{source.output_present && source.status !== "ready" && source.status !== "possibly_damaged" && <small>{t("library.stillPlayable")}</small>}<RepairControls source={source} notify={notify} refresh={retry} />{!source.present && !source.output && !source.output_present && <Button className="forget-record" size="sm" variant="ghost" disabled={busy} onClick={() => void forget([source.id])}><Trash2 size={13} />{t("library.forgetRecord")}</Button>}{source.error && <Button variant="ghost" size="sm" onClick={() => setDetailID(source.id)}>{t("library.errorDetails")}</Button>}</td>
             <td className="track-lyrics"><LyricsTrack source={source} notify={notify} refresh={retry} onChoose={() => openLyrics(source.id)} /></td>
           </tr></Fragment>;

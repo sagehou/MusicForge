@@ -1539,3 +1539,8 @@ input[role="switch"]:checked::after { transform: translateX(22px); background: v
   .track-lyrics .lyrics-actions .lyrics-action, .lyrics-details > summary { width: 32px; height: 32px; min-height: 32px; }
   .inline-details .lyrics-provider-status { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
+@media (max-width: 1000px) {
+  .track-lyrics .lyrics-track { position: relative; }
+  .track-lyrics .lyrics-details { position: static; }
+  .track-lyrics .lyrics-status-popover { top: calc(100% + 4px); right: 0; width: min(300px, 100%); }
+}

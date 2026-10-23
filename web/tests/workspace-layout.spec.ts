@@ -182,10 +182,11 @@ test("phone pages retain real content, readable facts and inline song details in
 
 test("album rows expose useful audio facts and toggle song and lyric details directly below the row", async ({ page }) => {
   await setup(page);
-  await page.route("**/api/library", route => route.fulfill({ json: tracks.slice(0, 3) }));
+  await page.route("**/api/library", route => route.fulfill({ json: tracks.slice(0, 3).map((source, index) => index === 2 ? { ...source, artist: "Guest Vocalist", metadata: { ...source.metadata, albumartist: "River Ensemble" } } : source) }));
   await page.route("**/api/library/*/lyrics/candidates", route => route.fulfill({ json: { query: "Song 01", groups: [] } }));
   await page.goto("/library?view=albums&artist=Artist&album=Artist%2FAlbum");
   const row = page.locator(".track-row").first();
+  await expect(page.locator(".track-row").nth(2).locator(".track-byline")).toHaveText("Guest Vocalist");
   for (const text of ["3:21", "24 bit / 96 kHz", "894 kbps", "25 MiB", "5 MiB"]) await expect(row).toContainText(text);
   await expect(row).not.toContainText(tracks[0].path);
   for (const button of await row.locator(".lyrics-action").all()) {

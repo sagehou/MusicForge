@@ -298,7 +298,7 @@ test("lyrics selection, background progress, stop and bilingual mobile UI", asyn
 });
 
 test("lyrics candidates keep partial results, preview languages and save an explicit selection", async ({ page }) => {
-  await page.addInitScript(() => localStorage.setItem("musicforge.language", "en"));
+  await page.addInitScript(() => { if (!localStorage.getItem("musicforge.language")) localStorage.setItem("musicforge.language", "en"); });
   const source: Source = { id: 1, path: "Artist/Album/01.flac", artist: "Artist", album: "Album", title: "Track", track: 1, disc: 1, present: true, output: "Artist/Album/01.opus", output_present: true, status: "ready", error: "", size: 123, metadata: {}, lyrics: { state: "needs_review", output: "Artist/Album/01.opus", signature: "audio", checked: 1 } };
   await page.route("**/api/auth/me", route => route.fulfill({ json: { initialized: true, authenticated: true, username: "admin", method: "local", csrf: "test", oidc: false, version: "test" } }));
   await page.route("**/api/library", route => route.fulfill({ json: [source] }));
@@ -424,7 +424,7 @@ test("automatic lyric previews wait for all providers, preserve manual choices a
 });
 
 test("song details and automatic saved recommendations survive reopening and page reload", async ({ page }) => {
-  await page.addInitScript(() => localStorage.setItem("musicforge.language", "en"));
+  await page.addInitScript(() => { if (!localStorage.getItem("musicforge.language")) localStorage.setItem("musicforge.language", "en"); });
   const source: Source = { id: 1, path: "Artist/Album/01.flac", hash: "0123456789abcdef".repeat(4), artist: "Artist", album: "Album", title: "Track", track: 1, disc: 2, duration: 183.5, present: true, output: "Artist/Album/01.opus", output_present: true, status: "ready", error: "", size: 2621440, metadata: { genre: "Pop", date: "2026" }, lyrics: { state: "needs_review", output: "Artist/Album/01.opus", signature: "audio", checked: 1 } };
   await page.route("**/api/auth/me", route => route.fulfill({ json: { initialized: true, authenticated: true, username: "admin", method: "local", csrf: "test", oidc: false, version: "test" } }));
   await page.route("**/api/library", route => route.fulfill({ json: [source] }));

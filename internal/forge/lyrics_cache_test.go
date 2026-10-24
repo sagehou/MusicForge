@@ -59,6 +59,58 @@ func TestLyricsSearchRestoresPreviewsAfterRestart(t *testing.T) {
 	}
 }
 
+func TestLyricsCachedNamesRecomputeAcrossRestartWithoutNewRequests(t *testing.T) {
+	a, s := testApp(t)
+	seedLyricsArtifact(t, a, s)
+	if _, err := a.db.Exec("UPDATE sources SET title='让爱随风',artist='新声歌手 / 客席歌手',album='摇滚乐' WHERE id=1"); err != nil {
+		t.Fatal(err)
+	}
+	target, err := a.captureLyricsTarget(context.Background(), 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The existing schema-2/version-1 record stores complete artist credits.
+	// Simulate a saved low score from before Chinese normalization was enabled.
+	candidate := lyricsCandidate{Title: "讓愛隨風", Artist: "Novel Voice / Guest Voice", Album: "搖滾樂", Duration: 183.25,
+		MatchScore: 49, artistAliases: []string{"新声歌手 / 客席歌手"}, text: &lyricsText{Original: "[00:01.00]让爱随风\n"}}
+	if err = a.storeLyricsSearch(context.Background(), target, "netease", "让爱随风", []lyricsCandidate{candidate}, false, time.Now().Unix()); err != nil {
+		t.Fatal(err)
+	}
+	cfg, logger, assets := a.cfg, a.logger, a.assets
+	a.Close()
+	reopened, err := New(cfg, logger, "test", assets)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer reopened.Close()
+	mockLyricsServices(t, reopened, func(w http.ResponseWriter, r *http.Request) {
+		t.Error("rescoring saved metadata contacted a provider", r.URL)
+		w.WriteHeader(500)
+	})
+	request := lyricsSession(t, reopened)
+	w := request("GET", "/api/library/1/lyrics/candidates", nil)
+	var result struct {
+		Groups []lyricsCandidateGroup `json:"groups"`
+	}
+	if w.Code != 200 || json.Unmarshal(w.Body.Bytes(), &result) != nil || len(result.Groups) != 1 || len(result.Groups[0].Candidates) != 1 {
+		t.Fatal(w.Code, w.Body.String())
+	}
+	group := result.Groups[0]
+	if c := group.Candidates[0]; !group.Cached || c.MatchScore != 99 || !c.IdentityMatch || !c.HighConfidence || c.Title != candidate.Title || c.Artist != candidate.Artist {
+		t.Fatal("cached names were not rescored without rewriting display metadata", c)
+	}
+	body := map[string]any{"token": group.Token, "index": 0}
+	if w = request("PUT", "/api/library/1/lyrics", body); w.Code != 409 {
+		t.Fatal("improved matching bypassed explicit preview", w.Code, w.Body.String())
+	}
+	if w = request("POST", "/api/library/1/lyrics/preview", body); w.Code != 200 {
+		t.Fatal(w.Code, w.Body.String())
+	}
+	if w = request("PUT", "/api/library/1/lyrics", body); w.Code != 200 {
+		t.Fatal("restored alias selection could not be saved", w.Code, w.Body.String())
+	}
+}
+
 func TestLyricsSearchReuseRefreshAndInvalidation(t *testing.T) {
 	a, s := testApp(t)
 	seedLyricsArtifact(t, a, s)

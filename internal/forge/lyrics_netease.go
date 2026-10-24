@@ -358,8 +358,9 @@ func (a *App) neteaseCandidates(ctx context.Context, query string) ([]lyricsCand
 						Aliases  []string `json:"alia"`
 						Duration float64  `json:"dt"`
 						Artists  []struct {
-							Name    string   `json:"name"`
-							Aliases []string `json:"alias"`
+							Name         string   `json:"name"`
+							Aliases      []string `json:"alias"`
+							Translations []string `json:"tns"`
 						} `json:"ar"`
 						Album struct {
 							Name string `json:"name"`
@@ -378,14 +379,12 @@ func (a *App) neteaseCandidates(ctx context.Context, query string) ([]lyricsCand
 		if song.ID < 1 {
 			continue
 		}
-		var artists, aliases []string
+		var artists []lyricsArtistCredit
 		for _, artist := range song.Artists {
-			artists = append(artists, artist.Name)
-			if len(song.Artists) == 1 {
-				aliases = artist.Aliases
-			}
+			artists = append(artists, lyricsArtistCredit{Name: artist.Name, Aliases: append(artist.Aliases, artist.Translations...)})
 		}
-		result = append(result, lyricsCandidate{Title: song.Name, Artist: strings.Join(artists, " / "), Album: song.Album.Name, Duration: song.Duration / 1000,
+		credit, aliases := lyricsArtistCredits(artists)
+		result = append(result, lyricsCandidate{Title: song.Name, Artist: credit, Album: song.Album.Name, Duration: song.Duration / 1000,
 			remoteID: strconv.FormatInt(song.ID, 10), titleAliases: song.Aliases, artistAliases: aliases})
 	}
 	return result, nil

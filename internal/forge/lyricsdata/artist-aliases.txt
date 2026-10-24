@@ -1,0 +1,73 @@
+# Explicit artist stage names. Tab-separated complete names, one artist per line.
+# Simplified/traditional forms, width, case and punctuation are normalized in code.
+# Keep unrelated artists and generic first names out of these equivalence groups.
+周杰伦	Jay Chou
+陈奕迅	Eason Chan
+林俊杰	JJ Lin
+蔡依林	Jolin Tsai
+王菲	Faye Wong
+张学友	Jacky Cheung
+刘德华	Andy Lau
+郭富城	Aaron Kwok
+黎明	Leon Lai
+张国荣	Leslie Cheung
+邓丽君	Teresa Teng
+孙燕姿	Stefanie Sun
+梁静茹	Fish Leong
+王力宏	Leehom Wang	Wang Leehom
+陶喆	David Tao
+方大同	Khalil Fong
+莫文蔚	Karen Mok
+陈慧琳	Kelly Chen
+郑秀文	Sammi Cheng
+张惠妹	A-Mei	A-Mei Chang
+萧亚轩	Elva Hsiao
+萧敬腾	Jam Hsiao
+杨丞琳	Rainie Yang
+张韶涵	Angela Chang
+田馥甄	Hebe Tien
+刘若英	Rene Liu
+徐佳莹	Lala Hsu
+戴佩妮	Penny Tai
+彭佳慧	Julia Peng
+李玟	CoCo Lee
+邓紫棋	G.E.M.
+张信哲	Jeff Chang
+庾澄庆	Harlem Yu
+任贤齐	Richie Jen
+许茹芸	Valen Hsu
+吴青峰	Wu Qing Feng
+蔡健雅	Tanya Chua
+林忆莲	Sandy Lam
+叶倩文	Sally Yeh
+林宥嘉	Yoga Lin
+林志炫	Terry Lin
+张敬轩	Hins Cheung
+卫兰	Janice Vidal
+吴雨霏	Kary Ng
+卢巧音	Candy Lo
+郑欣宜	Joyce Cheng
+薛凯琪	Fiona Sit
+关心妍	Jade Kwan
+何韵诗	Denise Ho
+罗志祥	Show Lo
+范玮琪	Christine Fan
+范晓萱	Mavis Fan
+许慧欣	eVonne Hsu
+梁咏琪	Gigi Leung
+梁汉文	Edmond Leung
+古巨基	Leo Ku
+容祖儿	Joey Yung
+杨千嬅	Miriam Yeung
+李克勤	Hacken Lee
+谢安琪	Kay Tse
+黄小琥	Tiger Huang
+陈绮贞	Cheer Chen
+魏如萱	Waa Wei
+黄丽玲	A-Lin
+杨乃文	Faith Yang
+徐若瑄	Vivian Hsu
+温岚	Landy Wen
+周兴哲	Eric Chou
+韦礼安	William Wei
+黄明志	Namewee

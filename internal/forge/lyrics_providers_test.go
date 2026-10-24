@@ -203,6 +203,50 @@ func TestLyricsMultilingualMatchingAndVersionSafety(t *testing.T) {
 	}
 }
 
+func TestLyricsProviderArtistAliasesIncludeTranslatedCollaborators(t *testing.T) {
+	for _, provider := range []string{"qq", "netease"} {
+		t.Run(provider, func(t *testing.T) {
+			a, _ := testApp(t)
+			mockLyricsServices(t, a, func(w http.ResponseWriter, r *http.Request) {
+				switch r.URL.Host + r.URL.Path {
+				case "u.y.qq.com/cgi-bin/musicu.fcg":
+					var body struct {
+						Request struct {
+							Method string `json:"method"`
+						} `json:"request"`
+					}
+					if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+						t.Fatal(err)
+					}
+					if body.Request.Method == "GetSession" {
+						lyricsJSON(w, `{"code":0,"request":{"code":0,"data":{"session":{"uid":"0","sid":"guest-session","userip":"127.0.0.1"}}}}`)
+						return
+					}
+					lyricsJSON(w, `{"code":0,"request":{"code":0,"data":{"body":{"item_song":[{"id":123,"mid":"recording","title":"讓愛隨風","interval":183,"album":{"name":"搖滾樂"},"singer":[{"name":"Novel Voice","foreign_name":"新声歌手"},{"name":"Guest Voice","title":"客席歌手"}]}]}}}}`)
+				case "interface.music.163.com/eapi/register/anonimous":
+					readNetEaseParams(t, r)
+					guestNetEaseResponse(w)
+				case "interface.music.163.com/eapi/search/song/list/page":
+					readNetEaseParams(t, r)
+					encryptedNetEaseResponse(w, `{"code":200,"data":{"resources":[{"baseInfo":{"simpleSongData":{"id":321,"name":"讓愛隨風","dt":183000,"ar":[{"name":"Novel Voice","alias":["Neo Voice"],"tns":["新声歌手"]},{"name":"Guest Voice","alias":["客席歌手"]}],"al":{"name":"搖滾樂"}}}}]}}`)
+				default:
+					t.Error("unexpected alias lookup", r.URL)
+					w.WriteHeader(500)
+				}
+			})
+			source := Source{Title: "让爱随风", Artist: "客席歌手 / 新聲歌手", Album: "摇滚乐", Duration: 183}
+			candidates, _, err := a.providerCandidates(context.Background(), provider, source, "Song", true)
+			if err != nil || len(candidates) != 1 || !candidates[0].IdentityMatch || candidates[0].MatchScore != 100 {
+				t.Fatal("provider aliases did not reach scoring", candidates, err)
+			}
+			source.Artist = "新声歌手"
+			if candidateMatches(candidates[0], source) {
+				t.Fatal("provider aliases silently removed a collaborating artist")
+			}
+		})
+	}
+}
+
 func TestLyricsProviderFormatsAndLanguageMerge(t *testing.T) {
 	qrc := `<QrcInfos><Lyric_1 LyricType="1" LyricContent="[ti:Title]
 [1000,2000]你(1000,500)好(1500,500)&amp;(2000,1000)

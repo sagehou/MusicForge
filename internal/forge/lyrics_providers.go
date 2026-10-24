@@ -54,8 +54,6 @@ type lyricsCandidate struct {
 	text                        *lyricsText
 }
 
-// Preserve letters, accents and scripts. Only width, case and punctuation are
-// folded; version words such as Live and Remix remain part of the title.
 func foldLyricsWidth(text string) string {
 	return strings.Map(func(r rune) rune {
 		if r >= '！' && r <= '～' {
@@ -65,26 +63,28 @@ func foldLyricsWidth(text string) string {
 	}, text)
 }
 
+// Preserve letters and accents; normalize Chinese script, width, case and
+// punctuation for comparison. Live and Remix remain part of the title.
 func lyricsTag(text string) string {
 	return strings.Map(func(r rune) rune {
 		if unicode.IsLetter(r) || unicode.IsNumber(r) || unicode.IsMark(r) {
 			return unicode.ToLower(r)
 		}
 		return -1
-	}, foldLyricsWidth(text))
+	}, normalizeLyricsMetadata(text))
 }
 
-var lyricsArtistSeparator = regexp.MustCompile(`(?i)\s+(?:feat\.?|ft\.?|featuring|with|and)\s+|[&;/、，]`)
+var lyricsArtistSeparator = regexp.MustCompile(`(?i)\s+(?:feat\.?|ft\.?|featuring|with|and)\s+|[&;/、，,]`)
 var lyricsVersionWords = regexp.MustCompile(`(?i)\b(?:live|remix|instrumental|karaoke|acoustic|remaster(?:ed)?|edit|version)\b|现场|伴奏|ライブ|실황`)
 
 func sameLyricsArtist(left, right string) bool {
-	if lyricsTag(left) == lyricsTag(right) {
-		return lyricsTag(left) != ""
+	if key := lyricsArtistKey(left); key != "" && key == lyricsArtistKey(right) {
+		return true
 	}
 	split := func(text string) []string {
 		var names []string
-		for _, name := range lyricsArtistSeparator.Split(text, -1) {
-			if name = lyricsTag(name); name != "" {
+		for _, name := range lyricsArtistSeparator.Split(normalizeLyricsMetadata(text), -1) {
+			if name = lyricsArtistKey(name); name != "" {
 				names = append(names, name)
 			}
 		}
@@ -107,7 +107,7 @@ func candidateMatches(candidate lyricsCandidate, source Source) bool {
 
 func candidateIdentity(candidate lyricsCandidate, source Source) (bool, bool) {
 	title := sameLyricsTag(candidate.Title, source.Title)
-	if strings.EqualFold(strings.Join(lyricsVersionWords.FindAllString(foldLyricsWidth(candidate.Title), -1), "/"), strings.Join(lyricsVersionWords.FindAllString(foldLyricsWidth(source.Title), -1), "/")) {
+	if strings.EqualFold(strings.Join(lyricsVersionWords.FindAllString(normalizeLyricsMetadata(candidate.Title), -1), "/"), strings.Join(lyricsVersionWords.FindAllString(normalizeLyricsMetadata(source.Title), -1), "/")) {
 		for _, alias := range candidate.titleAliases {
 			title = title || sameLyricsTag(alias, source.Title)
 		}
@@ -483,7 +483,9 @@ func (a *App) qqCandidates(ctx context.Context, query string) ([]lyricsCandidate
 			Name string `json:"name"`
 		} `json:"album"`
 		Singer []struct {
-			Name string `json:"name"`
+			Name        string `json:"name"`
+			Title       string `json:"title"`
+			ForeignName string `json:"foreign_name"`
 		} `json:"singer"`
 	}
 	var data struct {
@@ -506,15 +508,16 @@ func (a *App) qqCandidates(ctx context.Context, query string) ([]lyricsCandidate
 	}
 	var result []lyricsCandidate
 	for _, song := range songs {
-		var artists []string
+		var artists []lyricsArtistCredit
 		for _, artist := range song.Singer {
-			artists = append(artists, artist.Name)
+			artists = append(artists, lyricsArtistCredit{Name: artist.Name, Aliases: []string{artist.Title, artist.ForeignName}})
 		}
+		credit, aliases := lyricsArtistCredits(artists)
 		title := song.Title
 		if song.Subtitle != "" && !strings.Contains(strings.ToLower(title), strings.ToLower(song.Subtitle)) {
 			title += " (" + song.Subtitle + ")"
 		}
-		result = append(result, lyricsCandidate{Title: title, Artist: strings.Join(artists, " / "), Album: song.Album.Name, Duration: song.Interval, remoteID: strconv.FormatInt(song.ID, 10), mid: song.Mid, titleAliases: []string{song.Title, song.Name}})
+		result = append(result, lyricsCandidate{Title: title, Artist: credit, Album: song.Album.Name, Duration: song.Interval, remoteID: strconv.FormatInt(song.ID, 10), mid: song.Mid, titleAliases: []string{song.Title, song.Name}, artistAliases: aliases})
 	}
 	return result, nil
 }

@@ -122,6 +122,8 @@ test("phone lyric selection opens a separate tab with visible preview and confir
   await pickerTab.setViewportSize({ width: 320, height: 568 });
   await visibleInViewport(pickerTab, previewPane);
   await visibleInViewport(pickerTab, picker.getByRole("button", { name: "Confirm instrumental", exact: true }));
+  await expect(text).toContainText("纯音乐，请欣赏");
+  expect(await text.evaluate(element => element.scrollHeight <= element.clientHeight + 1)).toBe(true);
   expect(await pickerTab.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1 && document.documentElement.scrollHeight <= innerHeight + 1)).toBe(true);
   await pickerTab.screenshot({ path: "test-results/lyrics-instrumental-320-light-en.png", animations: "disabled" });
   await pickerTab.close();

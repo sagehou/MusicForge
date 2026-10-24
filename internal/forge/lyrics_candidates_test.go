@@ -163,6 +163,17 @@ func TestManualInstrumentalPlaceholderPreservesAudioAndSupportsExplicitReplaceme
 	if audio, err := os.ReadFile(filepath.Join(s.Output, source.Output)); err != nil || string(audio) != "registered audio fixture" {
 		t.Fatal("instrumental selection changed audio", string(audio), err)
 	}
+	if w = request("PUT", "/api/library/1/lyrics", map[string]any{"token": token, "index": index}); w.Code != 409 {
+		t.Fatal("consumed instrumental token was reused", w.Code, w.Body.String())
+	}
+	previousToken := token
+	token, index = previewInstrumentalLyrics(t, a, request)
+	if token == previousToken {
+		t.Fatal("reopening reused the consumed instrumental token")
+	}
+	if w = request("PUT", "/api/library/1/lyrics", map[string]any{"token": token, "index": index}); w.Code != 200 {
+		t.Fatal("fresh instrumental selection could not be saved again", w.Code, w.Body.String())
+	}
 	// Recover from publication finishing before its ready status was saved.
 	if _, err := a.db.Exec("DELETE FROM meta WHERE key='lyrics-status:1'"); err != nil {
 		t.Fatal(err)
@@ -178,6 +189,11 @@ func TestManualInstrumentalPlaceholderPreservesAudioAndSupportsExplicitReplaceme
 	}
 	if text, err := os.ReadFile(path); err != nil || string(text) != "[00:01.00]Real lyrics\n" {
 		t.Fatal(string(text), err)
+	}
+	token, index = previewInstrumentalLyrics(t, a, request)
+	w = request("PUT", "/api/library/1/lyrics", map[string]any{"token": token, "index": index})
+	if w.Code != 200 || json.Unmarshal(w.Body.Bytes(), &status) != nil || !status.Instrumental {
+		t.Fatal("instrumental selection failed after replacing lyrics", w.Code, w.Body.String())
 	}
 }
 

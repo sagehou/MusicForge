@@ -128,6 +128,10 @@ test("phone lyric selection opens a separate tab with visible preview and confir
   expect(await text.evaluate(element => element.scrollHeight <= element.clientHeight + 1)).toBe(true);
   expect(await pickerTab.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1 && document.documentElement.scrollHeight <= innerHeight + 1)).toBe(true);
   await pickerTab.screenshot({ path: "test-results/lyrics-instrumental-320-light-en.png", animations: "disabled" });
+  await picker.getByRole("button", { name: "Confirm instrumental", exact: true }).click();
+  await expect(picker.getByRole("button", { name: "Confirm instrumental", exact: true })).toBeDisabled();
+  await expect(picker.getByRole("status")).toContainText("Saved");
+  expect(saves.at(-1)).toEqual({ token: "instrumental-2", index: 0, translation: false, romanization: false });
   await pickerTab.close();
   await page.bringToFront();
   expect(page.url()).toBe(originalURL);
@@ -136,10 +140,98 @@ test("phone lyric selection opens a separate tab with visible preview and confir
 
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/library?view=albums&artist=Artist&album=Artist%2FAlbum&lyrics=instrumental");
-  await expect(page.locator(".track-row")).toHaveCount(1);
-  await expect(page.locator(".lyrics-state")).toHaveText("纯音乐");
-  await page.getByRole("button", { name: "选择歌词", exact: true }).click();
+  await expect(page.locator(".track-row")).toHaveCount(2);
+  await expect(page.locator(".lyrics-state")).toHaveText(["纯音乐", "纯音乐"]);
+  await page.getByRole("button", { name: "选择歌词", exact: true }).first().click();
   await page.getByRole("radio", { name: "标记为纯音乐", exact: true }).check();
   await expect(page.getByRole("region", { name: "可滚动歌词正文", exact: true })).toContainText("纯音乐，请欣赏");
   await page.screenshot({ path: "test-results/lyrics-instrumental-desktop-dark-zh.png", animations: "disabled" });
+});
+
+test("instrumental choices renew expired and consumed targets when replacing lyrics repeatedly on the same page", async ({ page }) => {
+  await page.addInitScript(() => { localStorage.setItem("musicforge.language", "en"); });
+  const source: Source = { id: 1, path: "Artist/Album/01.flac", artist: "Artist", album: "Album", title: "Track", track: 1, disc: 1, duration: 183, present: true, output: "Artist/Album/01.opus", output_present: true, status: "ready", error: "", size: 123, metadata: {} };
+  await page.route("**/api/auth/me", route => route.fulfill({ json: { initialized: true, authenticated: true, username: "admin", method: "local", csrf: "test", oidc: false, version: "test" } }));
+  await page.route("**/api/library", route => route.fulfill({ json: [source] }));
+  await page.route("**/api/lyrics", route => route.fulfill({ json: { options: { auto_search: false, min_score: 96 }, report: { state: "idle" } } }));
+  let version = 0, sequence = 0;
+  const tokens = new Map<string, number>();
+  const candidate = { index: 0, provider: "lrclib", title: "Track", artist: "Artist", album: "Album", duration: 183, high_confidence: false, match_score: 90, script: "simplified" };
+  const searches: string[] = [], previews: string[] = [], saves: string[] = [];
+  await page.route("**/api/library/1/lyrics/candidates", route => {
+    if (route.request().method() === "GET") {
+      const token = `instrumental-${++sequence}`;
+      tokens.set(token, version);
+      return route.fulfill({ json: { query: "Track Artist", groups: [], instrumental: { token, candidates: [{ index: 0 }] } } });
+    }
+    const { provider } = route.request().postDataJSON();
+    searches.push(provider);
+    const token = `${provider}-${++sequence}`;
+    tokens.set(token, version);
+    return route.fulfill({ json: { provider, token, candidates: provider === "lrclib" ? [candidate] : [] } });
+  });
+  await page.route("**/api/library/1/lyrics/preview", route => {
+    const { token } = route.request().postDataJSON();
+    previews.push(token);
+    if (!tokens.has(token)) return route.fulfill({ status: 409, json: { error: "Lyrics candidates expired; search again" } });
+    return route.fulfill({ json: { original: token.startsWith("instrumental-") ? "[00:00.00]纯音乐，请欣赏\n" : "[00:01.00]Real lyrics" } });
+  });
+  await page.route("**/api/library/1/lyrics", route => {
+    const { token } = route.request().postDataJSON();
+    if (!tokens.has(token) || tokens.get(token) !== version) return route.fulfill({ status: 409, json: { error: "LRC changed during publication; file preserved" } });
+    saves.push(token);
+    tokens.delete(token); version++;
+    source.lyrics = { state: "ready", instrumental: token.startsWith("instrumental-"), output: source.output, signature: "audio", checked: version, provider: token.startsWith("instrumental-") ? "source" : "lrclib" };
+    return route.fulfill({ json: source.lyrics });
+  });
+
+  // Standalone also stays open for a one-track library after a successful save.
+  await page.goto("/library?view=tracks&lyrics_track=1");
+  const picker = page.locator(".lyrics-picker");
+  const instrumental = picker.getByRole("radio", { name: "Mark as instrumental", exact: true });
+  const confirm = picker.getByRole("button", { name: "Confirm instrumental", exact: true });
+  await expect(instrumental).toBeEnabled();
+  // Expire the initial token without waiting ten minutes or changing the UI.
+  tokens.clear();
+  await instrumental.check();
+  await expect(confirm).toBeEnabled();
+  expect(previews[0]).not.toBe("instrumental-1");
+  await confirm.click();
+  await expect(confirm).toBeDisabled();
+  await expect(picker.getByRole("status")).toContainText("Saved");
+  expect(saves).toHaveLength(1);
+  expect(searches).toHaveLength(0);
+
+  async function searchAndSelect() {
+    await picker.getByRole("button", { name: "Search candidates", exact: true }).click();
+    await expect(picker.getByRole("button", { name: "Search candidates", exact: true })).toBeEnabled();
+    await picker.getByRole("radio", { name: "Preview Track · Artist · LRCLIB", exact: true }).check();
+    await expect(picker.locator(".lyrics-preview-content")).toHaveText("[00:01.00]Real lyrics");
+  }
+  await searchAndSelect();
+  await picker.getByRole("button", { name: "Save selected lyrics", exact: true }).click();
+  await expect(picker.getByRole("status")).toContainText("Saved");
+  expect(saves).toHaveLength(2);
+  await expect(picker.getByRole("radio", { name: "Preview Track · Artist · LRCLIB", exact: true })).toHaveCount(0);
+
+  // The initial instrumental token was consumed and the output changed twice.
+  await instrumental.check();
+  await expect(confirm).toBeEnabled();
+  await confirm.click();
+  await expect(confirm).toBeDisabled();
+  await expect(picker.getByRole("status")).toContainText("Saved");
+  expect(saves).toHaveLength(3);
+  expect(saves[2]).not.toBe(saves[0]);
+
+  // Repeated online searches must not leave the local choice on an evicted token.
+  await searchAndSelect();
+  tokens.clear();
+  await instrumental.check();
+  await expect(confirm).toBeEnabled();
+  await confirm.click();
+  await expect(confirm).toBeDisabled();
+  await expect(picker.getByRole("status")).toContainText("Saved");
+  expect(saves).toHaveLength(4);
+  expect(searches).toHaveLength(8);
+  await expect(picker.locator(".repair-warning")).toHaveCount(0);
 });

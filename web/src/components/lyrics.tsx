@@ -230,6 +230,15 @@ export function LyricsPicker({ source, notify, close, saved, previous, next, onB
     const controller = new AbortController(); previewController.current = controller;
     setSavedSelection(false); setSelected(choice); setPreview(undefined); setPreviewing(true); setPreviewError(""); setTranslation(false); setRomanization(false);
     try {
+      if (choice.instrumental) {
+        // Local choices must work after a save, token expiry or repeated searches.
+        // Capture the current target again; publication still checks for conflicts.
+        const result = await api<{ instrumental: InstrumentalChoice }>(`${base}/candidates`, "GET", undefined, controller.signal);
+        if (controller.signal.aborted) return;
+        setInstrumental(result.instrumental);
+        choice = { token: result.instrumental.token, candidate: result.instrumental.candidates[0], instrumental: true };
+        setSelected(choice);
+      }
       const result = await api<CandidateText>(`${base}/preview`, "POST", { token: choice.token, index: choice.candidate.index }, controller.signal);
       if (!controller.signal.aborted) {
         setPreview(result);
@@ -243,6 +252,9 @@ export function LyricsPicker({ source, notify, close, saved, previous, next, onB
     setPreviewError(""); setSaving(true); onBusyChange(true);
     try {
       await api(base, "PUT", { token: selected.token, index: selected.candidate.index, translation, romanization });
+      // Every old choice captured the LRC before this write. New selections
+      // need a fresh search/target instead of presenting stale save tokens.
+      searchController.current?.abort(); setGroups([]);
       notify("lyrics.saved"); saved(); setSavedSelection(true);
       if (advance && next) next(); else if (!standalone && !previous && !next) {
         close();

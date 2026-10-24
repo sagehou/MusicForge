@@ -75,7 +75,8 @@ test("phone lyric selection opens a separate tab with visible preview and confir
   await visibleInViewport(pickerTab, picker.getByRole("button", { name: "保存所选歌词", exact: true }));
   await expect(picker.getByRole("button", { name: "保存所选歌词", exact: true })).toBeDisabled();
   await picker.getByRole("radio", { name: "预览 Song 1 take 8 · Artist · 网易云", exact: true }).check();
-  const text = picker.getByRole("region", { name: "可滚动歌词正文", exact: true });
+  const text = picker.locator(".lyrics-preview-content");
+  await expect(text).toHaveAccessibleName("可滚动歌词正文");
   await expect(text).toContainText("第 120 行歌词");
   expect(await text.evaluate(element => element.scrollHeight > element.clientHeight)).toBe(true);
   await text.evaluate(element => { element.scrollTop = element.scrollHeight; });
@@ -122,6 +123,7 @@ test("phone lyric selection opens a separate tab with visible preview and confir
   await pickerTab.setViewportSize({ width: 320, height: 568 });
   await visibleInViewport(pickerTab, previewPane);
   await visibleInViewport(pickerTab, picker.getByRole("button", { name: "Confirm instrumental", exact: true }));
+  await expect(text).toHaveAccessibleName("Scrollable lyric text");
   await expect(text).toContainText("纯音乐，请欣赏");
   expect(await text.evaluate(element => element.scrollHeight <= element.clientHeight + 1)).toBe(true);
   expect(await pickerTab.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1 && document.documentElement.scrollHeight <= innerHeight + 1)).toBe(true);

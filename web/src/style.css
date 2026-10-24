@@ -1586,7 +1586,7 @@ input[role="switch"]:checked::after { transform: translateX(22px); background: v
 @media (max-width: 800px) {
   .track-lyrics .lyrics-actions .lyrics-choose-inline { display: none; }
   .track-lyrics .lyrics-actions .lyrics-choose-page { display: inline-flex; }
-  .lyrics-page .lyrics-picker-results { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) minmax(230px, 42%); gap: 10px; }
+  .lyrics-page .lyrics-picker-results { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) minmax(250px, 42%); gap: 10px; }
   .lyrics-page .lyrics-preview-pane { padding: 10px 12px; border-top: 2px solid var(--line-strong); }
   .lyrics-page .lyrics-preview-empty { min-height: 0; padding: 4px; gap: 4px; }
   .lyrics-page .lyrics-preview-empty > svg { display: none; }

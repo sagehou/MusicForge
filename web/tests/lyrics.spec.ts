@@ -358,10 +358,13 @@ test("lyrics candidates keep partial results, preview languages and save an expl
   await expect(page.locator(".lyrics-track")).toContainText("From NetEase");
   await setPreference(page, "language", "zh-CN");
   await page.setViewportSize({ width: 320, height: 844 });
-  await page.getByRole("button", { name: "选择歌词", exact: true }).click();
+  const phonePicker = page.getByRole("link", { name: "选择歌词（在新标签页打开）", exact: true });
+  await expect(phonePicker).toHaveAttribute("target", "_blank");
+  await page.goto((await phonePicker.getAttribute("href"))!);
   await expect(page.getByRole("region", { name: "选择歌词", exact: true })).toBeVisible();
   expect(await page.locator(".lyrics-picker").evaluate(element => element.scrollWidth <= element.clientWidth + 1)).toBe(true);
   await page.keyboard.press("Escape");
+  await expect(page.locator(".lyrics-page")).toHaveCount(0);
   await expect(page.getByRole("dialog")).toHaveCount(0);
 });
 
@@ -494,7 +497,9 @@ test("song details and automatic saved recommendations survive reopening and pag
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
   await page.screenshot({ path: "test-results/song-details-mobile-zh-CN.png", fullPage: true });
   await page.getByRole("button", { name: "关闭面板", exact: true }).click();
-  await page.getByRole("button", { name: "选择歌词", exact: true }).click();
+  const phonePicker = page.getByRole("link", { name: "选择歌词（在新标签页打开）", exact: true });
+  await expect(phonePicker).toHaveAttribute("target", "_blank");
+  await page.goto((await phonePicker.getAttribute("href"))!);
   picker = page.getByRole("region", { name: "选择歌词", exact: true });
   await expect(picker.getByText("推荐", { exact: true })).toBeVisible();
   expect(await picker.evaluate(element => element.scrollWidth <= element.clientWidth + 1)).toBe(true);

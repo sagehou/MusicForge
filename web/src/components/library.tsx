@@ -28,6 +28,10 @@ function readScope(): Scope {
   const view = params.get("view");
   return { view: view === "tracks" || view === "artists" ? view : "albums", artist: params.get("artist") ?? undefined, album: params.get("album") ?? undefined };
 }
+function lyricsPageTrack() {
+  const value = Number(new URLSearchParams(location.search).get("lyrics_track"));
+  return Number.isSafeInteger(value) && value > 0 ? value : undefined;
+}
 function duration(seconds: number) {
   if (!seconds) return "--";
   const value = Math.round(seconds);
@@ -110,7 +114,7 @@ export function Library({ notify }: { notify: Notice }) {
   const { t, status: statusLabel, locale, number } = useI18n();
   const { data, error, retry } = useResource<Source[]>("/library", true);
   const [scope, setScope] = useState<Scope>(readScope);
-  const [query, setQuery] = useState("");
+  const [query, setQuery] = useState(() => new URLSearchParams(location.search).get("q") || "");
   const search = useDeferredValue(query.trim().toLocaleLowerCase(locale));
   const [filter, setFilter] = useState(() => new URLSearchParams(location.search).get("status") || "all");
   const [lyricsFilter, setLyricsFilter] = useState<LyricsMatchState | "all">(() => { const value = new URLSearchParams(location.search).get("lyrics"); return lyricsMatchStates.includes(value as LyricsMatchState) ? value as LyricsMatchState : "all"; });
@@ -126,8 +130,9 @@ export function Library({ notify }: { notify: Notice }) {
   const transition = useRef<ViewTransition | null>(null);
   const navigation = useRef(0);
   const [detailID, setDetailID] = useState<number>();
-  const [lyricsID, setLyricsID] = useState<number>();
-  const lyricsOrder = useRef<number[]>([]);
+  const standalone = new URLSearchParams(location.search).has("lyrics_track");
+  const [lyricsID, setLyricsID] = useState<number | undefined>(lyricsPageTrack);
+  const [lyricsOrder, setLyricsOrder] = useState<number[]>([]);
   const [lyricsBusy, setLyricsBusy] = useState(false);
   const [optionsOpen, setOptionsOpen] = useState(false);
   const [sort, setSort] = useState(() => new URLSearchParams(location.search).get("sort") === "attention" ? "attention" : "name");
@@ -135,7 +140,7 @@ export function Library({ notify }: { notify: Notice }) {
   const [busy, setBusy] = useState(false);
   const [offset, setOffset] = useState(0);
   useEffect(() => {
-    const back = () => { navigation.current++; transition.current?.skipTransition(); setScope(readScope()); const params = new URLSearchParams(location.search); setFilter(params.get("status") || "all"); setLyricsFilter((params.get("lyrics") || "all") as LyricsMatchState | "all"); setScriptFilter(readScriptFilter()); setSort(params.get("sort") === "attention" ? "attention" : "name"); setOffset(0); setDetailID(undefined); setLyricsID(undefined); setOptionsOpen(false); };
+    const back = () => { navigation.current++; transition.current?.skipTransition(); setScope(readScope()); const params = new URLSearchParams(location.search); setFilter(params.get("status") || "all"); setLyricsFilter((params.get("lyrics") || "all") as LyricsMatchState | "all"); setScriptFilter(readScriptFilter()); setSort(params.get("sort") === "attention" ? "attention" : "name"); setQuery(params.get("q") || ""); setOffset(0); setDetailID(undefined); setLyricsID(lyricsPageTrack()); setOptionsOpen(false); setLyricsOrder([]); };
     window.addEventListener("popstate", back);
     window.addEventListener("route-changed", back);
     return () => { window.removeEventListener("popstate", back); window.removeEventListener("route-changed", back); };
@@ -207,6 +212,9 @@ export function Library({ notify }: { notify: Notice }) {
     });
     return { rows, groups };
   }, [indexed, scope.artist, scope.album, isAlbum, showingTracks, showingArtists, filter, lyricsFilter, scriptFilter, search, sort, collator, locale, detailID, lyricsID]);
+  useEffect(() => {
+    if (standalone && data && !lyricsOrder.length) setLyricsOrder(rows.filter(source => source.output_present && source.output).map(source => source.id));
+  }, [standalone, data, rows, lyricsOrder.length]);
   const totals = useMemo(() => ({
     artists: new Set(indexed.map(item => item.identity.artistKey)).size,
     albums: new Set(indexed.map(item => `${item.identity.artistKey}\0${item.identity.albumKey}`)).size,
@@ -287,7 +295,17 @@ export function Library({ notify }: { notify: Notice }) {
       setSelected(new Set()); retry();
     } catch (err) { notify(err as Error, true); } finally { setBusy(false); }
   }
-  function clearDetails() { if (!lyricsBusy) { setOffset(safeOffset); setDetailID(undefined); setLyricsID(undefined); } }
+  function pickerHref(id?: number) {
+    const params = new URLSearchParams(location.search);
+    if (id) params.set("lyrics_track", String(id)); else params.delete("lyrics_track");
+    if (query.trim()) params.set("q", query.trim()); else params.delete("q");
+    return `/library?${params}`;
+  }
+  function clearDetails() {
+    if (lyricsBusy) return;
+    if (standalone) { location.assign(pickerHref()); return; }
+    setOffset(safeOffset); setDetailID(undefined); setLyricsID(undefined);
+  }
   function openDetails(id: number) {
     if (lyricsBusy) return;
     setLyricsID(undefined); setDetailID(current => current === id ? undefined : id);
@@ -298,24 +316,33 @@ export function Library({ notify }: { notify: Notice }) {
       const index = rows.findIndex(source => source.id === id);
       return index < 0 ? undefined : rows[index + direction];
     }
-    const index = lyricsOrder.current.indexOf(id);
+    const index = lyricsOrder.indexOf(id);
     if (index < 0) return;
-    for (let i = index + direction; i >= 0 && i < lyricsOrder.current.length; i += direction) {
-      const source = data?.find(source => source.id === lyricsOrder.current[i]);
+    for (let i = index + direction; i >= 0 && i < lyricsOrder.length; i += direction) {
+      const source = data?.find(source => source.id === lyricsOrder[i]);
       if (source?.output_present && source.output) return source;
     }
   }
   function openLyrics(id: number) {
     if (lyricsBusy) return;
     setDetailID(undefined);
-    lyricsOrder.current = rows.filter(source => source.output_present && source.output).map(source => source.id);
+    setLyricsOrder(rows.filter(source => source.output_present && source.output).map(source => source.id));
     setLyricsID(current => current === id ? undefined : id);
   }
   function step(source: Source | undefined, lyrics = false) {
     if (!source || lyricsBusy) return;
+    if (standalone) history.replaceState(null, "", pickerHref(source.id));
     if (lyrics) setLyricsID(source.id); else setDetailID(source.id);
     const index = rows.findIndex(row => row.id === source.id);
     if (showingTracks && index >= 0) setOffset(Math.floor(index / 50) * 50);
+  }
+  if (standalone) {
+    const source = data.find(source => source.id === lyricsID);
+    return <div className="lyrics-page">
+      <PageHeading><Button asChild variant="ghost" size="sm"><a href={lyricsBusy ? undefined : pickerHref()} aria-disabled={lyricsBusy || undefined}><ArrowLeft size={16} />{t("lyrics.returnToLibrary")}</a></Button></PageHeading>
+      <ResourceWarning error={error} retry={retry} />
+      {source?.output_present && source.output ? <LyricsPicker standalone key={`${source.id}:${source.output}`} onBusyChange={setLyricsBusy} source={source} notify={notify} close={clearDetails} saved={retry} previous={adjacent(source.id, -1, true) ? () => step(adjacent(source.id, -1, true), true) : undefined} next={adjacent(source.id, 1, true) ? () => step(adjacent(source.id, 1, true), true) : undefined} /> : <Empty title={t("lyrics.trackUnavailable")}><a href={pickerHref()}>{t("lyrics.returnToLibrary")}</a></Empty>}
+    </div>;
   }
   return <>
     <ResourceWarning error={error} retry={retry} />
@@ -408,7 +435,7 @@ export function Library({ notify }: { notify: Notice }) {
             <td className="track-title"><div className="track-cell"><span className="track-number">{source.track || <Music2 size={15} />}</span><div><div className="track-title-line"><button id={`track-title-${source.id}`} className="track-open" aria-expanded={detailID === source.id} aria-controls={detailID === source.id ? `track-details-${source.id}` : undefined} disabled={lyricsBusy} aria-label={t("library.openDetails", { title: source.title || source.path })} onClick={() => openDetails(source.id)}><strong dir="auto">{source.title || source.path.split("/").pop()}</strong><ChevronRight className="track-expand-icon" size={14} aria-hidden="true" /></button>{isAlbum && <span className="track-duration">{duration(source.duration || 0)}</span>}</div>{isAlbum ? <>{source.artist && source.artist !== album?.artist && <small className="track-byline" dir="auto">{source.artist}</small>}<TrackFacts source={source} compact /></> : <small className="track-byline" dir="auto">{source.artist || t("library.unknownArtist")} · {source.album || t("library.unknownAlbum")}</small>}{!source.present && <small className="source-missing">{t("library.sourceDeleted")}</small>}</div></div></td>
             {!isAlbum && <td className="track-facts-cell" colSpan={3}><TrackFacts source={source} /></td>}
             <td className="track-output"><Badge status={source.status} />{source.output_present && source.status !== "ready" && source.status !== "possibly_damaged" && <small>{t("library.stillPlayable")}</small>}<RepairControls source={source} notify={notify} refresh={retry} compact />{!source.present && !source.output && !source.output_present && <Button className="forget-record" size="icon" variant="ghost" aria-label={t("library.forgetRecord")} title={t("library.forgetRecord")} disabled={busy} onClick={() => void forget([source.id])}><Trash2 size={15} /></Button>}{source.error && <Button variant="ghost" size="icon" aria-label={t("library.errorDetails")} title={t("library.errorDetails")} disabled={lyricsBusy} onClick={() => openDetails(source.id)}><Info size={15} /></Button>}</td>
-            <td className="track-lyrics"><LyricsTrack source={source} notify={notify} onChoose={() => openLyrics(source.id)} expanded={lyricsID === source.id} disabled={lyricsBusy} /></td>
+            <td className="track-lyrics"><LyricsTrack source={source} notify={notify} pickerHref={pickerHref(source.id)} onChoose={() => openLyrics(source.id)} expanded={lyricsID === source.id} disabled={lyricsBusy} /></td>
           </tr>{(detailID === source.id || lyricsID === source.id) && <tr className="track-expanded-row"><td colSpan={trackColumns}>
             {detailID === source.id && <InlineDetails id={`track-details-${source.id}`} returnFocusID={`track-title-${source.id}`} title={t("library.fileDetails")} subtitle={source.title || source.path} close={clearDetails} actions={<><Button variant="ghost" size="icon" aria-label={t("library.previousTrack")} title={t("library.previousTrack")} disabled={!adjacent(source.id, -1)} onClick={() => step(adjacent(source.id, -1))}><ChevronLeft size={17} /></Button><Button variant="ghost" size="icon" aria-label={t("library.nextTrack")} title={t("library.nextTrack")} disabled={!adjacent(source.id, 1)} onClick={() => step(adjacent(source.id, 1))}><ChevronRight size={17} /></Button></>}><TrackDetails source={source} notify={notify} /></InlineDetails>}
             {lyricsID === source.id && <LyricsPicker onBusyChange={setLyricsBusy} key={`${source.id}:${source.output}`} source={source} notify={notify} close={clearDetails} saved={retry} previous={adjacent(source.id, -1, true) ? () => step(adjacent(source.id, -1, true), true) : undefined} next={adjacent(source.id, 1, true) ? () => step(adjacent(source.id, 1, true), true) : undefined} />}

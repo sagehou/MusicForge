@@ -1,0 +1,141 @@
+import { test, expect, type Page, type Locator } from "@playwright/test";
+import type { Source } from "../src/types";
+import { setPreference } from "./preferences";
+
+async function visibleInViewport(page: Page, locator: Locator) {
+  await expect(locator).toBeVisible();
+  const box = (await locator.boundingBox())!;
+  const viewport = page.viewportSize()!;
+  expect(box.x).toBeGreaterThanOrEqual(0);
+  expect(box.y).toBeGreaterThanOrEqual(0);
+  expect(box.x + box.width).toBeLessThanOrEqual(viewport.width + 1);
+  expect(box.y + box.height).toBeLessThanOrEqual(viewport.height + 1);
+}
+
+test("phone lyric selection opens a separate tab with visible preview and confirmation and retains album review order", async ({ page, context }) => {
+  await context.addInitScript(() => { localStorage.setItem("musicforge.language", "zh-CN"); localStorage.setItem("musicforge.theme", "dark"); });
+  await page.setViewportSize({ width: 390, height: 844 });
+  const sources: Source[] = Array.from({ length: 3 }, (_, index) => ({
+    id: index + 1, path: `${index === 2 ? "Other/Elsewhere" : "Artist/Album"}/${index + 1}.flac`, artist: "Artist", album: index === 2 ? "Elsewhere" : "Album", title: `Song ${index + 1}`, track: index + 1, disc: 1, duration: 183,
+    present: true, output: `${index === 2 ? "Other/Elsewhere" : "Artist/Album"}/${index + 1}.opus`, output_present: true, status: "ready", error: "", size: 123, metadata: {},
+    lyrics: { state: "needs_review", output: `${index === 2 ? "Other/Elsewhere" : "Artist/Album"}/${index + 1}.opus`, signature: "audio", checked: 1 },
+  }));
+  await context.route("**/api/auth/me", route => route.fulfill({ json: { initialized: true, authenticated: true, username: "admin", method: "local", csrf: "test", oidc: false, version: "test" } }));
+  await context.route("**/api/library", route => route.fulfill({ json: sources }));
+  await context.route("**/api/lyrics", route => route.fulfill({ json: { options: { auto_search: false, min_score: 96 }, report: { state: "idle" } } }));
+  let searches = 0;
+  await context.route("**/api/library/*/lyrics/candidates", route => {
+    if (route.request().method() !== "GET") searches++;
+    const id = Number(new URL(route.request().url()).pathname.split("/")[3]);
+    return route.fulfill({ json: {
+      query: `Song ${id} Artist`, instrumental: { provider: "source", token: `instrumental-${id}`, candidates: [{ index: 0 }] },
+      groups: ["lrclib", "qq", "kugou", "netease"].map(provider => ({ provider, token: `${provider}-${id}`, cached: true, searched: 1800000000,
+        candidates: Array.from({ length: 8 }, (_, index) => ({ index, provider, title: `Song ${id} take ${index + 1}`, artist: "Artist", album: "Album", duration: 183, high_confidence: false, match_score: 90, script: "simplified" })),
+      })),
+    } });
+  });
+  const longLyrics = Array.from({ length: 120 }, (_, index) => `[${String(Math.floor(index / 60)).padStart(2, "0")}:${String(index % 60).padStart(2, "0")}.00]第 ${index + 1} 行歌词`).join("\n");
+  await context.route("**/api/library/*/lyrics/preview", route => route.fulfill({ json: route.request().postDataJSON().token.startsWith("instrumental-") ? { original: "[00:00.00]纯音乐，请欣赏\n" } : { original: longLyrics, translation: "[00:00.00]Translation", romanization: "[00:00.00]Romanization", script: "simplified" } }));
+  const saves: { token: string; index: number; translation: boolean; romanization: boolean }[] = [];
+  let releaseSave: () => void = () => {};
+  let saveGate: Promise<void> = Promise.resolve();
+  let rejectSave = false;
+  await context.route("**/api/library/*/lyrics", async route => {
+    expect(route.request().method()).toBe("PUT");
+    expect(route.request().headers()["x-csrf-token"]).toBe("test");
+    saves.push(route.request().postDataJSON());
+    await saveGate;
+    if (rejectSave) return route.fulfill({ status: 409, json: { error: "LRC changed during publication; file preserved" } });
+    const id = Number(new URL(route.request().url()).pathname.split("/")[3]);
+    const source = sources.find(source => source.id === id)!;
+    source.lyrics = { state: "ready", instrumental: saves.at(-1)!.token.startsWith("instrumental-"), output: source.output, signature: "audio", checked: 2, provider: "source", path: source.output.replace(/\.opus$/, ".lrc") };
+    return route.fulfill({ json: source.lyrics });
+  });
+
+  await page.goto("/library?view=albums&artist=Artist&album=Artist%2FAlbum&lyrics=needs_review");
+  await page.getByLabel("搜索音乐库", { exact: true }).fill("Song");
+  const originalURL = page.url();
+  const [pickerTab] = await Promise.all([
+    context.waitForEvent("page"),
+    page.getByRole("link", { name: "选择歌词（在新标签页打开）", exact: true }).first().click(),
+  ]);
+  await pickerTab.setViewportSize({ width: 390, height: 844 });
+  await pickerTab.waitForLoadState("domcontentloaded");
+  await expect(pickerTab).toHaveURL(/lyrics_track=1/);
+  await expect(pickerTab).toHaveURL(/q=Song/);
+  expect(await pickerTab.evaluate(() => window.opener)).toBeNull();
+  expect(page.url()).toBe(originalURL);
+  await expect(page.locator(".lyrics-picker")).toHaveCount(0);
+  const picker = pickerTab.locator(".lyrics-picker");
+  await expect(picker).toHaveAccessibleName("选择歌词");
+  await expect(picker.getByRole("radio")).toHaveCount(33);
+  await expect(pickerTab.locator(".sidebar")).toBeHidden();
+  const previewPane = picker.locator(".lyrics-preview-pane");
+  await visibleInViewport(pickerTab, previewPane);
+  await visibleInViewport(pickerTab, picker.getByRole("button", { name: "保存所选歌词", exact: true }));
+  await expect(picker.getByRole("button", { name: "保存所选歌词", exact: true })).toBeDisabled();
+  await picker.getByRole("radio", { name: "预览 Song 1 take 8 · Artist · 网易云", exact: true }).check();
+  const text = picker.getByRole("region", { name: "可滚动歌词正文", exact: true });
+  await expect(text).toContainText("第 120 行歌词");
+  expect(await text.evaluate(element => element.scrollHeight > element.clientHeight)).toBe(true);
+  await text.evaluate(element => { element.scrollTop = element.scrollHeight; });
+  await visibleInViewport(pickerTab, previewPane);
+  await visibleInViewport(pickerTab, picker.getByRole("button", { name: "保存所选歌词", exact: true }));
+  expect(await pickerTab.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1 && document.documentElement.scrollHeight <= innerHeight + 1)).toBe(true);
+  await pickerTab.screenshot({ path: "test-results/lyrics-new-tab-390-dark-zh.png", animations: "disabled" });
+  await picker.getByRole("radio", { name: "标记为纯音乐", exact: true }).check();
+  await expect(text).toHaveText("[00:00.00]纯音乐，请欣赏");
+  expect(saves).toHaveLength(0);
+  const confirm = picker.getByRole("button", { name: "确认纯音乐", exact: true });
+  await visibleInViewport(pickerTab, confirm);
+  saveGate = new Promise<void>(resolve => { releaseSave = resolve; });
+  rejectSave = true;
+  await confirm.click();
+  await expect.poll(() => saves.length).toBe(1);
+  await expect(confirm).toBeDisabled();
+  await expect(picker.getByRole("button", { name: "下一首歌曲", exact: true })).toBeDisabled();
+  await expect(picker.getByRole("button", { name: "关闭歌词选择", exact: true })).toBeDisabled();
+  await expect(pickerTab.getByText("返回音乐库", { exact: true })).toHaveAttribute("aria-disabled", "true");
+  await pickerTab.keyboard.press("Escape");
+  await expect(pickerTab).toHaveURL(/lyrics_track=1/);
+  releaseSave();
+  await expect(previewPane.getByRole("alert")).toBeVisible();
+  await expect(confirm).toBeEnabled();
+  await visibleInViewport(pickerTab, confirm);
+  await expect(text).toContainText("纯音乐，请欣赏");
+  rejectSave = false;
+  await confirm.click();
+  await expect(confirm).toBeDisabled();
+  await expect(picker.getByRole("status")).toContainText("已保存");
+  expect(saves).toEqual(Array(2).fill({ token: "instrumental-1", index: 0, translation: false, romanization: false }));
+  await pickerTab.screenshot({ path: "test-results/lyrics-instrumental-390-dark-zh.png", animations: "disabled" });
+  await picker.getByRole("button", { name: "下一首待处理歌曲", exact: true }).click();
+  await expect(picker.locator(".detail-heading")).toContainText("Song 2");
+  await expect(pickerTab).toHaveURL(/lyrics_track=2/);
+  await expect(picker.getByRole("button", { name: "下一首歌曲", exact: true })).toBeDisabled();
+  await pickerTab.reload();
+  await expect(picker.locator(".detail-heading")).toContainText("Song 2");
+  await picker.getByRole("radio", { name: "标记为纯音乐", exact: true }).check();
+  await expect(text).toContainText("纯音乐，请欣赏");
+  await setPreference(pickerTab, "language", "en");
+  await setPreference(pickerTab, "theme", "light");
+  await pickerTab.setViewportSize({ width: 320, height: 568 });
+  await visibleInViewport(pickerTab, previewPane);
+  await visibleInViewport(pickerTab, picker.getByRole("button", { name: "Confirm instrumental", exact: true }));
+  expect(await pickerTab.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1 && document.documentElement.scrollHeight <= innerHeight + 1)).toBe(true);
+  await pickerTab.screenshot({ path: "test-results/lyrics-instrumental-320-light-en.png", animations: "disabled" });
+  await pickerTab.close();
+  await page.bringToFront();
+  expect(page.url()).toBe(originalURL);
+  await expect(page.getByLabel("搜索音乐库", { exact: true })).toHaveValue("Song");
+  expect(searches).toBe(0);
+
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/library?view=albums&artist=Artist&album=Artist%2FAlbum&lyrics=instrumental");
+  await expect(page.locator(".track-row")).toHaveCount(1);
+  await expect(page.locator(".lyrics-state")).toHaveText("纯音乐");
+  await page.getByRole("button", { name: "选择歌词", exact: true }).click();
+  await page.getByRole("radio", { name: "标记为纯音乐", exact: true }).check();
+  await expect(page.getByRole("region", { name: "可滚动歌词正文", exact: true })).toContainText("纯音乐，请欣赏");
+  await page.screenshot({ path: "test-results/lyrics-instrumental-desktop-dark-zh.png", animations: "disabled" });
+});

@@ -20,6 +20,7 @@ NAME = "musicforge-rollback"
 CANDIDATE = "musicforge:validation"
 PASSWORD = "ci-rollback-password"
 LEGACY = {
+    "v0.2.42": "sha256:47178c299af9f96ae9614bfd411eb79992749011ca7842d86077c28a16ff4415",
     "v0.2.35": "sha256:9cc368ece8ce6d9386469ccf8a14d5aff41b1ae771edf2d2924d9e59307ddfb8",
     "v0.2.33": "sha256:dd5d74399d4b6afcb1d602a299d1ec62acfe1f11990a74eb4ff4733bbb873029",
     "v0.2.32": "sha256:43c37db7ffa658d89500a8a8df4785b7768a215bf502b120c208ae5bcb672b5f",
@@ -234,6 +235,14 @@ def main():
         api("/api/lyrics/options", "PUT", {"auto_search": False, "min_score": 98})
         api("/api/lyrics/search", "POST", {"ids": [lyrics_track["id"]]})
         wait_for(lambda: api("/api/lyrics")["report"], lambda row: row["state"] == "complete" and row["found"] == 1, "candidate source LRC publication")
+        instrumental_track = next(row for row in tracks if row["path"] == "Album/02.opus")
+        instrumental_base = f"/api/library/{instrumental_track['id']}/lyrics"
+        instrumental = api(instrumental_base + "/candidates")["instrumental"]
+        choice = {"token": instrumental["token"], "index": 0}
+        preview = api(instrumental_base + "/preview", "POST", choice)
+        assert preview["original"] == "[00:00.00]纯音乐，请欣赏\n", "instrumental preview differs from the local placeholder"
+        confirmed = api(instrumental_base, "PUT", choice)
+        assert confirmed["state"] == "ready" and confirmed["instrumental"] and confirmed["provider"] == "source", "manual instrumental result is not backward-compatible ready state"
         tracks = sorted((library_record(track) for track in api("/api/library")), key=lambda track: track["id"])
         values = api("/api/settings")["settings"]
         api("/api/lidarr/connection", "PUT", {"url": "http://lidarr.example.test:8686", "api_key": "ci-only-lidarr-key"})
@@ -291,7 +300,7 @@ def main():
         expected = snapshot()
         held = next(row for row in expected["jobs"] if row[0] == pending)
         assert held[4] == "pending" and held[8] == 253402300799, "paused task changed schema-2 job semantics"
-        assert all(path in expected["output"] for path in ("Album/01.opus", "Album/02.opus", "Album/03.opus", "Album/cover.jpg", "Album/01.lrc")), "mixed audio/cover/LRC fixture missing"
+        assert all(path in expected["output"] for path in ("Album/01.opus", "Album/02.opus", "Album/03.opus", "Album/cover.jpg", "Album/01.lrc", "Album/02.lrc")), "mixed audio/cover/LRC fixture missing"
         evidence = []
         for version, digest in LEGACY.items():
             image = "ghcr.io/sagehou/musicforge@" + digest
@@ -310,6 +319,8 @@ def main():
                     assert restored_track.get("lyrics_script") == "traditional", "older writer lost script classification"
                     restored_lyrics = next(row for row in api("/api/library") if row["path"] == "Album/01.flac").get("lyrics")
                     assert restored_lyrics and restored_lyrics["state"] == "ready" and restored_lyrics["provider"] == "source", "older writer lost optional lyrics annotation"
+                    restored_instrumental = next(row for row in api("/api/library") if row["id"] == instrumental_track["id"]).get("lyrics")
+                    assert restored_instrumental and restored_instrumental["state"] == "ready" and restored_instrumental.get("instrumental"), "older reader/writer lost the manually confirmed placeholder"
                 stop()
                 actual = snapshot()
                 changed = [key for key in expected if actual[key] != expected[key]]
@@ -353,7 +364,7 @@ def main():
             assert library_record(restored) == library_record(row), "candidate cannot reopen older worker's completed artifact"
             stop()
             pending_checks.append({"release": version, "pending_verify_then_old_worker_build": "passed", "source_hash": expected_hash})
-        Path(".ci/rollback-evidence.json").write_text(json.dumps({"architecture": os.environ["ARCH"], "schema": 2, "source_format_replacement": "passed", "checks": evidence, "pending_verification_checks": pending_checks}, indent=2) + "\n")
+        Path(".ci/rollback-evidence.json").write_text(json.dumps({"architecture": os.environ["ARCH"], "schema": 2, "source_format_replacement": "passed", "instrumental_placeholder": "passed", "checks": evidence, "pending_verification_checks": pending_checks}, indent=2) + "\n")
     finally:
         subprocess.run(["docker", "rm", "-f", NAME], capture_output=True)
 

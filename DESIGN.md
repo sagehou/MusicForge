@@ -151,8 +151,11 @@ values remain unknown; mixed source specifications remain visible. Album details
 use cover/metadata columns and a fixed-layout track table. Smaller screens hide
 redundant artist/duration columns. Collapsed song rows show title, duration, actual
 source audio/bitrate and source/output sizes; full paths, hashes and raw tags
-stay in expanded details. Song details and lyric selection expand directly below
-their track on desktop and phones. Task details expand within their task. Detail
+stay in expanded details. Song details expand directly below their track on desktop and phones. Desktop
+lyric selection stays inline; phone lyric actions open a separate browser tab
+with the current album/filters/search. Candidate lists and lyric text scroll
+independently while the preview and confirmation stay visible. A manual
+instrumental choice previews and saves an owned local placeholder LRC. Task details expand within their task. Detail
 drawers, overlays and full-screen inspectors are not used. Compact right-side
 actions use localized icon names and title tooltips. Closing returns focus to
 the current visible track; filter changes close the expansion, while polling

@@ -1502,7 +1502,7 @@ input[role="switch"]:checked::after { transform: translateX(22px); background: v
   .album-track-table .track-title-line { gap: 8px; }
 }
 
-/* Song and lyric details share the list flow at every viewport size. */
+/* Song details stay in the list; phone lyric selection opens its own page. */
 .track-row[data-expanded="true"] { background: var(--subtle); }
 .track-expand-icon { flex: none; color: var(--muted); transition: transform 160ms var(--ease); }
 .track-open[aria-expanded="true"] .track-expand-icon { transform: rotate(90deg); color: var(--accent); }
@@ -1543,4 +1543,56 @@ input[role="switch"]:checked::after { transform: translateX(22px); background: v
   .track-lyrics .lyrics-track { position: relative; }
   .track-lyrics .lyrics-details { position: static; }
   .track-lyrics .lyrics-status-popover { top: calc(100% + 4px); right: 0; width: min(300px, 100%); }
+}
+
+/* Candidate lists and lyric text scroll independently of the save controls. */
+.track-lyrics .lyrics-actions .lyrics-choose-page { display: none; }
+.lyrics-instrumental { align-items: center; margin: 0; background: var(--surface); }
+.lyrics-instrumental > svg { flex: none; color: var(--muted); }
+.lyrics-instrumental small { line-height: 1.6; }
+.lyrics-search-pane { min-width: 0; }
+.lyrics-guidance { margin: 0 0 12px; }
+.lyrics-query { margin-bottom: 12px; padding-bottom: 12px; }
+.lyrics-preview-pane { display: flex; flex-direction: column; top: 16px; max-height: calc(100dvh - 32px); overflow: hidden; }
+.lyrics-preview { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+.lyrics-preview h3 { flex: none; margin-bottom: 8px; }
+.lyrics-preview-content { min-height: 0; overflow: auto; overscroll-behavior: contain; scrollbar-gutter: stable; }
+.lyrics-preview-content pre { max-height: none; overflow: visible; margin-block: 8px; }
+.lyrics-preview-content .check-field { margin-block: 10px; }
+.lyrics-preview-pane > [role="alert"] { flex: none; max-height: 90px; overflow: auto; }
+.lyrics-save { flex: none; }
+.lyrics-save p { margin-bottom: 8px; }
+.lyrics-save-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.lyrics-save-actions .ui-button { flex: 1 1 130px; width: auto; }
+.lyrics-preview-empty { flex: 1; min-height: 160px; }
+.app-shell:has(.lyrics-page) > .sidebar { display: none; }
+.app-shell:has(.lyrics-page) > .main { margin-left: 0; }
+.app-shell:has(.lyrics-page) .page-content { padding: max(12px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(12px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left)); height: 100dvh; }
+.lyrics-page { display: flex; flex-direction: column; gap: 10px; height: 100%; min-height: 0; }
+.lyrics-page > .page-heading { flex: none; min-height: 32px; padding: 0; margin: 0; border: 0; }
+.lyrics-page > .lyrics-picker { flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
+.lyrics-page .detail-heading { flex: none; padding: 10px 14px; }
+.lyrics-page .detail-titlebar { flex-wrap: nowrap; }
+.lyrics-page .detail-titlebar > div:first-child { min-width: 0; }
+.lyrics-page .detail-heading p { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; line-height: 18px; }
+.lyrics-page .detail-content { flex: 1; min-height: 0; padding: 12px; }
+.lyrics-page .lyrics-picker-results { height: 100%; min-height: 0; align-items: stretch; }
+.lyrics-page .lyrics-candidate-groups { display: block; min-height: 0; overflow: auto; overscroll-behavior: contain; padding: 2px 6px 12px 2px; }
+.lyrics-page .lyrics-instrumental { margin-block: 12px; }
+.lyrics-page .candidate-source-filter { margin-block: 12px; }
+.lyrics-page .lyrics-preview-pane { position: static; max-height: none; min-height: 0; }
+.app-shell:has(.lyrics-page) > .toast { top: max(12px, env(safe-area-inset-top)); bottom: auto; padding: 10px 12px; }
+@media (max-width: 800px) {
+  .track-lyrics .lyrics-actions .lyrics-choose-inline { display: none; }
+  .track-lyrics .lyrics-actions .lyrics-choose-page { display: inline-flex; }
+  .lyrics-page .lyrics-picker-results { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(100px, 1fr) minmax(190px, 42%); gap: 10px; }
+  .lyrics-page .lyrics-preview-pane { padding: 10px 12px; border-top: 2px solid var(--line-strong); }
+  .lyrics-page .lyrics-preview-empty { min-height: 0; padding: 4px; gap: 4px; }
+  .lyrics-page .lyrics-preview-empty > svg { display: none; }
+  .lyrics-page .lyrics-save { margin-top: 8px; padding-top: 8px; }
+  .lyrics-page .lyrics-save-actions { flex-wrap: nowrap; gap: 6px; }
+  .lyrics-page .lyrics-save-actions .ui-button { flex: 1; min-width: 0; min-height: 40px; padding: 6px 8px; }
+  .lyrics-page .lyrics-save > p:not([role="status"]) { font-size: 11px; line-height: 16px; }
+  .lyrics-page .lyrics-provider-status { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .lyrics-page .lyrics-query { gap: 6px; }
 }

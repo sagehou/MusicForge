@@ -11,57 +11,68 @@ import (
 )
 
 func TestReadyLyricsAreSkippedWithoutStorageReadsAfterRestart(t *testing.T) {
-	a, settings := testApp(t)
-	seedLyricsArtifact(t, a, settings)
-	if err := os.WriteFile(filepath.Join(settings.Source, "Album/01.lrc"), []byte("[00:01.00]爱这风云"), 0644); err != nil {
-		t.Fatal(err)
-	}
-	request := lyricsSession(t, a)
-	if w := request("POST", "/api/lyrics/search", map[string]any{"all": true}); w.Code != 202 {
-		t.Fatal(w.Code, w.Body.String())
-	}
-	if report := waitLyrics(t, a); report.Total != 1 || report.Found != 1 {
-		t.Fatal(report)
-	}
-	before, err := a.meta("lyrics-status:1")
-	if err != nil {
-		t.Fatal(err)
-	}
-	cfg, logger, assets := a.cfg, a.logger, a.assets
-	a.Close()
-	// Neither volume is accessible: ordinary fill must decide entirely from
-	// persisted state, even after restart and a matching-threshold change.
-	for _, root := range []string{settings.Source, settings.Output} {
-		if err = os.Rename(root, root+"-offline"); err != nil {
-			t.Fatal(err)
-		}
-	}
-	reopened, err := New(cfg, logger, "test", assets)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer reopened.Close()
-	mockLyricsServices(t, reopened, func(w http.ResponseWriter, r *http.Request) {
-		t.Error("ready lyrics contacted a provider", r.URL)
-		w.WriteHeader(500)
-	})
-	request = lyricsSession(t, reopened)
-	if w := request("PUT", "/api/lyrics/options", map[string]any{"auto_search": true, "min_score": 100}); w.Code != 200 {
-		t.Fatal(w.Code, w.Body.String())
-	}
-	for _, body := range []map[string]any{{"all": true}, {"ids": []int64{1}}, {"all": true}} {
-		w := request("POST", "/api/lyrics/search", body)
-		var result struct{ Selected, Skipped int }
-		if w.Code != 202 || json.Unmarshal(w.Body.Bytes(), &result) != nil || result.Selected != 0 || result.Skipped != 1 {
-			t.Fatal("ready track entered a batch", w.Code, w.Body.String())
-		}
-		if report := waitLyrics(t, reopened); report.State != "complete" || report.Total != 0 || report.Processed != 0 || report.Found != 0 || report.Skipped != 1 {
-			t.Fatal("skips counted as processed tracks", report)
-		}
-	}
-	reopened.scheduleLyrics(settings)
-	if after, err := reopened.meta("lyrics-status:1"); err != nil || after != before {
-		t.Fatal("skipping rewrote the successful check", after, err)
+	for _, kind := range []string{"source", "instrumental"} {
+		t.Run(kind, func(t *testing.T) {
+			a, settings := testApp(t)
+			seedLyricsArtifact(t, a, settings)
+			request := lyricsSession(t, a)
+			if kind == "instrumental" {
+				token, index := previewInstrumentalLyrics(t, a, request)
+				if w := request("PUT", "/api/library/1/lyrics", map[string]any{"token": token, "index": index}); w.Code != 200 {
+					t.Fatal(w.Code, w.Body.String())
+				}
+			} else {
+				if err := os.WriteFile(filepath.Join(settings.Source, "Album/01.lrc"), []byte("[00:01.00]爱这风云"), 0644); err != nil {
+					t.Fatal(err)
+				}
+				if w := request("POST", "/api/lyrics/search", map[string]any{"all": true}); w.Code != 202 {
+					t.Fatal(w.Code, w.Body.String())
+				}
+				if report := waitLyrics(t, a); report.Total != 1 || report.Found != 1 {
+					t.Fatal(report)
+				}
+			}
+			before, err := a.meta("lyrics-status:1")
+			if err != nil {
+				t.Fatal(err)
+			}
+			cfg, logger, assets := a.cfg, a.logger, a.assets
+			a.Close()
+			// Neither volume is accessible: ordinary fill must decide entirely from
+			// persisted state, even after restart and a matching-threshold change.
+			for _, root := range []string{settings.Source, settings.Output} {
+				if err = os.Rename(root, root+"-offline"); err != nil {
+					t.Fatal(err)
+				}
+			}
+			reopened, err := New(cfg, logger, "test", assets)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer reopened.Close()
+			mockLyricsServices(t, reopened, func(w http.ResponseWriter, r *http.Request) {
+				t.Error("ready lyrics contacted a provider", r.URL)
+				w.WriteHeader(500)
+			})
+			request = lyricsSession(t, reopened)
+			if w := request("PUT", "/api/lyrics/options", map[string]any{"auto_search": true, "min_score": 100}); w.Code != 200 {
+				t.Fatal(w.Code, w.Body.String())
+			}
+			for _, body := range []map[string]any{{"all": true}, {"ids": []int64{1}}, {"all": true}} {
+				w := request("POST", "/api/lyrics/search", body)
+				var result struct{ Selected, Skipped int }
+				if w.Code != 202 || json.Unmarshal(w.Body.Bytes(), &result) != nil || result.Selected != 0 || result.Skipped != 1 {
+					t.Fatal("ready track entered a batch", w.Code, w.Body.String())
+				}
+				if report := waitLyrics(t, reopened); report.State != "complete" || report.Total != 0 || report.Processed != 0 || report.Found != 0 || report.Skipped != 1 {
+					t.Fatal("skips counted as processed tracks", report)
+				}
+			}
+			reopened.scheduleLyrics(settings)
+			if after, err := reopened.meta("lyrics-status:1"); err != nil || after != before {
+				t.Fatal("skipping rewrote the successful check", after, err)
+			}
+		})
 	}
 }
 

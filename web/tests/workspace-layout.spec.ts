@@ -221,7 +221,7 @@ test("album rows expose useful audio facts and toggle song and lyric details dir
   }
   await page.keyboard.press("Escape");
   await expect(page.locator(".inline-details")).toHaveCount(0);
-  await expect(row.getByRole("button", { name: "选择歌词", exact: true })).toBeFocused();
+  await expect(row.getByRole("link", { name: "选择歌词（在新标签页打开）", exact: true })).toBeFocused();
   for (const width of [1440, 390]) {
     await page.setViewportSize({ width, height: 1000 });
     await title.click();

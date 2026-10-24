@@ -36,7 +36,11 @@ type LyricsStatus struct {
 	Error     string          `json:"error,omitempty"`
 	Checked   int64           `json:"checked"`
 	Attempts  []lyricsAttempt `json:"attempts,omitempty"`
-	replaced  bool
+
+	// An explicitly confirmed local placeholder remains ready, so published
+	// schema-2 workers also skip it without reading files or contacting services.
+	Instrumental bool `json:"instrumental,omitempty"`
+	replaced     bool
 }
 
 type lyricsReport struct {
@@ -453,6 +457,7 @@ func (a *App) maintainLyrics(ctx context.Context, s Settings, id int64, batch ly
 	status.Output, status.Signature = target.Source.Output, target.Signature
 	if target.FilePresent {
 		status.Path, status.Provider = target.File.Path, target.File.Provider
+		status.Instrumental = target.Instrumental
 	}
 	if err == nil && (target.Settings.Source != s.Source || target.Settings.Output != s.Output) {
 		err = errors.New("Artifact or library settings changed during lyrics search; result discarded")
@@ -493,6 +498,7 @@ func (a *App) maintainLyrics(ctx context.Context, s Settings, id int64, batch ly
 		}
 		if err == nil {
 			status.State, status.Path, status.Provider = "ready", lyricsRel(target.Source.Output), provider
+			status.Instrumental = text == instrumentalLRC
 			status.replaced = batch.ReplaceTraditional
 			a.discardLyricsSearches(id)
 		}

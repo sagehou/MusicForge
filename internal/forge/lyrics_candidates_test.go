@@ -115,66 +115,140 @@ func TestLyricsCandidatePreviewAndExplicitLanguageSelection(t *testing.T) {
 	}
 }
 
+func previewInstrumentalLyrics(t *testing.T, a *App, request func(string, string, any) *httptest.ResponseRecorder) (string, int) {
+	t.Helper()
+	mockLyricsServices(t, a, func(w http.ResponseWriter, r *http.Request) {
+		t.Error("manual instrumental selection contacted a lyrics provider", r.URL)
+		w.WriteHeader(500)
+	})
+	w := request("GET", "/api/library/1/lyrics/candidates", nil)
+	var result struct {
+		Instrumental lyricsCandidateGroup `json:"instrumental"`
+	}
+	if w.Code != 200 || json.Unmarshal(w.Body.Bytes(), &result) != nil || len(result.Instrumental.Candidates) != 1 || result.Instrumental.Provider != "source" {
+		t.Fatal(w.Code, w.Body.String())
+	}
+	body := map[string]any{"token": result.Instrumental.Token, "index": 0}
+	if w = request("PUT", "/api/library/1/lyrics", body); w.Code != 409 {
+		t.Fatal("instrumental LRC saved without a preview", w.Code, w.Body.String())
+	}
+	w = request("POST", "/api/library/1/lyrics/preview", body)
+	var preview lyricsText
+	if w.Code != 200 || json.Unmarshal(w.Body.Bytes(), &preview) != nil || preview.Original != instrumentalLRC || preview.Translation != "" || preview.Romanization != "" {
+		t.Fatal(w.Code, w.Body.String())
+	}
+	return result.Instrumental.Token, 0
+}
+
+func TestManualInstrumentalPlaceholderPreservesAudioAndSupportsExplicitReplacement(t *testing.T) {
+	a, s := testApp(t)
+	source := seedLyricsArtifact(t, a, s)
+	if err := a.writeLyricsFile(context.Background(), s, source, "[00:01.00]Previous selection", "lrclib"); err != nil {
+		t.Fatal(err)
+	}
+	request := lyricsSession(t, a)
+	token, index := previewInstrumentalLyrics(t, a, request)
+	path := filepath.Join(s.Output, "Album/01.lrc")
+	if text, err := os.ReadFile(path); err != nil || string(text) != "[00:01.00]Previous selection\n" {
+		t.Fatal("preview replaced existing lyrics", string(text), err)
+	}
+	w := request("PUT", "/api/library/1/lyrics", map[string]any{"token": token, "index": index})
+	var status LyricsStatus
+	if w.Code != 200 || json.Unmarshal(w.Body.Bytes(), &status) != nil || status.State != "ready" || !status.Instrumental || status.Provider != "source" || status.Signature != digest("registered audio fixture") {
+		t.Fatal(w.Code, w.Body.String())
+	}
+	if text, err := os.ReadFile(path); err != nil || string(text) != instrumentalLRC {
+		t.Fatal("missing instrumental placeholder", string(text), err)
+	}
+	if audio, err := os.ReadFile(filepath.Join(s.Output, source.Output)); err != nil || string(audio) != "registered audio fixture" {
+		t.Fatal("instrumental selection changed audio", string(audio), err)
+	}
+	// Recover from publication finishing before its ready status was saved.
+	if _, err := a.db.Exec("DELETE FROM meta WHERE key='lyrics-status:1'"); err != nil {
+		t.Fatal(err)
+	}
+	if status = a.maintainLyrics(context.Background(), s, source.ID, lyricsBatchOptions{}); status.State != "ready" || !status.Instrumental {
+		t.Fatal("owned placeholder lost its identity", status)
+	}
+	if err := os.WriteFile(filepath.Join(s.Source, "Album/01.lrc"), []byte("[00:01.00]Real lyrics"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if status = a.maintainLyrics(context.Background(), s, source.ID, lyricsBatchOptions{Refresh: true}); status.State != "ready" || status.Instrumental {
+		t.Fatal("explicit re-search did not replace the placeholder", status)
+	}
+	if text, err := os.ReadFile(path); err != nil || string(text) != "[00:01.00]Real lyrics\n" {
+		t.Fatal(string(text), err)
+	}
+}
+
 func TestLyricsCandidatesRejectStaleTargetsAndClientContent(t *testing.T) {
-	for _, change := range []string{"audio", "source", "user file", "managed file", "expired token", "client content", "wrong track"} {
-		t.Run(change, func(t *testing.T) {
-			a, s := testApp(t)
-			source := seedLyricsArtifact(t, a, s)
-			request := lyricsSession(t, a)
-			token, index := previewTestLyrics(t, a, request)
-			path := filepath.Join(s.Output, "Album/01.lrc")
-			body := map[string]any{"token": token, "index": index}
-			endpoint := "/api/library/1/lyrics"
-			want := 409
-			switch change {
-			case "audio":
-				if _, err := a.db.Exec("UPDATE managed SET signature='new-audio' WHERE kind='audio'"); err != nil {
-					t.Fatal(err)
+	for _, choice := range []string{"online", "instrumental"} {
+		for _, change := range []string{"audio", "source", "user file", "managed file", "expired token", "client content", "wrong track"} {
+			t.Run(choice+"/"+change, func(t *testing.T) {
+				a, s := testApp(t)
+				source := seedLyricsArtifact(t, a, s)
+				request := lyricsSession(t, a)
+				var token string
+				var index int
+				if choice == "instrumental" {
+					token, index = previewInstrumentalLyrics(t, a, request)
+				} else {
+					token, index = previewTestLyrics(t, a, request)
 				}
-			case "source":
-				if _, err := a.db.Exec("UPDATE sources SET hash='new-source' WHERE id=1"); err != nil {
-					t.Fatal(err)
+				path := filepath.Join(s.Output, "Album/01.lrc")
+				body := map[string]any{"token": token, "index": index}
+				endpoint := "/api/library/1/lyrics"
+				want := 409
+				switch change {
+				case "audio":
+					if _, err := a.db.Exec("UPDATE managed SET signature='new-audio' WHERE kind='audio'"); err != nil {
+						t.Fatal(err)
+					}
+				case "source":
+					if _, err := a.db.Exec("UPDATE sources SET hash='new-source' WHERE id=1"); err != nil {
+						t.Fatal(err)
+					}
+				case "user file":
+					if err := os.WriteFile(path, []byte("user lyrics"), 0644); err != nil {
+						t.Fatal(err)
+					}
+				case "managed file":
+					a.files.Lock()
+					err := a.writeLyricsFile(context.Background(), s, source, "[00:02.00]Another selection", "lrclib")
+					a.files.Unlock()
+					if err != nil {
+						t.Fatal(err)
+					}
+				case "expired token":
+					a.lyricsMu.Lock()
+					a.lyricsChoices[token].Created = time.Now().Add(-11 * time.Minute)
+					a.lyricsMu.Unlock()
+				case "client content":
+					body["original"] = "[00:01.00]Injected"
+					want = 400
+				case "wrong track":
+					endpoint = "/api/library/2/lyrics"
 				}
-			case "user file":
-				if err := os.WriteFile(path, []byte("user lyrics"), 0644); err != nil {
-					t.Fatal(err)
+				w := request("PUT", endpoint, body)
+				if w.Code != want {
+					t.Fatal(w.Code, w.Body.String())
 				}
-			case "managed file":
-				a.files.Lock()
-				err := a.writeLyricsFile(context.Background(), s, source, "[00:02.00]Another selection", "lrclib")
-				a.files.Unlock()
-				if err != nil {
-					t.Fatal(err)
+				data, err := os.ReadFile(path)
+				switch change {
+				case "user file":
+					if err != nil || string(data) != "user lyrics" {
+						t.Fatal("overwrote user file", string(data), err)
+					}
+				case "managed file":
+					if err != nil || string(data) != "[00:02.00]Another selection\n" {
+						t.Fatal("overwrote concurrent selection", string(data), err)
+					}
+				default:
+					if !os.IsNotExist(err) {
+						t.Fatal("stale or injected selection published", string(data), err)
+					}
 				}
-			case "expired token":
-				a.lyricsMu.Lock()
-				a.lyricsChoices[token].Created = time.Now().Add(-11 * time.Minute)
-				a.lyricsMu.Unlock()
-			case "client content":
-				body["original"] = "[00:01.00]Injected"
-				want = 400
-			case "wrong track":
-				endpoint = "/api/library/2/lyrics"
-			}
-			w := request("PUT", endpoint, body)
-			if w.Code != want {
-				t.Fatal(w.Code, w.Body.String())
-			}
-			data, err := os.ReadFile(path)
-			switch change {
-			case "user file":
-				if err != nil || string(data) != "user lyrics" {
-					t.Fatal("overwrote user file", string(data), err)
-				}
-			case "managed file":
-				if err != nil || string(data) != "[00:02.00]Another selection\n" {
-					t.Fatal("overwrote concurrent selection", string(data), err)
-				}
-			default:
-				if !os.IsNotExist(err) {
-					t.Fatal("stale or injected selection published", string(data), err)
-				}
-			}
-		})
+			})
+		}
 	}
 }

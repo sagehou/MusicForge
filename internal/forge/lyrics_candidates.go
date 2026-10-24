@@ -12,6 +12,9 @@ import (
 	"unicode/utf8"
 )
 
+// A local, explicitly selected placeholder, never an online search result.
+const instrumentalLRC = "[00:00.00]纯音乐，请欣赏\n"
+
 type lyricsTarget struct {
 	Settings                 Settings
 	Source                   Source
@@ -19,6 +22,7 @@ type lyricsTarget struct {
 	File                     lyricsFile
 	FilePresent              bool
 	FileScript               string
+	Instrumental             bool
 }
 
 func (a *App) captureLyricsTarget(ctx context.Context, id int64) (target lyricsTarget, err error) {
@@ -67,6 +71,7 @@ func (a *App) captureLyricsTarget(ctx context.Context, id int64) (target lyricsT
 	if target.FilePresent {
 		target.FileSignature = digest(text)
 		target.FileScript = lyricsScript(text)
+		target.Instrumental = text == instrumentalLRC
 	}
 	return
 }
@@ -251,7 +256,14 @@ func (a *App) getLyricsCandidates(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
-	respond(w, 200, map[string]any{"query": query, "groups": groups})
+	// Reuse preview/publication tokens and their conflict checks. Keep the
+	// published provider vocabulary: this is a local LRC, not a new service.
+	instrumental := a.newLyricsChoices(target, "source", "", []lyricsCandidate{{
+		Provider: "source", Title: target.Source.Title, Artist: target.Source.Artist,
+		Album: target.Source.Album, Duration: target.Source.Duration,
+		text: &lyricsText{Original: instrumentalLRC},
+	}}, false, 0)
+	respond(w, 200, map[string]any{"query": query, "groups": groups, "instrumental": instrumental})
 }
 
 type lyricsChoiceRequest struct {
@@ -332,9 +344,11 @@ func (a *App) previewLyricsCandidate(w http.ResponseWriter, r *http.Request) {
 	a.lyricsMu.Unlock()
 	// Keep downloaded previews with their search so reopening never downloads
 	// the same pending result again. Publication still requires explicit preview.
-	if err = a.storeLyricsSearch(ctx, set.Target, set.Provider, set.Query, candidates, false, set.Searched); err != nil {
-		apiError(w, 500, err)
-		return
+	if set.Provider != "source" {
+		if err = a.storeLyricsSearch(ctx, set.Target, set.Provider, set.Query, candidates, false, set.Searched); err != nil {
+			apiError(w, 500, err)
+			return
+		}
 	}
 	respond(w, 200, map[string]any{"original": text.Original, "translation": text.Translation,
 		"romanization": text.Romanization, "script": lyricsScript(text.Original), "translation_script": lyricsScript(text.Translation)})
@@ -361,7 +375,7 @@ func (a *App) applyLyricsCandidate(w http.ResponseWriter, r *http.Request) {
 	}
 	a.discardLyricsSearches(set.Target.Source.ID)
 	status := LyricsStatus{State: "ready", Output: set.Target.Source.Output, Signature: set.Target.Signature,
-		Path: lyricsRel(set.Target.Source.Output), Provider: candidate.Provider, Checked: time.Now().Unix()}
+		Path: lyricsRel(set.Target.Source.Output), Provider: candidate.Provider, Checked: time.Now().Unix(), Instrumental: text == instrumentalLRC}
 	raw, _ := json.Marshal(status)
 	if err = a.setMeta("lyrics-status:"+strconv.FormatInt(set.Target.Source.ID, 10), string(raw)); err != nil {
 		apiError(w, 500, err)

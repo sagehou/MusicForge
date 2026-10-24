@@ -15,7 +15,11 @@ export function InlineDetails({ id, title, subtitle, children, close, returnFocu
   function collapse() {
     if (latest.current.busy) return;
     latest.current.close();
-    requestAnimationFrame(() => (document.getElementById(returnFocusID) || document.getElementById("library-title"))?.focus());
+    requestAnimationFrame(() => {
+      const trigger = document.getElementById(returnFocusID);
+      const target = trigger?.getClientRects().length ? trigger : document.querySelector<HTMLElement>(`a[data-lyrics-trigger="${returnFocusID}"]`) || document.getElementById("library-title");
+      target?.focus();
+    });
   }
   useEffect(() => {
     const frame = requestAnimationFrame(() => {

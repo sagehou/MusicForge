@@ -1559,6 +1559,8 @@ input[role="switch"]:checked::after { transform: translateX(22px); background: v
 .lyrics-preview-content { min-height: 0; overflow: auto; overscroll-behavior: contain; scrollbar-gutter: stable; }
 .lyrics-preview-content pre { max-height: none; overflow: visible; margin-block: 8px; }
 .lyrics-preview-content .check-field { margin-block: 10px; }
+.lyrics-raw-preview h4 { margin-block: 12px 4px; font-size: 12px; overflow-wrap: anywhere; }
+.lyrics-raw-preview .lyrics-preview-content > p { margin-bottom: 8px; font-size: 12px; line-height: 1.5; }
 .lyrics-preview-pane > [role="alert"] { flex: none; max-height: 90px; overflow: auto; }
 .lyrics-save { flex: none; }
 .lyrics-save p { margin-bottom: 8px; }

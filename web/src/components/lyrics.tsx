@@ -152,6 +152,7 @@ type OnlineProvider = Exclude<LyricsProvider, "source">;
 type Candidate = { index: number; provider: OnlineProvider; title: string; artist: string; album: string; duration: number; high_confidence: boolean; identity_match?: boolean; match_score: number; duration_delta?: number; script: string; translation_script?: string };
 type CandidateGroup = { provider: OnlineProvider; token?: string; candidates: Candidate[]; cached?: boolean; searched?: number; loading: boolean; error?: string };
 type CandidateText = { original: string; translation?: string; romanization?: string; script?: string; translation_script?: string };
+type CandidateDiagnostic = { error: string; fields: { name: string; text: string; truncated?: boolean }[]; instrumental?: boolean; uncollected?: boolean };
 type CandidateChoice = { token: string; candidate: { index: number }; instrumental?: boolean };
 type InstrumentalChoice = { token: string; candidates: { index: number }[] };
 
@@ -171,6 +172,7 @@ export function LyricsPicker({ source, notify, close, saved, previous, next, onB
   const [instrumental, setInstrumental] = useState<InstrumentalChoice>();
   const [selected, setSelected] = useState<CandidateChoice>();
   const [preview, setPreview] = useState<CandidateText>();
+  const [diagnostic, setDiagnostic] = useState<CandidateDiagnostic>();
   const [previewing, setPreviewing] = useState(false);
   const [previewError, setPreviewError] = useState("");
   const [translation, setTranslation] = useState(false);
@@ -193,7 +195,7 @@ export function LyricsPicker({ source, notify, close, saved, previous, next, onB
   function reloadCandidates() {
     searchController.current?.abort(); previewController.current?.abort();
     autoSelect.current = true;
-    setSelected(undefined); setPreview(undefined); setPreviewing(false); setPreviewError("");
+    setSelected(undefined); setPreview(undefined); setDiagnostic(undefined); setPreviewing(false); setPreviewError("");
     setSavedSelection(false); setRestoreError(""); setRestoring(true);
     setRestoreVersion(value => value + 1);
   }
@@ -207,7 +209,7 @@ export function LyricsPicker({ source, notify, close, saved, previous, next, onB
     searchController.current?.abort(); previewController.current?.abort();
     autoSelect.current = true;
     const controller = new AbortController(); searchController.current = controller;
-    setSelected(undefined); setPreview(undefined); setPreviewError(""); setPreviewing(false); setSavedSelection(false);
+    setSelected(undefined); setPreview(undefined); setDiagnostic(undefined); setPreviewError(""); setPreviewing(false); setSavedSelection(false);
     setRestoreError("");
     setGroups(onlineProviders.map(provider => ({ provider, candidates: [], loading: true })));
     await Promise.allSettled(onlineProviders.map(async provider => {
@@ -228,7 +230,7 @@ export function LyricsPicker({ source, notify, close, saved, previous, next, onB
     autoSelect.current = false;
     previewController.current?.abort();
     const controller = new AbortController(); previewController.current = controller;
-    setSavedSelection(false); setSelected(choice); setPreview(undefined); setPreviewing(true); setPreviewError(""); setTranslation(false); setRomanization(false);
+    setSavedSelection(false); setSelected(choice); setPreview(undefined); setDiagnostic(undefined); setPreviewing(true); setPreviewError(""); setTranslation(false); setRomanization(false);
     try {
       if (choice.instrumental) {
         // Local choices must work after a save, token expiry or repeated searches.
@@ -239,8 +241,12 @@ export function LyricsPicker({ source, notify, close, saved, previous, next, onB
         choice = { token: result.instrumental.token, candidate: result.instrumental.candidates[0], instrumental: true };
         setSelected(choice);
       }
-      const result = await api<CandidateText>(`${base}/preview`, "POST", { token: choice.token, index: choice.candidate.index }, controller.signal);
+      const result = await api<CandidateText & { diagnostic?: CandidateDiagnostic }>(`${base}/preview`, "POST", { token: choice.token, index: choice.candidate.index }, controller.signal);
       if (!controller.signal.aborted) {
+        if (result.diagnostic) {
+          setDiagnostic(result.diagnostic);
+          return;
+        }
         setPreview(result);
         setGroups(old => old.map(group => ({ ...group, candidates: group.candidates.map(candidate => group.token === choice.token && candidate.index === choice.candidate.index ? { ...candidate, script: result.script || "unknown", translation_script: result.translation_script } : candidate) })));
       }
@@ -305,7 +311,17 @@ export function LyricsPicker({ source, notify, close, saved, previous, next, onB
       {preview.romanization && <><label className="check-field"><input type="checkbox" checked={romanization} disabled={saving} onChange={event => setRomanization(event.target.checked)} /><span>{t("lyrics.includeRomanization")}</span></label>{romanization && <pre dir="auto">{preview.romanization}</pre>}</>}
       </div>
     </section>}
-    {!preview && !previewing && <div className="lyrics-preview-empty"><FileMusic size={24} /><h3>{t("lyrics.preview")}</h3><p>{t("lyrics.selectToPreview")}</p></div>}
+    {diagnostic && <section className="lyrics-preview lyrics-raw-preview" aria-label={t("lyrics.rawPreview")}>
+      <h3>{t("lyrics.rawPreview")}</h3>
+      <div className="lyrics-preview-content" tabIndex={0} role="region" aria-label={t("lyrics.rawText")}>
+        <p role="alert">{errorMessage(diagnostic.error)}</p><p>{t("lyrics.rawHint")}</p>
+        {diagnostic.instrumental && <p>{t("lyrics.rawInstrumental")}</p>}
+        {diagnostic.uncollected && <p>{t("lyrics.rawUncollected")}</p>}
+        {diagnostic.fields.length === 0 && <p>{t("lyrics.rawEmpty")}</p>}
+        {diagnostic.fields.map(field => <div key={field.name}><h4>{field.name}</h4><pre dir="auto">{field.text || t(field.truncated ? "lyrics.rawTruncated" : "lyrics.rawEmpty")}</pre>{field.truncated && field.text && <p>{t("lyrics.rawTruncated")}</p>}</div>)}
+      </div>
+    </section>}
+    {!preview && !diagnostic && !previewing && <div className="lyrics-preview-empty"><FileMusic size={24} /><h3>{t("lyrics.preview")}</h3><p>{t("lyrics.selectToPreview")}</p></div>}
     <div className="lyrics-save">{savedSelection && <p className="saved-feedback" role="status">{t("lyrics.savedNext")}</p>}<p>{t(selected?.instrumental ? "lyrics.instrumentalSaveHint" : "lyrics.saveHint")}</p><div className="lyrics-save-actions"><Button type="button" disabled={saving || savedSelection || !preview || previewing} onClick={() => void save()}>{t(selected?.instrumental ? "lyrics.saveInstrumental" : "lyrics.saveCandidate")}</Button>{next && <Button type="button" variant="outline" disabled={saving || !preview || previewing} onClick={() => savedSelection ? next() : void save(true)}>{t(savedSelection ? "lyrics.next" : "lyrics.saveNext")}<ChevronRight size={15} /></Button>}</div></div>
     </div></div>
   </InlineDetails>;

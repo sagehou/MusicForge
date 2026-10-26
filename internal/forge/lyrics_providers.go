@@ -34,6 +34,7 @@ type lyricsText struct {
 	Original     string `json:"original"`
 	Translation  string `json:"translation,omitempty"`
 	Romanization string `json:"romanization,omitempty"`
+	diagnostic   *lyricsDiagnostic
 }
 
 type lyricsCandidate struct {
@@ -575,6 +576,7 @@ func (a *App) candidateLyrics(ctx context.Context, candidate lyricsCandidate) (l
 		return *candidate.text, nil
 	}
 	var text lyricsText
+	diagnostic := &lyricsDiagnostic{}
 	switch candidate.Provider {
 	case "qq":
 		params := url.Values{"songmid": {candidate.mid}, "format": {"json"}, "nobase64": {"1"}, "g_tk": {"5381"}}
@@ -586,6 +588,10 @@ func (a *App) candidateLyrics(ctx context.Context, candidate lyricsCandidate) (l
 		_, err := a.lyricsRequest(ctx, "qq", "GET", "https://c.y.qq.com/lyric/fcgi-bin/fcg_query_lyric_new.fcg?"+params.Encode(), nil, &response)
 		if err == nil && response.Code == 0 {
 			text = lyricsText{Original: response.Lyric, Translation: response.Translation}
+			diagnostic.add("lyric", response.Lyric)
+			if response.Translation != "" {
+				diagnostic.add("trans", response.Translation)
+			}
 		}
 		if _, valid := providerLRC(text.Original); valid != nil {
 			var cloud struct {
@@ -597,12 +603,22 @@ func (a *App) candidateLyrics(ctx context.Context, candidate lyricsCandidate) (l
 				"singerName": base64.StdEncoding.EncodeToString([]byte(candidate.Artist)), "albumName": base64.StdEncoding.EncodeToString([]byte(candidate.Album)),
 				"interval": int(candidate.Duration), "crypt": 1, "qrc": 1, "qrc_t": 0, "lrc_t": 0, "trans": 1, "trans_t": 0, "roma": 1, "roma_t": 0, "type": 0, "ct": 19, "cv": 2111}
 			if cloudErr := a.qqCall(ctx, "music.musichallSong.PlayLyricInfo", "GetPlayLyricInfo", params, &cloud); cloudErr != nil {
+				if len(diagnostic.Fields) > 0 {
+					return diagnostic.failed(cloudErr), errors.Join(err, cloudErr)
+				}
 				return text, errors.Join(err, cloudErr)
+			}
+			diagnostic.add("qrc.lyric", cloud.Lyric)
+			if cloud.Translation != "" {
+				diagnostic.add("qrc.trans", cloud.Translation)
+			}
+			if cloud.Romanization != "" {
+				diagnostic.add("qrc.roma", cloud.Romanization)
 			}
 			var decodeErr error
 			text.Original, decodeErr = decodeCloudQRC(cloud.Lyric)
 			if decodeErr != nil {
-				return text, decodeErr
+				return diagnostic.failed(decodeErr), decodeErr
 			}
 			text.Translation, _ = decodeCloudQRC(cloud.Translation)
 			text.Romanization, _ = decodeCloudQRC(cloud.Romanization)
@@ -640,18 +656,26 @@ func (a *App) candidateLyrics(ctx context.Context, candidate lyricsCandidate) (l
 			}
 			decoded, err := base64.StdEncoding.DecodeString(data.Content)
 			if err != nil {
-				return text, errors.New("Kugou returned invalid lyrics data")
+				diagnostic.add("content.base64", data.Content)
+				err = errors.New("Kugou returned invalid lyrics data")
+				return diagnostic.failed(err), err
 			}
 			text.Original = string(decoded)
+			diagnostic.add("content", text.Original)
 			break
 		}
 	case "netease":
 		params := map[string]any{"id": json.Number(candidate.remoteID), "lv": "-1", "tv": "-1", "rv": "-1", "yv": "-1"}
 		var response struct {
-			Code int `json:"code"`
-			LRC  struct {
+			Code        int  `json:"code"`
+			NoLyrics    bool `json:"nolyric"`
+			Uncollected bool `json:"uncollected"`
+			LRC         struct {
 				Lyric string `json:"lyric"`
 			} `json:"lrc"`
+			YRC struct {
+				Lyric string `json:"lyric"`
+			} `json:"yrc"`
 			Translation struct {
 				Lyric string `json:"lyric"`
 			} `json:"tlyric"`
@@ -663,12 +687,23 @@ func (a *App) candidateLyrics(ctx context.Context, candidate lyricsCandidate) (l
 			return text, err
 		}
 		text = lyricsText{Original: response.LRC.Lyric, Translation: response.Translation.Lyric, Romanization: response.Romanization.Lyric}
+		diagnostic.Instrumental, diagnostic.Uncollected = response.NoLyrics, response.Uncollected
+		diagnostic.add("lrc.lyric", text.Original)
+		if response.YRC.Lyric != "" {
+			diagnostic.add("yrc.lyric", response.YRC.Lyric)
+		}
+		if text.Translation != "" {
+			diagnostic.add("tlyric.lyric", text.Translation)
+		}
+		if text.Romanization != "" {
+			diagnostic.add("romalrc.lyric", text.Romanization)
+		}
 	default:
 		return text, errors.New("Unknown lyrics provider")
 	}
 	var err error
 	if text.Original, err = providerLRC(text.Original); err != nil {
-		return lyricsText{}, nil
+		return diagnostic.failed(err), nil
 	} // Plain lyrics never become a candidate file.
 	text.Translation, _ = providerLRC(text.Translation)
 	text.Romanization, _ = providerLRC(text.Romanization)

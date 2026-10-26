@@ -314,14 +314,11 @@ func (a *App) previewLyricsCandidate(w http.ResponseWriter, r *http.Request) {
 	defer stop()
 	text, err := a.candidateLyrics(ctx, set.Candidates[body.Index])
 	if ctx.Err() != nil {
-		err = ctx.Err()
-	}
-	if err != nil {
-		apiError(w, 502, err)
+		apiError(w, 502, ctx.Err())
 		return
 	}
-	if text.Original == "" {
-		apiError(w, 422, errors.New("No synchronized LRC lines found"))
+	if err != nil && text.diagnostic == nil {
+		apiError(w, 502, err)
 		return
 	}
 	a.lyricsMu.Lock()
@@ -335,6 +332,18 @@ func (a *App) previewLyricsCandidate(w http.ResponseWriter, r *http.Request) {
 	if current.PreviewVersion != version {
 		a.lyricsMu.Unlock()
 		apiError(w, 409, errors.New("Lyrics preview changed; select the candidate again"))
+		return
+	}
+	if text.diagnostic != nil {
+		a.lyricsMu.Unlock()
+		// A diagnostic is a successful inspection, not a usable/savable preview.
+		// Keep it out of the choice set and the published version-1 search cache.
+		respond(w, 200, map[string]any{"original": "", "diagnostic": text.diagnostic})
+		return
+	}
+	if text.Original == "" {
+		a.lyricsMu.Unlock()
+		apiError(w, 422, errors.New("No synchronized LRC lines found"))
 		return
 	}
 	current.PreviewIndex, current.Preview = body.Index, &text

@@ -3,7 +3,6 @@ package forge
 import (
 	"context"
 	"encoding/json"
-	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
@@ -81,7 +80,7 @@ func TestAuditionAuthenticatedRangesAndOutputOnlyRead(t *testing.T) {
 	}
 	for _, test := range []struct {
 		method, byteRange, body, contentRange string
-		status                              int
+		status                                int
 	}{
 		{"GET", "", "registered audio fixture", "", 200},
 		{"HEAD", "", "", "", 200},

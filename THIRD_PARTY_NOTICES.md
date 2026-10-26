@@ -136,3 +136,9 @@ You may add Your own copyright statement to Your modifications and may provide a
 
 END OF TERMS AND CONDITIONS
 ```
+
+## PetitLyrics protocol references
+
+The PetitLyrics adapter is independently implemented with the Go standard library. The public client protocol identifier `p1110417` and terminal type are documented in [MusicBee.PetitLyrics, Plugin.cs](https://github.com/kokarare1212/MusicBee.PetitLyrics/blob/42e8118fce40ff1d40cedca5ceaec75cf2d27f60/MusicBee.PetitLyrics/Plugin.cs). They identify a public protocol client, not an account credential. MusicForge uses its own User-Agent and does not send device identifiers or impersonate a logged-in user.
+
+WSY/LSY format research consulted [petitlyric_sync_lyric_download](https://github.com/NingyuanWang/petitlyric_sync_lyric_download/blob/ad98773216cdc0b4bcf963a99cca8a378c658f32/petitlyrics.py) and was verified against real service responses. No upstream implementation code or lyric text is bundled. Tests use synthetic lyrics.

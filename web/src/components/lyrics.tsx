@@ -131,6 +131,8 @@ export function LyricsTrack({ source, notify, onChoose, pickerHref, expanded = f
   const { t, errorMessage } = useI18n();
   if (!source.output_present || !source.output) return null;
   const state = lyricsMatchState(source) || "unchecked";
+  const provider = source.lyrics?.provider || source.lyrics?.additional_provider;
+  const attempts = [...(source.lyrics?.attempts || []), ...(source.lyrics?.additional_attempts || [])].sort((a, b) => onlineProviders.findIndex(provider => provider === a.provider) - onlineProviders.findIndex(provider => provider === b.provider));
   return <div className="lyrics-track" data-state={state}>
     <span className="lyrics-state">{t(`lyrics.state.${state}`)}{source.lyrics_script && !source.lyrics?.instrumental && <small className="lyrics-script"> · {t(`lyrics.script.${source.lyrics_script}`)}</small>}</span>
     <div className="lyrics-actions">
@@ -139,15 +141,15 @@ export function LyricsTrack({ source, notify, onChoose, pickerHref, expanded = f
       <Button asChild variant="outline" size="sm" className="lyrics-action lyrics-choose-page"><a data-lyrics-trigger={`track-lyrics-trigger-${source.id}`} href={disabled ? undefined : pickerHref} target="_blank" rel="noopener" aria-label={t("lyrics.chooseNewTab")} title={t("lyrics.chooseNewTab")} aria-disabled={disabled || undefined}><ExternalLink size={15} /></a></Button>
     {source.lyrics && <details className="lyrics-details"><summary aria-label={t("lyrics.details")} title={t("lyrics.details")}><Info size={14} /></summary><div className="lyrics-status-popover">
     {source.lyrics?.path && <small>{source.lyrics.path}</small>}
-    {source.lyrics?.instrumental ? <small>{t("lyrics.instrumentalConfirmed")}</small> : source.lyrics?.provider && <small>{t(`lyrics.provider.${source.lyrics.provider}`)}</small>}
+    {source.lyrics?.instrumental ? <small>{t("lyrics.instrumentalConfirmed")}</small> : provider && <small>{t(`lyrics.provider.${provider}`)}</small>}
     {source.lyrics?.error && <p>{errorMessage(source.lyrics.error)}</p>}
-    {source.lyrics?.attempts && <details><summary>{t("lyrics.attempts")}</summary>{source.lyrics.attempts.map(attempt => <p key={attempt.provider}>{t(`lyrics.provider.${attempt.provider}`)} · {t(`lyrics.state.${attempt.state}`)}{attempt.error && <> · {errorMessage(attempt.error)}</>}</p>)}</details>}
+    {attempts.length > 0 && <details><summary>{t("lyrics.attempts")}</summary>{attempts.map(attempt => <p key={attempt.provider}>{t(`lyrics.provider.${attempt.provider}`)} · {t(`lyrics.state.${attempt.state}`)}{attempt.error && <> · {errorMessage(attempt.error)}</>}</p>)}</details>}
     </div></details>}
     </div>
   </div>;
 }
 
-const onlineProviders = ["lrclib", "qq", "kugou", "netease"] as const;
+const onlineProviders = ["qq", "kugou", "netease", "petitlyrics", "lrclib"] as const;
 type OnlineProvider = Exclude<LyricsProvider, "source">;
 type Candidate = { index: number; provider: OnlineProvider; title: string; artist: string; album: string; duration: number; high_confidence: boolean; identity_match?: boolean; match_score: number; duration_delta?: number; script: string; translation_script?: string };
 type CandidateGroup = { provider: OnlineProvider; token?: string; candidates: Candidate[]; cached?: boolean; searched?: number; loading: boolean; error?: string };
@@ -271,7 +273,7 @@ export function LyricsPicker({ source, notify, close, saved, previous, next, onB
   }
   const loading = groups.some(group => group.loading);
   const choices = useMemo(() => groups.flatMap(group => group.candidates.map(candidate => ({ token: group.token, candidate })))
-    .sort((a, b) => Number(b.candidate.high_confidence) - Number(a.candidate.high_confidence) || Number(b.candidate.script === "simplified") - Number(a.candidate.script === "simplified") || Number(b.candidate.translation_script === "simplified") - Number(a.candidate.translation_script === "simplified") || (b.candidate.match_score || 0) - (a.candidate.match_score || 0) || onlineProviders.indexOf(a.candidate.provider) - onlineProviders.indexOf(b.candidate.provider)), [groups]);
+    .sort((a, b) => (b.candidate.match_score || 0) - (a.candidate.match_score || 0) || onlineProviders.indexOf(a.candidate.provider) - onlineProviders.indexOf(b.candidate.provider) || Number(b.candidate.script === "simplified") - Number(a.candidate.script === "simplified") || Number(b.candidate.translation_script === "simplified") - Number(a.candidate.translation_script === "simplified")), [groups]);
   const minScore = options.data?.options.min_score ?? 96;
   const recommended = options.data && choices.find(({ token, candidate }) => token && (candidate.identity_match ?? candidate.high_confidence) && candidate.duration > 0 && (candidate.duration_delta !== undefined ? candidate.duration_delta <= 10 : candidate.high_confidence) && candidate.match_score >= minScore);
   useEffect(() => {
@@ -290,7 +292,7 @@ export function LyricsPicker({ source, notify, close, saved, previous, next, onB
       <Button type="button" variant="ghost" disabled={saving || restoring || loading || !query.trim()} onClick={() => void search(true)}>{t("lyrics.forceSearch")}</Button>
       {loading && <Button type="button" variant="ghost" onClick={cancelSearch}>{t("lyrics.cancelSearch")}</Button>}
     </form>
-    <div className="lyrics-provider-status" aria-label={t("lyrics.providerStatus")}>{groups.map(group => <fieldset key={group.provider} disabled={saving}><legend>{t(`lyrics.name.${group.provider}`)}{group.provider === "lrclib" && <> <span className="provider-priority">{t("lyrics.preferredSource")}</span></>}</legend>{group.cached && <small>{t("lyrics.cached")}{group.searched ? <> · {new Date(group.searched * 1000).toLocaleString(locale)}</> : null}</small>}{group.loading && <p role="status">{t("app.loading")}</p>}{group.error && <p role="alert">{errorMessage(group.error)}</p>}{!group.loading && !group.error && group.candidates.length === 0 && <p>{t("lyrics.noCandidates")}</p>}</fieldset>)}</div>
+    <div className="lyrics-provider-status" aria-label={t("lyrics.providerStatus")}>{groups.map(group => <fieldset key={group.provider} disabled={saving}><legend>{t(`lyrics.name.${group.provider}`)}{group.provider === onlineProviders[0] && <> <span className="provider-priority">{t("lyrics.preferredSource")}</span></>}</legend>{group.cached && <small>{t("lyrics.cached")}{group.searched ? <> · {new Date(group.searched * 1000).toLocaleString(locale)}</> : null}</small>}{group.loading && <p role="status">{t("app.loading")}</p>}{group.error && <p role="alert">{errorMessage(group.error)}</p>}{!group.loading && !group.error && group.candidates.length === 0 && <p>{t("lyrics.noCandidates")}</p>}</fieldset>)}</div>
     </div>
     {instrumental && <label className="lyrics-candidate lyrics-instrumental" data-selected={!!selected?.instrumental}>
       <input type="radio" name={`lyrics-candidate-${source.id}`} aria-label={t("lyrics.chooseInstrumental")} disabled={saving || restoring || !instrumental?.token} checked={!!selected?.instrumental} onChange={() => instrumental && instrumental.candidates[0] && void choose({ token: instrumental.token, candidate: instrumental.candidates[0], instrumental: true })} />

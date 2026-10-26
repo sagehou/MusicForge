@@ -18,7 +18,7 @@ For multiple domains, follow the [runtime configuration example](../README.md#ru
 
 ## Optional NetEase lyrics login
 
-Lyrics lookup keeps LRCLIB → QQ Music → Kugou → NetEase priority. NetEase first uses an anonymous session, reused in memory for up to ten days and renewed after expiry; restart creates a new session. No account is required by default. Platform or regional restrictions can still block guest access.
+Lyrics matches are ranked by score; ties use QQ Music → Kugou → NetEase → PetitLyrics → LRCLIB. NetEase first uses an anonymous session, reused in memory for up to ten days and renewed after expiry; restart creates a new session. No account is required by default. Platform or regional restrictions can still block guest access.
 
 If NetEase requires an account, sign in and complete any phone/account verification on the official NetEase website or app. Obtain your own logged-in website request's `Cookie` header and save its value as one line in a private `netease.cookie` file, for example `MUSIC_U=<your login value>; __csrf=<your csrf value>`. The file must contain a nonempty `MUSIC_U`, stay within 16 KiB, and contain no `Cookie:` prefix, browser-export JSON or Netscape cookie-file format. MusicForge does not perform password/SMS login or bypass platform verification. The MusicForge administrator account is separate from this provider login.
 

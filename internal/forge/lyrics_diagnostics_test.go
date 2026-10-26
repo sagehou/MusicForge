@@ -26,6 +26,8 @@ func TestLyricsFailedPreviewShowsRawWithoutCachingOrSaving(t *testing.T) {
 		{"Kugou invalid encoding", "kugou", `{"status":200,"content":"not-base64!"}`, "content.base64", "not-base64!", "Kugou returned invalid lyrics data", false, false},
 		{"Kugou plain text", "kugou", `{"status":200,"content":"UGxhaW4gbHlyaWNz"}`, "content", "Plain lyrics", "No synchronized LRC lines found", false, false},
 		{"Kugou no lyric candidates", "kugou", `{"status":200,"candidates":[]}`, "", "", "No synchronized LRC lines found", false, false},
+		{"PetitLyrics plain text", "petitlyrics", `<response><status>00000000</status><songs><song><lyricsId>321</lyricsId><lyricsType>1</lyricsType><lyricsData>UGxhaW4gbHlyaWNz</lyricsData></song></songs></response>`, "lyricsData.text", "Plain lyrics", "No synchronized LRC lines found", false, false},
+		{"PetitLyrics invalid word XML", "petitlyrics", `<response><status>00000000</status><songs><song><lyricsId>321</lyricsId><lyricsType>3</lyricsType><lyricsData>UGxhaW4gbHlyaWNz</lyricsData></song></songs></response>`, "lyricsData.wsy", "Plain lyrics", "petitlyrics returned invalid or oversized lyrics data", false, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			a, s := testApp(t)
@@ -74,6 +76,9 @@ func TestLyricsFailedPreviewShowsRawWithoutCachingOrSaving(t *testing.T) {
 					lyricsJSON(w, `{"status":200,"candidates":[{"id":123,"accesskey":"private-access-key","duration":183000}]}`)
 				case "lyrics.kugou.com/download":
 					lyricsJSON(w, tc.payload)
+				case "on.petitlyrics.com/api/GetPetitLyricsData.php":
+					w.Header().Set("Content-Type", "application/xml")
+					_, _ = w.Write([]byte(tc.payload))
 				default:
 					t.Error("unexpected diagnostic request", r.URL)
 					w.WriteHeader(500)
@@ -116,7 +121,7 @@ func TestLyricsFailedPreviewShowsRawWithoutCachingOrSaving(t *testing.T) {
 			if err != nil || after != before {
 				t.Fatal("diagnostic changed published search-cache contents", err)
 			}
-			if text, _, err := a.chooseLyrics(context.Background(), source, []lyricsCandidate{candidate}, lyricsBatchOptions{MinScore: defaultLyricsMinScore}); text != "" {
+			if text, _, _, err := a.chooseLyrics(context.Background(), source, []lyricsCandidate{candidate}, lyricsBatchOptions{MinScore: defaultLyricsMinScore}); text != "" {
 				t.Fatal("automatic matching accepted raw diagnostic", text, err)
 			}
 			if data, err := os.ReadFile(filepath.Join(s.Output, "Album/01.lrc")); err != nil || string(data) != previous {

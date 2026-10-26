@@ -329,9 +329,9 @@ test("lyrics candidates keep partial results, preview languages and save an expl
   const picker = page.getByRole("region", { name: "Choose lyrics", exact: true });
   await picker.getByLabel("Title or artist", { exact: true }).fill("別名 Artist");
   await picker.getByRole("button", { name: "Search candidates", exact: true }).click();
-  await expect.poll(() => searches.length).toBe(4);
-  expect(searches.map(search => search.provider).sort()).toEqual(["kugou", "lrclib", "netease", "qq"]);
-  await expect(picker.locator(".lyrics-provider-status fieldset > legend")).toHaveText(["LRCLIB Preferred", "QQ Music", "Kugou", "NetEase"]);
+  await expect.poll(() => searches.length).toBe(5);
+  expect(searches.map(search => search.provider).sort()).toEqual(["kugou", "lrclib", "netease", "petitlyrics", "qq"]);
+  await expect(picker.locator(".lyrics-provider-status fieldset > legend")).toHaveText(["QQ Music First on ties", "Kugou", "NetEase", "PetitLyrics", "LRCLIB"]);
   expect(searches.every(search => search.query === "別名 Artist")).toBe(true);
   await expect(picker).toContainText("QQ Music returned HTTP 403; retry later");
   await expect(picker).toContainText("No candidates found");
@@ -367,6 +367,56 @@ test("lyrics candidates keep partial results, preview languages and save an expl
   await expect(page.locator(".lyrics-page")).toHaveCount(0);
   await expect(page.getByRole("dialog")).toHaveCount(0);
 });
+
+for (const higherLRCLIBScore of [false, true]) {
+  test(`provider ties follow QQ Kugou NetEase and PetitLyrics can be selected (higher LRCLIB score: ${higherLRCLIBScore})`, async ({ page }) => {
+    await page.addInitScript(() => { if (!localStorage.getItem("musicforge.language")) localStorage.setItem("musicforge.language", "en"); });
+    const errors: string[] = []; page.on("pageerror", error => errors.push(error.message));
+    const source: Source = { id: 1, path: "Artist/Album/01.flac", artist: "YOASOBI", album: "THE BOOK", title: "夜に駆ける", track: 1, disc: 1, duration: 258.899, present: true, output: "Artist/Album/01.opus", output_present: true, status: "ready", error: "", size: 123, metadata: {}, lyrics: { state: "ready", output: "Artist/Album/01.opus", signature: "audio", checked: 1, additional_provider: "petitlyrics", attempts: [{ provider: "qq", state: "failed", error: "qq lyrics service returned HTTP 403; retry later" }], additional_attempts: [{ provider: "petitlyrics", state: "ready" }] } };
+    await page.route("**/api/auth/me", route => route.fulfill({ json: { initialized: true, authenticated: true, username: "admin", method: "local", csrf: "test", oidc: false, version: "test" } }));
+    await page.route("**/api/library", route => route.fulfill({ json: [source] }));
+    const providers = ["netease", "lrclib", "petitlyrics", "kugou", "qq"];
+    await page.route("**/api/library/1/lyrics/candidates", route => route.fulfill({ json: { query: "夜に駆ける YOASOBI", groups: providers.map(provider => ({ provider, token: `${provider}-saved`, cached: true, candidates: [{ index: 0, provider, title: source.title, artist: source.artist, album: source.album, duration: source.duration, duration_delta: 0, high_confidence: true, identity_match: true, match_score: provider === "lrclib" && higherLRCLIBScore ? 100 : 99, script: provider === "qq" ? "traditional" : "simplified" }] })) } }));
+    const previews: { token: string; index: number }[] = [];
+    await page.route("**/api/library/1/lyrics/preview", route => {
+      const body = route.request().postDataJSON(); previews.push(body);
+      return route.fulfill({ json: { original: `[00:00.870]${body.token === "petitlyrics-saved" ? "テストの歌" : "預覽"}`, script: "unknown" } });
+    });
+    let applied: unknown;
+    await page.route("**/api/library/1/lyrics", route => { applied = route.request().postDataJSON(); return route.fulfill({ json: source.lyrics }); });
+    await page.goto("/library?view=tracks");
+    await page.locator(".lyrics-details > summary").click();
+    await expect(page.locator(".lyrics-status-popover")).toContainText("From PetitLyrics");
+    await page.locator(".lyrics-status-popover > details > summary").click();
+    await expect(page.locator(".lyrics-status-popover")).toContainText("QQ Music returned HTTP 403");
+    await expect(page.locator(".lyrics-status-popover")).toContainText("From PetitLyrics · Available");
+    await page.getByRole("button", { name: "Choose lyrics", exact: true }).click();
+    const picker = page.locator(".lyrics-picker");
+    const names = ["QQ Music", "Kugou", "NetEase", "PetitLyrics", "LRCLIB"];
+    if (higherLRCLIBScore) names.unshift(names.pop()!);
+    await expect(picker.locator(".lyrics-candidate .candidate-source")).toHaveText(names);
+    await expect(picker.locator(".lyrics-candidate[data-recommended=true] .candidate-source")).toHaveText(higherLRCLIBScore ? "LRCLIB" : "QQ Music");
+    await expect.poll(() => previews.length).toBe(1);
+    expect(previews[0].token).toBe(higherLRCLIBScore ? "lrclib-saved" : "qq-saved");
+    await picker.getByRole("combobox", { name: /^Filter candidates by source/ }).selectOption("petitlyrics");
+    await expect(picker.locator(".lyrics-candidate")).toHaveCount(1);
+    await picker.getByRole("radio", { name: "Preview 夜に駆ける · YOASOBI · PetitLyrics", exact: true }).check();
+    await expect(picker.locator("pre")).toHaveText("[00:00.870]テストの歌");
+    await expect(picker.getByRole("button", { name: "Save selected lyrics", exact: true })).toBeEnabled();
+    await page.screenshot({ path: `test-results/lyrics-petitlyrics-priority-${higherLRCLIBScore ? "higher-score" : "ties"}-desktop.png`, animations: "disabled" });
+    await setPreference(page, "language", "zh-CN");
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto("/library?view=tracks&lyrics_track=1");
+    await picker.getByRole("combobox", { name: /^按来源筛选候选/ }).selectOption("petitlyrics");
+    await picker.getByRole("radio", { name: "预览 夜に駆ける · YOASOBI · PetitLyrics", exact: true }).check();
+    await expect(picker.locator("pre")).toHaveText("[00:00.870]テストの歌");
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
+    await page.screenshot({ path: `test-results/lyrics-petitlyrics-priority-${higherLRCLIBScore ? "higher-score" : "ties"}-mobile.png`, animations: "disabled" });
+    await picker.getByRole("button", { name: "保存所选歌词", exact: true }).click();
+    expect(applied).toEqual({ token: "petitlyrics-saved", index: 0, translation: false, romanization: false });
+    expect(errors).toEqual([]);
+  });
+}
 
 test("failed lyric parsing displays raw content safely and keeps saving disabled on desktop and phones", async ({ page }) => {
   await page.addInitScript(() => localStorage.setItem("musicforge.language", "en"));
@@ -446,7 +496,7 @@ test("automatic lyric previews wait for all providers, preserve manual choices a
   await page.route("**/api/library/1/lyrics/candidates", async route => {
     if (route.request().method() === "GET") return route.fulfill({ json: { query: "Track Artist", groups: [] } });
     const { provider } = route.request().postDataJSON();
-    if (provider === "qq") await delayed;
+    if (provider === "netease") await delayed;
     return route.fulfill({ json: { provider, token: `${provider}-choices`, candidates: ["lrclib", "qq"].includes(provider) ? [{ index: 0, provider, title: "Track", artist: "Artist", album: "Album", duration: 183, high_confidence: true, match_score: provider === "lrclib" ? 100 : 99, script: provider === "lrclib" ? "traditional" : "simplified" }] : [] } });
   });
   const previews: unknown[] = [];
@@ -472,16 +522,16 @@ test("automatic lyric previews wait for all providers, preserve manual choices a
   await expect(lrclib).not.toBeChecked();
   expect(previews).toHaveLength(0);
   release!();
-  await expect(qq).toBeChecked();
-  await expect(picker.locator("pre")).toContainText("爱这风云");
-  expect(previews).toEqual([{ token: "qq-choices", index: 0 }]);
-  await startSearch();
-  await lrclib.check();
+  await expect(lrclib).toBeChecked();
   await expect(picker.locator("pre")).toContainText("愛這風雲");
+  expect(previews).toEqual([{ token: "lrclib-choices", index: 0 }]);
+  await startSearch();
+  await qq.check();
+  await expect(picker.locator("pre")).toContainText("爱这风云");
   release!();
   await expect(picker.getByRole("button", { name: "Search candidates", exact: true })).toBeEnabled();
   await expect(qq).toBeVisible();
-  await expect(lrclib).toBeChecked();
+  await expect(qq).toBeChecked();
   expect(previews).toHaveLength(2);
   await startSearch();
   await picker.getByRole("button", { name: "Cancel candidate search", exact: true }).click();
@@ -510,8 +560,9 @@ test("song details and automatic saved recommendations survive reopening and pag
   });
   const previews: unknown[] = [];
   await page.route("**/api/library/1/lyrics/preview", route => {
-    previews.push(route.request().postDataJSON());
-    return route.fulfill({ json: { original: "[00:01.00]爱这风云", script: "simplified" } });
+    const body = route.request().postDataJSON(); previews.push(body);
+    const simplified = body.token === "qq-saved";
+    return route.fulfill({ json: { original: simplified ? "[00:01.00]爱这风云" : "[00:01.00]愛這風雲", script: simplified ? "simplified" : "traditional" } });
   });
   await page.goto("/library?view=albums&artist=Artist&album=Artist%2FAlbum");
   const details = page.locator(".track-file").first();
@@ -525,14 +576,14 @@ test("song details and automatic saved recommendations survive reopening and pag
   let picker = page.getByRole("region", { name: "Choose lyrics", exact: true });
   await expect(picker.getByText("Saved search", { exact: false })).toHaveCount(2);
   const recommended = picker.locator(".lyrics-candidate").filter({ hasText: "Recommended" });
-  await expect(recommended).toContainText("Simplified Chinese characters detected");
-  await expect(recommended).toContainText("Match score 99/100");
-  await expect(recommended).toContainText("Duration difference 0.5 s");
+  await expect(recommended).toContainText("Traditional Chinese characters detected");
+  await expect(recommended).toContainText("Match score 100/100");
+  await expect(recommended).toContainText("Duration difference 0 s");
   expect(searches).toHaveLength(0);
   await expect(recommended.getByRole("radio")).toBeChecked();
   await expect(recommended).toHaveAttribute("data-selected", "true");
-  await expect(picker.locator("pre")).toContainText("爱这风云");
-  expect(previews).toEqual([{ token: "qq-saved", index: 0 }]);
+  await expect(picker.locator("pre")).toContainText("愛這風雲");
+  expect(previews).toEqual([{ token: "lrclib-saved", index: 0 }]);
   await page.setViewportSize({ width: 1440, height: 1000 });
   const candidates = await picker.locator(".lyrics-candidate-groups").boundingBox();
   const preview = await picker.locator(".lyrics-preview-pane").boundingBox();
@@ -542,22 +593,22 @@ test("song details and automatic saved recommendations survive reopening and pag
   await page.getByRole("button", { name: "Choose lyrics", exact: true }).click();
   await expect(picker.getByText("Recommended", { exact: true })).toBeVisible();
   await expect(recommended.getByRole("radio")).toBeChecked();
-  await expect(picker.locator("pre")).toContainText("爱这风云");
+  await expect(picker.locator("pre")).toContainText("愛這風雲");
   expect(searches).toHaveLength(0);
   await page.reload();
   await page.locator(".lyrics-details > summary").click();
   await page.getByRole("button", { name: "Choose lyrics", exact: true }).click();
   await expect(picker.getByText("Recommended", { exact: true })).toBeVisible();
   await expect(recommended.getByRole("radio")).toBeChecked();
-  await expect(picker.locator("pre")).toContainText("爱这风云");
+  await expect(picker.locator("pre")).toContainText("愛這風雲");
   expect(searches).toHaveLength(0);
   await picker.getByRole("button", { name: "Force new search", exact: true }).click();
-  await expect.poll(() => searches.length).toBe(4);
+  await expect.poll(() => searches.length).toBe(5);
   expect(searches.every(search => search.refresh)).toBe(true);
   await expect(picker.getByRole("button", { name: "Search candidates", exact: true })).toBeEnabled();
   await picker.getByRole("button", { name: "Search candidates", exact: true }).click();
-  await expect.poll(() => searches.length).toBe(8);
-  expect(searches.slice(4).every(search => !search.refresh)).toBe(true);
+  await expect.poll(() => searches.length).toBe(10);
+  expect(searches.slice(5).every(search => !search.refresh)).toBe(true);
   await page.keyboard.press("Escape");
   await setPreference(page, "language", "zh-CN");
   await page.setViewportSize({ width: 320, height: 844 });

@@ -29,7 +29,7 @@ test("phone lyric selection opens a separate tab with visible preview and confir
     const id = Number(new URL(route.request().url()).pathname.split("/")[3]);
     return route.fulfill({ json: {
       query: `Song ${id} Artist`, instrumental: { provider: "source", token: `instrumental-${id}`, candidates: [{ index: 0 }] },
-      groups: ["lrclib", "qq", "kugou", "netease"].map(provider => ({ provider, token: `${provider}-${id}`, cached: true, searched: 1800000000,
+      groups: ["qq", "kugou", "netease", "petitlyrics", "lrclib"].map(provider => ({ provider, token: `${provider}-${id}`, cached: true, searched: 1800000000,
         candidates: Array.from({ length: 8 }, (_, index) => ({ index, provider, title: `Song ${id} take ${index + 1}`, artist: "Artist", album: "Album", duration: 183, high_confidence: false, match_score: 90, script: "simplified" })),
       })),
     } });
@@ -68,7 +68,7 @@ test("phone lyric selection opens a separate tab with visible preview and confir
   await expect(page.locator(".lyrics-picker")).toHaveCount(0);
   const picker = pickerTab.locator(".lyrics-picker");
   await expect(picker).toHaveAccessibleName("选择歌词");
-  await expect(picker.getByRole("radio")).toHaveCount(33);
+  await expect(picker.getByRole("radio")).toHaveCount(41);
   await expect(pickerTab.locator(".sidebar")).toBeHidden();
   const previewPane = picker.locator(".lyrics-preview-pane");
   await visibleInViewport(pickerTab, previewPane);
@@ -232,6 +232,6 @@ test("instrumental choices renew expired and consumed targets when replacing lyr
   await expect(confirm).toBeDisabled();
   await expect(picker.getByRole("status")).toContainText("Saved");
   expect(saves).toHaveLength(4);
-  expect(searches).toHaveLength(8);
+  expect(searches).toHaveLength(10);
   await expect(picker.locator(".repair-warning")).toHaveCount(0);
 });

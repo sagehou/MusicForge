@@ -6,12 +6,13 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
 
 func TestReadyLyricsAreSkippedWithoutStorageReadsAfterRestart(t *testing.T) {
-	for _, kind := range []string{"source", "instrumental"} {
+	for _, kind := range []string{"source", "instrumental", "petitlyrics"} {
 		t.Run(kind, func(t *testing.T) {
 			a, settings := testApp(t)
 			seedLyricsArtifact(t, a, settings)
@@ -19,6 +20,20 @@ func TestReadyLyricsAreSkippedWithoutStorageReadsAfterRestart(t *testing.T) {
 			if kind == "instrumental" {
 				token, index := previewInstrumentalLyrics(t, a, request)
 				if w := request("PUT", "/api/library/1/lyrics", map[string]any{"token": token, "index": index}); w.Code != 200 {
+					t.Fatal(w.Code, w.Body.String())
+				}
+			} else if kind == "petitlyrics" {
+				target, err := a.captureLyricsTarget(context.Background(), 1)
+				if err != nil {
+					t.Fatal(err)
+				}
+				candidate := lyricsCandidate{Provider: "petitlyrics", remoteID: "123", Title: "Track", Artist: "Artist", Album: "Album", Duration: 183, text: &lyricsText{Original: "[00:00.870]テストの歌\n"}}
+				group := a.newLyricsChoices(target, "petitlyrics", "Track Artist", []lyricsCandidate{candidate}, true, time.Now().Unix())
+				choice := map[string]any{"token": group.Token, "index": 0}
+				if w := request("POST", "/api/library/1/lyrics/preview", choice); w.Code != 200 {
+					t.Fatal(w.Code, w.Body.String())
+				}
+				if w := request("PUT", "/api/library/1/lyrics", choice); w.Code != 200 || !strings.Contains(w.Body.String(), `"additional_provider":"petitlyrics"`) {
 					t.Fatal(w.Code, w.Body.String())
 				}
 			} else {

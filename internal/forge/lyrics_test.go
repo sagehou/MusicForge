@@ -37,14 +37,16 @@ func (f lyricsTransport) RoundTrip(r *http.Request) (*http.Response, error) { re
 
 func mockLRCLIB(t *testing.T, a *App, handler http.HandlerFunc) {
 	t.Helper()
-	a.lyricsHTTP = &http.Client{Timeout: time.Second, Transport: lyricsTransport(func(r *http.Request) (*http.Response, error) {
-		if r.URL.Host != "lrclib.net" || !strings.Contains(r.Header.Get("User-Agent"), "MusicForge/") || r.Header.Get("Accept") != "application/json" {
-			t.Error("missing client identity or unexpected lyrics endpoint")
+	mockLyricsServices(t, a, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Host == "lrclib.net" {
+			handler(w, r)
+			return
 		}
-		w := httptest.NewRecorder()
-		handler(w, r)
-		return w.Result(), nil
-	})}
+		if !emptyLyricsProviderResponse(t, w, r) {
+			t.Error("unexpected lyrics endpoint", r.URL.Host+r.URL.Path)
+			w.WriteHeader(500)
+		}
+	})
 }
 
 func TestLRCLIBMatching(t *testing.T) {

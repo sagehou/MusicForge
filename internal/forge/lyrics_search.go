@@ -537,7 +537,8 @@ func (a *App) searchLRCLIB(ctx context.Context, source Source) (string, string, 
 	if instrumental {
 		return "", "instrumental", nil
 	}
-	return a.chooseLyrics(ctx, source, candidates, lyricsBatchOptions{MinScore: defaultLyricsMinScore})
+	text, _, state, err := a.chooseLyrics(ctx, source, candidates, lyricsBatchOptions{MinScore: defaultLyricsMinScore})
+	return text, state, err
 }
 
 func (a *App) lyricsGET(ctx context.Context, endpoint string, target any) (int, error) {

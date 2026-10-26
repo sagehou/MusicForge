@@ -59,7 +59,7 @@ func TestLyricsNormalizationKeepsVersionAndTextConflictChecks(t *testing.T) {
 	source := Source{Title: "让爱随风", Artist: "周杰伦", Album: "摇滚乐", Duration: 183}
 	candidate := lyricsCandidate{Title: "讓愛隨風", Artist: "Jay Chou", Album: "搖滾樂", Duration: 183.25,
 		text: &lyricsText{Original: "[00:01.00]讓愛隨風\n"}}
-	text, state, err := a.chooseLyrics(context.Background(), source, []lyricsCandidate{candidate}, lyricsBatchOptions{MinScore: defaultLyricsMinScore})
+	text, _, state, err := a.chooseLyrics(context.Background(), source, []lyricsCandidate{candidate}, lyricsBatchOptions{MinScore: defaultLyricsMinScore})
 	if err != nil || state != "ready" || text != candidate.text.Original {
 		t.Fatal("equivalent metadata did not retain original lyric text", text, state, err)
 	}
@@ -75,7 +75,7 @@ func TestLyricsNormalizationKeepsVersionAndTextConflictChecks(t *testing.T) {
 	candidate.Title = "讓愛隨風"
 	other := candidate
 	other.text = &lyricsText{Original: "[00:02.00]讓愛隨風\n"}
-	if text, state, err = a.chooseLyrics(context.Background(), source, []lyricsCandidate{candidate, other}, lyricsBatchOptions{MinScore: defaultLyricsMinScore}); err != nil || text != "" || state != "needs_review" {
+	if text, _, state, err = a.chooseLyrics(context.Background(), source, []lyricsCandidate{candidate, other}, lyricsBatchOptions{MinScore: defaultLyricsMinScore}); err != nil || text != "" || state != "needs_review" {
 		t.Fatal("matching metadata bypassed conflicting lyric timing", text, state, err)
 	}
 }

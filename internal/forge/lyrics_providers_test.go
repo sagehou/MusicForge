@@ -16,7 +16,11 @@ import (
 func mockLyricsServices(t *testing.T, a *App, handler http.HandlerFunc) {
 	t.Helper()
 	a.lyricsHTTP = &http.Client{Timeout: time.Second, Transport: lyricsTransport(func(r *http.Request) (*http.Response, error) {
-		if r.URL.Scheme != "https" || !strings.Contains(r.Header.Get("User-Agent"), "MusicForge/") || r.Header.Get("Accept") != "application/json" {
+		accept := "application/json"
+		if r.URL.Host == "on.petitlyrics.com" {
+			accept = "application/xml"
+		}
+		if r.URL.Scheme != "https" || !strings.Contains(r.Header.Get("User-Agent"), "MusicForge/") || r.Header.Get("Accept") != accept {
 			t.Error("lyrics request lost HTTPS or client identity")
 		}
 		w := httptest.NewRecorder()
@@ -31,7 +35,7 @@ func lyricsJSON(w http.ResponseWriter, data string) {
 }
 
 func TestLyricsProviderPriorityAndFallback(t *testing.T) {
-	track := Source{Title: "夜に駆ける", Artist: "YOASOBI", Album: "THE BOOK", Duration: 261.12}
+	track := Source{Title: "夜に駆ける", Artist: "YOASOBI", Album: "THE BOOK", Duration: 261}
 	for _, provider := range lyricsProviders {
 		t.Run(provider, func(t *testing.T) {
 			a, _ := testApp(t)
@@ -41,10 +45,9 @@ func TestLyricsProviderPriorityAndFallback(t *testing.T) {
 				switch r.URL.Host + r.URL.Path {
 				case "lrclib.net/api/get":
 					if provider == "lrclib" {
-						lyricsJSON(w, `{"trackName":"夜に駆ける","artistName":"YOASOBI","albumName":"THE BOOK","duration":261.12,"syncedLyrics":"[00:01.00]夜の歌"}`)
+						lyricsJSON(w, `{"trackName":"夜に駆ける","artistName":"YOASOBI","albumName":"THE BOOK","duration":261,"syncedLyrics":"[00:01.00]夜の歌"}`)
 					} else {
-						w.Header().Set("Retry-After", "60")
-						w.WriteHeader(429)
+						w.WriteHeader(404)
 					}
 				case "u.y.qq.com/cgi-bin/musicu.fcg":
 					if r.Method != "POST" || r.Header.Get("Referer") != "https://y.qq.com/" {
@@ -67,6 +70,11 @@ func TestLyricsProviderPriorityAndFallback(t *testing.T) {
 					}
 					if body.Comm.App != "qqmusiclight" || r.Header.Get("Cookie") != "tmeLoginType=-1;" {
 						t.Error("QQ anonymous client identity missing")
+					}
+					if provider != "qq" {
+						w.Header().Set("Retry-After", "60")
+						w.WriteHeader(429)
+						return
 					}
 					if body.Request.Method == "GetSession" {
 						lyricsJSON(w, `{"code":0,"request":{"code":0,"data":{"session":{"uid":"0","sid":"guest-session","userip":"127.0.0.1"}}}}`)
@@ -113,32 +121,51 @@ func TestLyricsProviderPriorityAndFallback(t *testing.T) {
 					if params["keyword"] != track.Title+" "+track.Artist || netEaseRequestCookie(r, "MUSIC_A") != "guest-session" {
 						t.Error("NetEase search lost metadata or guest credentials")
 					}
-					encryptedNetEaseResponse(w, `{"code":200,"data":{"resources":[{"baseInfo":{"simpleSongData":{"id":456,"name":"夜に駆ける","dt":261120,"ar":[{"name":"YOASOBI"}],"al":{"name":"THE BOOK"}}}}]}}`)
+					if provider == "netease" {
+						encryptedNetEaseResponse(w, `{"code":200,"data":{"resources":[{"baseInfo":{"simpleSongData":{"id":456,"name":"夜に駆ける","dt":261000,"ar":[{"name":"YOASOBI"}],"al":{"name":"THE BOOK"}}}}]}}`)
+					} else {
+						encryptedNetEaseResponse(w, `{"code":200,"data":{"resources":[]}}`)
+					}
 				case "interface.music.163.com/eapi/song/lyric/v1":
 					params := readNetEaseParams(t, r)
 					if params["id"] != float64(456) || params["yv"] != "-1" {
 						t.Error("NetEase downloaded wrong recording or format")
 					}
 					encryptedNetEaseResponse(w, `{"code":200,"lrc":{"lyric":"[00:01.00]夜の歌"},"tlyric":{"lyric":"[00:01.00]夜晚的歌"},"romalrc":{"lyric":"[00:01.00]yoru no uta"}}`)
+				case "lrclib.net/api/search":
+					lyricsJSON(w, `[]`)
+				case "on.petitlyrics.com/api/GetPetitLyricsData.php":
+					if err := r.ParseForm(); err != nil {
+						t.Fatal(err)
+					}
+					if provider == "petitlyrics" {
+						song := petitLyricsSong{ID: "123", Title: track.Title, Artist: track.Artist, Album: track.Album, Duration: 261000}
+						if r.Form.Get("lyricsType") == "3" {
+							song.Type, song.Data = 3, base64.StdEncoding.EncodeToString([]byte(`<wsy><line><linestring>夜の歌</linestring><word><starttime>1000</starttime></word></line></wsy>`))
+						}
+						petitLyricsXML(t, w, song)
+					} else {
+						petitLyricsXML(t, w)
+					}
 				default:
 					t.Error("unexpected lyrics request", r.URL.Host+r.URL.Path)
 					w.WriteHeader(500)
 				}
 			})
 			text, actual, state, attempts, err := a.searchOnlineLyrics(context.Background(), lyricsTarget{Source: track}, lyricsBatchOptions{MinScore: defaultLyricsMinScore})
-			if err != nil || actual != provider || state != "ready" || text != "[00:01.00]夜の歌\n" {
+			if err != nil || actual != provider || state != "ready" || !strings.HasSuffix(text, "]夜の歌\n") {
 				t.Fatal(actual, state, text, err, calls)
 			}
-			if calls[0] != "lrclib.net/api/get" || attempts[len(attempts)-1].Provider != provider {
+			if calls[0] != "u.y.qq.com/cgi-bin/musicu.fcg" || attempts[len(attempts)-1].Provider != provider {
 				t.Fatal("priority lost", calls, attempts)
 			}
-			if provider == "lrclib" && len(calls) != 1 {
-				t.Fatal("queried fallbacks after LRCLIB succeeded", calls)
+			if len(attempts) != lyricsProviderPriority(provider)+1 {
+				t.Fatal("queried lower-priority providers after an eligible 100-point result", calls, attempts)
 			}
-			if provider != "lrclib" && (attempts[0].State != "failed" || time.Until(a.lyricsRetryAt) < 55*time.Second) {
+			if provider != "qq" && (attempts[0].State != "failed" || time.Until(a.lyricsRetries["qq"]) < 55*time.Second) {
 				t.Fatal("provider cooldown or failure was lost", attempts)
 			}
-			if provider == "netease" && (attempts[2].Provider != "kugou" || attempts[2].State != "failed") {
+			if provider == "netease" && (attempts[1].Provider != "kugou" || attempts[1].State != "failed") {
 				t.Fatal("Kugou rejection was mistaken for missing lyrics", attempts)
 			}
 		})
@@ -279,7 +306,7 @@ func TestLyricsProviderFormatsAndLanguageMerge(t *testing.T) {
 	first := lyricsCandidate{Title: "Song", Artist: "Artist", Album: "Album", Duration: 183, text: &lyricsText{Original: "[00:01.00]First\n"}}
 	second := first
 	second.text = &lyricsText{Original: "[00:01.00]Different\n"}
-	if data, state, err := app.chooseLyrics(context.Background(), source, []lyricsCandidate{first, second}, lyricsBatchOptions{MinScore: defaultLyricsMinScore}); err != nil || data != "" || state != "needs_review" {
+	if data, _, state, err := app.chooseLyrics(context.Background(), source, []lyricsCandidate{first, second}, lyricsBatchOptions{MinScore: defaultLyricsMinScore}); err != nil || data != "" || state != "needs_review" {
 		t.Fatal("silently chose conflicting lyrics", data, state, err)
 	}
 	ctx, cancel := context.WithCancel(context.Background())

@@ -22,7 +22,16 @@ import (
 	"unicode"
 )
 
-var lyricsProviders = []string{"lrclib", "qq", "kugou", "netease"}
+var lyricsProviders = []string{"qq", "kugou", "netease", "petitlyrics", "lrclib"}
+
+func lyricsProviderPriority(provider string) int {
+	for i, name := range lyricsProviders {
+		if provider == name {
+			return i
+		}
+	}
+	return len(lyricsProviders)
+}
 
 type lyricsAttempt struct {
 	Provider string `json:"provider"`
@@ -210,8 +219,11 @@ func rankLyricsCandidates(candidates []lyricsCandidate, source Source) {
 	}
 	sort.SliceStable(candidates, func(i, j int) bool {
 		a, b := candidates[i], candidates[j]
-		if a.HighConfidence != b.HighConfidence {
-			return a.HighConfidence
+		if a.MatchScore != b.MatchScore {
+			return a.MatchScore > b.MatchScore
+		}
+		if a.Provider != b.Provider {
+			return lyricsProviderPriority(a.Provider) < lyricsProviderPriority(b.Provider)
 		}
 		if (a.Script == "simplified") != (b.Script == "simplified") {
 			return a.Script == "simplified"
@@ -219,7 +231,7 @@ func rankLyricsCandidates(candidates []lyricsCandidate, source Source) {
 		if (a.TranslationScript == "simplified") != (b.TranslationScript == "simplified") {
 			return a.TranslationScript == "simplified"
 		}
-		return a.MatchScore > b.MatchScore
+		return false
 	})
 }
 
@@ -236,13 +248,15 @@ func (a *App) searchOnlineLyrics(ctx context.Context, target lyricsTarget, batch
 		return
 	}
 	review, instrumental, failed := false, false, false
-	var traditionalText, traditionalProvider string
+	var bestText, bestProvider string
+	bestScore := -1
 	for _, name := range lyricsProviders {
 		candidates, noVocals, _, searched, searchErr := a.cachedLyricsCandidates(ctx, target, name, "", false, batch.Refresh)
 		instrumental = instrumental || noVocals
 		result, resultState := "", "not_found"
+		selectedScore := -1
 		if searchErr == nil {
-			result, resultState, searchErr = a.chooseLyrics(ctx, source, candidates, batch)
+			result, selectedScore, resultState, searchErr = a.chooseLyrics(ctx, source, candidates, batch)
 			if ctx.Err() == nil {
 				if cacheErr := a.storeLyricsSearch(ctx, target, name, "", candidates, noVocals, searched); cacheErr != nil {
 					return "", "", "failed", attempts, cacheErr
@@ -262,21 +276,19 @@ func (a *App) searchOnlineLyrics(ctx context.Context, target lyricsTarget, batch
 		}
 		attempts = append(attempts, attempt)
 		if result != "" && searchErr == nil {
-			script := lyricsScript(result)
-			if batch.ReplaceTraditional && script != "simplified" {
-				continue
+			if selectedScore > bestScore {
+				bestText, bestProvider, bestScore = result, name, selectedScore
 			}
-			if script == "simplified" || traditionalText == "" && script != "traditional" {
-				return result, name, "ready", attempts, nil
-			}
-			if traditionalText == "" {
-				traditionalText, traditionalProvider = result, name
+			// Providers are visited in tie order. Nothing later can beat an
+			// eligible, successfully parsed 100-point result from this prefix.
+			if bestScore == 100 {
+				return bestText, bestProvider, "ready", attempts, nil
 			}
 		}
 		review = review || resultState == "needs_review"
 	}
-	if traditionalText != "" {
-		return traditionalText, traditionalProvider, "ready", attempts, nil
+	if bestText != "" {
+		return bestText, bestProvider, "ready", attempts, nil
 	}
 	switch {
 	case review:
@@ -291,7 +303,7 @@ func (a *App) searchOnlineLyrics(ctx context.Context, target lyricsTarget, batch
 	return
 }
 
-func (a *App) chooseLyrics(ctx context.Context, source Source, candidates []lyricsCandidate, batch lyricsBatchOptions) (string, string, error) {
+func (a *App) chooseLyrics(ctx context.Context, source Source, candidates []lyricsCandidate, batch lyricsBatchOptions) (string, int, string, error) {
 	rankLyricsCandidates(candidates, source)
 	var safe []*lyricsCandidate
 	for i := range candidates {
@@ -300,13 +312,14 @@ func (a *App) chooseLyrics(ctx context.Context, source Source, candidates []lyri
 			safe = append(safe, &candidates[i])
 		}
 	}
-	// ponytail: bound downloads per track; crowded or conflicting recordings are
+	// Bound downloads per track; crowded or conflicting recordings are
 	// left for the existing candidate picker instead of guessing a winner.
 	if len(safe) > 3 {
-		return "", "needs_review", nil
+		return "", -1, "needs_review", nil
 	}
-	var selected string
+	var selected, reference string
 	selectedScript := ""
+	selectedScore := -1
 	var failures []error
 	for _, candidate := range safe {
 		text, err := a.candidateLyrics(ctx, *candidate)
@@ -318,30 +331,31 @@ func (a *App) chooseLyrics(ctx context.Context, source Source, candidates []lyri
 			continue
 		}
 		candidate.text = &text
-		if selected != "" && selected != text.Original {
+		if reference != "" && reference != text.Original {
 			// Script preference cannot resolve different words or timing.
-			if foldLyricsScript(selected) != foldLyricsScript(text.Original) {
-				return "", "needs_review", nil
+			if foldLyricsScript(reference) != foldLyricsScript(text.Original) {
+				return "", -1, "needs_review", nil
 			}
 		}
+		reference = text.Original
 		script := lyricsScript(text.Original)
-		if selected == "" || script == "simplified" && selectedScript != "simplified" {
-			selected, selectedScript = text.Original, script
+		if batch.ReplaceTraditional && script != "simplified" {
+			continue
+		}
+		if selected == "" || candidate.MatchScore > selectedScore || candidate.MatchScore == selectedScore && script == "simplified" && selectedScript != "simplified" {
+			selected, selectedScript, selectedScore = text.Original, script, candidate.MatchScore
 		}
 	}
 	if len(failures) > 0 {
-		return "", "failed", errors.Join(failures...)
+		return "", -1, "failed", errors.Join(failures...)
 	}
 	if selected != "" {
-		if batch.ReplaceTraditional && selectedScript != "simplified" {
-			return "", "not_found", nil
-		}
-		return selected, "ready", nil
+		return selected, selectedScore, "ready", nil
 	}
 	if len(candidates) > len(safe) {
-		return "", "needs_review", nil
+		return "", -1, "needs_review", nil
 	}
-	return "", "not_found", nil
+	return "", -1, "not_found", nil
 }
 
 func (a *App) providerCandidates(ctx context.Context, provider string, source Source, query string, manual bool) ([]lyricsCandidate, bool, error) {
@@ -360,6 +374,8 @@ func (a *App) providerCandidates(ctx context.Context, provider string, source So
 		candidates, err = a.kugouCandidates(ctx, query)
 	case "netease":
 		candidates, err = a.neteaseCandidates(ctx, query)
+	case "petitlyrics":
+		candidates, err = a.petitLyricsCandidates(ctx, source, query)
 	default:
 		return nil, false, errors.New("Unknown lyrics provider")
 	}
@@ -578,6 +594,8 @@ func (a *App) candidateLyrics(ctx context.Context, candidate lyricsCandidate) (l
 	var text lyricsText
 	diagnostic := &lyricsDiagnostic{}
 	switch candidate.Provider {
+	case "petitlyrics":
+		return a.petitLyricsText(ctx, candidate)
 	case "qq":
 		params := url.Values{"songmid": {candidate.mid}, "format": {"json"}, "nobase64": {"1"}, "g_tk": {"5381"}}
 		var response struct {
@@ -772,7 +790,9 @@ func (a *App) lyricsHTTPResponse(provider string, request *http.Request) (*http.
 	if request.Header.Get("User-Agent") == "" {
 		request.Header.Set("User-Agent", "MusicForge/"+a.version+" (https://github.com/sagehou/MusicForge)")
 	}
-	request.Header.Set("Accept", "application/json")
+	if request.Header.Get("Accept") == "" {
+		request.Header.Set("Accept", "application/json")
+	}
 	client := http.Client{Timeout: 10 * time.Second}
 	if a.lyricsHTTP != nil {
 		client = *a.lyricsHTTP

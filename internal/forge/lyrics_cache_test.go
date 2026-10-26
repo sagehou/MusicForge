@@ -223,14 +223,14 @@ func TestLyricsRecommendationUsesMetadataAndScriptWithoutGuessing(t *testing.T) 
 	wrongVersion.Title = "Song (Live)"
 	candidates := []lyricsCandidate{wrongVersion, traditional, simplified}
 	rankLyricsCandidates(candidates, source)
-	if candidates[0].Script != "simplified" || !candidates[0].HighConfidence || candidates[0].MatchScore < 96 || candidates[2].HighConfidence {
+	if candidates[0].Script != "traditional" || !candidates[0].HighConfidence || candidates[0].MatchScore != 100 || candidates[2].HighConfidence {
 		t.Fatal(candidates)
 	}
-	if data, state, err := a.chooseLyrics(context.Background(), source, candidates[:2], lyricsBatchOptions{MinScore: defaultLyricsMinScore}); err != nil || state != "ready" || data != simplified.text.Original {
-		t.Fatal("did not prefer equivalent Simplified Chinese lyrics", data, state, err)
+	if data, _, state, err := a.chooseLyrics(context.Background(), source, candidates[:2], lyricsBatchOptions{MinScore: defaultLyricsMinScore}); err != nil || state != "ready" || data != traditional.text.Original {
+		t.Fatal("did not prefer higher-scoring equivalent lyrics", data, state, err)
 	}
 	traditional.text = &lyricsText{Original: "[00:02.00]愛這風雲\n"}
-	if _, state, _ := a.chooseLyrics(context.Background(), source, []lyricsCandidate{simplified, traditional}, lyricsBatchOptions{MinScore: defaultLyricsMinScore}); state != "needs_review" {
+	if _, _, state, _ := a.chooseLyrics(context.Background(), source, []lyricsCandidate{simplified, traditional}, lyricsBatchOptions{MinScore: defaultLyricsMinScore}); state != "needs_review" {
 		t.Fatal("script preference erased conflicting timing", state)
 	}
 	for _, text := range []string{"[ti:爱这风云]\n[00:01.00]hello", "[00:01.00]爱してる", "[00:01.00]하늘과爱", "[00:01.00]你好"} {
@@ -240,7 +240,7 @@ func TestLyricsRecommendationUsesMetadataAndScriptWithoutGuessing(t *testing.T) 
 	}
 }
 
-func TestAutomaticLyricsPrefersSimplifiedWithTraditionalFallback(t *testing.T) {
+func TestAutomaticLyricsUsesQQWithTraditionalFallback(t *testing.T) {
 	for _, available := range []bool{true, false} {
 		a, _ := testApp(t)
 		mockLyricsServices(t, a, func(w http.ResponseWriter, r *http.Request) {

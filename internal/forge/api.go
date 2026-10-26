@@ -47,6 +47,8 @@ type apiResponse struct {
 	err    error
 }
 
+func (w *apiResponse) Unwrap() http.ResponseWriter { return w.ResponseWriter }
+
 func (w *apiResponse) WriteHeader(status int) {
 	if w.status != 0 {
 		return
@@ -108,6 +110,8 @@ func (a *App) Handler() http.Handler {
 	mux.HandleFunc("GET /api/lidarr/check", a.auth(a.getLidarrCheck))
 	mux.HandleFunc("POST /api/lidarr/check", a.auth(a.startLidarrCheck))
 	mux.HandleFunc("GET /api/library/{id}/artwork", a.auth(a.libraryArtwork))
+	mux.HandleFunc("GET /api/library/{id}/audition", a.auth(a.libraryAudition))
+	mux.HandleFunc("GET /api/library/{id}/audition/audio", a.auth(a.libraryAuditionAudio))
 	mux.HandleFunc("GET /api/lyrics", a.auth(a.getLyrics))
 	mux.HandleFunc("PUT /api/lyrics/options", a.auth(a.putLyricsOptions))
 	mux.HandleFunc("POST /api/lyrics/search", a.auth(a.requestLyrics))
@@ -179,7 +183,8 @@ func (a *App) Handler() http.Handler {
 		if strings.HasPrefix(r.URL.Path, "/api/") {
 			requestID := randomToken()[:16]
 			w.Header().Set("X-Request-ID", requestID)
-			if r.Method == "GET" && !strings.HasPrefix(r.URL.Path, "/api/auth/oidc/") {
+			audioStream := strings.HasPrefix(r.URL.Path, "/api/library/") && strings.HasSuffix(r.URL.Path, "/audition/audio")
+			if r.Method == "GET" && !strings.HasPrefix(r.URL.Path, "/api/auth/oidc/") && !audioStream {
 				ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
 				defer cancel()
 				r = r.WithContext(ctx)

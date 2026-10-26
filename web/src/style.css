@@ -1504,6 +1504,8 @@ input[role="switch"]:checked::after { transform: translateX(22px); background: v
 
 /* Song details stay in the list; phone lyric selection opens its own page. */
 .track-row[data-expanded="true"] { background: var(--subtle); }
+.track-title-line .track-audition-trigger { flex: none; width: 30px; min-height: 30px; height: 30px; padding: 4px; color: var(--muted); }
+.track-title-line .track-audition-trigger:hover, .track-title-line .track-audition-trigger[aria-expanded="true"] { color: var(--accent); background: var(--accent-soft); }
 .track-expand-icon { flex: none; color: var(--muted); transition: transform 160ms var(--ease); }
 .track-open[aria-expanded="true"] .track-expand-icon { transform: rotate(90deg); color: var(--accent); }
 .track-table .track-expanded-row > td { padding: 0 8px 12px; width: auto; }
@@ -1522,6 +1524,39 @@ input[role="switch"]:checked::after { transform: translateX(22px); background: v
 .track-output .ui-button { width: 30px; height: 30px; min-height: 30px; padding: 4px; }
 .track-output .repair-controls { gap: 4px; }
 .track-file > dl { background: var(--surface); }
+.audition-body { display: grid; gap: 12px; }
+.audition-body > audio { display: none; }
+.audition-controls { display: flex; align-items: center; gap: 12px; padding: 12px; border: 1px solid var(--line); border-radius: var(--radius-control); background: var(--surface); }
+.audition-controls > .ui-button { flex: none; }
+.audition-controls input[type="range"] { flex: 1; min-width: 0; width: 100%; padding: 0; min-height: 32px; border: 0; box-shadow: none; appearance: auto; accent-color: var(--accent); cursor: pointer; }
+.audition-controls input:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.audition-controls input:disabled { cursor: default; }
+.audition-time { flex: none; color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+.audition-format { color: var(--muted); font-size: 11px; border-left: 1px solid var(--line); padding-left: 12px; }
+.audition-lyrics-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 30px; font-size: 12px; color: var(--muted); }
+.audition-lyrics-heading .ui-button { min-height: 30px; font-size: 12px; }
+.audition-lyrics-heading .ui-button[aria-pressed="true"] { color: var(--accent); background: var(--accent-soft); }
+.audition-lyrics { position: relative; height: clamp(144px, 28dvh, 256px); overflow-y: auto; overscroll-behavior: contain; border: 1px solid var(--line); border-radius: var(--radius-control); background: var(--surface); scrollbar-gutter: stable; }
+.audition-line { display: flex; align-items: baseline; gap: 16px; margin: 0; padding: 12px 16px; color: var(--muted); font-size: 14px; line-height: 1.8; }
+.audition-line time { flex: none; font-size: 11px; font-variant-numeric: tabular-nums; }
+.audition-line > span { white-space: pre-line; overflow-wrap: anywhere; }
+.audition-line[aria-current="true"] { color: var(--accent); background: var(--accent-soft); font-weight: 500; }
+.audition-empty { display: grid; align-content: center; min-height: 100%; margin: 0; padding: 24px; color: var(--muted); text-align: center; font-size: 13px; line-height: 1.8; }
+.audition-loading { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 13px; }
+.audition-note, .audition-warning, .audition-error p { margin: 0; font-size: 12px; line-height: 1.8; overflow-wrap: anywhere; }
+.audition-note { color: var(--muted); }
+.audition-warning { color: var(--warning); }
+.audition-error { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px 16px; color: var(--danger); }
+@media (max-width: 600px) {
+  .track-title-line .track-audition-trigger { width: 34px; height: 36px; min-height: 36px; }
+  .artifact-audition { scroll-margin-bottom: calc(92px + env(safe-area-inset-bottom)); }
+  .artifact-audition .detail-titlebar { flex-wrap: nowrap; }
+  .audition-controls { gap: 8px; padding: 8px; }
+  .audition-controls > .ui-button { width: 36px; height: 36px; min-height: 36px; }
+  .audition-format { display: none; }
+  .audition-line { gap: 12px; padding: 10px 12px; font-size: 13px; }
+  .audition-empty { padding: 16px; }
+}
 .inline-details.lyrics-picker { max-height: none; overflow: visible; box-shadow: none; }
 @media (max-width: 1000px) {
   .track-table .track-expanded-row { display: block; padding: 0 0 12px; border: 0; }

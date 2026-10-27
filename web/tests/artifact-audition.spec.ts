@@ -4,7 +4,7 @@ import type { Source } from "../src/types";
 import { setPreference } from "./preferences";
 
 const sources: Source[] = [
-  { id: 91, title: "Nightfall", artist: "River Ensemble", album: "Night Studies", path: "River/Night/01.flac", track: 1, disc: 1, duration: 180, present: true, output: "River/Night/01.opus", output_present: true, status: "ready", error: "", size: 10485760, source_audio: { codec: "flac", sample_rate: 44100, bit_depth: 16, channels: 2 }, metadata: {} },
+  { id: 91, title: "Nightfall", artist: "River Ensemble", album: "Night Studies", path: "River/Night/01.flac", track: 1, disc: 1, duration: 180, present: true, output: "River/Night/01.opus", output_present: true, status: "ready", error: "", size: 26214400, source_bitrate: 894000, output_size: 5242880, source_audio: { codec: "flac", sample_rate: 96000, bit_depth: 24, channels: 2 }, lyrics: { state: "ready", output: "River/Night/01.opus", signature: "audio", checked: 1 }, metadata: {} },
   { id: 92, title: "Still Water", artist: "River Ensemble", album: "Night Studies", path: "River/Night/02.flac", track: 2, disc: 1, duration: 180, present: false, output: "River/Night/02.opus", output_present: true, status: "expired", error: "", size: 10485760, metadata: {} },
   { id: 93, title: "Unbuilt", artist: "River Ensemble", album: "Night Studies", path: "River/Night/03.flac", track: 3, disc: 1, present: true, output: "", output_present: false, status: "missing", error: "", size: 10485760, metadata: {} },
 ];
@@ -201,6 +201,11 @@ test.describe("phone audition", () => {
     await page.goto(view === "album" ? "/library?view=albums&artist=River&album=River%2FNight" : "/library?view=tracks");
     await setPreference(page, "language", "zh-CN");
     await setPreference(page, "theme", "dark");
+    const row = page.locator(".track-row").first();
+    await row.scrollIntoViewIfNeeded();
+    for (const text of ["24 bit / 96 kHz", "894 kbps", "25 MiB", "5 MiB"]) await expect(row).toContainText(text);
+    expect((await row.boundingBox())!.height).toBeLessThanOrEqual(230);
+    await page.screenshot({ path: `test-results/audition-phone-${view}-${browserName}-library-dark-zh.png`, animations: "disabled" });
     await page.getByRole("button", { name: "试听 Nightfall", exact: true }).tap();
     const panel = page.locator(".artifact-audition");
     await expect(panel.locator("audio")).toHaveAttribute("src", /audition\/audio/);

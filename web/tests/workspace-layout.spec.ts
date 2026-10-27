@@ -151,6 +151,11 @@ test("phone pages retain real content, readable facts and inline song details in
     await expect(page.locator(".track-table tbody > tr").first().locator(".track-open")).toBeInViewport();
     const first = await page.locator(".track-table tbody > tr").first().boundingBox();
     expect(first!.y + first!.height).toBeLessThan(780);
+    expect(first!.height).toBeLessThanOrEqual(230);
+    const facts = page.locator(".track-row").first().locator(".track-facts");
+    for (const text of ["3:21", "24 bit / 96 kHz", "894 kbps", "25 MiB", "5 MiB"]) await expect(facts).toContainText(text);
+    for (const value of await facts.locator("dd").all()) await expect(value).toBeVisible();
+    expect(await facts.evaluate(element => element.scrollWidth <= element.clientWidth + 1)).toBe(true);
     const lyricsTitle = await page.locator(".lyrics-settings > summary").boundingBox();
     expect(lyricsTitle!.height).toBeLessThanOrEqual(40);
     expect(await page.locator(".lyrics-state").first().evaluate(element => element.scrollHeight <= element.clientHeight + 1)).toBe(true);

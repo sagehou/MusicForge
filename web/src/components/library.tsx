@@ -52,7 +52,7 @@ function TrackFacts({ source, compact = false }: { source: Source; compact?: boo
   return <dl className={`track-facts ${compact ? "track-facts-compact" : ""}`}>
     <div className="track-fact-duration"><dt>{t("library.duration")}</dt><dd>{duration(source.duration || 0)}</dd></div>
     <div className="track-fact-audio"><dt>{t("library.sourceAudio")}</dt><dd className="track-spec-chip"><AudioSpec audio={source.source_audio} /></dd><dd className="track-bitrate" title={!source.source_bitrate ? t("library.bitratePending") : undefined}><span>{t("library.sourceBitrate")} </span>{source.source_bitrate ? `${number(Math.round(source.source_bitrate / 1000))} kbps` : "—"}</dd></div>
-    <div className="track-fact-sizes"><dt>{t(compact ? "library.sourceSizeShort" : "library.sourceSize")}</dt><dd>{fileSize(source.size, locale)}</dd>{source.output_present && source.output_size !== undefined && <><dt>{t(compact ? "library.outputSizeShort" : "library.outputSize")}</dt><dd className="track-output-size">{fileSize(source.output_size, locale)}</dd></>}</div>
+    <div className="track-fact-sizes"><dt title={t("library.sourceSize")}>{t("library.sourceSizeShort")}</dt><dd>{fileSize(source.size, locale)}</dd>{source.output_present && source.output_size !== undefined && <><dt title={t("library.outputSize")}>{t("library.outputSizeShort")}</dt><dd className="track-output-size">{fileSize(source.output_size, locale)}</dd></>}</div>
   </dl>;
 }
 function GroupFacts({ tracks }: { tracks: Source[] }) {

@@ -1,5 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
-import { openAccount, setPreference } from "./preferences";
+import { openAccount, openLibraryOptions, setPreference } from "./preferences";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 
@@ -177,6 +177,7 @@ test("checkbox, partial selection, hover, focus, switch and disabled states shar
   await setup(page);
   await page.goto("/library?view=tracks");
   const first = page.getByLabel("Select Song 1", { exact: true });
+  await openLibraryOptions(page);
   const all = page.getByLabel("Select current page", { exact: true });
   expect(await first.evaluate(element => getComputedStyle(element).appearance)).toBe("none");
   await first.check();
@@ -184,6 +185,7 @@ test("checkbox, partial selection, hover, focus, switch and disabled states shar
   expect(await all.evaluate(element => (element as HTMLInputElement).indeterminate)).toBe(true);
   const shape = await all.evaluate(element => getComputedStyle(element, "::after").height);
   expect(shape).toBe("2px");
+  await page.locator(".library-options > summary").press("Escape");
   await page.keyboard.press("Tab");
   await first.focus();
   expect(await first.evaluate(element => getComputedStyle(element).outlineStyle)).toBe("solid");
@@ -230,4 +232,33 @@ test("top-right controls and color menus fit narrow screens in either language a
       }
     }
   }
+});
+
+test("approved settings grid and category tabs match at desktop and phone widths", async ({ page, context }) => {
+  await setup(page);
+  const reference = await context.newPage();
+  const design = await readFile(resolve("../docs/ui-refinement-preview.html"), "utf8");
+  for (const [width, height, theme] of [[1440, 900, "light"], [390, 844, "dark"]] as const) {
+    await page.setViewportSize({ width, height });
+    await page.goto("/settings?section=encoding");
+    await setPreference(page, "language", "zh-CN");
+    await setPreference(page, "theme", theme);
+    await expect(page.locator("#settings-tab-encoding")).toHaveAttribute("aria-selected", "true");
+    await expect(page.locator(".settings-nav")).toHaveAttribute("aria-orientation", width > 800 ? "vertical" : "horizontal");
+    await reference.setViewportSize({ width, height });
+    await reference.setContent(design);
+    await reference.addStyleTag({ content: "#inspector-bar { display:none } #preview-container { padding:0 } #preview-frame { border:0 }" });
+    await reference.evaluate(({ theme, width }) => { (window as any).setTheme(theme); (window as any).setVp(width === 390 ? "mobile" : "desktop"); (window as any).setPage("settings"); }, { theme, width });
+    for (const [actual, approved] of [[".settings-layout", ".settings-layout"], [".settings-nav", ".settings-tabs"], [".settings-content", ".settings-layout > section"]]) {
+      const a = (await page.locator(actual).boundingBox())!, b = (await reference.locator(approved).boundingBox())!;
+      expect(Math.abs(a.x - b.x), `${actual} x at ${width}`).toBeLessThanOrEqual(1);
+      expect(Math.abs(a.width - b.width), `${actual} width at ${width}`).toBeLessThanOrEqual(1);
+    }
+    const grid = await page.locator('[data-settings-section="encoding"] .form-grid').evaluate(node => { const s = getComputedStyle(node); return [s.gridTemplateColumns, s.gap]; });
+    const approvedGrid = await reference.locator(".form-grid").evaluate(node => { const s = getComputedStyle(node); return [s.gridTemplateColumns, s.gap]; });
+    expect(grid).toEqual(approvedGrid);
+    await page.screenshot({ path: `test-results/approved-actual-settings-${width}-${theme}.png`, animations: "disabled" });
+    await reference.locator("#preview-frame").screenshot({ path: `test-results/approved-reference-settings-${width}-${theme}.png`, animations: "disabled" });
+  }
+  await reference.close();
 });

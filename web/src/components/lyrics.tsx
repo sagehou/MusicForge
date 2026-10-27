@@ -280,9 +280,8 @@ export function LyricsPicker({ source, notify, close, saved, previous, next, onB
     if (autoSelect.current && !restoring && !loading && !selected && recommended?.token) void choose({ token: recommended.token, candidate: recommended.candidate });
   }, [restoring, loading, selected, recommended, choose]);
   return <InlineDetails id={`track-lyrics-${source.id}`} returnFocusID={`track-lyrics-trigger-${source.id}`} className="lyrics-picker" title={t("lyrics.choose")} subtitle={`${source.title} · ${source.artist}${source.duration ? ` · ${t("lyrics.targetDuration", { seconds: source.duration })}` : ""}`} close={close} closeLabel={t("lyrics.close")} busy={saving} actions={<><Button type="button" variant="ghost" size="icon" aria-label={t("library.previousTrack")} title={t("library.previousTrack")} disabled={saving || !previous} onClick={previous}><ChevronLeft size={17} /></Button><Button type="button" variant="ghost" size="icon" aria-label={t("library.nextTrack")} title={t("library.nextTrack")} disabled={saving || !next} onClick={next}><ChevronRight size={17} /></Button></>}>
-    <div className="lyrics-picker-results"><div className="lyrics-candidate-groups">
-    <div className="lyrics-search-pane">
-    <details className="lyrics-guidance"><summary>{t("lyrics.recommendationInfo")}</summary><p>{t("lyrics.recommendationHint")}</p><p>{t("lyrics.cacheHint")}</p></details>
+    <div className="lyrics-picker-results"><div className="lyrics-search-pane">
+
     <ResourceWarning error={options.error} retry={options.retry} />
     {restoring && <p role="status">{t("lyrics.restoring")}</p>}
     {restoreError && <div role="alert"><p>{errorMessage(restoreError)}</p><Button type="button" variant="outline" size="sm" onClick={reloadCandidates}>{t("app.retry")}</Button></div>}
@@ -292,8 +291,10 @@ export function LyricsPicker({ source, notify, close, saved, previous, next, onB
       <Button type="button" variant="ghost" disabled={saving || restoring || loading || !query.trim()} onClick={() => void search(true)}>{t("lyrics.forceSearch")}</Button>
       {loading && <Button type="button" variant="ghost" onClick={cancelSearch}>{t("lyrics.cancelSearch")}</Button>}
     </form>
-    <div className="lyrics-provider-status" aria-label={t("lyrics.providerStatus")}>{groups.map(group => <fieldset key={group.provider} disabled={saving}><legend>{t(`lyrics.name.${group.provider}`)}{group.provider === onlineProviders[0] && <> <span className="provider-priority">{t("lyrics.preferredSource")}</span></>}</legend>{group.cached && <small>{t("lyrics.cached")}{group.searched ? <> · {new Date(group.searched * 1000).toLocaleString(locale)}</> : null}</small>}{group.loading && <p role="status">{t("app.loading")}</p>}{group.error && <p role="alert">{errorMessage(group.error)}</p>}{!group.loading && !group.error && group.candidates.length === 0 && <p>{t("lyrics.noCandidates")}</p>}</fieldset>)}</div>
+    <details className="lyrics-guidance" open={groups.some(group => !!group.error) || undefined}><summary>{t("lyrics.recommendationInfo")}</summary><p>{t("lyrics.recommendationHint")}</p><p>{t("lyrics.cacheHint")}</p>
+      <div className="lyrics-provider-status" aria-label={t("lyrics.providerStatus")}>{groups.map(group => <fieldset key={group.provider} disabled={saving}><legend>{t(`lyrics.name.${group.provider}`)}{group.provider === onlineProviders[0] && <> <span className="provider-priority">{t("lyrics.preferredSource")}</span></>}</legend>{group.cached && <small>{t("lyrics.cached")}{group.searched ? <> · {new Date(group.searched * 1000).toLocaleString(locale)}</> : null}</small>}{group.loading && <p role="status">{t("app.loading")}</p>}{group.error && <p role="alert">{errorMessage(group.error)}</p>}{!group.loading && !group.error && group.candidates.length === 0 && <p>{t("lyrics.noCandidates")}</p>}</fieldset>)}</div></details>
     </div>
+    <div className="lyrics-candidate-groups">
     {instrumental && <label className="lyrics-candidate lyrics-instrumental" data-selected={!!selected?.instrumental}>
       <input type="radio" name={`lyrics-candidate-${source.id}`} aria-label={t("lyrics.chooseInstrumental")} disabled={saving || restoring || !instrumental?.token} checked={!!selected?.instrumental} onChange={() => instrumental && instrumental.candidates[0] && void choose({ token: instrumental.token, candidate: instrumental.candidates[0], instrumental: true })} />
       <Music2 size={18} aria-hidden="true" /><span><strong>{t("lyrics.instrumental")}</strong><small>{t("lyrics.instrumentalHint")}</small></span>

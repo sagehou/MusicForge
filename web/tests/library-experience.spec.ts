@@ -1,4 +1,4 @@
-import { openLibraryOptions, setPreference } from "./preferences";
+import { selectLibraryPage, openLibraryOptions, setPreference } from "./preferences";
 import { test, expect, type Page } from "@playwright/test";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
@@ -74,6 +74,7 @@ test("all-album and list views, unverified filter, missing images and persisted 
   await mockLibrary(page, detailed);
   await page.goto("/library?view=albums");
   await expect(page.locator(".library-group")).toHaveCount(3);
+  await openLibraryOptions(page);
   await page.getByRole("button", { name: "List view", exact: true }).click();
   await expect(page.locator(".library-groups")).toHaveClass(/library-list/);
   const facts = page.locator(".library-group").filter({ has: page.getByRole("button", { name: "Night Studies", exact: true }) }).locator(".group-facts");
@@ -108,6 +109,7 @@ test("album and artist lyrics actions use all playable tracks in their scope, in
   await page.getByLabel("Search library", { exact: true }).fill("Song 01");
   await expect(page.locator(".track-table tbody > tr")).toHaveCount(1);
   await expect(page.getByRole("button", { name: "Fill lyrics for all artifacts", exact: true })).toHaveCount(0);
+  await page.locator(".lyrics-settings > summary").click();
   await page.getByRole("button", { name: "Fill album lyrics", exact: true }).click();
   await expect.poll(() => searches.length).toBe(1);
   expect(searches[0]).toEqual({ ids: album.slice(0, 63).map(source => source.id), refresh: false });
@@ -116,14 +118,17 @@ test("album and artist lyrics actions use all playable tracks in their scope, in
   await expect.poll(() => searches.length).toBe(2);
   expect(searches[1]).toEqual({ ids: [100], refresh: false });
   await page.goto("/library?view=albums&artist=River+Ensemble");
+  await page.locator(".lyrics-settings > summary").click();
   await page.getByRole("button", { name: "Fill artist lyrics", exact: true }).click();
   await expect.poll(() => searches.length).toBe(3);
   expect(searches[2]).toEqual({ ids: [...album.slice(0, 63).map(source => source.id), otherAlbum.id], refresh: false });
   await page.goto("/library?view=albums&artist=River+Ensemble&album=missing");
+  await page.locator(".lyrics-settings > summary").click();
   await expect(page.getByRole("button", { name: "Fill album lyrics", exact: true })).toBeDisabled();
   expect(searches).toHaveLength(3);
   running = true;
   await page.goto("/library?view=albums&artist=River+Ensemble&album=River+Ensemble%2FNight+Studies");
+  await page.locator(".lyrics-settings > summary").click();
   await expect(page.getByRole("button", { name: "Fill album lyrics", exact: true })).toBeDisabled();
   await expect(page.getByRole("link", { name: "View background lyrics task", exact: true })).toHaveAttribute("href", "/settings?section=lyrics");
   await expect(page.getByRole("button", { name: "Stop lyrics search", exact: true })).toHaveCount(0);
@@ -137,6 +142,7 @@ test("all songs share filters, pagination and batch lyrics with visible file fac
   await mockLibrary(page, library);
   await page.route("**/api/lyrics/search", route => { searches.push(route.request().postDataJSON()); return route.fulfill({ status: 202, json: { selected: 2 } }); });
   await page.goto("/library");
+  await page.locator(".lyrics-settings > summary").click();
   await expect(page.getByRole("button", { name: "Fill lyrics for all artifacts", exact: true })).toBeVisible();
   await page.getByRole("button", { name: /^All songs/ }).click();
   await expect(page).toHaveURL(/view=tracks/);
@@ -163,7 +169,7 @@ test("all songs share filters, pagination and batch lyrics with visible file fac
   await expect(first.locator(".lyrics-details")).not.toHaveAttribute("open", "");
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.screenshot({ path: "test-results/all-songs-1440-light-en.png", animations: "disabled" });
-  await page.getByLabel("Select current page", { exact: true }).check();
+  await selectLibraryPage(page);
   await page.getByRole("button", { name: "Fill lyrics for selected artifacts", exact: true }).click();
   await expect.poll(() => searches.length).toBe(1);
   expect(searches[0]).toEqual({ ids: [1, 4], refresh: false });
@@ -366,11 +372,14 @@ test("cover density and list preferences persist, pagination and polling retain 
   await expect(page.locator(".library-group")).toHaveCount(50);
   const columns = () => page.locator(".library-groups").evaluate(node => getComputedStyle(node).gridTemplateColumns.split(" ").length);
   expect(await columns()).toBe(7);
+  await openLibraryOptions(page);
   await page.getByRole("group", { name: "Cover size", exact: true }).getByRole("button", { name: "Small", exact: true }).click();
   expect(await columns()).toBe(10);
+  await openLibraryOptions(page);
   await page.getByRole("group", { name: "Cover size", exact: true }).getByRole("button", { name: "Large", exact: true }).click();
   expect(await columns()).toBe(5);
   await page.reload();
+  await openLibraryOptions(page);
   await expect(page.getByRole("group", { name: "Cover size", exact: true }).getByRole("button", { name: "Large", exact: true })).toHaveAttribute("aria-pressed", "true");
   await page.getByLabel("Select album Night Studies", { exact: true }).check();
   const image = page.locator(".cover img").first();
@@ -385,8 +394,10 @@ test("cover density and list preferences persist, pagination and polling retain 
   await expect(page.locator(".library-group")).toHaveCount(17);
   await page.getByRole("button", { name: "Previous page", exact: true }).click();
   await expect(page.getByLabel("Select album Night Studies", { exact: true })).toBeChecked();
+  await openLibraryOptions(page);
   await page.getByRole("button", { name: "List view", exact: true }).click();
   await page.reload();
+  await openLibraryOptions(page);
   await expect(page.getByRole("button", { name: "List view", exact: true })).toHaveAttribute("aria-pressed", "true");
   expect(await columns()).toBe(1);
 });
@@ -503,15 +514,17 @@ for (const width of [1920, 1440, 768, 390, 320]) {
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
     await page.screenshot({ path: `test-results/library-${width}-dark-zh.png`, animations: "disabled" });
     await setPreference(page, "language", "en");
+    await openLibraryOptions(page);
     await page.getByRole("button", { name: "List view", exact: true }).click();
     expect(await page.locator(".library-groups").evaluate(node => getComputedStyle(node).gridTemplateColumns.split(" ").length)).toBe(1);
     await page.screenshot({ path: `test-results/library-list-${width}-dark.png`, animations: "disabled" });
+    await openLibraryOptions(page);
     await page.getByRole("button", { name: "Grid view", exact: true }).click();
     await page.getByRole("button", { name: "Browse album Night Studies", exact: true }).click();
     await expect(page.getByRole("table")).toBeVisible();
     await page.evaluate(() => Promise.allSettled(document.getAnimations().filter(animation => animation.effect?.getComputedTiming().iterations !== Infinity).map(animation => animation.finished)));
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
-    if (width >= 1440) expect((await page.locator(".album-library .search").boundingBox())!.width).toBeLessThanOrEqual(320);
+    if (width >= 1440) expect((await page.locator(".album-library .search").boundingBox())!.width).toBeGreaterThan(1000);
     await page.screenshot({ path: `test-results/album-${width}-dark.png`, fullPage: true, animations: "disabled" });
     if (width === 1440 || width === 390) {
       await setPreference(page, "theme", "light");

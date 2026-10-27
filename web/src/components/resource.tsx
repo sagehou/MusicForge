@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { Activity, Check, Disc3, Loader2, RefreshCw } from "lucide-react";
+import { Activity, Disc3, Loader2, RefreshCw } from "lucide-react";
 import { api, cachedResource } from "../api";
 import { useI18n, type MessageKey, type Params } from "../i18n";
 import { Button } from "./ui/button";
@@ -55,7 +55,7 @@ export function ResourceWarning({ error, retry }: { error: string; retry: () => 
 }
 export function Badge({ status }: { status: string }) {
   const { status: label } = useI18n();
-  return <span className={`badge badge-${status}`}>{status === "ready" || status === "success" ? <Check size={12} aria-hidden="true" /> : <span />}{label(status)}</span>;
+  return <span className={`badge badge-${status}`}><span aria-hidden="true" />{label(status)}</span>;
 }
 export function Empty({ title, children }: { title: string; children?: ReactNode }) {
   return <div className="empty"><Disc3 size={36} strokeWidth={1.2} /><h3>{title}</h3><p>{children}</p></div>;

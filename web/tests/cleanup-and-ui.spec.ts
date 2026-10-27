@@ -1,4 +1,4 @@
-import { setPreference } from "./preferences";
+import { selectLibraryPage, setPreference } from "./preferences";
 import { test, expect, type Page } from "@playwright/test";
 import type { Dashboard, Job, Source } from "../src/types";
 
@@ -55,7 +55,7 @@ test("missing records have confirmed individual, selected and all cleanup with p
   await expect(page.getByRole("table").getByRole("button", { name: "Remove record", exact: true })).toHaveCount(3);
   const retained = page.locator("tbody tr").filter({ hasText: "Track 2" });
   await expect(retained.getByRole("button", { name: "Remove record", exact: true })).toHaveCount(0);
-  await page.getByLabel("Select current page", { exact: true }).check();
+  await selectLibraryPage(page);
   await page.getByRole("button", { name: "Remove 3 selected records", exact: true }).click();
   expect(requests).toHaveLength(0);
   expect(dialogs[0]).toContain("no files or task history are deleted");

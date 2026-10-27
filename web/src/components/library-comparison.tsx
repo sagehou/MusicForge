@@ -19,13 +19,14 @@ export function LibraryComparison({ sources, notify }: { sources: Source[]; noti
   const [open, setOpen] = useState(false);
   const present = sources.filter(source => source.present);
   return <details className="library-comparison" onToggle={event => setOpen(event.currentTarget.open)}>
-    <summary><ListChecks size={18} /><span>{t("compare.title")}</span><ChevronRight size={16} /></summary>
-    <p className="comparison-counts">{t("compare.localCounts", {
+    <summary title={t(open ? "compare.collapse" : "compare.title")}><ListChecks size={18} /><span>{t(open ? "compare.collapse" : "compare.title")}</span><ChevronRight size={16} /></summary>
+
+    {open && <LidarrComparison notify={notify} />}
+    <div className="comparison-local-notes"><p className="comparison-counts">{t("compare.localCounts", {
       sources: number(present.length), expired: number(sources.length - present.length),
       outputs: number(sources.filter(source => source.output_present).length), failed: number(present.filter(source => source.error).length),
     })}</p>
-    <p>{t("compare.countHint")}</p>
-    {open && <LidarrComparison notify={notify} />}
+    <p>{t("compare.countHint")}</p></div>
   </details>;
 }
 
@@ -70,22 +71,21 @@ function LidarrComparison({ notify }: { notify: Notice }) {
   const selectable = visible.filter(row => row.scan_dir).map(row => row.path);
   return <div className="comparison-body">
     <ResourceWarning error={connection.error} retry={connection.retry} />
-    <div className="comparison-connection"><div><strong>{connection.data.url || t("compare.disconnected")}</strong><p>{t(connection.data.key_configured ? "compare.connected" : "compare.configureHint")}</p></div><Button type="button" variant="outline" size="sm" asChild><a href="/settings?section=integrations">{t("compare.configure")}</a></Button></div>
-    <p>{t("compare.scopeHint")}</p>
-    <div className="actions"><Button disabled={busy || running || !connection.data.key_configured} onClick={() => void start()}><RefreshCw size={15} className={running ? "animate-spin" : ""} />{t("compare.start")}</Button>
-      {running && <span role="status">{t("compare.progress", { done: number(data?.processed || 0), total: number(data?.total || 0) })}</span>}
-    </div>
+    <div className="comparison-connection"><div><h2>{t("compare.heading")}</h2><p>{t(connection.data.key_configured ? "compare.connected" : "compare.configureHint")}</p></div><Button disabled={busy || running || !connection.data.key_configured} onClick={() => void start()}><RefreshCw size={15} className={running ? "animate-spin" : ""} />{t("compare.start")}</Button></div>
+
+    {running && <p role="status">{t("compare.progress", { done: number(data?.processed || 0), total: number(data?.total || 0) })}</p>}
     <ResourceWarning error={report.error} retry={report.retry} />
     {data?.state === "failed" && <div className="error-box" role="alert"><strong>{t("compare.failed")}</strong><p>{errorMessage(data.error || "")}</p></div>}
     {data?.state === "complete" && <>
-      <p>{t("compare.snapshot", { time: date(data.finished) })}</p>
-      <p className="comparison-paths"><code>{data.prefix || data.source}</code><span aria-hidden="true"> → </span><code>{data.source}</code></p>
       <dl className="comparison-metrics">{([
         ["lidarr", data.lidarr_count], ["sources", data.source_count], ["matched", data.matched],
         ["onlyLidarr", data.only_lidarr], ["onlyMusicForge", data.only_musicforge], ["unmapped", data.unmapped], ["outsideScope", data.outside_scope],
       ] as const).map(([label, value]) => <div key={label}><dt>{t(`compare.metric.${label}`)}</dt><dd>{number(value)}</dd></div>)}</dl>
       {data.outside_scope > 0 && <p className="repair-warning">{t("compare.outsideHint")}</p>}
       <p>{t("compare.snapshotHint")}</p>
+      <details className="comparison-notes"><summary>{t("compare.snapshot", { time: date(data.finished) })}</summary>
+      <p className="comparison-paths"><code>{data.prefix || data.source}</code><span aria-hidden="true"> → </span><code>{data.source}</code></p>
+      </details>
       <div className="comparison-filters">
         <label className="field"><span>{t("compare.search")}</span><input value={query} onChange={event => { setQuery(event.target.value); setPage(0); }} /></label>
         <label className="field"><span>{t("compare.filter")}</span><select aria-label={t("compare.filter")} value={filter} onChange={event => { setFilter(event.target.value); setPage(0); }}><option value="all">{t("library.allStatuses")}</option>{(["not_indexed", "expired", "unsupported", "not_in_lidarr", "unmapped", "failed", "possibly_damaged", "no_output", "outside_scope"] as const).map(kind => <option key={kind} value={kind}>{t(`compare.kind.${kind}`)}</option>)}</select></label>
@@ -100,5 +100,6 @@ function LidarrComparison({ notify }: { notify: Notice }) {
       </li>)}</ul> : <p>{t("compare.noDifferences")}</p>}
       {rows.length > 50 && <div className="pagination"><span>{t("library.pagination", { start: offset + 1, end: Math.min(offset + 50, rows.length), total: rows.length })}</span><Button variant="ghost" size="icon" aria-label={t("library.previous")} disabled={offset === 0} onClick={() => setPage(offset / 50 - 1)}><ChevronLeft size={16} /></Button><Button variant="ghost" size="icon" aria-label={t("library.next")} disabled={offset + 50 >= rows.length} onClick={() => setPage(offset / 50 + 1)}><ChevronRight size={16} /></Button></div>}
     </>}
+    <details className="comparison-notes"><summary>{t("compare.configure")}</summary><strong>{connection.data.url || t("compare.disconnected")}</strong><p>{t("compare.scopeHint")}</p><Button type="button" variant="outline" size="sm" asChild><a href="/settings?section=integrations">{t("compare.configure")}</a></Button></details>
   </div>;
 }

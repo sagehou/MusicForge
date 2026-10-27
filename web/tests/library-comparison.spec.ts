@@ -51,6 +51,7 @@ test("file comparison explains count differences and queues only selected direct
   await expect(compare).toBeDisabled();
   await expect(page.getByLabel("Lidarr URL", { exact: true })).toHaveCount(0);
   await expect(page.getByLabel("Lidarr API key", { exact: true })).toHaveCount(0);
+  await page.locator(".comparison-notes").first().locator("summary").click();
   await page.getByRole("link", { name: "Lidarr settings", exact: true }).click();
   await expect(page.getByRole("tab", { name: "Integrations", exact: true })).toHaveAttribute("aria-selected", "true");
   await page.getByLabel("Lidarr URL", { exact: true }).fill("http://lidarr:8686");

@@ -835,6 +835,8 @@
   "audition.loading": "Loading artifact…",
   "audition.outputLyrics": "Output lyrics",
   "audition.follow": "Follow lyrics",
+  "audition.seekHint": "Tap a line to seek",
+  "audition.seekLyric": "Seek to {time}: {text}",
   "audition.noLyrics": "No saved output lyrics. Audio can still be auditioned.",
   "audition.lyricsUnavailable": "Output lyrics are unavailable or have changed. Audio can still be auditioned.",
   "audition.failed": "Cannot play this artifact. The file or session may have changed, or this browser may not support the audio format. Reload to try again.",

@@ -147,7 +147,7 @@ jobs:
           server_pid=$!
           trap 'kill "$server_pid" 2>/dev/null || true' EXIT
           cd web
-          npx playwright install --with-deps chromium
+          npx playwright install --with-deps chromium webkit
           MUSICFORGE_TEST_ROOT="$(dirname "$PWD")/.ci" npm test
       - name: UI browser checks against the built frontend
         if: steps.scope.outputs.scope == 'ui' && steps.plan.outputs.reuse_run == ''
@@ -164,9 +164,9 @@ jobs:
           done
           curl -fsS http://127.0.0.1:8787/library >/dev/null
           # The selected existing cases mock their API; no backend or audio is needed.
-          npm test -- language.spec.ts --grep 'translation catalogs' --reporter=list
+          npm test -- language.spec.ts --project=chromium --grep 'translation catalogs' --reporter=list
           mapfile -t ui_specs < ../.ci/ui-specs.txt
-          MUSICFORGE_TEST_ROOT="$(dirname "$PWD")/.ci" npm test -- "${ui_specs[@]}"
+          MUSICFORGE_TEST_ROOT="$(dirname "$PWD")/.ci" npm test -- "${ui_specs[@]}" --project=chromium
       - name: Stop the Navidrome validation service
         if: always() && steps.scope.outputs.scope == 'full' && steps.plan.outputs.reuse_run == ''
         run: docker rm -f musicforge-nav-validation || true

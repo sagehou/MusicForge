@@ -787,6 +787,8 @@
   "audition.loading": "正在载入产物…",
   "audition.outputLyrics": "产物歌词",
   "audition.follow": "跟随歌词",
+  "audition.seekHint": "点击歌词定位进度",
+  "audition.seekLyric": "跳转到 {time}：{text}",
   "audition.noLyrics": "产物暂无已保存的歌词，可正常试听音频。",
   "audition.lyricsUnavailable": "产物歌词不可用或已被修改，可正常试听音频。",
   "audition.failed": "无法播放此产物。文件或登录状态可能已变化，或浏览器不支持此音频格式，请重新载入试听。",

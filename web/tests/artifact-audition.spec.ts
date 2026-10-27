@@ -1,4 +1,4 @@
-import { test, expect, type Page } from "@playwright/test";
+import { test, expect, type Locator, type Page } from "@playwright/test";
 import { activeLyric, lyricsTimeline } from "../src/lyrics-timeline";
 import type { Source } from "../src/types";
 import { setPreference } from "./preferences";
@@ -39,6 +39,15 @@ async function mockAudition(page: Page) {
   });
 }
 
+async function expectCurrentVisible(panel: Locator) {
+  await expect.poll(() => panel.locator(".audition-lyrics").evaluate(container => {
+    const current = container.querySelector('[aria-current="true"]');
+    if (!current) return false;
+    const pane = container.getBoundingClientRect(), line = current.getBoundingClientRect();
+    return line.top >= pane.top + 1 && line.bottom <= pane.bottom - 1;
+  })).toBe(true);
+}
+
 test("LRC timeline respects offsets, repeats, translations, blanks and seeking boundaries", () => {
   const cues = lyricsTimeline("\uFEFF[ti:Ignored]\n[offset:+500]\n[00:02.50][00:04:500]Repeat\n[00:02.500]译文\n[00:03.5]\n[00:99]Invalid\n[00:02.500]译文");
   expect(cues).toEqual([{ time: 2, text: "Repeat\n译文" }, { time: 3, text: "" }, { time: 4, text: "Repeat" }]);
@@ -52,6 +61,7 @@ test("LRC timeline respects offsets, repeats, translations, blanks and seeking b
 
 test("inline audition plays actual audio, seeks and follows lyrics without scrolling the page", async ({ page }) => {
   await mockAudition(page);
+  await page.setViewportSize({ width: 1440, height: 1000 });
   const writes: string[] = [];
   page.on("request", request => { if (request.url().includes("/api/") && request.method() !== "GET") writes.push(request.url()); });
   await page.goto("/library?view=tracks");
@@ -71,21 +81,64 @@ test("inline audition plays actual audio, seeks and follows lyrics without scrol
   await audio.evaluate(node => { (node as HTMLAudioElement).currentTime = 45.1; });
   await expect(panel.locator('[aria-current="true"]')).toContainText("Lyric 45");
   await expect.poll(() => panel.locator(".audition-lyrics").evaluate(node => node.scrollTop)).toBeGreaterThan(400);
+  await expectCurrentVisible(panel);
   expect(Math.abs(await page.evaluate(() => scrollY) - scroll)).toBeLessThan(2);
   await seek.focus();
   await seek.press("Home");
   await expect.poll(() => audio.evaluate(node => (node as HTMLAudioElement).currentTime)).toBeLessThan(0.1);
   await expect(panel.locator('[aria-current="true"]')).toContainText("Translation 0");
   await panel.locator(".audition-lyrics").dispatchEvent("wheel", { deltaY: 80 });
-  await expect(panel.getByRole("button", { name: "Follow lyrics", exact: true })).toHaveAttribute("aria-pressed", "false");
-  await audio.evaluate(node => { (node as HTMLAudioElement).currentTime = 30.1; });
-  await panel.getByRole("button", { name: "Follow lyrics", exact: true }).click();
-  await expect(panel.locator('[aria-current="true"]')).toContainText("Lyric 30");
-  await expect.poll(() => panel.locator(".audition-lyrics").evaluate(node => node.scrollTop)).toBeGreaterThan(300);
-  await page.setViewportSize({ width: 1440, height: 1000 });
+  await expect(panel.getByRole("button", { name: "Follow lyrics", exact: true })).toHaveAttribute("aria-pressed", "true");
+  await audio.evaluate(node => { (node as HTMLAudioElement).playbackRate = 4; });
+  await panel.getByRole("button", { name: "Play artifact", exact: true }).click();
+  await expect.poll(() => audio.evaluate(node => (node as HTMLAudioElement).currentTime), { timeout: 10000 }).toBeGreaterThan(12);
+  await expectCurrentVisible(panel);
+  await panel.locator(".audition-lyrics").evaluate(node => { node.scrollTop = 0; });
+  await panel.locator(".audition-lyrics").dispatchEvent("wheel", { deltaY: -400 });
+  await expect.poll(() => audio.evaluate(node => (node as HTMLAudioElement).currentTime), { timeout: 10000 }).toBeGreaterThan(20);
+  await expectCurrentVisible(panel);
+  await panel.getByRole("button", { name: "Pause audition", exact: true }).click();
+  expect(Math.abs(await page.evaluate(() => scrollY) - scroll)).toBeLessThan(2);
   await panel.scrollIntoViewIfNeeded();
   await page.screenshot({ path: "test-results/audition-desktop-light-en.png", animations: "disabled" });
   expect(writes).toEqual([]);
+});
+
+test("lyric clicks and keyboard seeking update the audio, slider and follow state", async ({ page }) => {
+  await mockAudition(page);
+  await page.goto("/library?view=tracks");
+  await page.getByRole("button", { name: "Audition Nightfall", exact: true }).click();
+  const panel = page.locator(".artifact-audition"), audio = panel.locator("audio");
+  const slider = panel.getByRole("slider", { name: "Playback position", exact: true });
+  const follow = panel.getByRole("button", { name: "Follow lyrics", exact: true });
+  await expect(slider).toBeEnabled();
+  await follow.click();
+  await expect(follow).toHaveAttribute("aria-pressed", "false");
+  await panel.getByRole("button", { name: "Seek to 0:40: Lyric 40", exact: true }).click();
+  await expect.poll(() => audio.evaluate(node => (node as HTMLAudioElement).currentTime)).toBeCloseTo(40, 1);
+  await expect(slider).toHaveValue("40");
+  await expect(panel.locator('[aria-current="true"]')).toContainText("Lyric 40");
+  expect(await audio.evaluate(node => (node as HTMLAudioElement).paused)).toBe(true);
+  await expect(follow).toHaveAttribute("aria-pressed", "true");
+  await expectCurrentVisible(panel);
+  const earlier = panel.getByRole("button", { name: "Seek to 0:12: Lyric 12", exact: true });
+  await earlier.focus();
+  await earlier.press("Enter");
+  await expect(slider).toHaveValue("12");
+  await expect.poll(() => audio.evaluate(node => (node as HTMLAudioElement).currentTime)).toBeCloseTo(12, 1);
+  await expectCurrentVisible(panel);
+  await panel.getByRole("button", { name: "Play artifact", exact: true }).click();
+  await panel.getByRole("button", { name: "Seek to 0:30: Lyric 30", exact: true }).click();
+  await expect.poll(() => audio.evaluate(node => (node as HTMLAudioElement).currentTime)).toBeGreaterThanOrEqual(30);
+  expect(await audio.evaluate(node => (node as HTMLAudioElement).paused)).toBe(false);
+  await expect.poll(() => slider.inputValue().then(Number)).toBeGreaterThanOrEqual(30);
+  await expectCurrentVisible(panel);
+  await panel.getByRole("button", { name: "Pause audition", exact: true }).click();
+  const translated = panel.getByRole("button", { name: "Seek to 0:00: Lyric 0 Translation 0", exact: true });
+  await translated.focus();
+  await translated.press("Space");
+  await expect(slider).toHaveValue("0");
+  await expectCurrentVisible(panel);
 });
 
 test("switching, collapsing, other details and navigation release the previous audio", async ({ page }) => {
@@ -138,24 +191,39 @@ test("audition errors retry and missing or changed lyrics do not block playback"
   await expect(page.getByRole("slider", { name: "Playback position", exact: true })).toBeEnabled();
 });
 
-test("phone audition keeps controls visible, follows global theme and stops on session expiry", async ({ page }) => {
-  await mockAudition(page);
-  await page.setViewportSize({ width: 390, height: 844 });
-  await page.emulateMedia({ reducedMotion: "reduce" });
-  await page.goto("/library?view=albums&artist=River&album=River%2FNight");
-  await setPreference(page, "language", "zh-CN");
-  await setPreference(page, "theme", "dark");
-  await page.getByRole("button", { name: "试听 Nightfall", exact: true }).click();
-  const panel = page.locator(".artifact-audition");
-  await expect(panel.locator("audio")).toHaveAttribute("src", /audition\/audio/);
-  await expect(panel.getByRole("slider", { name: "播放进度", exact: true })).toBeEnabled();
-  await expect.poll(() => panel.locator(".audition-controls").evaluate(node => { const box = node.getBoundingClientRect(); return box.top >= 0 && box.bottom < innerHeight - 70; })).toBe(true);
-  await expect.poll(() => panel.locator(".audition-lyrics").evaluate(node => { const box = node.getBoundingClientRect(); return box.top > 0 && box.bottom < innerHeight - 70; })).toBe(true);
-  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
-  await page.screenshot({ path: "test-results/audition-phone-dark-zh.png", animations: "disabled" });
-  await panel.getByRole("button", { name: "播放产物", exact: true }).click();
-  const audio = await panel.locator("audio").elementHandle();
-  await expect.poll(() => audio!.evaluate(node => !(node as HTMLAudioElement).paused)).toBe(true);
-  await page.evaluate(() => window.dispatchEvent(new CustomEvent("session-updated", { detail: { initialized: true, authenticated: false, csrf: "", oidc: false, version: "test" } })));
-  await expect.poll(() => audio!.evaluate(node => (node as HTMLAudioElement).paused)).toBe(true);
+test.describe("phone audition", () => {
+  test.use({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, deviceScaleFactor: 3 });
+  for (const view of ["tracks", "album"]) test(`${view} keeps controls visible, supports touch seeking and follows lyrics`, async ({ page, browserName }) => {
+    const errors: string[] = [];
+    page.on("pageerror", error => errors.push(error.message));
+    await mockAudition(page);
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await page.goto(view === "album" ? "/library?view=albums&artist=River&album=River%2FNight" : "/library?view=tracks");
+    await setPreference(page, "language", "zh-CN");
+    await setPreference(page, "theme", "dark");
+    await page.getByRole("button", { name: "试听 Nightfall", exact: true }).tap();
+    const panel = page.locator(".artifact-audition");
+    await expect(panel.locator("audio")).toHaveAttribute("src", /audition\/audio/);
+    await expect(panel.getByRole("slider", { name: "播放进度", exact: true })).toBeEnabled();
+    await expect.poll(() => panel.locator(".audition-controls").evaluate(node => { const box = node.getBoundingClientRect(); return box.top >= 0 && box.bottom < innerHeight - 70; })).toBe(true);
+    await expect.poll(() => panel.locator(".audition-lyrics").evaluate(node => { const box = node.getBoundingClientRect(); return box.top > 0 && box.bottom < innerHeight - 70; })).toBe(true);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
+    await expect(panel).toBeInViewport({ ratio: 1 });
+    await expect.poll(() => panel.evaluate(node => node.getBoundingClientRect().width)).toBeGreaterThan(300);
+    await panel.locator(".audition-lyrics").dispatchEvent("touchmove");
+    await expect(panel.getByRole("button", { name: "跟随歌词", exact: true })).toHaveAttribute("aria-pressed", "true");
+    await panel.getByRole("button", { name: "跳转到 0:40：Lyric 40", exact: true }).tap();
+    await expect(panel.getByRole("slider", { name: "播放进度", exact: true })).toHaveValue("40");
+    await expect.poll(() => panel.locator("audio").evaluate(node => (node as HTMLAudioElement).currentTime)).toBeCloseTo(40, 1);
+    await expectCurrentVisible(panel);
+    await page.screenshot({ path: `test-results/audition-phone-${view}-${browserName}-dark-zh.png`, animations: "disabled" });
+    await panel.getByRole("button", { name: "播放产物", exact: true }).tap();
+    const audio = await panel.locator("audio").elementHandle();
+    await expect.poll(() => audio!.evaluate(node => !(node as HTMLAudioElement).paused)).toBe(true);
+    await expect.poll(() => audio!.evaluate(node => (node as HTMLAudioElement).currentTime), { timeout: 10000 }).toBeGreaterThan(43);
+    await expectCurrentVisible(panel);
+    await page.evaluate(() => window.dispatchEvent(new CustomEvent("session-updated", { detail: { initialized: true, authenticated: false, csrf: "", oidc: false, version: "test" } })));
+    await expect.poll(() => audio!.evaluate(node => (node as HTMLAudioElement).paused)).toBe(true);
+    expect(errors).toEqual([]);
+  });
 });

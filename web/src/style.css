@@ -1534,10 +1534,14 @@ input[role="switch"]:checked::after { transform: translateX(22px); background: v
 .audition-time { flex: none; color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
 .audition-format { color: var(--muted); font-size: 11px; border-left: 1px solid var(--line); padding-left: 12px; }
 .audition-lyrics-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 30px; font-size: 12px; color: var(--muted); }
+.audition-lyrics-heading > span { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 10px; }
+.audition-lyrics-heading small { font-size: 11px; }
 .audition-lyrics-heading .ui-button { min-height: 30px; font-size: 12px; }
 .audition-lyrics-heading .ui-button[aria-pressed="true"] { color: var(--accent); background: var(--accent-soft); }
-.audition-lyrics { position: relative; height: clamp(144px, 28dvh, 256px); overflow-y: auto; overscroll-behavior: contain; border: 1px solid var(--line); border-radius: var(--radius-control); background: var(--surface); scrollbar-gutter: stable; }
-.audition-line { display: flex; align-items: baseline; gap: 16px; margin: 0; padding: 12px 16px; color: var(--muted); font-size: 14px; line-height: 1.8; }
+.audition-lyrics { position: relative; height: 224px; height: clamp(144px, 28dvh, 256px); overflow-y: auto; overscroll-behavior: contain; border: 1px solid var(--line); border-radius: var(--radius-control); background: var(--surface); scrollbar-gutter: stable; scroll-behavior: auto; }
+.audition-line { display: flex; align-items: baseline; gap: 16px; width: 100%; min-height: 44px; margin: 0; padding: 12px 16px; border: 0; border-radius: 0; background: transparent; color: var(--muted); font: inherit; font-size: 14px; line-height: 1.8; text-align: left; white-space: normal; }
+.audition-line:hover:not(:disabled) { background: var(--hover); }
+.audition-line:focus-visible { outline: 2px solid var(--accent); outline-offset: -3px; }
 .audition-line time { flex: none; font-size: 11px; font-variant-numeric: tabular-nums; }
 .audition-line > span { white-space: pre-line; overflow-wrap: anywhere; }
 .audition-line[aria-current="true"] { color: var(--accent); background: var(--accent-soft); font-weight: 500; }

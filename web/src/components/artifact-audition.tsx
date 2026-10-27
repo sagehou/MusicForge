@@ -69,7 +69,7 @@ function AudioPreview({ data, source, reload }: { data: Audition; source: Source
     const container = lyrics.current;
     const line = container?.querySelector<HTMLElement>('[aria-current="true"]');
     if (follow && container && line) {
-      container.scrollTo({ top: container.scrollTop + line.getBoundingClientRect().top - container.getBoundingClientRect().top - container.clientHeight / 2 + line.clientHeight / 2, behavior: matchMedia("(prefers-reduced-motion: reduce)").matches || !playing ? "instant" : "smooth" });
+      container.scrollTo({ top: line.offsetTop - Math.max(0, (container.clientHeight - line.clientHeight) / 2), behavior: matchMedia("(prefers-reduced-motion: reduce)").matches || !playing ? "auto" : "smooth" });
     }
   }, [current, follow, playing]);
   async function toggle() {
@@ -77,6 +77,7 @@ function AudioPreview({ data, source, reload }: { data: Audition; source: Source
     if (!element) return;
     if (!element.paused) { element.pause(); return; }
     setBlocked(false);
+    setFollow(true);
     try { await element.play(); }
     catch (err) {
       if (!mounted.current || err instanceof DOMException && err.name === "AbortError") return;
@@ -89,24 +90,28 @@ function AudioPreview({ data, source, reload }: { data: Audition; source: Source
     const seconds = audio.current?.duration;
     setDuration(seconds && Number.isFinite(seconds) && seconds > 0 ? seconds : 0);
   }
+  function seekTo(time: number) {
+    const element = audio.current;
+    if (!element || !duration || failed) return;
+    const seconds = Math.min(Math.max(time, 0), duration);
+    element.currentTime = seconds;
+    setPosition(seconds);
+    setFollow(true);
+  }
   return <div className="audition-body">
     <audio ref={audio} src={data.audio_url} preload="metadata" playsInline onLoadedMetadata={updateDuration} onDurationChange={updateDuration} onTimeUpdate={() => setPosition(audio.current?.currentTime || 0)} onPlay={() => setPlaying(true)} onPlaying={() => { setPlaying(true); setLoading(false); }} onPause={() => { setPlaying(false); setLoading(false); }} onWaiting={() => setLoading(true)} onCanPlay={() => setLoading(false)} onSeeked={() => { setPosition(audio.current?.currentTime || 0); setLoading(false); }} onEnded={() => { setPlaying(false); setLoading(false); }} onError={() => { audio.current?.pause(); setFailed(true); setPlaying(false); setLoading(false); }} />
     <div className="audition-controls" role="group" aria-label={t("audition.controls")}>
       <Button size="icon" aria-label={t(playing ? "audition.pause" : "audition.play")} title={t(playing ? "audition.pause" : "audition.play")} disabled={failed} onClick={() => void toggle()}>{loading ? <Loader2 size={19} className="animate-spin" /> : playing ? <Pause size={19} /> : <Play size={19} />}</Button>
       <span className="audition-time">{audioTime(position)}</span>
-      <input type="range" min={0} max={duration || 1} step={0.01} value={Math.min(position, duration || 0)} disabled={!duration || failed} aria-label={t("audition.seek")} aria-valuetext={`${audioTime(position)} / ${audioTime(duration)}`} onChange={event => {
-        const value = Number(event.target.value);
-        if (audio.current) audio.current.currentTime = value;
-        setPosition(value);
-      }} />
+      <input type="range" min={0} max={duration || 1} step={0.01} value={Math.min(position, duration || 0)} disabled={!duration || failed} aria-label={t("audition.seek")} aria-valuetext={`${audioTime(position)} / ${audioTime(duration)}`} onChange={event => seekTo(Number(event.target.value))} />
       <span className="audition-time">{duration ? audioTime(duration) : "—"}</span><span className="audition-format">{data.format.slice(1).toUpperCase()}</span>
     </div>
     {source.possibly_damaged && <p className="audition-warning">{t("audition.damaged")}</p>}
     {!source.possibly_damaged && !["ready", "expired"].includes(source.status) && <p className="audition-note">{t("audition.existing")}</p>}
     {failed ? <div className="audition-error" role="alert"><p>{t("audition.failed")}</p><Button size="sm" variant="outline" onClick={reload}><RotateCcw size={14} />{t("audition.reload")}</Button></div> : blocked && <p role="status" className="audition-note">{t("audition.blocked")}</p>}
-    <div className="audition-lyrics-heading"><span>{t("audition.outputLyrics")}</span>{cues.length > 0 && <Button size="sm" variant="ghost" aria-pressed={follow} onClick={() => setFollow(value => !value)}>{t("audition.follow")}</Button>}</div>
-    <div className="audition-lyrics" ref={lyrics} role="region" aria-label={t("audition.outputLyrics")} tabIndex={0} onWheel={() => setFollow(false)} onTouchMove={() => setFollow(false)} onKeyDown={event => { if (["ArrowUp", "ArrowDown", "PageUp", "PageDown", "Home", "End", " "].includes(event.key)) setFollow(false); }}>
-      {cues.length ? cues.map((cue, index) => <p key={cue.time} className="audition-line" aria-current={current === index ? "true" : undefined}><time>{audioTime(cue.time)}</time><span dir="auto">{cue.text || "♪"}</span></p>) : <p className="audition-empty">{t(data.lyrics_state === "unavailable" ? "audition.lyricsUnavailable" : "audition.noLyrics")}</p>}
+    <div className="audition-lyrics-heading"><span>{t("audition.outputLyrics")}{cues.length > 0 && <small>{t("audition.seekHint")}</small>}</span>{cues.length > 0 && <Button size="sm" variant="ghost" aria-pressed={follow} onClick={() => setFollow(value => !value)}>{t("audition.follow")}</Button>}</div>
+    <div className="audition-lyrics" ref={lyrics} role="region" aria-label={t("audition.outputLyrics")} tabIndex={0}>
+      {cues.length ? cues.map((cue, index) => <button type="button" key={cue.time} className="audition-line" aria-current={current === index ? "true" : undefined} disabled={!duration || failed || cue.time > duration} aria-label={t("audition.seekLyric", { time: audioTime(cue.time), text: cue.text || "♪" })} onClick={() => seekTo(cue.time)}><time>{audioTime(cue.time)}</time><span dir="auto">{cue.text || "♪"}</span></button>) : <p className="audition-empty">{t(data.lyrics_state === "unavailable" ? "audition.lyricsUnavailable" : "audition.noLyrics")}</p>}
     </div>
   </div>;
 }

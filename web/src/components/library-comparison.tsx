@@ -18,7 +18,14 @@ export function LibraryComparison({ sources, notify }: { sources: Source[]; noti
   const { t, number } = useI18n();
   const [open, setOpen] = useState(false);
   const present = sources.filter(source => source.present);
-  return <details className="library-comparison" onToggle={event => setOpen(event.currentTarget.open)}>
+  return <details id="library-comparison" className="library-comparison" onToggle={event => {
+    setOpen(event.currentTarget.open);
+    if (event.currentTarget.open) document.querySelector<HTMLButtonElement>(".comparison-close")?.focus();
+  }} onKeyDown={event => {
+    if (event.key === "Escape" && event.currentTarget.open && !event.defaultPrevented) {
+      event.preventDefault(); event.currentTarget.open = false; event.currentTarget.querySelector("summary")?.focus();
+    }
+  }}>
     <summary title={t(open ? "compare.collapse" : "compare.title")}><ListChecks size={18} /><span>{t(open ? "compare.collapse" : "compare.title")}</span><ChevronRight size={16} /></summary>
 
     {open && <LidarrComparison notify={notify} />}

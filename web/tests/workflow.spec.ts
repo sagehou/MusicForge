@@ -118,7 +118,7 @@ test("bilingual setup, real incremental build, state preservation and login", as
   const sourcePath = join(root, "source/Artist/Album/01.flac");
   const sourceBytes = readFileSync(sourcePath);
   unlinkSync(sourcePath);
-  await page.getByRole("button", { name: "Scan", exact: true }).click();
+  await page.getByRole("button", { name: "Scan library", exact: true }).click();
   await openLibraryOptions(page);
   await page.getByLabel("Filter by status", { exact: true }).selectOption("expired");
   await expect(page.getByText("Source deleted", { exact: true })).toBeVisible({ timeout: 30000 });
@@ -139,7 +139,7 @@ test("bilingual setup, real incremental build, state preservation and login", as
   writeFileSync(sourcePath, sourceBytes);
   const stable = new Date(Date.now() - 120000);
   utimesSync(sourcePath, stable, stable);
-  await page.getByRole("button", { name: "扫描", exact: true }).click();
+  await page.getByRole("button", { name: "扫描音乐库", exact: true }).click();
   await openLibraryOptions(page);
   await page.getByLabel("状态筛选", { exact: true }).selectOption("ready");
   await expect(page.getByRole("table").getByText("已就绪", { exact: true })).toBeVisible({ timeout: 30000 });
@@ -322,7 +322,7 @@ async function exerciseTaskQueue(page: import("@playwright/test").Page, root: st
   try {
     await page.getByRole("link", { name: "Library", exact: true }).click();
     const scanning = page.waitForResponse(response => response.url().endsWith("/api/library/scan") && response.request().method() === "POST");
-    await page.getByRole("button", { name: "Scan", exact: true }).click();
+    await page.getByRole("button", { name: "Scan library", exact: true }).click();
     const id = (await (await scanning).json()).job_id as number;
     const read = async () => (await (await page.request.get("/api/jobs")).json()).jobs as Job[];
     await expect.poll(async () => (await read()).find(job => job.id === id)?.counts.total).toBe(3);

@@ -286,10 +286,10 @@ test("a changed browser session refreshes CSRF without automatically replaying a
   await page.goto("/library");
   await expect(page.getByRole("heading", { name: "Library", exact: true })).toBeVisible();
   csrf = "renewed-in-another-tab";
-  await page.getByRole("button", { name: "Scan", exact: true }).click();
+  await page.getByRole("button", { name: "Scan library", exact: true }).click();
   await expect(page.getByRole("alert")).toContainText("Session changed; please retry this action");
   expect(writes).toBe(1);
-  await page.getByRole("button", { name: "Scan", exact: true }).click();
+  await page.getByRole("button", { name: "Scan library", exact: true }).click();
   await expect(page.getByRole("status")).toContainText("Scan");
   expect(writes).toBe(2);
 });
@@ -302,7 +302,7 @@ test("failed action diagnostics persist until dismissal while successful notices
     ? route.fulfill({ status: 500, headers: { "X-Request-ID": "ci-persistent-error" }, json: { error: "Synthetic scan failure" } })
     : route.fulfill({ status: 202, json: { job_id: 1 } }));
   await page.goto("/library");
-  await page.getByRole("button", { name: "Scan", exact: true }).click();
+  await page.getByRole("button", { name: "Scan library", exact: true }).click();
   const error = page.getByRole("alert");
   await expect(error).toContainText("Synthetic scan failure");
   await expect(error).toContainText("ci-persistent-error");
@@ -311,7 +311,7 @@ test("failed action diagnostics persist until dismissal while successful notices
   await error.getByRole("button", { name: "Dismiss notification", exact: true }).click();
   await expect(error).toHaveCount(0);
   fail = false;
-  await page.getByRole("button", { name: "Scan", exact: true }).click();
+  await page.getByRole("button", { name: "Scan library", exact: true }).click();
   await expect(page.getByRole("status")).toContainText("Scan");
   await page.clock.fastForward(6500);
   await expect(page.getByRole("status")).toHaveCount(0);
@@ -345,7 +345,7 @@ test("system appearance follows the OS and reduced motion disables the toast ent
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
   await page.emulateMedia({ colorScheme: "light", reducedMotion: "reduce" });
   await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
-  await page.getByRole("button", { name: "Scan", exact: true }).click();
+  await page.getByRole("button", { name: "Scan library", exact: true }).click();
   await expect(page.getByRole("status")).toContainText("Scan");
   expect(await page.locator(".toast").evaluate(node => getComputedStyle(node).animationName)).toBe("none");
   let transitions = 0;
@@ -381,6 +381,7 @@ test("cover density and list preferences persist, pagination and polling retain 
   await page.reload();
   await openLibraryOptions(page);
   await expect(page.getByRole("group", { name: "Cover size", exact: true }).getByRole("button", { name: "Large", exact: true })).toHaveAttribute("aria-pressed", "true");
+  await page.locator(".library-options > summary").press("Escape");
   await page.getByLabel("Select album Night Studies", { exact: true }).check();
   const image = page.locator(".cover img").first();
   await expect(image).toHaveClass("cover-loaded");

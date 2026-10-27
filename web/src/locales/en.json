@@ -71,7 +71,7 @@
   "notice.password": "Password updated; other sessions have been revoked",
   "library.deleteSelectedConfirm": "Permanently delete expired artifacts among the selected tracks?",
   "library.verify": "Full verification",
-  "library.scan": "Scan",
+  "library.scan": "Scan library",
   "library.expiredHint": "The source files were deleted. Navidrome removes these tracks after you delete their artifacts.",
   "library.deleteExpired": "Delete all expired",
   "library.search": "Search library",

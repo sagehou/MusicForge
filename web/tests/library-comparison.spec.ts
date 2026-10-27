@@ -46,7 +46,7 @@ test("file comparison explains count differences and queues only selected direct
     return route.fulfill({ json: { job_id: 7 } });
   });
   await page.goto("/library");
-  await page.getByText("File counts · compare with Lidarr", { exact: true }).click();
+  await page.locator(".library-comparison > summary").filter({ hasText: "File counts · compare with Lidarr" }).click();
   const compare = page.getByRole("button", { name: "Compare file lists", exact: true });
   await expect(compare).toBeDisabled();
   await expect(page.getByLabel("Lidarr URL", { exact: true })).toHaveCount(0);
@@ -67,7 +67,7 @@ test("file comparison explains count differences and queues only selected direct
   await page.getByRole("button", { name: "Save settings", exact: true }).click();
   await expect(page.getByLabel("Lidarr API key", { exact: true })).toHaveValue("");
   await page.getByRole("link", { name: "Library", exact: true }).click();
-  await page.getByText("File counts · compare with Lidarr", { exact: true }).click();
+  await page.locator(".library-comparison > summary").filter({ hasText: "File counts · compare with Lidarr" }).click();
   await expect(compare).toBeEnabled();
   await compare.click();
   await expect(page.getByText("Some Lidarr paths are outside", { exact: false })).toBeVisible();
@@ -83,5 +83,16 @@ test("file comparison explains count differences and queues only selected direct
   await setPreference(page, "language", "zh-CN");
   await expect(page.getByRole("button", { name: "核对文件清单", exact: true })).toBeVisible();
   await page.setViewportSize({ width: 390, height: 844 });
+  await page.screenshot({ path: "test-results/approved-actual-compare-390-light.png", animations: "disabled" });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  const trigger = page.locator("#library-comparison > summary");
+  await page.getByRole("button", { name: "返回音乐库", exact: true }).click();
+  await expect(page.locator(".library-toolbar-box")).toBeVisible();
+  await expect(trigger).toBeFocused();
+  await trigger.press("Enter");
+  const back = page.getByRole("button", { name: "返回音乐库", exact: true });
+  await expect(back).toBeFocused();
+  await back.press("Escape");
+  await expect(trigger).toBeFocused();
+  expect(checks).toBe(1);
 });

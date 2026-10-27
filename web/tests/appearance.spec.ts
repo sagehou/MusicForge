@@ -189,7 +189,7 @@ test("checkbox, partial selection, hover, focus, switch and disabled states shar
   await page.keyboard.press("Tab");
   await first.focus();
   expect(await first.evaluate(element => getComputedStyle(element).outlineStyle)).toBe("solid");
-  const scan = page.getByRole("button", { name: "Scan", exact: true });
+  const scan = page.getByRole("button", { name: "Scan library", exact: true });
   const normal = await scan.evaluate(element => getComputedStyle(element).backgroundColor);
   await scan.hover();
   await expect.poll(() => scan.evaluate(element => getComputedStyle(element).backgroundColor)).not.toBe(normal);
@@ -238,7 +238,7 @@ test("approved settings grid and category tabs match at desktop and phone widths
   await setup(page);
   const reference = await context.newPage();
   const design = await readFile(resolve("../docs/ui-refinement-preview.html"), "utf8");
-  for (const [width, height, theme] of [[1440, 900, "light"], [390, 844, "dark"]] as const) {
+  for (const [width, height, theme] of [[1440, 900, "light"], [1024, 900, "light"], [390, 844, "dark"]] as const) {
     await page.setViewportSize({ width, height });
     await page.goto("/settings?section=encoding");
     await setPreference(page, "language", "zh-CN");

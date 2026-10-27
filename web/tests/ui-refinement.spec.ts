@@ -102,7 +102,7 @@ test("large library returns instantly from memory, revalidates with 304 and clea
   await page.screenshot({ path: "test-results/library-skeleton.png", animations: "disabled" });
   hold = false; release!();
   await expect(page.locator(".library-group")).toHaveCount(50);
-  await expect(page.getByText("File counts · compare with Lidarr", { exact: true })).toBeInViewport();
+  await expect(page.locator(".library-comparison > summary").filter({ hasText: "File counts · compare with Lidarr" })).toBeInViewport();
   await page.getByRole("link", { name: "Settings", exact: true }).click();
   await expect(page.getByLabel("Source audio directory", { exact: true })).toBeVisible();
   hold = true;
@@ -121,7 +121,7 @@ test("large library returns instantly from memory, revalidates with 304 and clea
   await expect(page.getByRole("alert")).toHaveCount(0);
   await expect(page.locator(".library-group")).toHaveCount(50);
   expect(conditionals.at(-1)).toBe('W/"library-test"');
-  await page.getByRole("button", { name: "Scan", exact: true }).click();
+  await page.getByRole("button", { name: "Scan library", exact: true }).click();
   await expect(page.locator(".library-group").filter({ has: page.getByRole("button", { name: "Browse artist Artist 0", exact: true }) }).locator(".badge")).toHaveText("Failed");
   expect(conditionals.at(-1)).toBeUndefined();
   await openAccount(page);

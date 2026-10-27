@@ -121,6 +121,8 @@ test("phone lyric selection opens a separate tab with visible preview and confir
   await setPreference(pickerTab, "language", "en");
   await setPreference(pickerTab, "theme", "light");
   await pickerTab.setViewportSize({ width: 320, height: 568 });
+  expect((await picker.locator(".lyrics-candidate-groups").boundingBox())!.height).toBeGreaterThanOrEqual(96);
+  await visibleInViewport(pickerTab, picker.locator(".lyrics-candidate-groups"));
   await visibleInViewport(pickerTab, previewPane);
   await visibleInViewport(pickerTab, picker.getByRole("button", { name: "Confirm instrumental", exact: true }));
   await expect(text).toHaveAccessibleName("Scrollable lyric text");

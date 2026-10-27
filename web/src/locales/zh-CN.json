@@ -572,7 +572,7 @@
   "error.forgetIDs": "库记录 ID 必须为正整数",
   "lyrics.title": "LRC 歌词",
   "lyrics.targetDuration": "歌曲时长：{seconds} 秒",
-  "lyrics.recommendationInfo": "匹配分与来源优先级",
+  "lyrics.recommendationInfo": "搜索选项与匹配说明",
   "lyrics.recommendationHint": "结果加载完成后，自动选中并预览达到已保存阈值且符合保护条件的候选，保留手动选择。匹配分越高越靠前；同分按 QQ 音乐 → 酷狗 → 网易云 → PetitLyrics → LRCLIB 排序。同一来源且同分时，优先简中原文，再优先简中同步译文。分数比较歌名、歌手、专辑和时长，不代表正确概率。请预览确认版本后保存。",
   "lyrics.cacheHint": "搜索结果最多暂存 7 天，重启后仍可恢复。普通搜索复用暂存，强制重新搜索更新结果。",
   "lyrics.restoring": "正在恢复已暂存的搜索…",

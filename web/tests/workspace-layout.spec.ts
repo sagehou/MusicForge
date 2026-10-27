@@ -103,7 +103,9 @@ test("cached lyric review saves and advances in the same inline region without r
   await expect(picker.locator(".lyrics-preview pre")).toContainText("海岸与夜晚");
   await picker.getByRole("button", { name: "Save and next", exact: true }).click();
   await expect(picker.locator(".detail-heading")).toContainText("Song 02");
+  await picker.locator(".lyrics-guidance > summary").click();
   await expect(picker.getByText("Saved search", { exact: false })).toBeVisible();
+  await picker.locator(".lyrics-guidance > summary").click();
   await expect(picker.getByRole("radio")).toBeChecked();
   await expect(picker.locator(".lyrics-preview pre")).toContainText("海岸与夜晚");
   expect(saves).toBe(1);

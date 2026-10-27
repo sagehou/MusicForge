@@ -288,10 +288,10 @@ export function LyricsPicker({ source, notify, close, saved, previous, next, onB
     <form className="lyrics-query" onSubmit={event => { event.preventDefault(); if (standalone) event.currentTarget.querySelector("input")?.blur(); void search(); }}>
       <label><span>{t("lyrics.query")}</span><input maxLength={500} value={query} disabled={saving || restoring} onChange={event => setQuery(event.target.value)} /></label>
       <Button type="submit" variant="outline" disabled={saving || restoring || loading || !query.trim()}><Search size={15} />{t("lyrics.findCandidates")}</Button>
-      <Button type="button" variant="ghost" disabled={saving || restoring || loading || !query.trim()} onClick={() => void search(true)}>{t("lyrics.forceSearch")}</Button>
       {loading && <Button type="button" variant="ghost" onClick={cancelSearch}>{t("lyrics.cancelSearch")}</Button>}
     </form>
     <details className="lyrics-guidance" open={groups.some(group => !!group.error) || undefined}><summary>{t("lyrics.recommendationInfo")}</summary><p>{t("lyrics.recommendationHint")}</p><p>{t("lyrics.cacheHint")}</p>
+      <Button type="button" variant="ghost" disabled={saving || restoring || loading || !query.trim()} onClick={() => void search(true)}>{t("lyrics.forceSearch")}</Button>
       <div className="lyrics-provider-status" aria-label={t("lyrics.providerStatus")}>{groups.map(group => <fieldset key={group.provider} disabled={saving}><legend>{t(`lyrics.name.${group.provider}`)}{group.provider === onlineProviders[0] && <> <span className="provider-priority">{t("lyrics.preferredSource")}</span></>}</legend>{group.cached && <small>{t("lyrics.cached")}{group.searched ? <> · {new Date(group.searched * 1000).toLocaleString(locale)}</> : null}</small>}{group.loading && <p role="status">{t("app.loading")}</p>}{group.error && <p role="alert">{errorMessage(group.error)}</p>}{!group.loading && !group.error && group.candidates.length === 0 && <p>{t("lyrics.noCandidates")}</p>}</fieldset>)}</div></details>
     </div>
     <div className="lyrics-candidate-groups">

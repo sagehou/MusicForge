@@ -282,7 +282,7 @@ test("approved library and audition design matches the desktop and phone impleme
     await panel.locator("audio").evaluate(node => { (node as HTMLAudioElement).currentTime = 40; });
     await expect(panel.locator('[aria-current="true"]')).toContainText("在每一个音符");
     const comparisons: [string, string, string[]][] = [
-      [".heading-content h1", "h1", ["font-size", "font-weight", "line-height"]],
+      [".heading-content h1", "h1", ["font-size", "font-weight", "line-height", "font-synthesis"]],
       [".library-navigation .segmented", ".toolbar .segmented", ["background-color", "border-radius", "padding"]],
       [".track-output .badge-ready", ".track-row > .status", ["color", "background-color", "border-width", "font-size"]],
       [".artifact-audition", ".audition-panel", ["padding", "background-color", "border-width"]],
@@ -297,6 +297,9 @@ test("approved library and audition design matches the desktop and phone impleme
     expect(await style(panel.locator('[aria-current="true"]'), ["background-color"])).toEqual(await style(reference.locator(".lyric-line.current"), ["background-color"]));
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
     await page.mouse.move(0, 0);
+    await panel.screenshot({ path: `test-results/approved-actual-audition-${width}-${theme}.png`, animations: "disabled" });
+    await reference.locator(".audition-panel").screenshot({ path: `test-results/approved-reference-audition-${width}-${theme}.png`, animations: "disabled" });
+    await page.evaluate(() => window.scrollTo(0, 0));
     await page.screenshot({ path: `test-results/approved-actual-library-${width}-${theme}.png`, animations: "disabled" });
     await reference.locator("#preview-frame").screenshot({ path: `test-results/approved-reference-library-${width}-${theme}.png`, animations: "disabled" });
   }

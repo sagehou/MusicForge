@@ -620,7 +620,7 @@
   "error.forgetIDs": "Library record IDs must be positive",
   "lyrics.title": "LRC lyrics",
   "lyrics.targetDuration": "Track duration: {seconds} s",
-  "lyrics.recommendationInfo": "Match scores and source priority",
+  "lyrics.recommendationInfo": "Search options and match details",
   "lyrics.recommendationHint": "After results load, an eligible candidate meeting your saved threshold is selected and previewed, preserving manual choices. Higher match scores come first. Ties use QQ Music → Kugou → NetEase → PetitLyrics → LRCLIB; within the same source and score, simplified originals and then simplified synchronized translations are preferred. Scores compare title, artist, album and duration; they are not probabilities. Preview to confirm the recording, then save.",
   "lyrics.cacheHint": "Saved results last up to 7 days and survive restart. Search reuses them; force search updates them.",
   "lyrics.restoring": "Restoring saved searches…",

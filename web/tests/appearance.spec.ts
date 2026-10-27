@@ -228,7 +228,7 @@ test("top-right controls and color menus fit narrow screens in either language a
         const controls = await page.locator(".page-heading .appearance-controls").boundingBox();
         const trigger = await page.locator(".heading-preferences > summary").boundingBox();
         expect(controls!.y).toBeGreaterThanOrEqual(trigger!.y + trigger!.height);
-        expect(controls!.x + controls!.width).toBeGreaterThan(width - 24);
+        expect(Math.abs(controls!.x + controls!.width - trigger!.x - trigger!.width)).toBeLessThanOrEqual(1);
       }
     }
   }

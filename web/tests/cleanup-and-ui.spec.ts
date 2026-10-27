@@ -185,7 +185,7 @@ for (const width of [1440, 1024, 768, 390, 320]) {
     await expect(page.locator(".task")).toHaveCount(5);
     await expect(page.locator('.task[data-state="running"] .task-activity')).toContainText("First Light");
     await expect(page.locator('.task[data-state="running"] [role="progressbar"]')).toHaveAttribute("aria-valuenow", "44");
-    await expect(page.locator('.task[data-state="success"] .badge > svg')).toHaveCount(1);
+    await expect(page.locator('.task[data-state="success"] .badge > span[aria-hidden="true"]')).toHaveCount(1);
     await expect(page.locator('.task[data-state="success"] .task-meter')).toBeHidden();
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
     // A breakpoint change must settle immediately, without layout overflow.
@@ -233,7 +233,7 @@ test("task states use the active palette and Canvas status tones across light an
         function token(name: string) { sample.style.color = `var(--${name})`; return getComputedStyle(sample).color; }
         function style(state: string, selector: string) { return getComputedStyle(document.querySelector(`.task[data-state="${state}"] ${selector}`)!); }
         const result = {
-          accent: token("accent"), successTone: token("success"), successToneFill: token("success-soft"), warning: token("warning"), danger: token("danger"),
+          accent: token("accent"), successTone: token("success"), warning: token("warning"), danger: token("danger"),
           running: style("running", ".badge").color, runningIcon: style("running", ".job-symbol").color, progress: style("running", ".task-meter > span").backgroundColor, fill: token("accent-fill"),
           success: style("success", ".badge").color, successIcon: style("success", ".job-symbol").color, successFill: style("success", ".badge").backgroundColor,
           paused: style("paused", ".badge").color, failed: style("failed", ".badge").color,
@@ -244,7 +244,9 @@ test("task states use the active palette and Canvas status tones across light an
       expect([colors.running, colors.runningIcon]).toEqual([colors.accent, colors.accent]);
       // Progress is a solid fill; small accent text separately adapts for contrast.
       expect(colors.progress).toBe(colors.fill);
-      expect([colors.success, colors.successIcon, colors.successFill]).toEqual([colors.successTone, colors.successTone, colors.successToneFill]);
+      expect([colors.success, colors.successIcon]).toEqual([colors.successTone, colors.successTone]);
+      // The approved flat status uses semantic color on a transparent surface.
+      expect(colors.successFill).toBe("rgba(0, 0, 0, 0)");
       expect(colors.paused).toBe(colors.warning);
       expect(colors.failed).toBe(colors.danger);
       await page.screenshot({ path: `test-results/task-colors-${name.replaceAll(" ", "-")}-${mode}.png`, animations: "disabled" });

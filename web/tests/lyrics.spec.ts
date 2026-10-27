@@ -604,6 +604,7 @@ test("song details and automatic saved recommendations survive reopening and pag
   await expect(recommended.getByRole("radio")).toBeChecked();
   await expect(picker.locator("pre")).toContainText("愛這風雲");
   expect(searches).toHaveLength(0);
+  await picker.locator(".lyrics-guidance > summary").click();
   await picker.getByRole("button", { name: "Force new search", exact: true }).click();
   await expect.poll(() => searches.length).toBe(5);
   expect(searches.every(search => search.refresh)).toBe(true);

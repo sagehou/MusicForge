@@ -76,6 +76,11 @@ test("default albums, compact headings and the text account link retain settings
     for (const screen of ["overview", "library", "settings", "jobs", "lyrics", "compare"]) {
       await reference.evaluate(`setPage('${screen}')`);
       await reference.locator("#preview-frame").screenshot({ path: `test-results/design-flat-${screen}-${width}.png`, animations: "disabled" });
+      if (screen === "library") {
+        await reference.evaluate("setTheme('light')");
+        await reference.locator("#preview-frame").screenshot({ path: `test-results/design-flat-library-${width}-light.png`, animations: "disabled" });
+        await reference.evaluate("setTheme('dark')");
+      }
     }
   }
   await reference.close();

@@ -29,7 +29,7 @@ test("phone lyric selection opens a separate tab with visible preview and confir
     const id = Number(new URL(route.request().url()).pathname.split("/")[3]);
     return route.fulfill({ json: {
       query: `Song ${id} Artist`, instrumental: { provider: "source", token: `instrumental-${id}`, candidates: [{ index: 0 }] },
-      groups: ["qq", "kugou", "netease", "petitlyrics", "lrclib"].map(provider => ({ provider, token: `${provider}-${id}`, cached: true, searched: 1800000000,
+      groups: ["qq", "kugou", "netease", "petitlyrics", "lrclib"].map(provider => ({ provider, token: `${provider}-${id}`, cached: true, searched: 1800000000, error: provider === "qq" && id === 2 ? "Synthetic provider unavailable" : undefined,
         candidates: Array.from({ length: 8 }, (_, index) => ({ index, provider, title: `Song ${id} take ${index + 1}`, artist: "Artist", album: "Album", duration: 183, high_confidence: false, match_score: 90, script: "simplified" })),
       })),
     } });
@@ -121,6 +121,7 @@ test("phone lyric selection opens a separate tab with visible preview and confir
   await setPreference(pickerTab, "language", "en");
   await setPreference(pickerTab, "theme", "light");
   await pickerTab.setViewportSize({ width: 320, height: 568 });
+  await expect(picker.locator(".lyrics-guidance")).toHaveAttribute("open", "");
   expect((await picker.locator(".lyrics-candidate-groups").boundingBox())!.height).toBeGreaterThanOrEqual(96);
   await visibleInViewport(pickerTab, picker.locator(".lyrics-candidate-groups"));
   await visibleInViewport(pickerTab, previewPane);

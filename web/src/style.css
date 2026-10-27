@@ -1755,6 +1755,9 @@ input:not([type="checkbox"], [type="radio"], [type="range"]), select, textarea {
 .track-byline { margin-top: 3px; }
 .audition-format { display: none; }
 .audition-time { color: var(--ink); }
+.audition-playback { padding-top: 4px; }
+.artifact-audition svg { stroke-width: 1.7; }
+.artifact-audition .detail-heading .ui-button { color: var(--ink); }
 .audition-controls input[type="range"]::-webkit-slider-runnable-track { background: var(--line); }
 .audition-controls input[type="range"]::-moz-range-track { background: var(--line); }
 .audition-lyrics-heading { min-height: 32px; margin-bottom: 4px; }
@@ -1998,5 +2001,6 @@ input:not([type="checkbox"], [type="radio"], [type="range"]), select, textarea {
 @media (max-width: 600px) { .heading-content p { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } }
 @media (max-width: 600px) and (max-height: 600px) {
   .lyrics-page > .page-heading { min-height: 64px; padding-block: 10px; }
-  .lyrics-page .lyrics-picker-results { grid-template-rows: auto minmax(96px, 1fr) minmax(210px, 42%); }
+  .lyrics-page .lyrics-search-pane { max-height: 72px; }
+  .lyrics-page .lyrics-picker-results { grid-template-rows: auto minmax(96px, 1fr) minmax(220px, 42%); }
 }

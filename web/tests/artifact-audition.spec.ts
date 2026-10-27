@@ -287,6 +287,7 @@ test("approved library and audition design matches the desktop and phone impleme
       [".track-output .badge-ready", ".track-row > .status", ["color", "background-color", "border-width", "font-size"]],
       [".artifact-audition", ".audition-panel", ["padding", "background-color", "border-width"]],
       [".audition-body", ".audition-body", ["column-gap", "row-gap", "grid-template-columns"]],
+      [".audition-playback", ".audition-controls", ["padding-top"]],
       [".audition-controls > .ui-button", ".play-button", ["width", "height", "border-radius", "background-color", "color"]],
       [".audition-transcript", ".audition-transcript", ["padding-inline-start", "border-inline-start-width", "border-top-width"]],
       [".audition-lyrics-heading .ui-button", ".follow", ["background-color", "color", "border-color", "font-size", "min-height"]],

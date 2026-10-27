@@ -1,0 +1,220 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>MusicForge · Flat Studio 设计预览</title>
+<style>
+:root { color-scheme: dark; --canvas:#111214; --surface:#17181b; --subtle:#202125; --hover:#292b30; --ink:#f5f5f7; --muted:#9e9ea8; --line:#2b2d33; --accent:#f06f81; --fill:#e6213c; --accent-soft:#332027; --success:#86efac; --warning:#e8c279; --danger:#fca5a5; --mono:"SFMono-Regular",Consolas,monospace; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif; color:var(--ink); background:var(--canvas); }
+:root[data-theme="light"] { color-scheme:light; --canvas:#fbfbfc; --surface:#fff; --subtle:#f1f2f4; --hover:#e9ebef; --ink:#18191d; --muted:#646874; --line:#e5e6ea; --accent:#cf1e36; --accent-soft:#faedf0; --success:#15803d; --warning:#b45309; --danger:#b91c1c; }
+* { box-sizing:border-box; }
+body { margin:0; font-size:13px; line-height:1.6; }
+h1,h2,h3,p { margin:0; }
+h1 { font-size:18px; font-weight:600; }
+h2 { font-size:15px; font-weight:600; }
+h3 { font-size:13px; font-weight:600; }
+small,.muted { color:var(--muted); }
+small { font-size:12px; }
+button,input,select { font:inherit; }
+button,select { cursor:pointer; }
+button { border:1px solid transparent; border-radius:6px; background:transparent; color:inherit; padding:5px 10px; min-height:32px; }
+button:hover { background:var(--hover); }
+button:disabled { cursor:default; opacity:.45; }
+:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+svg.icon { width:18px; height:18px; flex:none; fill:none; stroke:currentColor; stroke-width:1.7; stroke-linecap:round; stroke-linejoin:round; }
+.primary { background:var(--fill); color:#fff; }
+.primary:hover { background:#cf1e36; }
+.outline { border-color:var(--line); }
+.icon-button { display:inline-grid; place-items:center; width:32px; padding:5px; }
+.inline,.actions { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+.actions { justify-content:flex-end; }
+.mono { font-family:var(--mono); font-size:12px; font-variant-numeric:tabular-nums; }
+.status { display:inline-flex; align-items:center; gap:4px; font-size:12px; color:var(--success); }
+.status::before { content:""; width:5px; height:5px; border-radius:50%; background:currentColor; }
+.warning { color:var(--warning); }
+.danger { color:var(--danger); }
+#inspector-bar { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px; padding:14px 20px; border-bottom:1px solid var(--line); background:var(--surface); }
+.inspector-title { font-weight:600; }
+.inspector-note { display:block; font-weight:400; }
+#inspector-bar label { display:flex; align-items:center; gap:6px; font-size:12px; color:var(--muted); }
+select,input:not([type="checkbox"],[type="range"]) { min-width:0; padding:6px 10px; min-height:32px; border:1px solid var(--line); border-radius:6px; color:var(--ink); background:var(--surface); }
+input[type="checkbox"],input[type="range"] { accent-color:var(--fill); }
+#preview-container { display:flex; justify-content:center; padding:20px; }
+#preview-frame { width:1440px; max-width:100%; height:900px; border:1px solid var(--line); container:workspace / inline-size; overflow:hidden; }
+#preview-frame[data-vp="tablet"] { width:768px; }
+#preview-frame[data-vp="mobile"] { width:390px; height:844px; }
+.app { display:grid; grid-template-columns:236px minmax(0,1fr); height:100%; }
+.sidebar { display:flex; flex-direction:column; min-height:0; padding:20px 14px; border-right:1px solid var(--line); background:var(--surface); }
+.brand { display:flex; align-items:center; gap:10px; padding:4px 8px 20px; border-bottom:1px solid var(--line); }
+.brand-icon { display:grid; place-items:center; width:30px; height:30px; border-radius:6px; background:var(--fill); color:#fff; flex:none; }
+.brand-wordmark { font-size:14px; font-weight:600; }
+.brand-wordmark small { display:block; font:11px var(--mono); margin-top:2px; }
+.sidebar-navigation { flex:1; min-height:0; overflow-y:auto; padding-top:14px; scrollbar-width:thin; }
+.nav-link { display:flex; align-items:center; gap:10px; text-align:left; width:100%; min-height:36px; padding:7px 11px; color:var(--muted); margin-bottom:3px; }
+.nav-link.active { background:var(--accent-soft); color:var(--accent); font-weight:600; }
+.nav-group { margin-top:20px; }
+.group-title { margin:0 11px 6px; font-size:11px; color:var(--muted); }
+.nav-group .nav-link { font-size:12px; min-height:34px; }
+.nav-group .icon { width:16px; height:16px; }
+.sidebar-bottom { display:flex; align-items:center; gap:8px; border-top:1px solid var(--line); padding:14px 4px 0; margin-top:12px; }
+.avatar { display:grid; place-items:center; width:26px; height:26px; border:1px solid var(--line); border-radius:6px; background:var(--subtle); font-size:11px; }
+.account-name small { display:block; font-size:11px; }
+.main { display:flex; flex-direction:column; min-width:0; min-height:0; }
+.page-heading { display:flex; align-items:center; justify-content:space-between; gap:16px; min-height:82px; padding:16px 28px; border-bottom:1px solid var(--line); }
+.heading-copy { min-width:0; }
+.heading-copy p { color:var(--muted); font-size:12px; }
+.page-body { flex:1; min-height:0; overflow-y:auto; padding:24px 28px 40px; }
+.bottom-navigation { display:none; }
+.toolbar { padding-bottom:14px; border-bottom:1px solid var(--line); margin-bottom:14px; }
+.segmented { display:inline-flex; background:var(--subtle); padding:3px; border-radius:6px; gap:2px; }
+.segmented button { min-height:28px; font-size:12px; padding:3px 12px; color:var(--muted); }
+.segmented button.selected { background:var(--accent-soft); color:var(--accent); font-weight:600; }
+.search { width:100%; margin-top:12px; }
+.maintenance { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px; color:var(--muted); font-size:12px; margin-bottom:14px; }
+.track-head,.track-row { display:grid; grid-template-columns:22px minmax(0,1fr) 58px 180px 100px 78px 130px; gap:10px; align-items:center; }
+.track-head { color:var(--muted); font-size:12px; padding:8px; border-bottom:1px solid var(--line); }
+.track-row { padding:12px 8px; border-bottom:1px solid var(--line); }
+.track-row > * { min-width:0; overflow-wrap:anywhere; }
+.track-title { display:flex; align-items:center; justify-content:space-between; gap:8px; }
+.track-title strong { font-size:13px; font-weight:500; }
+.track-name small { display:block; margin-top:3px; }
+.track-spec,.track-sizes { font:12px/1.8 var(--mono); }
+.mobile-label { display:none; }
+.track-lyrics { font-size:12px; }
+.track-lyrics .actions { justify-content:flex-start; gap:4px; margin-top:4px; }
+.track-lyrics button { min-height:24px; padding:2px 5px; }
+.audition-panel { margin:0 8px 12px; background:var(--subtle); border-block:1px solid var(--line); }
+.audition-header { display:flex; align-items:center; justify-content:space-between; padding:12px 16px; border-bottom:1px solid var(--line); }
+.audition-header small { display:block; margin-top:3px; }
+.audition-body { padding:14px 16px; }
+.audition-controls { display:flex; align-items:center; gap:12px; padding:8px 0; }
+.audition-controls input { flex:1; min-width:0; }
+.play-button { width:36px; height:36px; padding:8px; display:grid; place-items:center; }
+.lyrics-heading { display:flex; align-items:center; justify-content:space-between; gap:8px; margin:10px 0 6px; font-size:12px; color:var(--muted); }
+.lyrics-heading small { margin-left:8px; font-size:11px; }
+.follow { color:var(--accent); background:var(--accent-soft); }
+.lyrics-scroll { max-height:224px; overflow-y:auto; }
+.lyric-line { display:flex; align-items:baseline; gap:16px; padding:10px 12px; color:var(--muted); }
+.lyric-line time { font:11px var(--mono); }
+.lyric-line.current { color:var(--accent); background:var(--accent-soft); font-weight:500; }
+.metrics { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); padding-bottom:16px; border-bottom:1px solid var(--line); margin-bottom:20px; }
+.metric { padding:16px 18px; border-inline-end:1px solid var(--line); }
+.metric:last-child { border:0; }
+.metric strong { display:block; font:600 26px/1.4 var(--mono); margin-block:6px; }
+.readiness { padding-block:18px; border-bottom:1px solid var(--line); margin-bottom:20px; }
+.meter { height:6px; border-radius:6px; background:var(--subtle); margin-top:12px; overflow:hidden; }
+.meter span { display:block; height:100%; background:var(--fill); }
+.workspace { display:grid; grid-template-columns:2fr minmax(220px,1fr); gap:24px; }
+.section-title { padding-block:12px; border-bottom:1px solid var(--line); color:var(--muted); }
+.job-row { display:flex; align-items:center; gap:12px; padding:14px 0; border-bottom:1px solid var(--line); }
+.job-row > div { flex:1; min-width:0; }
+.job-row small { display:block; }
+.side-section { padding-block:18px; border-bottom:1px solid var(--line); }
+.side-section strong { display:block; font:600 22px var(--mono); margin-block:10px; }
+.side-section code { font:11px var(--mono); overflow-wrap:anywhere; }
+.comparison-metrics { display:grid; grid-template-columns:repeat(7,minmax(0,1fr)); gap:12px; padding-block:20px; border-block:1px solid var(--line); margin-block:16px; }
+.comparison-metrics strong { display:block; font:600 20px var(--mono); margin-top:8px; }
+.difference { display:grid; grid-template-columns:20px minmax(0,1fr) auto; gap:10px; padding-block:14px; border-bottom:1px solid var(--line); }
+.difference code { overflow-wrap:anywhere; font:12px var(--mono); }
+.picker { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:24px; }
+.candidate { display:flex; align-items:flex-start; gap:10px; padding:12px 10px; border-bottom:1px solid var(--line); border-inline-start:2px solid transparent; }
+.candidate.selected { border-inline-start-color:var(--accent); background:var(--accent-soft); }
+.candidate > div { min-width:0; }
+.candidate small { display:block; margin-top:4px; }
+.preview-pane { display:flex; flex-direction:column; min-width:0; gap:12px; }
+.lyric-preview { flex:1; min-height:120px; margin:0; padding:8px 0; white-space:pre-wrap; font:13px/2 var(--mono); color:var(--ink); }
+.save-actions { padding-top:12px; border-top:1px solid var(--line); }
+.save-actions small { display:block; margin-bottom:10px; }
+.settings-layout { display:grid; grid-template-columns:180px minmax(0,1fr); gap:24px; }
+.settings-tabs button { display:block; width:100%; text-align:left; color:var(--muted); margin-bottom:3px; }
+.settings-tabs button.selected { color:var(--ink); background:var(--subtle); }
+.form-grid { display:grid; grid-template-columns:1fr 1fr; gap:20px; margin-block:20px; }
+.field { display:flex; flex-direction:column; gap:6px; min-width:0; }
+.field small { font-size:11px; }
+.settings-save { display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap; padding-top:14px; border-top:1px solid var(--line); }
+@container workspace (max-width:1100px) { .track-head { display:none; } .track-row { grid-template-columns:22px minmax(0,1fr); gap:6px 10px; } .track-row > :not(input) { grid-column:2; } .track-row > input { grid-row:1; align-self:start; } .track-spec,.track-sizes { font-size:12px; } .mobile-label { display:inline; font-size:12px; color:var(--muted); margin-right:5px; } .track-lyrics .actions { display:inline-flex; margin-left:8px; } .comparison-metrics { grid-template-columns:repeat(4,minmax(0,1fr)); } }
+@container workspace (max-width:800px) { .app { grid-template-columns:72px minmax(0,1fr); } .sidebar { padding-inline:10px; } .brand { justify-content:center; padding-inline:0; } .brand-wordmark,.nav-label,.group-title,.account-name { display:none; } .nav-link { justify-content:center; padding-inline:8px; } .sidebar-bottom { justify-content:center; } .workspace,.picker,.settings-layout { grid-template-columns:1fr; } .settings-tabs { display:flex; flex-wrap:wrap; gap:4px; } .settings-tabs button { width:auto; } .metrics { grid-template-columns:repeat(2,minmax(0,1fr)); } .metric:nth-child(n) { border:0; border-bottom:1px solid var(--line); } }
+@container workspace (max-width:600px) { .app { display:flex; flex-direction:column; } .sidebar { display:none; } .main { flex:1; } .page-heading { min-height:74px; padding:14px; gap:8px; } .heading-copy p { font-size:11px; } .page-heading > .actions { flex-wrap:nowrap; } .page-heading .icon-button { display:none; } .page-body { padding:14px 14px 24px; } .bottom-navigation { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); flex:none; padding:4px 8px; border-top:1px solid var(--line); background:var(--surface); } .bottom-navigation button { display:flex; flex-direction:column; align-items:center; font-size:11px; gap:3px; padding:5px; color:var(--muted); } .bottom-navigation .active { color:var(--accent); } .comparison-metrics { grid-template-columns:repeat(2,minmax(0,1fr)); } .metric { padding:12px; } .metric strong { font-size:24px; } .segmented { display:flex; } .segmented button { flex:1; padding-inline:6px; } .audition-panel { margin-inline:0; } .audition-header,.audition-body { padding:12px; } .audition-controls { gap:8px; } .lyrics-heading small { display:none; } .form-grid { grid-template-columns:1fr; } }
+@media (max-width:600px) { #preview-container { padding:0; } #preview-frame { border-inline:0; } #inspector-bar { padding:12px; } .inspector-title { font-size:12px; } }
+@media (prefers-reduced-motion:reduce) { *,*::before,*::after { animation:none!important; transition:none!important; scroll-behavior:auto!important; } }
+</style>
+</head>
+<body>
+<svg xmlns="http://www.w3.org/2000/svg" style="display:none" aria-hidden="true">
+<symbol id="i-wave" viewBox="0 0 24 24"><path d="M2 12c2.5 0 2.5-4 5-4s2.5 4 5 4 2.5-4 5-4 2.5 4 5 4"/></symbol>
+<symbol id="i-overview" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></symbol>
+<symbol id="i-library" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="2"/><path d="M7 12a5 5 0 0 1 5-5"/></symbol>
+<symbol id="i-jobs" viewBox="0 0 24 24"><path d="M2 12h4l3-8 5 16 3-8h5"/></symbol>
+<symbol id="i-settings" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/><circle cx="9" cy="6" r="2"/><circle cx="15" cy="12" r="2"/><circle cx="9" cy="18" r="2"/></symbol>
+<symbol id="i-tracks" viewBox="0 0 24 24"><path d="M3 5h12M3 10h10M3 15h7M18 8v10"/><circle cx="15" cy="18" r="3"/></symbol>
+<symbol id="i-artists" viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M6 10v1a6 6 0 0 0 12 0v-1M12 17v4M8 21h8"/></symbol>
+<symbol id="i-lyrics" viewBox="0 0 24 24"><path d="M14 3H5v18h14V8zM14 3v5h5M8 12h8M8 16h5"/></symbol>
+<symbol id="i-play" viewBox="0 0 24 24"><path d="m8 5 11 7-11 7z"/></symbol>
+<symbol id="i-close" viewBox="0 0 24 24"><path d="m6 6 12 12M6 18 18 6"/></symbol>
+<symbol id="i-search" viewBox="0 0 24 24"><circle cx="10" cy="10" r="6"/><path d="m15 15 5 5"/></symbol>
+<symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 7a9 9 0 0 0-15-2L3 7m0-5v5h5M4 17a9 9 0 0 0 15 2l2-2m0 5v-5h-5"/></symbol>
+</svg>
+<header id="inspector-bar">
+<div class="inspector-title">MusicForge · Flat Studio<small class="inspector-note">设计预览 · 示例数据；业务按钮不执行任务</small></div>
+<div class="inline">
+<label>页面<select id="screen"><option value="library">曲目与试听</option><option value="overview">概览</option><option value="lyrics">歌词选择</option><option value="compare">文件核对</option><option value="jobs">任务</option><option value="settings">设置</option></select></label>
+<label>主题<select id="theme"><option value="dark">深色</option><option value="light">浅色</option></select></label>
+<label>视口<select id="viewport"><option value="desktop">桌面 1440</option><option value="tablet">平板 768</option><option value="mobile">手机 390</option></select></label>
+</div>
+</header>
+<main id="preview-container"><div id="preview-frame" data-vp="desktop"><div class="app">
+<aside class="sidebar">
+<div class="brand"><span class="brand-icon"><svg class="icon"><use href="#i-wave"/></svg></span><span class="brand-wordmark">MusicForge<small>设计预览</small></span></div>
+<div class="sidebar-navigation" id="sidebar-navigation"></div>
+<div class="sidebar-bottom"><span class="avatar">A</span><div class="account-name">admin<small>账户设置</small></div></div>
+</aside>
+<div class="main"><header class="page-heading"><div class="heading-copy"><h1 id="page-title"></h1><p id="page-description"></p></div><div class="actions" id="page-actions"></div></header><div class="page-body" id="page-body"></div></div>
+<nav class="bottom-navigation" aria-label="主导航" id="bottom-navigation"></nav>
+</div></div></main>
+<script>
+const icon = name => `<svg class="icon" aria-hidden="true"><use href="#i-${name}"/></svg>`;
+const button = (label, symbol, cls = '') => `<button type="button" class="${cls}">${symbol ? icon(symbol) : ''}${label}</button>`;
+const mainNav = [['overview','概览','overview'],['library','音乐库','library'],['jobs','任务','jobs'],['settings','设置','settings']];
+const groups = [['浏览',[['library','专辑','library'],['library','全部歌曲','tracks'],['library','全部歌手','artists']]],['管理',[['lyrics','待确认歌词','lyrics'],['settings','歌词设置','lyrics'],['settings','编码配置','wave'],['settings','集成','refresh']]]];
+const row = (title, number, lyrics = '尚未检查', review = false) => `<div class="track-row"><input type="checkbox" aria-label="选择 ${title}"><div class="track-name"><div class="track-title"><strong>${number}. ${title}</strong><button class="icon-button" aria-label="试听 ${title}">${icon('play')}</button></div><small>River Ensemble · Night Studies</small></div><span class="mono"><span class="mobile-label">时长</span>3:21</span><span class="track-spec"><span class="mobile-label">源规格</span>FLAC · 24 bit / 96 kHz<br><span class="muted">894 kbps</span></span><span class="track-sizes"><span class="mobile-label">源／产物</span>25 MiB<br><span class="muted">5 MiB</span></span><span class="status">已就绪</span><div class="track-lyrics"><span class="${review ? 'warning' : 'muted'}">${lyrics}</span><div class="actions"><button aria-label="重新搜索歌词">${icon('search')}</button><button aria-label="选择歌词">${icon('lyrics')}</button></div></div></div>`;
+const audition = `<section class="audition-panel"><div class="audition-header"><div><h3>产物试听</h3><small>Nightfall · River Ensemble</small></div><button class="icon-button" aria-label="关闭试听">${icon('close')}</button></div><div class="audition-body"><div class="audition-controls"><button class="play-button primary" aria-label="播放产物">${icon('play')}</button><span class="mono">0:40</span><input type="range" aria-label="播放进度" min="0" max="201" value="40"><span class="mono">3:21</span></div><div class="lyrics-heading"><span>产物歌词<small>点击歌词定位进度</small></span><button class="follow">跟随歌词</button></div><div class="lyrics-scroll" tabindex="0" aria-label="产物歌词">${[['0:32','晚风穿过寂静的街巷'],['0:36','留下熟悉的回响'],['0:40','在每一个音符停留的地方'],['0:44','让时间慢慢流淌']].map(([time,line]) => `<div class="lyric-line ${time==='0:40' ? 'current' : ''}"><time>${time}</time><span>${line}</span></div>`).join('')}</div></div></section>`;
+const library = `<div class="toolbar"><div class="inline" style="justify-content:space-between"><div class="segmented"><button>专辑 128</button><button class="selected">全部歌曲 1,215</button><button>全部歌手 86</button></div><button class="icon-button outline" aria-label="视图选项">${icon('settings')}</button></div><input class="search" aria-label="搜索音乐库" placeholder="搜索歌手、专辑、歌曲或路径…"></div><div class="maintenance"><span>文件数量 · 与 Lidarr 核对　›</span><span>LRC 歌词　1,103 / 1,149　›</span></div><div class="track-head"><span></span><span>曲目／文件</span><span>时长</span><span>音频／码率</span><span>源／产物</span><span>产物状态</span><span>LRC 歌词</span></div>${row('Nightfall','01','已有歌词')}${audition}${row('First Light · 海岸与夜晚的音乐记录','02','请选择歌词候选',true)}${row('Quiet Hours','03')}${row('After the Rain','04','已有歌词')}`;
+const jobs = `<div class="segmented"><button class="selected">全部</button><button>运行中</button><button>成功</button><button>失败</button><button>已暂停</button></div><div class="readiness"><div class="inline" style="justify-content:space-between"><h2>扫描与转换队列 #130</h2><span class="status" style="color:var(--accent)">运行中</span></div><p class="muted">44 / 100 · First Light · River Ensemble</p><div class="meter"><span style="width:44%"></span></div><div class="actions" style="margin-top:12px"><button class="outline">暂停</button><button class="outline">停止</button></div></div>${[['音频构建队列 #129','100 / 100 · 已完成','成功',''],['音频构建队列 #128','44 / 100 · 有歌曲处理失败','失败','danger'],['音频构建队列 #127','44 / 100 · 等待恢复','已暂停','warning'],['刷新 Navidrome #126','等待队列执行','等待中','muted']].map(([title,sub,status,tone]) => `<div class="job-row">${icon('jobs')}<div><h3>${title}</h3><small>${sub}</small></div><span class="status ${tone}">${status}</span><button class="outline">详情</button></div>`).join('')}`;
+const overview = `<div class="metrics">${[['音频源文件','1,215','只读源音乐库'],['流媒体产物','1,149','目标格式：OPUS'],['符合当前配置','1,103','符合当前构建配置'],['待处理','62','46 待重建 · 4 过期 · 12 失败']].map(([label,value,sub]) => `<div class="metric"><span class="muted">${label}</span><strong>${value}</strong><small>${sub}</small></div>`).join('')}</div><section class="readiness"><div class="inline" style="justify-content:space-between"><h3>构建完成 91%</h3><span class="mono muted">OPUS VBR · 192 kbps　1,103 / 1,215</span></div><div class="meter"><span style="width:91%"></span></div><div class="job-row">${icon('tracks')}<div><h3>First Light · 海岸与夜晚的音乐记录</h3><small>River Ensemble · Night Studies</small></div><span class="mono" style="color:var(--accent)">61%</span></div></section><div class="workspace"><section><h3 class="section-title">最近任务</h3>${[['扫描与转换队列 #130','First Light · 44 / 100','运行中'],['音频构建队列 #129','100 / 100','成功'],['音频构建队列 #128','44 / 100','失败']].map(([title,sub,state]) => `<div class="job-row">${icon('jobs')}<div><h3>${title}</h3><small>${sub}</small></div><span class="muted">${state}</span></div>`).join('')}</section><aside><section class="side-section"><h3>LRC 歌词</h3><strong>1,103 / 1,149</strong><small>18 首等待确认</small><div style="margin-top:10px"><button class="outline">歌词设置</button></div></section><section class="side-section"><h3>音乐存储　<span class="status">在线</span></h3><p style="margin-top:12px"><small>源音乐库</small>　<code>/music/source</code></p><p><small>流媒体库</small>　<code>/music/output</code></p></section></aside></div>`;
+const compare = `<div class="inline" style="justify-content:space-between"><div><h2>与 Lidarr 核对</h2><small>API 密钥已配置 · 连接信息在设置中维护</small></div><button class="primary">核对文件清单</button></div><div class="comparison-metrics">${[['Lidarr','1,217'],['源文件','1,215'],['匹配','1,213'],['仅 Lidarr','4'],['仅 MusicForge','2'],['未映射','0'],['范围外','8']].map(([key,value]) => `<div><small>${key}</small><strong>${value}</strong></div>`).join('')}</div><p class="muted">这是索引快照；源目录保持只读。超出映射范围的文件单独列出。</p><div class="inline" style="margin-block:16px"><select aria-label="差异类型"><option>所有差异</option><option>尚未索引</option></select><input placeholder="搜索文件路径" aria-label="搜索文件路径"></div>${[['River Ensemble/Night Studies/11 - Last Train.flac','尚未索引'],['River Ensemble/Archive/01 - Before Dawn.flac','源文件已移除'],['Guest Vocalist/Live Sessions/02 - A Very Long Recording Name.flac','处理失败']].map(([path,state]) => `<div class="difference"><input type="checkbox" aria-label="选择 ${path}"><code>${path}</code><span class="warning">${state}</span></div>`).join('')}<div style="margin-top:16px"><button class="outline">重新扫描所选目录</button></div>`;
+const lyrics = `<div class="inline" style="margin-bottom:16px"><input style="flex:1" value="Nightfall River Ensemble" aria-label="歌名或歌手"><button class="outline">搜索候选</button></div><div class="picker"><div><div class="inline" style="justify-content:space-between;margin-bottom:12px"><small>按匹配分排序 · 推荐优先</small><select aria-label="歌词来源"><option>所有来源</option></select></div>${[['Nightfall','QQ 音乐','100','3:21'],['Nightfall','网易云音乐','98','3:21'],['Nightfall (Live)','PetitLyrics','86','3:28']].map(([title,provider,score,duration],i) => `<label class="candidate ${i===0 ? 'selected' : ''}"><input type="radio" name="candidate" ${i===0 ? 'checked' : ''}><div><h3>${title}${i===0 ? ' · 推荐' : ''}</h3><small>River Ensemble · Night Studies · ${duration}</small><small>${provider} · 匹配分 ${score}/100</small><small>简体中文原文</small></div></label>`).join('')}<div style="padding-block:16px"><button class="outline">手动标记为纯音乐</button></div></div><div class="preview-pane"><h3>歌词预览</h3><pre class="lyric-preview">[00:32.00]晚风穿过寂静的街巷
+[00:36.00]留下熟悉的回响
+[00:40.00]在每一个音符停留的地方
+[00:44.00]让时间慢慢流淌</pre><label class="inline"><input type="checkbox">附带同步译文</label><label class="inline"><input type="checkbox">附带同步罗马音</label><div class="save-actions"><small>保存为产物旁的同名 LRC；手动修改或未登记的文件会保留。</small><div class="actions"><button class="primary">保存所选歌词</button><button class="outline">保存并处理下一首</button></div></div></div></div>`;
+const settings = `<div class="settings-layout"><div class="settings-tabs">${['音乐库','编码','歌词','集成','账户安全'].map((name,i) => `<button class="${i===1 ? 'selected' : ''}">${name}</button>`).join('')}</div><section><h2>编码配置</h2><p class="muted" style="margin-top:4px">配置变更会将不匹配的产物标记为待重建；已有文件仍可播放。</p><div class="form-grid"><label class="field">编码格式<select><option>Opus（推荐）</option><option>MP3</option></select></label><label class="field">编码模式<select><option>VBR · 可变码率</option><option>CBR · 固定码率</option></select></label><label class="field">平均目标码率<input type="number" value="192"><small>32–512 kbps · 推荐 192 kbps</small></label><label class="field">并发转换数<input type="number" value="2"><small>根据处理器性能与源库读取速度调整。</small></label></div><p class="muted" style="margin-bottom:24px">保留标签与 ReplayGain · 每个专辑一份 cover.jpg · 校验后替换</p><div class="settings-save"><small>尚无未保存的修改</small><div class="actions"><button class="outline" disabled>放弃修改</button><button class="primary" disabled>保存设置</button></div></div></section></div>`;
+const screens = {
+ library:{title:'音乐库',description:'1,215 首索引歌曲 · 源与产物状态一目了然',content:library,action:'扫描音乐库'},
+ overview:{title:'概览',description:'查看音乐库状态、当前任务和待处理事项。',content:overview,action:'扫描音乐库'},
+ lyrics:{title:'选择歌词',description:'Nightfall · River Ensemble · 歌曲时长：201 秒',content:lyrics,action:null},
+ compare:{title:'文件数量 · 与 Lidarr 核对',description:'核对源库与 Lidarr 的索引清单',content:compare,action:null},
+ jobs:{title:'任务',description:'查看队列进度、处理结果与恢复操作。',content:jobs,action:null},
+ settings:{title:'设置',description:'配置音乐库、编码、歌词与服务集成。',content:settings,action:null}
+};
+function setPage(name) {
+ const screen=screens[name];
+ document.getElementById('screen').value=name;
+ document.getElementById('page-title').textContent=screen.title;
+ document.getElementById('page-description').textContent=screen.description;
+ document.getElementById('page-actions').innerHTML=(screen.action ? button(screen.action,'refresh','primary inline') : '')+button('','settings','icon-button outline');
+ document.getElementById('page-actions').querySelector('.icon-button').setAttribute('aria-label','外观设置');
+ document.getElementById('page-body').innerHTML=screen.content;
+ const active=['lyrics','compare'].includes(name) ? 'library' : name;
+ document.getElementById('sidebar-navigation').innerHTML=mainNav.map(([key,label,symbol]) => `<button class="nav-link ${key===active ? 'active' : ''}" data-screen="${key}" title="${label}">${icon(symbol)}<span class="nav-label">${label}</span></button>`).join('')+groups.map(([title,items]) => `<div class="nav-group"><p class="group-title">${title}</p>${items.map(([key,label,symbol]) => `<button class="nav-link" data-screen="${key}" title="${label}">${icon(symbol)}<span class="nav-label">${label}</span></button>`).join('')}</div>`).join('');
+ document.getElementById('bottom-navigation').innerHTML=mainNav.map(([key,label,symbol]) => `<button class="${key===active ? 'active' : ''}" data-screen="${key}">${icon(symbol)}${label}</button>`).join('');
+ document.querySelectorAll('[data-screen]').forEach(node=>node.addEventListener('click',()=>setPage(node.dataset.screen)));
+ document.getElementById('page-body').scrollTop=0;
+}
+function setTheme(theme) { document.documentElement.dataset.theme=theme; document.getElementById('theme').value=theme; }
+function setVp(viewport) { document.getElementById('preview-frame').dataset.vp=viewport; document.getElementById('viewport').value=viewport; }
+document.getElementById('screen').addEventListener('change',event=>setPage(event.target.value));
+document.getElementById('theme').addEventListener('change',event=>setTheme(event.target.value));
+document.getElementById('viewport').addEventListener('change',event=>setVp(event.target.value));
+setPage('library');
+</script>
+</body>
+</html>

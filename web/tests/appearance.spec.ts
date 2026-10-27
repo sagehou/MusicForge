@@ -66,25 +66,39 @@ test("default albums, compact headings and the text account link retain settings
   await expect(page.locator(".brand-version")).toHaveText("test");
   await page.screenshot({ path: "test-results/appearance-default-albums.png", animations: "disabled" });
   const reference = await page.context().newPage();
-  const design = await readFile(resolve("../designs/index.html"), "utf8");
+  const design = await readFile(resolve("../docs/ui-refinement-preview.html"), "utf8");
   for (const width of [1440, 390]) {
     await reference.setViewportSize({ width, height: 1000 });
     await reference.setContent(design);
-    // Remove only the demo controller and device frame when reviewing actual pages.
-    await reference.addStyleTag({ content: `#showcase-bar { display: none !important; } #viewport-wrapper { padding: 0 !important; max-width: none !important; } .app-frame { max-width: none !important; min-height: 100vh !important; border: 0 !important; border-radius: 0 !important; box-shadow: none !important; } .app-main { max-height: none !important; }` });
+    // Capture the current design at its actual width, without the preview controls.
+    await reference.addStyleTag({ content: `#inspector-bar { display: none; } #preview-container { padding: 0; } #preview-frame { border: 0; }` });
     await reference.evaluate(`setVp('${width === 390 ? "mobile" : "desktop"}'); setTheme('dark')`);
-    for (const screen of ["overview", "library", "settings", "jobs"]) {
+    for (const screen of ["overview", "library", "settings", "jobs", "lyrics", "compare"]) {
       await reference.evaluate(`setPage('${screen}')`);
-      await reference.locator(".app-frame").screenshot({ path: `test-results/design-a2-${screen}-${width}.png`, animations: "disabled" });
+      await reference.locator("#preview-frame").screenshot({ path: `test-results/design-flat-${screen}-${width}.png`, animations: "disabled" });
     }
   }
   await reference.close();
+  const shortcuts = page.getByRole("navigation", { name: "Workspace shortcuts", exact: true });
+  await expect(shortcuts.getByRole("link")).toHaveCount(7);
+  for (const [label, view] of [["All songs", "tracks"], ["All artists", "artists"], ["Albums", "albums"]]) {
+    await shortcuts.getByRole("link", { name: label, exact: true }).click();
+    await expect(page).toHaveURL(new RegExp(`view=${view}`));
+    await expect(page.getByRole("button", { name: new RegExp(`^${label}`) })).toHaveAttribute("aria-pressed", "true");
+  }
+  await shortcuts.getByRole("link", { name: "Review lyrics", exact: true }).click();
+  await expect(page).toHaveURL(/view=tracks&lyrics=needs_review/);
   await openAccount(page);
   await expect(page).toHaveURL(/section=security/);
   await expect(page.locator(".account-summary")).toContainText("admin");
   await expect(page.getByLabel("Current password", { exact: true })).toBeVisible();
   await page.getByRole("tab", { name: "Library", exact: true }).click();
   await page.getByLabel("Source audio directory", { exact: true }).fill("/keep-this-draft");
+  for (const [label, section, tab] of [["Encoding profile", "encoding", "Encoding"], ["Lyrics settings", "lyrics", "Lyrics"], ["Integrations", "integrations", "Integrations"]]) {
+    await shortcuts.getByRole("link", { name: label, exact: true }).click();
+    await expect(page).toHaveURL(new RegExp(`section=${section}`));
+    await expect(page.getByRole("tab", { name: tab, exact: true })).toHaveAttribute("aria-selected", "true");
+  }
   await openAccount(page);
   await page.getByRole("tab", { name: "Library", exact: true }).click();
   await expect(page.getByLabel("Source audio directory", { exact: true })).toHaveValue("/keep-this-draft");

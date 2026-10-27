@@ -99,6 +99,12 @@ test("sidebar collapse persists and icon navigation stays accessible across lang
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.getByRole("button", { name: "展开侧栏", exact: true }).click();
   await expect.poll(async () => (await page.locator(".sidebar").boundingBox())?.width).toBe(236);
+  await page.setViewportSize({ width: 1440, height: 540 });
+  const lastShortcut = page.locator(".sidebar-shortcuts a").last();
+  await lastShortcut.scrollIntoViewIfNeeded();
+  await expect(lastShortcut).toBeInViewport();
+  await expect(page.locator(".sidebar .brand")).toBeInViewport();
+  await expect(page.locator(".sidebar .account-link")).toBeInViewport();
 });
 
 test("dashboard uses real clamped completion and functional quick actions", async ({ page }) => {

@@ -146,6 +146,8 @@ test("phone pages retain real content, readable facts and inline song details in
   for (const width of [390, 320]) {
     await page.setViewportSize({ width, height: 844 });
     await page.goto("/library?view=tracks");
+    await expect(page.locator("#main-navigation a:visible")).toHaveCount(4);
+    await expect(page.locator(".sidebar-shortcuts")).toBeHidden();
     await expect(page.locator(".track-table tbody > tr").first().locator(".track-open")).toBeInViewport();
     const first = await page.locator(".track-table tbody > tr").first().boundingBox();
     expect(first!.y + first!.height).toBeLessThan(780);

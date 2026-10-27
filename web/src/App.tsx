@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { flushSync } from "react-dom";
-import { Activity, ArrowRight, Check, ChevronLeft, ChevronRight, Clock3, Disc3, FileMusic, FolderOpen, LayoutDashboard, Loader2, PanelLeftClose, PanelLeftOpen, Pause, Play, RefreshCw, Settings as SettingsIcon, ShieldCheck, Square, Trash2, Waves, X } from "lucide-react";
+import { Activity, ArrowRight, Check, ChevronLeft, ChevronRight, Clock3, Disc3, FileMusic, FolderOpen, LayoutDashboard, ListChecks, ListMusic, Loader2, Mic2, PanelLeftClose, PanelLeftOpen, Pause, Play, RefreshCw, Settings as SettingsIcon, ShieldCheck, Square, Trash2, Waves, X } from "lucide-react";
 import { Button } from "./components/ui/button";
 import { api, loadSession, setCSRF } from "./api";
 import type { Activity as JobActivity, Encoding, Job, Me, Settings, TaskItem } from "./types";
@@ -100,12 +100,33 @@ export function App() {
   if (!me) return <div className="auth-layout"><AppearanceControls /><Loading error={authError} />{authError && <Button onClick={() => void loadMe()}>{t("app.reconnect")}</Button>}</div>;
   if (!me.authenticated) return <Auth me={me} done={loadMe} recoveryError={authError} />;
   const nav = [{ path: "/", label: t("app.overview"), icon: LayoutDashboard }, { path: "/library", label: t("app.library"), icon: Disc3 }, { path: "/jobs", label: t("app.jobs"), icon: Activity }, { path: "/settings", label: t("app.settings"), icon: SettingsIcon }];
+  const shortcuts = [
+    { label: t("app.browse"), items: [
+      { path: "/library?view=albums", label: t("library.albums"), icon: Disc3 },
+      { path: "/library?view=tracks", label: t("library.allTracks"), icon: ListMusic },
+      { path: "/library?view=artists", label: t("library.artists"), icon: Mic2 },
+    ] },
+    { label: t("app.manage"), items: [
+      { path: "/library?view=tracks&lyrics=needs_review", label: t("app.reviewLyrics"), icon: ListChecks },
+      { path: "/settings?section=lyrics", label: t("app.lyricsSettings"), icon: FileMusic },
+      { path: "/settings?section=encoding", label: t("settings.encoding"), icon: Waves },
+      { path: "/settings?section=integrations", label: t("settings.tabIntegrations"), icon: RefreshCw },
+    ] },
+  ];
   const current = nav.find(item => item.path === page) || nav[0];
   const notification = toast && <div className={`toast ${toast.error ? "toast-error" : ""}`} role={toast.error ? "alert" : "status"}>{toast.error ? <Activity size={17} /> : <Check size={17} />}<span>{toast.message instanceof Error ? errorMessage(toast.message.message) : t(toast.message, toast.params)}</span><button type="button" aria-label={t("app.dismiss")} title={t("app.dismiss")} onClick={() => setToast(undefined)}><X size={17} /></button></div>;
   return <><div className="app-shell" data-sidebar-collapsed={sidebarCollapsed} inert={locked ? true : undefined} aria-hidden={locked ? true : undefined}><a className="skip-link" href="#main-content">{t("app.skipContent")}</a>
     <aside className="sidebar">
       <div className="brand-row"><a className="brand" href="/" aria-label="MusicForge" title="MusicForge" onClick={e => { e.preventDefault(); navigate("/"); }}><span className="brand-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" aria-hidden="true"><path d="M2 12c2.5 0 2.5-4 5-4s2.5 4 5 4 2.5-4 5-4 2.5 4 5 4" /></svg></span><span className="brand-wordmark">MusicForge<small className="brand-version">{me.version}</small></span></a><Button className="sidebar-toggle" variant="ghost" size="icon" aria-label={t(sidebarCollapsed ? "app.expandSidebar" : "app.collapseSidebar")} title={t(sidebarCollapsed ? "app.expandSidebar" : "app.collapseSidebar")} aria-expanded={!sidebarCollapsed} aria-controls="main-navigation" onClick={toggleSidebar}>{sidebarCollapsed ? <PanelLeftOpen size={18} /> : <PanelLeftClose size={18} />}</Button></div>
-      <nav id="main-navigation" aria-label={t("app.navigation")}>{nav.map(item => <a key={item.path} href={item.path} aria-label={item.label} title={item.label} aria-current={current.path === item.path ? "page" : undefined} className={current.path === item.path ? "active" : ""} onClick={e => { e.preventDefault(); navigate(item.path); }}><item.icon size={19} /><span className="nav-label">{item.label}</span>{current.path === item.path && <span className="nav-dot" />}</a>)}</nav>
+      <div className="sidebar-navigation">
+        <nav id="main-navigation" aria-label={t("app.navigation")}>{nav.map(item => <a key={item.path} href={item.path} aria-label={item.label} title={item.label} aria-current={current.path === item.path ? "page" : undefined} className={current.path === item.path ? "active" : ""} onClick={e => { e.preventDefault(); navigate(item.path); }}><item.icon size={19} /><span className="nav-label">{item.label}</span>{current.path === item.path && <span className="nav-dot" />}</a>)}</nav>
+        <nav className="sidebar-shortcuts" aria-label={t("app.shortcuts")}>
+          {shortcuts.map(group => <div className="sidebar-group" key={group.label}>
+            <p className="sidebar-group-title">{group.label}</p>
+            {group.items.map(item => <a key={item.path} href={item.path} aria-label={item.label} title={item.label} onClick={event => { event.preventDefault(); navigate(item.path); }}><item.icon size={16} /><span className="nav-label">{item.label}</span></a>)}
+          </div>)}
+        </nav>
+      </div>
       <div className="sidebar-bottom"><a className="account-link" href="/settings?section=security" aria-label={t("app.account")} title={t("app.account")} onClick={event => { event.preventDefault(); navigate("/settings?section=security"); }}>
         <span className="account-initial" aria-hidden="true">{me.username?.slice(0, 1).toUpperCase()}</span>
         <span className="account-name"><span className="account-identity"><span className="account-username">{me.username}</span></span><small>{t("app.account")}</small></span>

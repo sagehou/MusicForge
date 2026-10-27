@@ -53,7 +53,7 @@ test("bilingual setup, real incremental build, state preservation and login", as
   await page.getByRole("button", { name: /^全部歌手/ }).click();
   await page.getByRole("button", { name: "浏览歌手 CI Artist", exact: true }).click({ timeout: 30000 });
   await page.getByRole("button", { name: "浏览专辑 CI Album", exact: true }).click();
-  await expect(page.locator(".track-cell strong").filter({ hasText: /^CI Track$/ })).toBeVisible({ timeout: 30000 });
+  await expect(page.getByRole("button", { name: "查看 CI Track 的详情", exact: true })).toBeVisible({ timeout: 30000 });
   await expect(page.getByRole("table").getByText("已就绪", { exact: true })).toBeVisible({ timeout: 30000 });
   const audioBeforeLyrics = readFileSync(join(root, "output/Artist/Album/01.opus"));
   writeFileSync(join(root, "source/Artist/Album/01.lrc"), "[00:00.00]CI 同步歌词\n");
@@ -329,7 +329,7 @@ async function exerciseTaskQueue(page: import("@playwright/test").Page, root: st
     await page.getByRole("button", { name: /^All artists/ }).click();
     await page.getByRole("button", { name: "Browse artist Queue Artist", exact: true }).click();
     await page.getByRole("button", { name: "Browse album Queue Album", exact: true }).click();
-    await expect(page.locator(".track-cell strong").filter({ hasText: /^Queue Track 1$/ })).toBeVisible();
+    await expect(page.getByRole("button", { name: "View details for Queue Track 1", exact: true })).toBeVisible();
     await expect(page.getByRole("table").locator(".track-spec-chip").filter({ hasText: "MP3" })).toBeVisible();
     await expect(page.getByRole("table").locator(".track-spec-chip").filter({ hasText: "AAC" })).toBeVisible();
     await setPreference(page, "language", "zh-CN");

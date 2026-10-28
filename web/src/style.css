@@ -1640,7 +1640,10 @@ input[role="switch"]:checked::after { transform: translateX(22px); background: v
   .detail-titlebar { flex-wrap: wrap; gap: 8px; }
   .detail-heading .actions { margin-left: auto; gap: 4px; }
   .detail-heading .ui-button { width: 32px; height: 32px; min-height: 32px; }
-  .track-details .detail-heading { padding: 6px 8px; }
+  .track-details .detail-heading { padding: 6px 4px; }
+  .track-details .detail-titlebar { gap: 4px; }
+  .track-details .detail-titlebar > div:first-child { gap: 6px; }
+  .track-details .detail-heading .actions { gap: 0; }
   .track-details .detail-heading .ui-button { width: 40px; height: 40px; min-height: 40px; }
   .inline-details .detail-content { padding: 12px; }
   .inline-details .track-file dt, .inline-details .track-file dd { padding-inline: 10px; }

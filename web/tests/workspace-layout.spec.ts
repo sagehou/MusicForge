@@ -249,6 +249,7 @@ test("album rows expose useful audio facts and toggle song and lyric details dir
   await page.screenshot({ path: "test-results/album-song-inline-1440-light-en.png", animations: "disabled" });
   await page.setViewportSize({ width: 320, height: 1000 });
   await expectCompactSongHeader(details);
+  expect(await details.locator(".detail-heading p").evaluate(element => element.scrollWidth <= element.clientWidth + 1)).toBe(true);
   await page.screenshot({ path: "test-results/album-song-inline-320-light-en.png", animations: "disabled" });
   await page.setViewportSize({ width: 1440, height: 1000 });
   await expect(page.getByRole("dialog")).toHaveCount(0);
@@ -279,6 +280,7 @@ test("album rows expose useful audio facts and toggle song and lyric details dir
     await title.click();
     await expect(details).toHaveAccessibleName("歌曲详情");
     await expectCompactSongHeader(details);
+    expect(await details.locator(".detail-heading p").evaluate(element => element.scrollWidth <= element.clientWidth + 1)).toBe(true);
     for (const fact of await row.locator(".track-fact-audio dd, .track-fact-sizes dd").all()) {
       await expect(fact).toBeVisible();
       expect(await fact.evaluate(element => element.scrollWidth <= element.clientWidth + 1)).toBe(true);
@@ -292,8 +294,9 @@ test("album rows expose useful audio facts and toggle song and lyric details dir
   await expectCompactSongHeader(details);
   await expect(details.locator(".detail-heading p")).toHaveText(longTitle);
   await expect(details.locator(".track-file > dl > dd").first()).toHaveText(longTitle);
-  await details.locator(".detail-heading").scrollIntoViewIfNeeded();
-  await expect(details.locator(".detail-heading")).toBeInViewport();
+  await details.locator(".detail-heading").evaluate(element => element.scrollIntoView({ block: "center", behavior: "instant" }));
+  await expect(details.locator(".detail-heading")).toBeInViewport({ ratio: 1 });
+  await expect(details.locator(".track-file > dl > dd").first()).toBeInViewport({ ratio: 1 });
   await page.screenshot({ path: "test-results/album-song-long-320-dark-zh.png", animations: "disabled" });
   await page.keyboard.press("Escape");
   await expect(page.locator(".track-row").nth(2).locator(".track-open")).toBeFocused();

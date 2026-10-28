@@ -1962,12 +1962,15 @@ input:not([type="checkbox"], [type="radio"], [type="range"]), select, textarea {
 /* Keep the semantic table while matching the approved seven-column desktop grid. */
 @media (min-width: 1101px) {
   .track-table:not(.album-track-table), .track-table:not(.album-track-table) thead, .track-table:not(.album-track-table) tbody { display: block; width: 100%; }
-  .track-table:not(.album-track-table) thead tr, .track-table:not(.album-track-table) .track-row { display: grid; grid-template-columns: 22px minmax(0, 1fr) 58px 180px 100px 78px 130px; gap: 10px; align-items: center; padding: 12px 8px; border-bottom: 1px solid var(--line); }
+  .track-table:not(.album-track-table) thead tr, .track-table:not(.album-track-table) .track-row { display: grid; grid-template-columns: 22px minmax(0, 1fr) 58px 180px 100px 78px 130px; gap: 10px; align-items: center; padding: 9px 8px; border-bottom: 1px solid var(--line); }
   .track-table:not(.album-track-table) thead tr { padding-block: 8px; }
   .track-table:not(.album-track-table) th, .track-table:not(.album-track-table) .track-row > td { display: block; width: auto; padding: 0; border: 0; min-width: 0; }
   .track-table:not(.album-track-table) .track-facts-cell { grid-column: 3 / 6; }
   .track-table:not(.album-track-table) .track-facts { margin: 0; grid-template-columns: 58px minmax(0, 1fr) 100px; gap: 10px; }
   .track-table:not(.album-track-table) .track-facts > div { padding: 0; }
+  .track-table:not(.album-track-table) .track-facts dd { line-height: 1.6; }
+  .track-table:not(.album-track-table) .track-fact-audio > dd { display: inline; }
+  .track-table:not(.album-track-table) .track-fact-audio > .track-bitrate { display: inline-block; margin-inline-start: 8px; white-space: nowrap; }
   .track-table:not(.album-track-table) .track-expanded-row, .track-table:not(.album-track-table) .track-expanded-row > td { display: block; width: 100%; }
 }
 .track-lyrics .lyrics-track[data-state="ready"] .lyrics-state { color: var(--muted); }

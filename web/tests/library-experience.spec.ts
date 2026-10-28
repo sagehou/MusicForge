@@ -188,6 +188,16 @@ test("all songs share filters, pagination and batch lyrics with visible file fac
   await openLibraryOptions(page);
   await page.getByLabel("Filter by lyrics status", { exact: true }).selectOption("not_found");
   await setPreference(page, "language", "zh-CN");
+  for (const width of [1440, 1101]) {
+    await page.setViewportSize({ width, height: 900 });
+    const audio = first.locator(".track-fact-audio");
+    expect(await audio.evaluate(element => element.getBoundingClientRect().height <= 2 * parseFloat(getComputedStyle(element).lineHeight) + 1)).toBe(true);
+    expect((await first.boundingBox())!.height).toBeLessThanOrEqual(80);
+    await expect(audio).toContainText("FLAC · 24 bit / 96 kHz · 2 声道");
+    await expect(audio).toContainText("894 kbps");
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
+    await page.screenshot({ path: `test-results/all-songs-dense-${width}-light-zh.png`, animations: "disabled" });
+  }
   await page.setViewportSize({ width: 320, height: 844 });
   for (const theme of ["light", "dark"]) {
     await setPreference(page, "theme", theme);

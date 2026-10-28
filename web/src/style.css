@@ -1633,7 +1633,7 @@ input[role="switch"]:checked::after { transform: translateX(22px); background: v
   .track-table .track-expanded-row { display: block; padding: 0 0 12px; border: 0; }
   .track-table .track-expanded-row > td { width: 100%; padding: 0; }
   .album-track-table .track-expanded-row { padding: 0 12px 12px; }
-  .track-facts-compact { gap: 2px 12px; }
+  .track-facts-compact { gap: 2px 8px; }
   .track-facts-compact dd, .track-facts-compact dt { font-size: 11px; }
 }
 @media (max-width: 600px) {

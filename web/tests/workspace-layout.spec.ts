@@ -31,6 +31,16 @@ async function expectCompactSongHeader(panel: Locator) {
   expect(await header.evaluate(element => element.scrollWidth <= element.clientWidth + 1)).toBe(true);
 }
 
+async function expectCompactAlbumFacts(facts: Locator, lines: number) {
+  const layout = await facts.evaluate(element => ({
+    height: element.getBoundingClientRect().height,
+    lineHeight: parseFloat(getComputedStyle(element.querySelector(".track-spec-chip")!).lineHeight),
+    gap: parseFloat(getComputedStyle(element).rowGap),
+  }));
+  expect(layout.height).toBeLessThanOrEqual(layout.lineHeight * lines + layout.gap * (lines - 1) + 1);
+  expect(await facts.evaluate(element => element.scrollWidth <= element.clientWidth + 1)).toBe(true);
+}
+
 test("aligned records fit six tracks, and the icon rail keeps navigation and preferences usable", async ({ page }) => {
   await setup(page);
   await page.setViewportSize({ width: 1440, height: 900 });
@@ -220,8 +230,7 @@ test("album rows expose useful audio facts and toggle song and lyric details dir
   for (const width of [1440, 1101, 390, 320]) {
     await page.setViewportSize({ width, height: 1000 });
     const facts = row.locator(".track-facts-compact");
-    expect(await facts.evaluate((element, lines) => element.getBoundingClientRect().height <= parseFloat(getComputedStyle(element.querySelector("dd")!).lineHeight) * lines + 2 * (lines - 1) + 1, width > 1100 ? 1 : 2)).toBe(true);
-    expect(await facts.evaluate(element => element.scrollWidth <= element.clientWidth + 1)).toBe(true);
+    await expectCompactAlbumFacts(facts, width > 1100 ? 1 : 2);
   }
   await page.setViewportSize({ width: 1440, height: 1000 });
   await expect(row).not.toContainText(tracks[0].path);
@@ -274,8 +283,7 @@ test("album rows expose useful audio facts and toggle song and lyric details dir
       await expect(fact).toBeVisible();
       expect(await fact.evaluate(element => element.scrollWidth <= element.clientWidth + 1)).toBe(true);
     }
-    expect(await row.locator(".track-facts-compact").evaluate((element, lines) => element.getBoundingClientRect().height <= parseFloat(getComputedStyle(element.querySelector("dd")!).lineHeight) * lines + 2 * (lines - 1) + 1, width > 1100 ? 1 : 2)).toBe(true);
-    expect(await row.locator(".track-facts-compact").evaluate(element => element.scrollWidth <= element.clientWidth + 1)).toBe(true);
+    await expectCompactAlbumFacts(row.locator(".track-facts-compact"), width > 1100 ? 1 : 2);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
     await page.screenshot({ path: `test-results/album-song-inline-${width}-dark-zh.png`, animations: "disabled" });
     await page.keyboard.press("Escape");

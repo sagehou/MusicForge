@@ -198,6 +198,27 @@ for (const width of [1440, 1024, 768, 390, 320]) {
       expect(success!.height).toBeLessThan(150);
     }
     if (width <= 600) {
+      const filters = page.locator('.filter-tabs');
+      const bounds = (await filters.boundingBox())!;
+      for (const button of await filters.getByRole('button').all()) {
+        const box = (await button.boundingBox())!;
+        expect(box.x).toBeGreaterThanOrEqual(bounds.x);
+        expect(box.x + box.width).toBeLessThanOrEqual(bounds.x + bounds.width + 1);
+        expect(box.y + box.height).toBeLessThanOrEqual(bounds.y + bounds.height + 1);
+        expect(box.height).toBeGreaterThanOrEqual(40);
+      }
+      for (const button of await page.locator('.task-actions .ui-button:visible').all()) {
+        const box = (await button.boundingBox())!;
+        expect(box.width).toBeGreaterThanOrEqual(40);
+        expect(box.height).toBeGreaterThanOrEqual(40);
+      }
+      await filters.getByRole('button', { name: '失败', exact: true }).click();
+      await expect(page.locator('.task')).toHaveCount(1);
+      await expect(page.locator('.task')).toHaveAttribute('data-state', 'failed');
+      await filters.getByRole('button', { name: '已停止', exact: true }).click();
+      await expect(page.locator('.task')).toHaveCount(0);
+      await filters.getByRole('button', { name: '全部', exact: true }).click();
+      await expect(page.locator('.task')).toHaveCount(5);
       for (const task of await page.locator('.task:not([data-state="running"])').all()) {
         const badge = await task.locator(".task-title > .badge").boundingBox();
         const progress = await task.locator(".task-progress").boundingBox();

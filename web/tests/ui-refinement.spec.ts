@@ -100,6 +100,11 @@ test("settings layouts in both themes and narrow viewports", async ({ page }) =>
       for (const [id, label] of [["library", "音乐库"], ["encoding", "编码"], ["integrations", "集成"], ["security", "账户安全"]]) {
         await page.getByRole("tab", { name: label, exact: true }).click();
         expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
+        if (width <= 600) {
+          for (const field of await page.locator('.settings-panel input:visible:not([type="checkbox"]), .settings-panel select:visible, .settings-panel textarea:visible').all()) {
+            expect(await field.evaluate(element => parseFloat(getComputedStyle(element).fontSize))).toBeGreaterThanOrEqual(16);
+          }
+        }
         await page.screenshot({ path: `test-results/settings-${id}-${width}-${theme}.png`, fullPage: true, animations: "disabled" });
       }
     }

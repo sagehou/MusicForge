@@ -202,6 +202,13 @@ test.describe("phone audition", () => {
     await setPreference(page, "language", "zh-CN");
     await setPreference(page, "theme", "dark");
     const row = page.locator(".track-row").first();
+    const search = page.getByLabel('搜索音乐库', { exact: true });
+    expect(await search.evaluate(element => parseFloat(getComputedStyle(element).fontSize))).toBeGreaterThanOrEqual(16);
+    for (const button of await row.locator('.track-audition-trigger, .lyrics-action:visible, .lyrics-details > summary:visible').all()) {
+      const box = (await button.boundingBox())!;
+      expect(box.width).toBeGreaterThanOrEqual(40);
+      expect(box.height).toBeGreaterThanOrEqual(40);
+    }
     await row.scrollIntoViewIfNeeded();
     for (const text of ["24 bit / 96 kHz", "894 kbps", "25 MiB", "5 MiB"]) await expect(row).toContainText(text);
     expect((await row.boundingBox())!.height).toBeLessThanOrEqual(230);

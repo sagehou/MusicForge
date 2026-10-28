@@ -530,6 +530,20 @@ for (const width of [1920, 1440, 768, 390, 320]) {
     await openLibraryOptions(page);
     await page.getByRole("button", { name: "List view", exact: true }).click();
     expect(await page.locator(".library-groups").evaluate(node => getComputedStyle(node).gridTemplateColumns.split(" ").length)).toBe(1);
+    if (width <= 600) {
+      const group = page.locator('.library-list .library-group').first();
+      const title = group.locator('.library-open strong');
+      expect(await title.evaluate(element => element.getBoundingClientRect().height <= 2 * parseFloat(getComputedStyle(element).lineHeight) + 1)).toBe(true);
+      expect((await group.boundingBox())!.height).toBeLessThanOrEqual(260);
+      for (const fact of ['FLAC', '24 bit / 96 kHz', '2 ch', 'OPUS', '5 MiB', '1 / 1']) await expect(group.locator('.group-facts')).toContainText(fact);
+      expect(await group.evaluate(element => element.scrollWidth <= element.clientWidth + 1)).toBe(true);
+      const background = await group.evaluate(element => getComputedStyle(element).backgroundColor);
+      await group.getByRole('checkbox').check();
+      await expect(group).toHaveAttribute('data-selected', 'true');
+      await expect.poll(() => group.evaluate(element => getComputedStyle(element).backgroundColor)).not.toBe(background);
+      await group.getByRole('checkbox').uncheck();
+      await page.mouse.move(0, 0);
+    }
     await page.screenshot({ path: `test-results/library-list-${width}-dark.png`, animations: "disabled" });
     await openLibraryOptions(page);
     await page.getByRole("button", { name: "Grid view", exact: true }).click();

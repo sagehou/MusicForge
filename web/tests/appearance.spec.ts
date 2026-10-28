@@ -222,6 +222,11 @@ test("top-right controls and color menus fit narrow screens in either language a
         const box = await menu.locator(".palette-popover").boundingBox();
         expect(box!.x).toBeGreaterThanOrEqual(0);
         expect(box!.x + box!.width).toBeLessThanOrEqual(width);
+        if (width <= 600) {
+          const hex = menu.locator('.color-hex');
+          expect(await hex.evaluate(element => parseFloat(getComputedStyle(element).fontSize))).toBeGreaterThanOrEqual(16);
+          expect(await hex.evaluate(element => element.scrollWidth <= element.clientWidth + 1)).toBe(true);
+        }
         await page.screenshot({ path: `test-results/appearance-palette-${width}-${locale}-${mode}.png`, animations: "disabled" });
         await page.keyboard.press("Escape");
         expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);

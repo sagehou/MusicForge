@@ -290,7 +290,8 @@ test("approved library and audition design matches the desktop and phone impleme
     await expect(panel.locator('[aria-current="true"]')).toContainText("在每一个音符");
     const comparisons: [string, string, string[]][] = [
       [".heading-content h1", "h1", ["font-size", "font-weight", "line-height", "font-synthesis"]],
-      [".library-navigation .segmented", ".toolbar .segmented", ["background-color", "border-radius", "padding"]],
+      [".library-navigation .segmented", ".toolbar .segmented", ["border-radius", "padding"]],
+      [".library-navigation .segmented button[aria-pressed=\"true\"]", ".toolbar .segmented button.selected", ["background-color", "color", "font-weight"]],
       [".track-output .badge-ready", ".track-row > .status", ["color", "background-color", "border-width", "font-size"]],
       [".artifact-audition", ".audition-panel", ["padding", "background-color", "border-width"]],
       [".audition-body", ".audition-body", ["column-gap", "row-gap", "grid-template-columns"]],
@@ -301,6 +302,8 @@ test("approved library and audition design matches the desktop and phone impleme
       [".audition-line[aria-current]", ".lyric-line.current", ["background-color", "color", "font-size", "font-weight", "min-height", "padding"]],
     ];
     for (const [actual, expected, properties] of comparisons) expect(await style(page.locator(actual), properties), `${actual} at ${width}`).toEqual(await style(reference.locator(expected), properties));
+    // Approved Antigravity amendment: remove the outer tray, retain selection and geometry.
+    await expect(page.locator(".library-navigation .segmented")).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
     await panel.locator('[aria-current="true"]').hover();
     expect(await style(panel.locator('[aria-current="true"]'), ["background-color"])).toEqual(await style(reference.locator(".lyric-line.current"), ["background-color"]));
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);

@@ -31,6 +31,22 @@ async function mockLibrary(page: Page, library = sources) {
   });
 }
 
+async function expectCoverBadgesFit(page: Page) {
+  const badges = page.locator(".library-grid .badge:not(.badge-ready)");
+  expect(await badges.count()).toBeGreaterThan(0);
+  expect(await badges.evaluateAll(nodes => nodes.flatMap(badge => {
+    const group = badge.closest(".library-group")!;
+    const cover = group.querySelector(".library-cover-open")!.getBoundingClientRect();
+    const checkbox = group.querySelector("input")!.getBoundingClientRect();
+    const box = badge.getBoundingClientRect();
+    const label = badge.querySelector<HTMLElement>(".badge-label-short")!;
+    const fits = box.x >= cover.x && box.right <= cover.right + 1 && box.y >= cover.y && box.bottom <= cover.bottom + 1;
+    const separate = box.bottom <= checkbox.y || box.y >= checkbox.bottom || box.right <= checkbox.x || box.x >= checkbox.right;
+    const readable = parseFloat(getComputedStyle(label).fontSize) >= 12 && label.scrollWidth <= label.clientWidth + 1 && label.getBoundingClientRect().height <= parseFloat(getComputedStyle(label).lineHeight) + 1;
+    return fits && separate && readable ? [] : [{ status: badge.textContent, fits, separate, readable }];
+  }))).toEqual([]);
+}
+
 test.beforeEach(async ({ page }) => {
   await page.route("**/api/lyrics", route => route.fulfill({ json: { options: { auto_search: false }, report: { state: "idle", total: 0, processed: 0, found: 0, not_found: 0, failed: 0, stopping: false } } }));
 });
@@ -442,7 +458,8 @@ test("album artwork continuity is progressive and keyboard navigation remains fo
 });
 
 test("narrow-screen filter and display menu stays usable and inside the viewport", async ({ page }) => {
-  await mockLibrary(page, collection);
+  const riskStates = ["possibly_damaged", "expired", "missing", "changed", "needs_rebuild", "unverified"];
+  await mockLibrary(page, collection.map((source, index) => index >= 4 && index < 10 ? { ...source, status: riskStates[index - 4] } : source));
   await page.setViewportSize({ width: 320, height: 844 });
   await page.goto("/library?view=albums");
   const summary = page.locator(".library-options > summary");
@@ -454,6 +471,12 @@ test("narrow-screen filter and display menu stays usable and inside the viewport
   for (const [label, columns] of [["Small", 4], ["Medium", 3], ["Large", 2]] as const) {
     await density.getByRole("button", { name: label, exact: true }).click();
     expect(await page.locator(".library-groups").evaluate(node => getComputedStyle(node).gridTemplateColumns.split(" ").length)).toBe(columns);
+    await expectCoverBadgesFit(page);
+    if (label === "Small") {
+      await summary.click();
+      await page.screenshot({ path: "test-results/library-small-320-light-en.png", animations: "disabled" });
+      await summary.click();
+    }
   }
   await expect(page.getByLabel("Sort library", { exact: true })).toBeVisible();
   const menu = await page.locator(".library-options-body").boundingBox();
@@ -482,6 +505,12 @@ test("narrow-screen filter and display menu stays usable and inside the viewport
   await expect(page.locator(".library-options")).not.toHaveAttribute("open", "");
   await setPreference(page, "language", "zh-CN");
   await expect(summary).toHaveAttribute("aria-label", "筛选与显示选项");
+  await summary.click();
+  await page.locator('.density-control button').first().click();
+  await summary.click();
+  await expectCoverBadgesFit(page);
+  await setPreference(page, "theme", "dark");
+  await page.screenshot({ path: "test-results/library-small-320-dark-zh.png", animations: "disabled" });
 });
 
 test("Navidrome waiting is a localized non-error state", async ({ page }) => {
@@ -511,6 +540,22 @@ for (const width of [1920, 1440, 768, 390, 320]) {
     await expect(page.getByRole("heading", { name: "Library", exact: true })).toBeVisible();
     await expect(page.locator(".library-group")).toHaveCount(50);
     await expect.poll(() => page.locator(".cover img").first().evaluate((node: HTMLImageElement) => node.naturalWidth)).toBeGreaterThan(0);
+    await expectCoverBadgesFit(page);
+    const ready = page.locator(".library-grid .badge-ready").first();
+    await expect(ready.locator(".badge-label-full")).toHaveText("Ready");
+    expect(await ready.ariaSnapshot()).toContain("Ready");
+    expect((await ready.boundingBox())!.width).toBeLessThanOrEqual(1);
+    const failed = page.locator(".library-grid .badge-failed");
+    await expect(failed.locator(".badge-label-short")).toHaveText("Failed");
+    await expect(failed.locator(".badge-label-full")).toHaveText("Failed");
+    const failedGroup = page.locator(".library-group").filter({ has: page.locator(".badge-failed") });
+    await failedGroup.hover();
+    await failedGroup.getByRole("checkbox").check();
+    await expect(failedGroup).toHaveAttribute("data-selected", "true");
+    await expectCoverBadgesFit(page);
+    await failedGroup.getByRole("checkbox").uncheck();
+    await page.mouse.move(0, 0);
+    await page.evaluate(() => window.scrollTo(0, 0));
     if (width <= 800) {
       const name = await page.getByRole("button", { name: "Field Notes", exact: true }).boundingBox();
       const navigation = width <= 600 ? await page.locator(".sidebar").boundingBox() : null;
@@ -525,6 +570,7 @@ for (const width of [1920, 1440, 768, 390, 320]) {
     await setPreference(page, "language", "zh-CN");
     await expect(page.getByRole("heading", { name: "音乐库", exact: true })).toBeVisible();
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
+    await expectCoverBadgesFit(page);
     await page.screenshot({ path: `test-results/library-${width}-dark-zh.png`, animations: "disabled" });
     await setPreference(page, "language", "en");
     await openLibraryOptions(page);

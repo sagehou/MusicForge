@@ -240,6 +240,10 @@ for (const width of [1440, 1024, 768, 390, 320]) {
         }
       }
     }
+    if (width <= 600) {
+      const hint = page.locator('.task[data-state="paused"] .task-progress > p');
+      expect(await hint.evaluate(element => element.getBoundingClientRect().height <= 2 * parseFloat(getComputedStyle(element).lineHeight) + 1)).toBe(true);
+    }
     await page.screenshot({ path: `test-results/forge-jobs-${width}-light.png`, fullPage: true, animations: "disabled" });
     await page.emulateMedia({ reducedMotion: "reduce" });
     expect(await page.locator('.task[data-state="running"] .task-meter > span').evaluate(node => getComputedStyle(node, "::after").animationName)).toBe("none");

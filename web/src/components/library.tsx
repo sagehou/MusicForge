@@ -431,7 +431,7 @@ export function Library({ notify }: { notify: Notice }) {
           const state = priority[group.rank] || "ready";
           const open = (origin: HTMLElement) => showingArtists ? navigate({ view: scope.view, artist: group.artistKey }) : navigate({ view: scope.view, artist: group.artistKey, album: group.albumKey }, origin);
           return <article className="library-group" key={group.key} data-selected={group.tracks.some(source => selected.has(source.id))}>
-            <button className="library-cover-open" aria-label={t(showingArtists ? "library.openArtist" : "library.openAlbum", { name: group.name })} onClick={event => open(event.currentTarget)}><Cover tracks={group.tracks} name={group.name} artist={showingArtists} /></button>
+            <button className="library-cover-open" aria-label={t(showingArtists ? "library.openArtist" : "library.openAlbum", { name: group.name })} title={`${group.name} · ${statusLabel(state)}`} onClick={event => open(event.currentTarget)}><Cover tracks={group.tracks} name={group.name} artist={showingArtists} /></button>
             <div className="library-group-body"><input type="checkbox" aria-label={t(showingArtists ? "library.selectArtist" : "library.selectAlbum", { name: group.name })} checked={group.tracks.every(source => selected.has(source.id))} ref={node => { if (node) node.indeterminate = group.tracks.some(source => selected.has(source.id)) && !group.tracks.every(source => selected.has(source.id)); }} disabled={busy} onChange={event => toggle(group.tracks.map(source => source.id), event.target.checked)} />
               <div className="library-group-title"><button className="library-open" title={group.name} onClick={event => open(event.currentTarget)}><strong>{group.name}</strong></button>
                 <small>{showingArtists ? t("library.albumCount", { count: group.albums.size }) : group.artist}</small>
@@ -439,7 +439,7 @@ export function Library({ notify }: { notify: Notice }) {
                 {state !== "possibly_damaged" && group.tracks.some(source => source.possibly_damaged) && <small className="repair-warning">{t("repair.damaged")}</small>}
               </div>
               {layout === "list" && <GroupFacts tracks={group.tracks} />}
-              <Badge status={state} />
+              <Badge status={state} compact={layout === "grid"} />
             </div>
           </article>;
         })}</div> : <div className={`table-scroll ${isAlbum ? "album-tracks" : ""}`}>{isAlbum && <div className="album-tracks-heading"><h3>{t("library.albumTracks")}</h3><span>{t("library.trackCount", { count: rows.length })}</span></div>}<table className={`track-table ${isAlbum ? "album-track-table" : ""}`}>{isAlbum && <colgroup><col className="album-select-column" /><col /><col className="album-status-column" /><col className="album-lyrics-column" /></colgroup>}<thead><tr><th aria-label={t("library.selectedTracks")} /><th className="track-title-column">{t("library.trackFile")}</th>{!isAlbum && <><th className="track-duration-column">{t("library.duration")}</th><th className="track-audio-column">{t("library.audioColumn")}</th><th className="track-size-column">{t("library.sizesColumn")}</th></>}<th className="track-status-column">{t("library.artifact")}</th><th className="track-lyrics-column">{t("lyrics.title")}</th></tr></thead><tbody>{shown.map((source, index) => {

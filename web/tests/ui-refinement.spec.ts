@@ -159,7 +159,10 @@ test("large library returns instantly from memory, revalidates with 304 and clea
   await expect(page.locator(".library-group")).toHaveCount(50);
   expect(conditionals.at(-1)).toBe('W/"library-test"');
   await page.getByRole("button", { name: "Scan library", exact: true }).click();
-  await expect(page.locator(".library-group").filter({ has: page.getByRole("button", { name: "Browse artist Artist 0", exact: true }) }).locator(".badge")).toHaveText("Failed");
+  const changedBadge = page.locator(".library-group").filter({ has: page.getByRole("button", { name: "Browse artist Artist 0", exact: true }) }).locator(".badge");
+  await expect(changedBadge.locator(".badge-label-full")).toHaveText("Failed");
+  await expect(changedBadge.locator(".badge-label-short")).toBeVisible();
+  await expect(changedBadge.locator(".badge-label-short")).toHaveText("Failed");
   expect(conditionals.at(-1)).toBeUndefined();
   await openAccount(page);
   await page.getByRole("button", { name: "Log out", exact: true }).click();

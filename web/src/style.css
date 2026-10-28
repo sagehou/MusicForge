@@ -1141,7 +1141,7 @@ input[role="switch"]:checked::after { transform: translateX(22px); background: v
 .library-grid .library-group-body > .badge { grid-area: 1 / 1; position: relative; align-self: end; justify-self: start; margin: 4px; max-width: calc(100% - 8px); z-index: 4; font-size: 12px; line-height: 18px; padding: 1px 4px; border-radius: var(--radius-badge); background: var(--surface); white-space: nowrap; pointer-events: none; }
 .library-grid .library-group-body > .badge-ready, .badge > .badge-label-full { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; border: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 .library-grid .badge > span[aria-hidden="true"] { display: none; }
-.badge-label-short { color: inherit; font: inherit; }
+.badge .badge-label-short { margin: 0; color: inherit; font: inherit; }
 .library-grid .library-group-title { grid-area: 2 / 1; }
 .library-group-title { min-width: 0; }
 .library-open { display: block; min-width: 0; max-width: 100%; width: 100%; text-align: left; }

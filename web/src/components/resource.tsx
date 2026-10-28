@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { Activity, Check, Disc3, Loader2, RefreshCw } from "lucide-react";
+import { Activity, Disc3, Loader2, RefreshCw } from "lucide-react";
 import { api, cachedResource } from "../api";
 import { useI18n, type MessageKey, type Params } from "../i18n";
 import { Button } from "./ui/button";
@@ -53,9 +53,9 @@ export function ResourceWarning({ error, retry }: { error: string; retry: () => 
   const { t, errorMessage } = useI18n();
   return error ? <div className="banner amber" role="alert"><Activity size={20} /><div><strong>{t("app.stale")}</strong><p>{errorMessage(error)}</p></div><Button variant="outline" size="sm" onClick={retry}><RefreshCw size={14} />{t("app.retry")}</Button></div> : null;
 }
-export function Badge({ status }: { status: string }) {
-  const { status: label } = useI18n();
-  return <span className={`badge badge-${status}`}>{status === "ready" || status === "success" ? <Check size={12} aria-hidden="true" /> : <span />}{label(status)}</span>;
+export function Badge({ status, compact = false }: { status: string; compact?: boolean }) {
+  const { status: label, t } = useI18n();
+  return <span className={`badge badge-${status}`} title={compact ? label(status) : undefined}><span aria-hidden="true" />{compact ? <><span className="badge-label-full">{label(status)}</span><small className="badge-label-short" aria-hidden="true">{t(`badge.${status}` as MessageKey)}</small></> : label(status)}</span>;
 }
 export function Empty({ title, children }: { title: string; children?: ReactNode }) {
   return <div className="empty"><Disc3 size={36} strokeWidth={1.2} /><h3>{title}</h3><p>{children}</p></div>;

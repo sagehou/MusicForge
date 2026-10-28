@@ -1,4 +1,4 @@
-import { openLibraryOptions, setPreference } from "./preferences";
+import { selectLibraryPage, openLibraryOptions, setPreference } from "./preferences";
 import { test, expect } from "@playwright/test";
 
 test.beforeEach(async ({ page }) => {
@@ -104,7 +104,7 @@ test("best-effort repair requires consent and imports normal audio with a persis
   await page.reload();
   await openLibraryOptions(page);
   await page.locator(".library-options-body select").first().selectOption("possibly_damaged");
-  await expect(page.locator(".track-cell strong").filter({ hasText: /^Dear My Friend$/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: "View details for Dear My Friend", exact: true })).toBeVisible();
   await expect(page.locator(".badge-failed")).toBeVisible();
   await expect(page.locator(".repair-warning")).toHaveText("Possibly damaged");
 });
@@ -209,7 +209,7 @@ test("filtered failed tracks can be selected across pages and repaired with one 
   await page.goto("/library?view=albums&artist=Artist&album=Artist%2FAlbum");
   await openLibraryOptions(page);
   await page.locator(".library-options-body select").first().selectOption("failed");
-  await page.getByRole("checkbox", { name: "Select current page", exact: true }).check();
+  await selectLibraryPage(page);
   await page.getByRole("button", { name: "Select all 65 matching tracks", exact: true }).click();
   const repair = page.getByRole("button", { name: "Best-effort repair selected (60)", exact: true });
   page.once("dialog", async dialog => { expect(dialog.message()).toContain("60 selected tracks"); expect(dialog.message()).toContain("one task"); await dialog.dismiss(); });
@@ -219,7 +219,7 @@ test("filtered failed tracks can be selected across pages and repaired with one 
   await expect(page.locator(".toast")).toContainText("Queued 60 tracks for best-effort repair; skipped 5");
   await expect(repair).toHaveCount(0); expect(starts).toBe(1);
   await setPreference(page, "language", "zh-CN");
-  await page.getByRole("checkbox", { name: "选择当前页", exact: true }).check();
+  await selectLibraryPage(page);
   await page.getByRole("button", { name: "选择筛选结果中的全部 65 首曲目", exact: true }).click();
   await expect(page.getByRole("button", { name: "尽力修复所选曲目（60 首）", exact: true })).toBeVisible();
   await page.setViewportSize({ width: 320, height: 900 });

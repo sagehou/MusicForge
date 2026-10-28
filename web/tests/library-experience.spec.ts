@@ -1,4 +1,4 @@
-import { openLibraryOptions, setPreference } from "./preferences";
+import { selectLibraryPage, openLibraryOptions, setPreference } from "./preferences";
 import { test, expect, type Page } from "@playwright/test";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
@@ -29,6 +29,22 @@ async function mockLibrary(page: Page, library = sources) {
     const body = await readFile(resolve(process.env.MUSICFORGE_TEST_ROOT || "../.ci", "artwork", `${id % 4}.png`));
     await route.fulfill({ contentType: "image/png", body });
   });
+}
+
+async function expectCoverBadgesFit(page: Page) {
+  const badges = page.locator(".library-grid .badge:not(.badge-ready)");
+  expect(await badges.count()).toBeGreaterThan(0);
+  expect(await badges.evaluateAll(nodes => nodes.flatMap(badge => {
+    const group = badge.closest(".library-group")!;
+    const cover = group.querySelector(".library-cover-open")!.getBoundingClientRect();
+    const checkbox = group.querySelector("input")!.getBoundingClientRect();
+    const box = badge.getBoundingClientRect();
+    const label = badge.querySelector<HTMLElement>(".badge-label-short")!;
+    const fits = box.x >= cover.x && box.right <= cover.right + 1 && box.y >= cover.y && box.bottom <= cover.bottom + 1;
+    const separate = box.bottom <= checkbox.y || box.y >= checkbox.bottom || box.right <= checkbox.x || box.x >= checkbox.right;
+    const readable = parseFloat(getComputedStyle(label).fontSize) >= 12 && label.scrollWidth <= label.clientWidth + 1 && label.getBoundingClientRect().height <= parseFloat(getComputedStyle(label).lineHeight) + 1;
+    return fits && separate && readable ? [] : [{ status: badge.textContent, fits, separate, readable }];
+  }))).toEqual([]);
 }
 
 test.beforeEach(async ({ page }) => {
@@ -74,6 +90,7 @@ test("all-album and list views, unverified filter, missing images and persisted 
   await mockLibrary(page, detailed);
   await page.goto("/library?view=albums");
   await expect(page.locator(".library-group")).toHaveCount(3);
+  await openLibraryOptions(page);
   await page.getByRole("button", { name: "List view", exact: true }).click();
   await expect(page.locator(".library-groups")).toHaveClass(/library-list/);
   const facts = page.locator(".library-group").filter({ has: page.getByRole("button", { name: "Night Studies", exact: true }) }).locator(".group-facts");
@@ -108,6 +125,7 @@ test("album and artist lyrics actions use all playable tracks in their scope, in
   await page.getByLabel("Search library", { exact: true }).fill("Song 01");
   await expect(page.locator(".track-table tbody > tr")).toHaveCount(1);
   await expect(page.getByRole("button", { name: "Fill lyrics for all artifacts", exact: true })).toHaveCount(0);
+  await page.locator(".lyrics-settings > summary").click();
   await page.getByRole("button", { name: "Fill album lyrics", exact: true }).click();
   await expect.poll(() => searches.length).toBe(1);
   expect(searches[0]).toEqual({ ids: album.slice(0, 63).map(source => source.id), refresh: false });
@@ -116,14 +134,17 @@ test("album and artist lyrics actions use all playable tracks in their scope, in
   await expect.poll(() => searches.length).toBe(2);
   expect(searches[1]).toEqual({ ids: [100], refresh: false });
   await page.goto("/library?view=albums&artist=River+Ensemble");
+  await page.locator(".lyrics-settings > summary").click();
   await page.getByRole("button", { name: "Fill artist lyrics", exact: true }).click();
   await expect.poll(() => searches.length).toBe(3);
   expect(searches[2]).toEqual({ ids: [...album.slice(0, 63).map(source => source.id), otherAlbum.id], refresh: false });
   await page.goto("/library?view=albums&artist=River+Ensemble&album=missing");
+  await page.locator(".lyrics-settings > summary").click();
   await expect(page.getByRole("button", { name: "Fill album lyrics", exact: true })).toBeDisabled();
   expect(searches).toHaveLength(3);
   running = true;
   await page.goto("/library?view=albums&artist=River+Ensemble&album=River+Ensemble%2FNight+Studies");
+  await page.locator(".lyrics-settings > summary").click();
   await expect(page.getByRole("button", { name: "Fill album lyrics", exact: true })).toBeDisabled();
   await expect(page.getByRole("link", { name: "View background lyrics task", exact: true })).toHaveAttribute("href", "/settings?section=lyrics");
   await expect(page.getByRole("button", { name: "Stop lyrics search", exact: true })).toHaveCount(0);
@@ -131,12 +152,13 @@ test("album and artist lyrics actions use all playable tracks in their scope, in
 
 test("all songs share filters, pagination and batch lyrics with visible file facts", async ({ page }) => {
   const library = collection.map(source => ({ ...source, title: source.id >= 100 ? `Song ${source.id}` : source.title }));
-  Object.assign(library[0], { size: 26214400, source_bitrate: 894123, source_audio: { codec: "flac", bit_depth: 24, sample_rate: 96000, channels: 2 }, output_size: 5242880, lyrics: { state: "not_found", output: library[0].output, signature: "first", checked: 1 } });
+  Object.assign(library[0], { title: "First Light · 海岸与夜晚的音乐记录", size: 26214400, source_bitrate: 894123, source_audio: { codec: "flac", bit_depth: 24, sample_rate: 96000, channels: 2 }, output_size: 5242880, lyrics: { state: "not_found", output: library[0].output, signature: "first", checked: 1 } });
   Object.assign(library[3], { lyrics: { state: "not_found", output: library[3].output, signature: "morning", checked: 1 } });
   const searches: unknown[] = [];
   await mockLibrary(page, library);
   await page.route("**/api/lyrics/search", route => { searches.push(route.request().postDataJSON()); return route.fulfill({ status: 202, json: { selected: 2 } }); });
   await page.goto("/library");
+  await page.locator(".lyrics-settings > summary").click();
   await expect(page.getByRole("button", { name: "Fill lyrics for all artifacts", exact: true })).toBeVisible();
   await page.getByRole("button", { name: /^All songs/ }).click();
   await expect(page).toHaveURL(/view=tracks/);
@@ -154,16 +176,18 @@ test("all songs share filters, pagination and batch lyrics with visible file fac
   await expect(rows).toHaveCount(50);
   await openLibraryOptions(page);
   await page.getByLabel("Filter by lyrics status", { exact: true }).selectOption("not_found");
-  const first = rows.filter({ has: page.locator(".track-cell strong").filter({ hasText: /^First Light$/ }) });
+  const first = rows.filter({ has: page.locator("#track-title-1") });
   for (const text of ["3:21", "FLAC · 24 bit / 96 kHz · 2 ch", "894 kbps", "25 MiB", "5 MiB"]) await expect(first.locator(".track-facts")).toContainText(text);
   await expect(first.locator(".track-open")).toBeVisible();
+  await expect(first.locator(".track-open")).toHaveAttribute("title", library[0].title);
+  await expect(first.locator(".track-byline")).toHaveAttribute("title", `${library[0].artist} · ${library[0].album}`);
   await expect(page.locator(".inline-details")).toHaveCount(0);
   await expect(first.getByRole("button", { name: "Choose lyrics", exact: true })).toBeVisible();
   await expect(first.getByRole("button", { name: "Search again", exact: true })).toBeVisible();
   await expect(first.locator(".lyrics-details")).not.toHaveAttribute("open", "");
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.screenshot({ path: "test-results/all-songs-1440-light-en.png", animations: "disabled" });
-  await page.getByLabel("Select current page", { exact: true }).check();
+  await selectLibraryPage(page);
   await page.getByRole("button", { name: "Fill lyrics for selected artifacts", exact: true }).click();
   await expect.poll(() => searches.length).toBe(1);
   expect(searches[0]).toEqual({ ids: [1, 4], refresh: false });
@@ -182,6 +206,16 @@ test("all songs share filters, pagination and batch lyrics with visible file fac
   await openLibraryOptions(page);
   await page.getByLabel("Filter by lyrics status", { exact: true }).selectOption("not_found");
   await setPreference(page, "language", "zh-CN");
+  for (const width of [1440, 1101]) {
+    await page.setViewportSize({ width, height: 900 });
+    const audio = first.locator(".track-fact-audio");
+    expect(await audio.evaluate(element => element.getBoundingClientRect().height <= 2 * parseFloat(getComputedStyle(element).lineHeight) + 1)).toBe(true);
+    expect((await first.boundingBox())!.height).toBeLessThanOrEqual(80);
+    await expect(audio).toContainText("FLAC · 24 bit / 96 kHz · 2 声道");
+    await expect(audio).toContainText("894 kbps");
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
+    await page.screenshot({ path: `test-results/all-songs-dense-${width}-light-zh.png`, animations: "disabled" });
+  }
   await page.setViewportSize({ width: 320, height: 844 });
   for (const theme of ["light", "dark"]) {
     await setPreference(page, "theme", theme);
@@ -280,10 +314,10 @@ test("a changed browser session refreshes CSRF without automatically replaying a
   await page.goto("/library");
   await expect(page.getByRole("heading", { name: "Library", exact: true })).toBeVisible();
   csrf = "renewed-in-another-tab";
-  await page.getByRole("button", { name: "Scan", exact: true }).click();
+  await page.getByRole("button", { name: "Scan library", exact: true }).click();
   await expect(page.getByRole("alert")).toContainText("Session changed; please retry this action");
   expect(writes).toBe(1);
-  await page.getByRole("button", { name: "Scan", exact: true }).click();
+  await page.getByRole("button", { name: "Scan library", exact: true }).click();
   await expect(page.getByRole("status")).toContainText("Scan");
   expect(writes).toBe(2);
 });
@@ -296,7 +330,7 @@ test("failed action diagnostics persist until dismissal while successful notices
     ? route.fulfill({ status: 500, headers: { "X-Request-ID": "ci-persistent-error" }, json: { error: "Synthetic scan failure" } })
     : route.fulfill({ status: 202, json: { job_id: 1 } }));
   await page.goto("/library");
-  await page.getByRole("button", { name: "Scan", exact: true }).click();
+  await page.getByRole("button", { name: "Scan library", exact: true }).click();
   const error = page.getByRole("alert");
   await expect(error).toContainText("Synthetic scan failure");
   await expect(error).toContainText("ci-persistent-error");
@@ -305,7 +339,7 @@ test("failed action diagnostics persist until dismissal while successful notices
   await error.getByRole("button", { name: "Dismiss notification", exact: true }).click();
   await expect(error).toHaveCount(0);
   fail = false;
-  await page.getByRole("button", { name: "Scan", exact: true }).click();
+  await page.getByRole("button", { name: "Scan library", exact: true }).click();
   await expect(page.getByRole("status")).toContainText("Scan");
   await page.clock.fastForward(6500);
   await expect(page.getByRole("status")).toHaveCount(0);
@@ -339,7 +373,7 @@ test("system appearance follows the OS and reduced motion disables the toast ent
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
   await page.emulateMedia({ colorScheme: "light", reducedMotion: "reduce" });
   await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
-  await page.getByRole("button", { name: "Scan", exact: true }).click();
+  await page.getByRole("button", { name: "Scan library", exact: true }).click();
   await expect(page.getByRole("status")).toContainText("Scan");
   expect(await page.locator(".toast").evaluate(node => getComputedStyle(node).animationName)).toBe("none");
   let transitions = 0;
@@ -366,12 +400,16 @@ test("cover density and list preferences persist, pagination and polling retain 
   await expect(page.locator(".library-group")).toHaveCount(50);
   const columns = () => page.locator(".library-groups").evaluate(node => getComputedStyle(node).gridTemplateColumns.split(" ").length);
   expect(await columns()).toBe(7);
+  await openLibraryOptions(page);
   await page.getByRole("group", { name: "Cover size", exact: true }).getByRole("button", { name: "Small", exact: true }).click();
   expect(await columns()).toBe(10);
+  await openLibraryOptions(page);
   await page.getByRole("group", { name: "Cover size", exact: true }).getByRole("button", { name: "Large", exact: true }).click();
   expect(await columns()).toBe(5);
   await page.reload();
+  await openLibraryOptions(page);
   await expect(page.getByRole("group", { name: "Cover size", exact: true }).getByRole("button", { name: "Large", exact: true })).toHaveAttribute("aria-pressed", "true");
+  await page.locator(".library-options > summary").press("Escape");
   await page.getByLabel("Select album Night Studies", { exact: true }).check();
   const image = page.locator(".cover img").first();
   await expect(image).toHaveClass("cover-loaded");
@@ -385,8 +423,10 @@ test("cover density and list preferences persist, pagination and polling retain 
   await expect(page.locator(".library-group")).toHaveCount(17);
   await page.getByRole("button", { name: "Previous page", exact: true }).click();
   await expect(page.getByLabel("Select album Night Studies", { exact: true })).toBeChecked();
+  await openLibraryOptions(page);
   await page.getByRole("button", { name: "List view", exact: true }).click();
   await page.reload();
+  await openLibraryOptions(page);
   await expect(page.getByRole("button", { name: "List view", exact: true })).toHaveAttribute("aria-pressed", "true");
   expect(await columns()).toBe(1);
 });
@@ -418,7 +458,8 @@ test("album artwork continuity is progressive and keyboard navigation remains fo
 });
 
 test("narrow-screen filter and display menu stays usable and inside the viewport", async ({ page }) => {
-  await mockLibrary(page, collection);
+  const riskStates = ["possibly_damaged", "expired", "missing", "changed", "needs_rebuild", "unverified"];
+  await mockLibrary(page, collection.map((source, index) => index >= 4 && index < 10 ? { ...source, status: riskStates[index - 4] } : source));
   await page.setViewportSize({ width: 320, height: 844 });
   await page.goto("/library?view=albums");
   const summary = page.locator(".library-options > summary");
@@ -430,6 +471,12 @@ test("narrow-screen filter and display menu stays usable and inside the viewport
   for (const [label, columns] of [["Small", 4], ["Medium", 3], ["Large", 2]] as const) {
     await density.getByRole("button", { name: label, exact: true }).click();
     expect(await page.locator(".library-groups").evaluate(node => getComputedStyle(node).gridTemplateColumns.split(" ").length)).toBe(columns);
+    await expectCoverBadgesFit(page);
+    if (label === "Small") {
+      await summary.click();
+      await page.screenshot({ path: "test-results/library-small-320-light-en.png", animations: "disabled" });
+      await summary.click();
+    }
   }
   await expect(page.getByLabel("Sort library", { exact: true })).toBeVisible();
   const menu = await page.locator(".library-options-body").boundingBox();
@@ -458,6 +505,12 @@ test("narrow-screen filter and display menu stays usable and inside the viewport
   await expect(page.locator(".library-options")).not.toHaveAttribute("open", "");
   await setPreference(page, "language", "zh-CN");
   await expect(summary).toHaveAttribute("aria-label", "筛选与显示选项");
+  await summary.click();
+  await page.locator('.density-control button').first().click();
+  await summary.click();
+  await expectCoverBadgesFit(page);
+  await setPreference(page, "theme", "dark");
+  await page.screenshot({ path: "test-results/library-small-320-dark-zh.png", animations: "disabled" });
 });
 
 test("Navidrome waiting is a localized non-error state", async ({ page }) => {
@@ -487,6 +540,22 @@ for (const width of [1920, 1440, 768, 390, 320]) {
     await expect(page.getByRole("heading", { name: "Library", exact: true })).toBeVisible();
     await expect(page.locator(".library-group")).toHaveCount(50);
     await expect.poll(() => page.locator(".cover img").first().evaluate((node: HTMLImageElement) => node.naturalWidth)).toBeGreaterThan(0);
+    await expectCoverBadgesFit(page);
+    const ready = page.locator(".library-grid .badge-ready").first();
+    await expect(ready.locator(".badge-label-full")).toHaveText("Ready");
+    expect(await ready.ariaSnapshot()).toContain("Ready");
+    expect((await ready.boundingBox())!.width).toBeLessThanOrEqual(1);
+    const failed = page.locator(".library-grid .badge-failed");
+    await expect(failed.locator(".badge-label-short")).toHaveText("Failed");
+    await expect(failed.locator(".badge-label-full")).toHaveText("Failed");
+    const failedGroup = page.locator(".library-group").filter({ has: page.locator(".badge-failed") });
+    await failedGroup.hover();
+    await failedGroup.getByRole("checkbox").check();
+    await expect(failedGroup).toHaveAttribute("data-selected", "true");
+    await expectCoverBadgesFit(page);
+    await failedGroup.getByRole("checkbox").uncheck();
+    await page.mouse.move(0, 0);
+    await page.evaluate(() => window.scrollTo(0, 0));
     if (width <= 800) {
       const name = await page.getByRole("button", { name: "Field Notes", exact: true }).boundingBox();
       const navigation = width <= 600 ? await page.locator(".sidebar").boundingBox() : null;
@@ -501,17 +570,34 @@ for (const width of [1920, 1440, 768, 390, 320]) {
     await setPreference(page, "language", "zh-CN");
     await expect(page.getByRole("heading", { name: "音乐库", exact: true })).toBeVisible();
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
+    await expectCoverBadgesFit(page);
     await page.screenshot({ path: `test-results/library-${width}-dark-zh.png`, animations: "disabled" });
     await setPreference(page, "language", "en");
+    await openLibraryOptions(page);
     await page.getByRole("button", { name: "List view", exact: true }).click();
     expect(await page.locator(".library-groups").evaluate(node => getComputedStyle(node).gridTemplateColumns.split(" ").length)).toBe(1);
+    if (width <= 600) {
+      const group = page.locator('.library-list .library-group').first();
+      const title = group.locator('.library-open strong');
+      expect(await title.evaluate(element => element.getBoundingClientRect().height <= 2 * parseFloat(getComputedStyle(element).lineHeight) + 1)).toBe(true);
+      expect((await group.boundingBox())!.height).toBeLessThanOrEqual(260);
+      for (const fact of ['FLAC', '24 bit / 96 kHz', '2 ch', 'OPUS', '5 MiB', '1 / 1']) await expect(group.locator('.group-facts')).toContainText(fact);
+      expect(await group.evaluate(element => element.scrollWidth <= element.clientWidth + 1)).toBe(true);
+      const background = await group.evaluate(element => getComputedStyle(element).backgroundColor);
+      await group.getByRole('checkbox').check();
+      await expect(group).toHaveAttribute('data-selected', 'true');
+      await expect.poll(() => group.evaluate(element => getComputedStyle(element).backgroundColor)).not.toBe(background);
+      await group.getByRole('checkbox').uncheck();
+      await page.mouse.move(0, 0);
+    }
     await page.screenshot({ path: `test-results/library-list-${width}-dark.png`, animations: "disabled" });
+    await openLibraryOptions(page);
     await page.getByRole("button", { name: "Grid view", exact: true }).click();
     await page.getByRole("button", { name: "Browse album Night Studies", exact: true }).click();
     await expect(page.getByRole("table")).toBeVisible();
     await page.evaluate(() => Promise.allSettled(document.getAnimations().filter(animation => animation.effect?.getComputedTiming().iterations !== Infinity).map(animation => animation.finished)));
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
-    if (width >= 1440) expect((await page.locator(".album-library .search").boundingBox())!.width).toBeLessThanOrEqual(320);
+    if (width >= 1440) expect((await page.locator(".album-library .search").boundingBox())!.width).toBeGreaterThan(1000);
     await page.screenshot({ path: `test-results/album-${width}-dark.png`, fullPage: true, animations: "disabled" });
     if (width === 1440 || width === 390) {
       await setPreference(page, "theme", "light");

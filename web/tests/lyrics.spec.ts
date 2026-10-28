@@ -1,4 +1,4 @@
-import { openLibraryOptions, setPreference } from "./preferences";
+import { selectLibraryPage, openLibraryOptions, setPreference } from "./preferences";
 import { test, expect } from "@playwright/test";
 import type { Source } from "../src/types";
 
@@ -97,7 +97,7 @@ test("traditional script filter supports cross-page batch replacement and shared
   const filter = page.getByLabel("Lyric script", { exact: true });
   await expect(filter).toHaveValue("traditional");
   await expect(page.locator(".track-table tbody > tr")).toHaveCount(50);
-  await page.getByLabel("Select current page", { exact: true }).check();
+  await selectLibraryPage(page);
   await page.getByRole("button", { name: "Select all 60 matching tracks", exact: true }).click();
   await page.getByRole("button", { name: "Replace traditional with simplified", exact: true }).click();
   await expect.poll(() => batches.length).toBe(1);
@@ -190,7 +190,7 @@ test("lyrics filters compose with audio status and library coverage survives new
   await page.getByLabel("Search library", { exact: true }).fill("Lyrics ready");
   await expect(rows).toHaveCount(0);
   await page.getByLabel("Search library", { exact: true }).fill("");
-  await page.getByLabel("Select current page", { exact: true }).check();
+  await selectLibraryPage(page);
   await page.getByRole("button", { name: "Fill lyrics for selected artifacts", exact: true }).click();
   await expect.poll(() => searches.length).toBe(1);
   expect(searches).toEqual([{ ids: [2], refresh: false }]);
@@ -265,11 +265,12 @@ test("lyrics selection, background progress, stop and bilingual mobile UI", asyn
     return route.fulfill({ status: running ? 202 : 200, json: { selected: 1 } });
   });
   await page.goto("/library?view=albums&artist=Artist&album=Artist%2FAlbum");
-  await page.getByLabel("Select current page", { exact: true }).check();
+  await selectLibraryPage(page);
   await page.getByRole("button", { name: "Fill lyrics for selected artifacts", exact: true }).click();
   await expect.poll(() => requests.length).toBe(1);
   expect(requests).toEqual([{ ids: [1], refresh: false }]);
   await expect(page.getByRole("link", { name: "View background lyrics task", exact: true })).toBeVisible();
+  await page.locator(".lyrics-settings > summary").click();
   await expect(page.getByRole("button", { name: "Fill album lyrics", exact: true })).toBeDisabled();
   await expect(page.getByRole("button", { name: "Stop lyrics search", exact: true })).toHaveCount(0);
   await expect(page.getByLabel("Automatically fill lyrics for new and existing artifacts", { exact: true })).toHaveCount(0);
@@ -290,6 +291,7 @@ test("lyrics selection, background progress, stop and bilingual mobile UI", asyn
   expect(requests.at(-1)).toEqual({ ids: [1], refresh: true });
   await setPreference(page, "language", "zh-CN");
   await expect(page.getByRole("link", { name: "查看后台歌词任务", exact: true })).toBeVisible();
+  await page.locator(".lyrics-settings > summary").click();
   await expect(page.getByRole("button", { name: "补齐本专辑歌词", exact: true })).toBeDisabled();
   await expect(page.locator(".lyrics-track")).toContainText("未找到同步歌词");
   await page.setViewportSize({ width: 320, height: 844 });
@@ -602,6 +604,7 @@ test("song details and automatic saved recommendations survive reopening and pag
   await expect(recommended.getByRole("radio")).toBeChecked();
   await expect(picker.locator("pre")).toContainText("愛這風雲");
   expect(searches).toHaveLength(0);
+  await picker.locator(".lyrics-guidance > summary").click();
   await picker.getByRole("button", { name: "Force new search", exact: true }).click();
   await expect.poll(() => searches.length).toBe(5);
   expect(searches.every(search => search.refresh)).toBe(true);

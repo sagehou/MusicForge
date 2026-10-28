@@ -1,4 +1,4 @@
-import { test, expect, type Page } from "@playwright/test";
+import { test, expect, type Locator, type Page } from "@playwright/test";
 import { setPreference } from "./preferences";
 import type { Source } from "../src/types";
 
@@ -17,6 +17,28 @@ async function setup(page: Page) {
   await page.route("**/api/lyrics", route => route.fulfill({ json: { options: { auto_search: false }, report: { state: "idle", total: 0, processed: 0, found: 0, not_found: 0, failed: 0, stopping: false } } }));
   await page.route("**/api/jobs?*", route => route.fulfill({ json: { jobs: [], total: 0 } }));
   await page.route("**/api/dashboard", route => route.fulfill({ json: { source_count: 30, output_count: 30, ready_count: 28, rebuild_count: 1, failed_count: 1, expired_count: 0, online: true, codec: "opus", enabled: true, version: "test" } }));
+}
+
+async function expectCompactSongHeader(panel: Locator) {
+  const header = panel.locator(".detail-heading");
+  const heading = (await header.locator("h2").boundingBox())!;
+  const song = (await header.locator("p").boundingBox())!;
+  const actions = (await header.locator(".actions").boundingBox())!;
+  expect((await header.boundingBox())!.height).toBeLessThanOrEqual(56);
+  expect(Math.abs(heading.y + heading.height / 2 - song.y - song.height / 2)).toBeLessThanOrEqual(4);
+  expect(song.x).toBeGreaterThanOrEqual(heading.x + heading.width + 6);
+  expect(song.x + song.width).toBeLessThanOrEqual(actions.x);
+  expect(await header.evaluate(element => element.scrollWidth <= element.clientWidth + 1)).toBe(true);
+}
+
+async function expectCompactAlbumFacts(facts: Locator, lines: number) {
+  const layout = await facts.evaluate(element => ({
+    height: element.getBoundingClientRect().height,
+    lineHeight: parseFloat(getComputedStyle(element.querySelector(".track-spec-chip")!).lineHeight),
+    gap: parseFloat(getComputedStyle(element).rowGap),
+  }));
+  expect(layout.height).toBeLessThanOrEqual(layout.lineHeight * lines + layout.gap * (lines - 1) + 1);
+  expect(await facts.evaluate(element => element.scrollWidth <= element.clientWidth + 1)).toBe(true);
 }
 
 test("aligned records fit six tracks, and the icon rail keeps navigation and preferences usable", async ({ page }) => {
@@ -74,6 +96,7 @@ test("inline song details keep the filtered list and restore keyboard focus with
   const inspector = page.getByRole("region", { name: "Song details", exact: true });
   await expect(inspector).toContainText("Song 08");
   await expect(inspector).toContainText(tracks[0].hash!);
+  await expectCompactSongHeader(inspector);
   await inspector.getByRole("button", { name: "Next track", exact: true }).click();
   await expect(inspector.locator(".detail-heading")).toContainText("Song 09");
   await expect(page.getByLabel("Search library", { exact: true })).toHaveValue("Song");
@@ -103,7 +126,9 @@ test("cached lyric review saves and advances in the same inline region without r
   await expect(picker.locator(".lyrics-preview pre")).toContainText("海岸与夜晚");
   await picker.getByRole("button", { name: "Save and next", exact: true }).click();
   await expect(picker.locator(".detail-heading")).toContainText("Song 02");
+  await picker.locator(".lyrics-guidance > summary").click();
   await expect(picker.getByText("Saved search", { exact: false })).toBeVisible();
+  await picker.locator(".lyrics-guidance > summary").click();
   await expect(picker.getByRole("radio")).toBeChecked();
   await expect(picker.locator(".lyrics-preview pre")).toContainText("海岸与夜晚");
   expect(saves).toBe(1);
@@ -146,9 +171,16 @@ test("phone pages retain real content, readable facts and inline song details in
   for (const width of [390, 320]) {
     await page.setViewportSize({ width, height: 844 });
     await page.goto("/library?view=tracks");
+    await expect(page.locator("#main-navigation a:visible")).toHaveCount(4);
+    await expect(page.locator(".sidebar-shortcuts")).toBeHidden();
     await expect(page.locator(".track-table tbody > tr").first().locator(".track-open")).toBeInViewport();
     const first = await page.locator(".track-table tbody > tr").first().boundingBox();
     expect(first!.y + first!.height).toBeLessThan(780);
+    expect(first!.height).toBeLessThanOrEqual(230);
+    const facts = page.locator(".track-row").first().locator(".track-facts");
+    for (const text of ["3:21", "24 bit / 96 kHz", "894 kbps", "25 MiB", "5 MiB"]) await expect(facts).toContainText(text);
+    for (const value of await facts.locator("dd").all()) await expect(value).toBeVisible();
+    expect(await facts.evaluate(element => element.scrollWidth <= element.clientWidth + 1)).toBe(true);
     const lyricsTitle = await page.locator(".lyrics-settings > summary").boundingBox();
     expect(lyricsTitle!.height).toBeLessThanOrEqual(40);
     expect(await page.locator(".lyrics-state").first().evaluate(element => element.scrollHeight <= element.clientHeight + 1)).toBe(true);
@@ -159,6 +191,12 @@ test("phone pages retain real content, readable facts and inline song details in
       await page.locator(".track-open").first().click();
       const panel = page.getByRole("region", { name: "Song details", exact: true });
       await expect(panel).toBeVisible();
+      await expectCompactSongHeader(panel);
+      for (const button of await panel.locator(".detail-heading button").all()) {
+        const box = (await button.boundingBox())!;
+        expect(box.width).toBeGreaterThanOrEqual(40);
+        expect(box.height).toBeGreaterThanOrEqual(40);
+      }
       const box = await panel.boundingBox();
       expect(box!.x).toBeGreaterThanOrEqual(12);
       expect(box!.x + box!.width).toBeLessThanOrEqual(width - 12);
@@ -182,12 +220,19 @@ test("phone pages retain real content, readable facts and inline song details in
 
 test("album rows expose useful audio facts and toggle song and lyric details directly below the row", async ({ page }) => {
   await setup(page);
-  await page.route("**/api/library", route => route.fulfill({ json: tracks.slice(0, 3).map((source, index) => index === 2 ? { ...source, artist: "Guest Vocalist", metadata: { ...source.metadata, albumartist: "River Ensemble" } } : source) }));
+  const longTitle = "Song 03 · 海岸与夜晚的音乐记录 · Complete Sessions and Alternative Recording";
+  await page.route("**/api/library", route => route.fulfill({ json: tracks.slice(0, 3).map((source, index) => index === 2 ? { ...source, title: longTitle, artist: "Guest Vocalist", metadata: { ...source.metadata, albumartist: "River Ensemble" } } : source) }));
   await page.route("**/api/library/*/lyrics/candidates", route => route.fulfill({ json: { query: "Song 01", groups: [] } }));
   await page.goto("/library?view=albums&artist=Artist&album=Artist%2FAlbum");
   const row = page.locator(".track-row").first();
   await expect(page.locator(".track-row").nth(2).locator(".track-byline")).toHaveText("Guest Vocalist");
   for (const text of ["3:21", "24 bit / 96 kHz", "894 kbps", "25 MiB", "5 MiB"]) await expect(row).toContainText(text);
+  for (const width of [1440, 1101, 390, 320]) {
+    await page.setViewportSize({ width, height: 1000 });
+    const facts = row.locator(".track-facts-compact");
+    await expectCompactAlbumFacts(facts, width > 1100 ? 1 : 2);
+  }
+  await page.setViewportSize({ width: 1440, height: 1000 });
   await expect(row).not.toContainText(tracks[0].path);
   for (const button of await row.locator(".lyrics-action").all()) {
     await expect(button).toHaveAttribute("title", /.+/);
@@ -195,10 +240,18 @@ test("album rows expose useful audio facts and toggle song and lyric details dir
   }
   const title = row.locator(".track-open");
   await title.click();
-  const details = page.getByRole("region", { name: "Song details", exact: true });
+  const details = page.locator(".track-details");
+  await expect(details).toHaveAccessibleName("Song details");
   await expect(title).toHaveAttribute("aria-expanded", "true");
   await expect(row.locator("xpath=following-sibling::tr[1]").getByRole("region", { name: "Song details", exact: true })).toBeVisible();
   await expect(details).toContainText(tracks[0].path);
+  await expectCompactSongHeader(details);
+  await page.screenshot({ path: "test-results/album-song-inline-1440-light-en.png", animations: "disabled" });
+  await page.setViewportSize({ width: 320, height: 1000 });
+  await expectCompactSongHeader(details);
+  expect(await details.locator(".detail-heading p").evaluate(element => element.scrollWidth <= element.clientWidth + 1)).toBe(true);
+  await page.screenshot({ path: "test-results/album-song-inline-320-light-en.png", animations: "disabled" });
+  await page.setViewportSize({ width: 1440, height: 1000 });
   await expect(page.getByRole("dialog")).toHaveCount(0);
   expect(await page.evaluate(() => document.body.style.overflow)).not.toBe("hidden");
   await title.click();
@@ -222,12 +275,31 @@ test("album rows expose useful audio facts and toggle song and lyric details dir
   await page.keyboard.press("Escape");
   await expect(page.locator(".inline-details")).toHaveCount(0);
   await expect(row.getByRole("link", { name: "选择歌词（在新标签页打开）", exact: true })).toBeFocused();
-  for (const width of [1440, 390]) {
+  for (const width of [1440, 1101, 390, 320]) {
     await page.setViewportSize({ width, height: 1000 });
     await title.click();
+    await expect(details).toHaveAccessibleName("歌曲详情");
+    await expectCompactSongHeader(details);
+    expect(await details.locator(".detail-heading p").evaluate(element => element.scrollWidth <= element.clientWidth + 1)).toBe(true);
+    for (const fact of await row.locator(".track-fact-audio dd, .track-fact-sizes dd").all()) {
+      await expect(fact).toBeVisible();
+      expect(await fact.evaluate(element => element.scrollWidth <= element.clientWidth + 1)).toBe(true);
+    }
+    await expectCompactAlbumFacts(row.locator(".track-facts-compact"), width > 1100 ? 1 : 2);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
     await page.screenshot({ path: `test-results/album-song-inline-${width}-dark-zh.png`, animations: "disabled" });
     await page.keyboard.press("Escape");
   }
+  await page.locator(".track-row").nth(2).locator(".track-open").click();
+  await expectCompactSongHeader(details);
+  await expect(details.locator(".detail-heading p")).toHaveText(longTitle);
+  await expect(details.locator(".track-file > dl > dd").first()).toHaveText(longTitle);
+  await details.locator(".detail-heading").evaluate(element => element.scrollIntoView({ block: "center", behavior: "instant" }));
+  await expect(details.locator(".detail-heading")).toBeInViewport({ ratio: 1 });
+  await expect(details.locator(".track-file > dl > dd").first()).toBeInViewport({ ratio: 1 });
+  await page.screenshot({ path: "test-results/album-song-long-320-dark-zh.png", animations: "disabled" });
+  await page.keyboard.press("Escape");
+  await expect(page.locator(".track-row").nth(2).locator(".track-open")).toBeFocused();
 });
 
 test("inline track navigation crosses pages and explicit filters dismiss the expanded row", async ({ page }) => {

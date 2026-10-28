@@ -1,4 +1,4 @@
-import { setPreference } from "./preferences";
+import { selectLibraryPage, setPreference } from "./preferences";
 import { test, expect, type Page } from "@playwright/test";
 import type { Dashboard, Job, Source } from "../src/types";
 
@@ -55,7 +55,7 @@ test("missing records have confirmed individual, selected and all cleanup with p
   await expect(page.getByRole("table").getByRole("button", { name: "Remove record", exact: true })).toHaveCount(3);
   const retained = page.locator("tbody tr").filter({ hasText: "Track 2" });
   await expect(retained.getByRole("button", { name: "Remove record", exact: true })).toHaveCount(0);
-  await page.getByLabel("Select current page", { exact: true }).check();
+  await selectLibraryPage(page);
   await page.getByRole("button", { name: "Remove 3 selected records", exact: true }).click();
   expect(requests).toHaveLength(0);
   expect(dialogs[0]).toContain("no files or task history are deleted");
@@ -99,6 +99,12 @@ test("sidebar collapse persists and icon navigation stays accessible across lang
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.getByRole("button", { name: "展开侧栏", exact: true }).click();
   await expect.poll(async () => (await page.locator(".sidebar").boundingBox())?.width).toBe(236);
+  await page.setViewportSize({ width: 1440, height: 540 });
+  const lastShortcut = page.locator(".sidebar-shortcuts a").last();
+  await lastShortcut.scrollIntoViewIfNeeded();
+  await expect(lastShortcut).toBeInViewport();
+  await expect(page.locator(".sidebar .brand")).toBeInViewport();
+  await expect(page.locator(".sidebar .account-link")).toBeInViewport();
 });
 
 test("dashboard uses real clamped completion and functional quick actions", async ({ page }) => {
@@ -179,7 +185,7 @@ for (const width of [1440, 1024, 768, 390, 320]) {
     await expect(page.locator(".task")).toHaveCount(5);
     await expect(page.locator('.task[data-state="running"] .task-activity')).toContainText("First Light");
     await expect(page.locator('.task[data-state="running"] [role="progressbar"]')).toHaveAttribute("aria-valuenow", "44");
-    await expect(page.locator('.task[data-state="success"] .badge > svg')).toHaveCount(1);
+    await expect(page.locator('.task[data-state="success"] .badge > span[aria-hidden="true"]')).toHaveCount(1);
     await expect(page.locator('.task[data-state="success"] .task-meter')).toBeHidden();
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
     // A breakpoint change must settle immediately, without layout overflow.
@@ -192,6 +198,27 @@ for (const width of [1440, 1024, 768, 390, 320]) {
       expect(success!.height).toBeLessThan(150);
     }
     if (width <= 600) {
+      const filters = page.locator('.filter-tabs');
+      const bounds = (await filters.boundingBox())!;
+      for (const button of await filters.getByRole('button').all()) {
+        const box = (await button.boundingBox())!;
+        expect(box.x).toBeGreaterThanOrEqual(bounds.x);
+        expect(box.x + box.width).toBeLessThanOrEqual(bounds.x + bounds.width + 1);
+        expect(box.y + box.height).toBeLessThanOrEqual(bounds.y + bounds.height + 1);
+        expect(box.height).toBeGreaterThanOrEqual(40);
+      }
+      for (const button of await page.locator('.task-actions .ui-button:visible').all()) {
+        const box = (await button.boundingBox())!;
+        expect(box.width).toBeGreaterThanOrEqual(40);
+        expect(box.height).toBeGreaterThanOrEqual(40);
+      }
+      await filters.getByRole('button', { name: '失败', exact: true }).click();
+      await expect(page.locator('.task')).toHaveCount(1);
+      await expect(page.locator('.task')).toHaveAttribute('data-state', 'failed');
+      await filters.getByRole('button', { name: '已停止', exact: true }).click();
+      await expect(page.locator('.task')).toHaveCount(0);
+      await filters.getByRole('button', { name: '全部', exact: true }).click();
+      await expect(page.locator('.task')).toHaveCount(5);
       for (const task of await page.locator('.task:not([data-state="running"])').all()) {
         const badge = await task.locator(".task-title > .badge").boundingBox();
         const progress = await task.locator(".task-progress").boundingBox();
@@ -201,6 +228,22 @@ for (const width of [1440, 1024, 768, 390, 320]) {
     await page.screenshot({ path: `test-results/forge-jobs-${width}-dark-zh.png`, fullPage: true, animations: "disabled" });
     await setPreference(page, "language", "en");
     await setPreference(page, "theme", "light");
+    if (width <= 600) {
+      for (const actions of await page.locator('.task-actions').all()) {
+        const buttons = await actions.locator('.ui-button:visible').all();
+        const first = (await buttons[0].boundingBox())!;
+        for (const button of buttons) {
+          const box = (await button.boundingBox())!;
+          expect(box.width).toBeGreaterThanOrEqual(40);
+          expect(box.height).toBeGreaterThanOrEqual(40);
+          expect(Math.abs(box.y - first.y)).toBeLessThanOrEqual(1);
+        }
+      }
+    }
+    if (width <= 600) {
+      const hint = page.locator('.task[data-state="paused"] .task-progress > p');
+      expect(await hint.evaluate(element => element.getBoundingClientRect().height <= 2 * parseFloat(getComputedStyle(element).lineHeight) + 1)).toBe(true);
+    }
     await page.screenshot({ path: `test-results/forge-jobs-${width}-light.png`, fullPage: true, animations: "disabled" });
     await page.emulateMedia({ reducedMotion: "reduce" });
     expect(await page.locator('.task[data-state="running"] .task-meter > span').evaluate(node => getComputedStyle(node, "::after").animationName)).toBe("none");
@@ -227,7 +270,7 @@ test("task states use the active palette and Canvas status tones across light an
         function token(name: string) { sample.style.color = `var(--${name})`; return getComputedStyle(sample).color; }
         function style(state: string, selector: string) { return getComputedStyle(document.querySelector(`.task[data-state="${state}"] ${selector}`)!); }
         const result = {
-          accent: token("accent"), successTone: token("success"), successToneFill: token("success-soft"), warning: token("warning"), danger: token("danger"),
+          accent: token("accent"), successTone: token("success"), warning: token("warning"), danger: token("danger"),
           running: style("running", ".badge").color, runningIcon: style("running", ".job-symbol").color, progress: style("running", ".task-meter > span").backgroundColor, fill: token("accent-fill"),
           success: style("success", ".badge").color, successIcon: style("success", ".job-symbol").color, successFill: style("success", ".badge").backgroundColor,
           paused: style("paused", ".badge").color, failed: style("failed", ".badge").color,
@@ -238,7 +281,9 @@ test("task states use the active palette and Canvas status tones across light an
       expect([colors.running, colors.runningIcon]).toEqual([colors.accent, colors.accent]);
       // Progress is a solid fill; small accent text separately adapts for contrast.
       expect(colors.progress).toBe(colors.fill);
-      expect([colors.success, colors.successIcon, colors.successFill]).toEqual([colors.successTone, colors.successTone, colors.successToneFill]);
+      expect([colors.success, colors.successIcon]).toEqual([colors.successTone, colors.successTone]);
+      // The approved flat status uses semantic color on a transparent surface.
+      expect(colors.successFill).toBe("rgba(0, 0, 0, 0)");
       expect(colors.paused).toBe(colors.warning);
       expect(colors.failed).toBe(colors.danger);
       await page.screenshot({ path: `test-results/task-colors-${name.replaceAll(" ", "-")}-${mode}.png`, animations: "disabled" });

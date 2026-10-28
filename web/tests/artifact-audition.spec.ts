@@ -4,7 +4,7 @@ import type { Source } from "../src/types";
 import { setPreference } from "./preferences";
 
 const sources: Source[] = [
-  { id: 91, title: "Nightfall", artist: "River Ensemble", album: "Night Studies", path: "River/Night/01.flac", track: 1, disc: 1, duration: 180, present: true, output: "River/Night/01.opus", output_present: true, status: "ready", error: "", size: 10485760, source_audio: { codec: "flac", sample_rate: 44100, bit_depth: 16, channels: 2 }, metadata: {} },
+  { id: 91, title: "Nightfall", artist: "River Ensemble", album: "Night Studies", path: "River/Night/01.flac", track: 1, disc: 1, duration: 180, present: true, output: "River/Night/01.opus", output_present: true, status: "ready", error: "", size: 26214400, source_bitrate: 894000, output_size: 5242880, source_audio: { codec: "flac", sample_rate: 96000, bit_depth: 24, channels: 2 }, lyrics: { state: "ready", output: "River/Night/01.opus", signature: "audio", checked: 1 }, metadata: {} },
   { id: 92, title: "Still Water", artist: "River Ensemble", album: "Night Studies", path: "River/Night/02.flac", track: 2, disc: 1, duration: 180, present: false, output: "River/Night/02.opus", output_present: true, status: "expired", error: "", size: 10485760, metadata: {} },
   { id: 93, title: "Unbuilt", artist: "River Ensemble", album: "Night Studies", path: "River/Night/03.flac", track: 3, disc: 1, present: true, output: "", output_present: false, status: "missing", error: "", size: 10485760, metadata: {} },
 ];
@@ -201,6 +201,18 @@ test.describe("phone audition", () => {
     await page.goto(view === "album" ? "/library?view=albums&artist=River&album=River%2FNight" : "/library?view=tracks");
     await setPreference(page, "language", "zh-CN");
     await setPreference(page, "theme", "dark");
+    const row = page.locator(".track-row").first();
+    const search = page.getByLabel('搜索音乐库', { exact: true });
+    expect(await search.evaluate(element => parseFloat(getComputedStyle(element).fontSize))).toBeGreaterThanOrEqual(16);
+    for (const button of await row.locator('.track-audition-trigger, .lyrics-action:visible, .lyrics-details > summary:visible').all()) {
+      const box = (await button.boundingBox())!;
+      expect(box.width).toBeGreaterThanOrEqual(40);
+      expect(box.height).toBeGreaterThanOrEqual(40);
+    }
+    await row.scrollIntoViewIfNeeded();
+    for (const text of ["24 bit / 96 kHz", "894 kbps", "25 MiB", "5 MiB"]) await expect(row).toContainText(text);
+    expect((await row.boundingBox())!.height).toBeLessThanOrEqual(230);
+    await page.screenshot({ path: `test-results/audition-phone-${view}-${browserName}-library-dark-zh.png`, animations: "disabled" });
     await page.getByRole("button", { name: "试听 Nightfall", exact: true }).tap();
     const panel = page.locator(".artifact-audition");
     await expect(panel.locator("audio")).toHaveAttribute("src", /audition\/audio/);
@@ -226,4 +238,81 @@ test.describe("phone audition", () => {
     await expect.poll(() => audio!.evaluate(node => (node as HTMLAudioElement).paused)).toBe(true);
     expect(errors).toEqual([]);
   });
+});
+
+// The approved HTML is independent of the product CSS. Freeze it so implementation
+// changes cannot silently move the reference, then compare its actual rendered tokens.
+test("approved library and audition design matches the desktop and phone implementation", async ({ page, context }) => {
+  const { readFile } = await import("node:fs/promises");
+  const { resolve } = await import("node:path");
+  const { createHash } = await import("node:crypto");
+  const design = await readFile(resolve("../docs/ui-refinement-preview.html"), "utf8");
+  expect(createHash("sha256").update(design).digest("hex")).toBe("3ec45b0cfd0b59f455ccf8cd369acae2d6b5845b47575623c610ae677f680e14");
+  await mockAudition(page);
+  const tracks = ["Nightfall", "First Light · 海岸与夜晚的音乐记录", "Quiet Hours", "After the Rain"].map((title, index) => ({ ...sources[0], id: 91 + index, title, track: index + 1, duration: 201,
+    lyrics: index === 2 ? undefined : { ...sources[0].lyrics!, state: index === 1 ? "needs_review" : "ready" },
+  }));
+  await page.route("**/api/library", route => route.fulfill({ json: tracks }));
+  await page.route("**/api/library/91/audition", route => route.fulfill({ json: { audio_url: "/api/library/91/audition/audio?v=design", format: ".opus", size: 5242880,
+    lyrics: "[00:32.00]晚风穿过寂静的街巷\n[00:36.00]留下熟悉的回响\n[00:40.00]在每一个音符停留的地方\n[00:44.00]让时间慢慢流淌", lyrics_state: "ready" } }));
+  const audio = wave(201);
+  await page.route("**/api/library/91/audition/audio?*", route => {
+    const range = route.request().headers().range?.match(/^bytes=(\d+)-(\d*)$/);
+    if (!range) return route.fulfill({ contentType: "audio/wav", headers: { "Accept-Ranges": "bytes" }, body: audio });
+    const start = Number(range[1]), end = range[2] ? Math.min(Number(range[2]), audio.length - 1) : audio.length - 1;
+    return route.fulfill({ status: 206, contentType: "audio/wav", headers: { "Accept-Ranges": "bytes", "Content-Range": `bytes ${start}-${end}/${audio.length}` }, body: audio.subarray(start, end + 1) });
+  });
+  const reference = await context.newPage();
+  async function style(target: Locator, properties: string[]) {
+    return target.first().evaluate((node, keys) => Object.fromEntries(keys.map(key => [key, getComputedStyle(node).getPropertyValue(key)])), properties);
+  }
+  for (const [width, height, theme] of [[1440, 900, "light"], [390, 844, "dark"]] as const) {
+    await page.setViewportSize({ width, height });
+    await page.goto("/library?view=tracks");
+    await setPreference(page, "language", "zh-CN");
+    await setPreference(page, "theme", theme);
+    await reference.setViewportSize({ width, height });
+    await reference.setContent(design);
+    await reference.addStyleTag({ content: "#inspector-bar { display:none } #preview-container { padding:0 } #preview-frame { border:0 }" });
+    await reference.evaluate(({ theme, width }) => { (window as any).setTheme(theme); (window as any).setVp(width === 390 ? "mobile" : "desktop"); (window as any).setPage("library"); }, { theme, width });
+    const header = (await page.locator(".page-heading").boundingBox())!;
+    const approvedHeader = (await reference.locator(".page-heading").boundingBox())!;
+    for (const key of ["x", "y", "width", "height"] as const) expect(Math.abs(header[key] - approvedHeader[key]), `heading ${key} at ${width}`).toBeLessThanOrEqual(1);
+    const toolbar = (await page.locator(".library-toolbar-box").boundingBox())!;
+    const approvedToolbar = (await reference.locator(".toolbar").boundingBox())!;
+    expect(toolbar.x).toBe(approvedToolbar.x);
+    expect(toolbar.y).toBe(approvedToolbar.y);
+    expect(toolbar.width).toBe(approvedToolbar.width);
+    await page.getByRole("button", { name: "试听 Nightfall", exact: true }).click();
+    const panel = page.locator(".artifact-audition");
+    await expect(panel.getByRole("slider")).toBeEnabled();
+    await panel.locator("audio").evaluate(node => { (node as HTMLAudioElement).currentTime = 40; });
+    await expect(panel.locator('[aria-current="true"]')).toContainText("在每一个音符");
+    const comparisons: [string, string, string[]][] = [
+      [".heading-content h1", "h1", ["font-size", "font-weight", "line-height", "font-synthesis"]],
+      [".library-navigation .segmented", ".toolbar .segmented", ["border-radius", "padding"]],
+      [".library-navigation .segmented button[aria-pressed=\"true\"]", ".toolbar .segmented button.selected", ["background-color", "color", "font-weight"]],
+      [".track-output .badge-ready", ".track-row > .status", ["color", "background-color", "border-width", "font-size"]],
+      [".artifact-audition", ".audition-panel", ["padding", "background-color", "border-width"]],
+      [".audition-body", ".audition-body", ["column-gap", "row-gap", "grid-template-columns"]],
+      [".audition-playback", ".audition-controls", ["padding-top"]],
+      [".audition-controls > .ui-button", ".play-button", ["width", "height", "border-radius", "background-color", "color"]],
+      [".audition-transcript", ".audition-transcript", ["padding-inline-start", "border-inline-start-width", "border-top-width"]],
+      [".audition-lyrics-heading .ui-button", ".follow", ["background-color", "color", "border-color", "font-size", "min-height"]],
+      [".audition-line[aria-current]", ".lyric-line.current", ["background-color", "color", "font-size", "font-weight", "min-height", "padding"]],
+    ];
+    for (const [actual, expected, properties] of comparisons) expect(await style(page.locator(actual), properties), `${actual} at ${width}`).toEqual(await style(reference.locator(expected), properties));
+    // Approved Antigravity amendment: remove the outer tray, retain selection and geometry.
+    await expect(page.locator(".library-navigation .segmented")).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
+    await panel.locator('[aria-current="true"]').hover();
+    expect(await style(panel.locator('[aria-current="true"]'), ["background-color"])).toEqual(await style(reference.locator(".lyric-line.current"), ["background-color"]));
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
+    await page.mouse.move(0, 0);
+    await panel.screenshot({ path: `test-results/approved-actual-audition-${width}-${theme}.png`, animations: "disabled" });
+    await reference.locator(".audition-panel").screenshot({ path: `test-results/approved-reference-audition-${width}-${theme}.png`, animations: "disabled" });
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await page.screenshot({ path: `test-results/approved-actual-library-${width}-${theme}.png`, animations: "disabled" });
+    await reference.locator("#preview-frame").screenshot({ path: `test-results/approved-reference-library-${width}-${theme}.png`, animations: "disabled" });
+  }
+  await reference.close();
 });

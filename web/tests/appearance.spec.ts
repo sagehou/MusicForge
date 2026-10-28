@@ -1,5 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
-import { openAccount, setPreference } from "./preferences";
+import { openAccount, openLibraryOptions, setPreference } from "./preferences";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 
@@ -66,25 +66,44 @@ test("default albums, compact headings and the text account link retain settings
   await expect(page.locator(".brand-version")).toHaveText("test");
   await page.screenshot({ path: "test-results/appearance-default-albums.png", animations: "disabled" });
   const reference = await page.context().newPage();
-  const design = await readFile(resolve("../designs/index.html"), "utf8");
+  const design = await readFile(resolve("../docs/ui-refinement-preview.html"), "utf8");
   for (const width of [1440, 390]) {
     await reference.setViewportSize({ width, height: 1000 });
     await reference.setContent(design);
-    // Remove only the demo controller and device frame when reviewing actual pages.
-    await reference.addStyleTag({ content: `#showcase-bar { display: none !important; } #viewport-wrapper { padding: 0 !important; max-width: none !important; } .app-frame { max-width: none !important; min-height: 100vh !important; border: 0 !important; border-radius: 0 !important; box-shadow: none !important; } .app-main { max-height: none !important; }` });
+    // Capture the current design at its actual width, without the preview controls.
+    await reference.addStyleTag({ content: `#inspector-bar { display: none; } #preview-container { padding: 0; } #preview-frame { border: 0; }` });
     await reference.evaluate(`setVp('${width === 390 ? "mobile" : "desktop"}'); setTheme('dark')`);
-    for (const screen of ["overview", "library", "settings", "jobs"]) {
+    for (const screen of ["overview", "library", "settings", "jobs", "lyrics", "compare"]) {
       await reference.evaluate(`setPage('${screen}')`);
-      await reference.locator(".app-frame").screenshot({ path: `test-results/design-a2-${screen}-${width}.png`, animations: "disabled" });
+      await reference.locator("#preview-frame").screenshot({ path: `test-results/design-flat-${screen}-${width}.png`, animations: "disabled" });
+      if (screen === "library") {
+        await reference.evaluate("setTheme('light')");
+        await reference.locator("#preview-frame").screenshot({ path: `test-results/design-flat-library-${width}-light.png`, animations: "disabled" });
+        await reference.evaluate("setTheme('dark')");
+      }
     }
   }
   await reference.close();
+  const shortcuts = page.getByRole("navigation", { name: "Workspace shortcuts", exact: true });
+  await expect(shortcuts.getByRole("link")).toHaveCount(7);
+  for (const [label, view] of [["All songs", "tracks"], ["All artists", "artists"], ["Albums", "albums"]]) {
+    await shortcuts.getByRole("link", { name: label, exact: true }).click();
+    await expect(page).toHaveURL(new RegExp(`view=${view}`));
+    await expect(page.getByRole("button", { name: new RegExp(`^${label}`) })).toHaveAttribute("aria-pressed", "true");
+  }
+  await shortcuts.getByRole("link", { name: "Review lyrics", exact: true }).click();
+  await expect(page).toHaveURL(/view=tracks&lyrics=needs_review/);
   await openAccount(page);
   await expect(page).toHaveURL(/section=security/);
   await expect(page.locator(".account-summary")).toContainText("admin");
   await expect(page.getByLabel("Current password", { exact: true })).toBeVisible();
   await page.getByRole("tab", { name: "Library", exact: true }).click();
   await page.getByLabel("Source audio directory", { exact: true }).fill("/keep-this-draft");
+  for (const [label, section, tab] of [["Encoding profile", "encoding", "Encoding"], ["Lyrics settings", "lyrics", "Lyrics"], ["Integrations", "integrations", "Integrations"]]) {
+    await shortcuts.getByRole("link", { name: label, exact: true }).click();
+    await expect(page).toHaveURL(new RegExp(`section=${section}`));
+    await expect(page.getByRole("tab", { name: tab, exact: true })).toHaveAttribute("aria-selected", "true");
+  }
   await openAccount(page);
   await page.getByRole("tab", { name: "Library", exact: true }).click();
   await expect(page.getByLabel("Source audio directory", { exact: true })).toHaveValue("/keep-this-draft");
@@ -158,6 +177,7 @@ test("checkbox, partial selection, hover, focus, switch and disabled states shar
   await setup(page);
   await page.goto("/library?view=tracks");
   const first = page.getByLabel("Select Song 1", { exact: true });
+  await openLibraryOptions(page);
   const all = page.getByLabel("Select current page", { exact: true });
   expect(await first.evaluate(element => getComputedStyle(element).appearance)).toBe("none");
   await first.check();
@@ -165,10 +185,11 @@ test("checkbox, partial selection, hover, focus, switch and disabled states shar
   expect(await all.evaluate(element => (element as HTMLInputElement).indeterminate)).toBe(true);
   const shape = await all.evaluate(element => getComputedStyle(element, "::after").height);
   expect(shape).toBe("2px");
+  await page.locator(".library-options > summary").press("Escape");
   await page.keyboard.press("Tab");
   await first.focus();
   expect(await first.evaluate(element => getComputedStyle(element).outlineStyle)).toBe("solid");
-  const scan = page.getByRole("button", { name: "Scan", exact: true });
+  const scan = page.getByRole("button", { name: "Scan library", exact: true });
   const normal = await scan.evaluate(element => getComputedStyle(element).backgroundColor);
   await scan.hover();
   await expect.poll(() => scan.evaluate(element => getComputedStyle(element).backgroundColor)).not.toBe(normal);
@@ -179,13 +200,18 @@ test("checkbox, partial selection, hover, focus, switch and disabled states shar
   await page.getByRole("link", { name: "Settings", exact: true }).click();
   const save = page.getByRole("button", { name: "Save settings", exact: true });
   await expect(save).toBeDisabled();
+  // The approved neutral disabled fill keeps text readable without lowering opacity.
+  const disabledColors = await save.evaluate(element => [getComputedStyle(element).backgroundColor, getComputedStyle(element).color]);
+  expect(disabledColors[0]).not.toBe(normal);
   await save.hover();
-  expect(Number(await save.evaluate(element => getComputedStyle(element).opacity))).toBeLessThan(.5);
+  expect(await save.evaluate(element => [getComputedStyle(element).backgroundColor, getComputedStyle(element).color])).toEqual(disabledColors);
+  await page.screenshot({ path: "test-results/appearance-disabled-save.png", animations: "disabled" });
   const toggle = page.getByRole("switch");
   const before = await toggle.evaluate(element => getComputedStyle(element, "::after").transform);
   await toggle.uncheck();
   await expect.poll(() => toggle.evaluate(element => getComputedStyle(element, "::after").transform)).not.toBe(before);
   await expect(save).toBeEnabled();
+  await expect.poll(() => save.evaluate(element => getComputedStyle(element).backgroundColor)).toBe(normal);
 });
 
 test("top-right controls and color menus fit narrow screens in either language and appearance", async ({ page }) => {
@@ -201,14 +227,48 @@ test("top-right controls and color menus fit narrow screens in either language a
         const box = await menu.locator(".palette-popover").boundingBox();
         expect(box!.x).toBeGreaterThanOrEqual(0);
         expect(box!.x + box!.width).toBeLessThanOrEqual(width);
+        if (width <= 600) {
+          const hex = menu.locator('.color-hex');
+          expect(await hex.evaluate(element => parseFloat(getComputedStyle(element).fontSize))).toBeGreaterThanOrEqual(16);
+          expect(await hex.evaluate(element => element.scrollWidth <= element.clientWidth + 1)).toBe(true);
+        }
         await page.screenshot({ path: `test-results/appearance-palette-${width}-${locale}-${mode}.png`, animations: "disabled" });
         await page.keyboard.press("Escape");
         expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
         const controls = await page.locator(".page-heading .appearance-controls").boundingBox();
         const trigger = await page.locator(".heading-preferences > summary").boundingBox();
         expect(controls!.y).toBeGreaterThanOrEqual(trigger!.y + trigger!.height);
-        expect(controls!.x + controls!.width).toBeGreaterThan(width - 24);
+        expect(Math.abs(controls!.x + controls!.width - trigger!.x - trigger!.width)).toBeLessThanOrEqual(1);
       }
     }
   }
+});
+
+test("approved settings grid and category tabs match at desktop and phone widths", async ({ page, context }) => {
+  await setup(page);
+  const reference = await context.newPage();
+  const design = await readFile(resolve("../docs/ui-refinement-preview.html"), "utf8");
+  for (const [width, height, theme] of [[1440, 900, "light"], [1024, 900, "light"], [390, 844, "dark"]] as const) {
+    await page.setViewportSize({ width, height });
+    await page.goto("/settings?section=encoding");
+    await setPreference(page, "language", "zh-CN");
+    await setPreference(page, "theme", theme);
+    await expect(page.locator("#settings-tab-encoding")).toHaveAttribute("aria-selected", "true");
+    await expect(page.locator(".settings-nav")).toHaveAttribute("aria-orientation", width > 800 ? "vertical" : "horizontal");
+    await reference.setViewportSize({ width, height });
+    await reference.setContent(design);
+    await reference.addStyleTag({ content: "#inspector-bar { display:none } #preview-container { padding:0 } #preview-frame { border:0 }" });
+    await reference.evaluate(({ theme, width }) => { (window as any).setTheme(theme); (window as any).setVp(width === 390 ? "mobile" : "desktop"); (window as any).setPage("settings"); }, { theme, width });
+    for (const [actual, approved] of [[".settings-layout", ".settings-layout"], [".settings-nav", ".settings-tabs"], [".settings-content", ".settings-layout > section"]]) {
+      const a = (await page.locator(actual).boundingBox())!, b = (await reference.locator(approved).boundingBox())!;
+      expect(Math.abs(a.x - b.x), `${actual} x at ${width}`).toBeLessThanOrEqual(1);
+      expect(Math.abs(a.width - b.width), `${actual} width at ${width}`).toBeLessThanOrEqual(1);
+    }
+    const grid = await page.locator('[data-settings-section="encoding"] .form-grid').evaluate(node => { const s = getComputedStyle(node); return [s.gridTemplateColumns, s.gap]; });
+    const approvedGrid = await reference.locator(".form-grid").evaluate(node => { const s = getComputedStyle(node); return [s.gridTemplateColumns, s.gap]; });
+    expect(grid).toEqual(approvedGrid);
+    await page.screenshot({ path: `test-results/approved-actual-settings-${width}-${theme}.png`, animations: "disabled" });
+    await reference.locator("#preview-frame").screenshot({ path: `test-results/approved-reference-settings-${width}-${theme}.png`, animations: "disabled" });
+  }
+  await reference.close();
 });

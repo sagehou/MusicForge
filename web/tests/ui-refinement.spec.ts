@@ -82,6 +82,11 @@ test("settings sections preserve drafts, reveal invalid controls, discard and sa
   await expect(saveBar.getByRole("status")).toHaveText("Settings saved");
   await expectSaveActionsReachable();
   await page.screenshot({ path: "test-results/settings-saved-390-short-light-en.png", animations: "disabled" });
+  const dismiss = saveBar.getByRole("button", { name: "Dismiss notification", exact: true });
+  expect((await dismiss.boundingBox())!.height).toBeGreaterThanOrEqual(40);
+  await dismiss.click();
+  await expect(saveBar.getByRole("status")).toHaveCount(0);
+  expect(writes).toHaveLength(1);
 });
 
 test("settings layouts in both themes and narrow viewports", async ({ page }) => {

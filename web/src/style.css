@@ -1968,6 +1968,7 @@ input:not([type="checkbox"], [type="radio"], [type="range"]), select, textarea {
   .track-table:not(.album-track-table) .track-facts-cell { grid-column: 3 / 6; }
   .track-table:not(.album-track-table) .track-facts { margin: 0; grid-template-columns: 58px minmax(0, 1fr) 100px; gap: 10px; }
   .track-table:not(.album-track-table) .track-facts > div { padding: 0; }
+  .track-table:not(.album-track-table) .track-open strong, .track-table:not(.album-track-table) .track-byline { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .track-table:not(.album-track-table) .track-facts dd { line-height: 1.6; }
   .track-table:not(.album-track-table) .track-fact-audio > dd { display: inline; }
   .track-table:not(.album-track-table) .track-fact-audio > .track-bitrate { display: inline-block; margin-inline-start: 8px; white-space: nowrap; }

@@ -228,6 +228,18 @@ for (const width of [1440, 1024, 768, 390, 320]) {
     await page.screenshot({ path: `test-results/forge-jobs-${width}-dark-zh.png`, fullPage: true, animations: "disabled" });
     await setPreference(page, "language", "en");
     await setPreference(page, "theme", "light");
+    if (width <= 600) {
+      for (const actions of await page.locator('.task-actions').all()) {
+        const buttons = await actions.locator('.ui-button:visible').all();
+        const first = (await buttons[0].boundingBox())!;
+        for (const button of buttons) {
+          const box = (await button.boundingBox())!;
+          expect(box.width).toBeGreaterThanOrEqual(40);
+          expect(box.height).toBeGreaterThanOrEqual(40);
+          expect(Math.abs(box.y - first.y)).toBeLessThanOrEqual(1);
+        }
+      }
+    }
     await page.screenshot({ path: `test-results/forge-jobs-${width}-light.png`, fullPage: true, animations: "disabled" });
     await page.emulateMedia({ reducedMotion: "reduce" });
     expect(await page.locator('.task[data-state="running"] .task-meter > span').evaluate(node => getComputedStyle(node, "::after").animationName)).toBe("none");

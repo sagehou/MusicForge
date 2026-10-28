@@ -1910,7 +1910,7 @@ input:not([type="checkbox"], [type="radio"], [type="range"]), select, textarea {
   .filter-tabs { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); overflow: visible; }
   .filter-tabs button { min-height: 40px; padding: 6px 4px; }
   .jobs-panel .task-actions { gap: 4px; }
-  .jobs-panel .task-actions .ui-button { min-height: 40px; padding: 8px 6px; }
+  .jobs-panel .task-actions .ui-button { min-width: 40px; min-height: 40px; padding: 8px 4px; }
   .jobs-panel .task-actions .task-delete { width: 40px; min-width: 40px; }
   .jobs-panel .task-activity strong { flex-basis: 100%; }
   .settings-panel .form-grid { grid-template-columns: 1fr; }

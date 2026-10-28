@@ -16,13 +16,25 @@ test.beforeEach(async ({ page }) => {
 
 test("settings sections preserve drafts, reveal invalid controls, discard and save together", async ({ page }) => {
   await setup(page);
+  await page.setViewportSize({ width: 1440, height: 900 });
   const writes: Record<string, unknown>[] = [];
   await page.route("**/api/settings", route => {
     if (route.request().method() === "PUT") { writes.push(route.request().postDataJSON()); return route.fulfill({ json: { encoding_changed: false } }); }
     return route.fulfill({ json: response });
   });
   await page.goto("/settings");
+  const saveBar = page.locator('.settings-save:visible');
+  async function expectSaveActionsReachable() {
+    await expect(saveBar).toBeInViewport({ ratio: 1 });
+    for (const button of await saveBar.getByRole("button").all()) {
+      expect(await button.evaluate(element => {
+        const box = element.getBoundingClientRect();
+        return element.contains(document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2));
+      })).toBe(true);
+    }
+  }
   await page.getByLabel("Source audio directory", { exact: true }).fill("");
+  await expectSaveActionsReachable();
   await page.getByRole("tab", { name: "Encoding", exact: true }).click();
   await page.getByLabel("Concurrent conversions", { exact: true }).fill("17");
   await page.getByRole("tab", { name: "Account & security", exact: true }).click();
@@ -34,11 +46,20 @@ test("settings sections preserve drafts, reveal invalid controls, discard and sa
   await page.getByRole("button", { name: "Save settings", exact: true }).click();
   await expect(page.getByLabel("Concurrent conversions", { exact: true })).toBeFocused();
   await page.getByLabel("Concurrent conversions", { exact: true }).fill("2");
+  await page.setViewportSize({ width: 390, height: 568 });
   await page.getByRole("tab", { name: "Integrations", exact: true }).click();
   await page.getByLabel("Independent webhook secret", { exact: true }).fill("draft-webhook-secret-value");
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await expectSaveActionsReachable();
+  const dock = (await page.locator('.sidebar').boundingBox())!;
+  const strip = (await saveBar.boundingBox())!;
+  expect(strip.y + strip.height).toBeLessThanOrEqual(dock.y + 1);
+  for (const button of await saveBar.getByRole("button").all()) expect((await button.boundingBox())!.height).toBeGreaterThanOrEqual(40);
+  await page.screenshot({ path: "test-results/settings-dirty-390-short-light-en.png", animations: "disabled" });
   await setPreference(page, "language", "zh-CN");
   await page.getByRole("tab", { name: "音乐库", exact: true }).click();
   await expect(page.getByLabel("音频源目录", { exact: true })).toHaveValue("/draft/source");
+  await expectSaveActionsReachable();
   await page.getByRole("button", { name: "放弃修改", exact: true }).click();
   await expect(page.getByLabel("音频源目录", { exact: true })).toHaveValue(settings.source);
   await expect(page.getByRole("button", { name: "保存设置", exact: true })).toBeDisabled();

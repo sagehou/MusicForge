@@ -75,6 +75,11 @@ test("phone lyric selection opens a separate tab with visible preview and confir
   await visibleInViewport(pickerTab, picker.getByRole("button", { name: "保存所选歌词", exact: true }));
   await expect(picker.getByRole("button", { name: "保存所选歌词", exact: true })).toBeDisabled();
   await picker.getByRole("radio", { name: "预览 Song 1 take 8 · Artist · 网易云", exact: true }).check();
+  const selectedCandidate = picker.locator('.lyrics-candidate[data-selected="true"]');
+  for (const fact of ["Song 1 take 8", "Artist · Album · 3:03", "网易云", "匹配分 90/100", "检测到简体中文字符"]) await expect(selectedCandidate).toContainText(fact);
+  await expect(selectedCandidate.locator('.script-chip')).toBeVisible();
+  expect((await selectedCandidate.boundingBox())!.height).toBeLessThanOrEqual(128);
+  expect(await selectedCandidate.evaluate(element => element.scrollHeight <= element.clientHeight + 1 && element.scrollWidth <= element.clientWidth + 1)).toBe(true);
   const text = picker.locator(".lyrics-preview-content");
   await expect(text).toHaveAccessibleName("可滚动歌词正文");
   await expect(text).toContainText("第 120 行歌词");

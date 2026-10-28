@@ -1252,7 +1252,9 @@ input[role="switch"]:checked::after { transform: translateX(22px); background: v
 .settings-panel input:not([type="checkbox"], [type="radio"]), .settings-panel select, .settings-panel textarea { background-color: var(--canvas); border-color: var(--line); }
 .settings-panel > small { margin: 0; }
 .settings-panel > .ui-button { align-self: flex-start; }
-.settings-save, .settings-save[data-dirty="true"] { position: static; display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding: 14px 0 0; margin: 0; border: 0; border-top: 1px solid var(--line); border-radius: 0; box-shadow: none; background: transparent; }
+.settings-save { position: static; display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding: 14px 0 0; margin: 0; border: 0; border-top: 1px solid var(--line); border-radius: 0; box-shadow: none; background: transparent; }
+.settings-save[data-dirty="true"] { position: sticky; padding-block: 10px; background: var(--canvas); border-color: var(--line); box-shadow: none; }
+.settings-form :is(input, select, textarea) { scroll-margin-block: 24px 120px; }
 .settings-save > span { flex: 1; font-size: 11.5px; }
 .settings-save > button { flex: none; min-height: 26px; font-size: 11.5px; padding: 2px 9px; }
 .settings-save .toast { position: static; flex-basis: 100%; width: 100%; max-width: none; padding: 10px 12px; box-shadow: none; }
@@ -1831,6 +1833,11 @@ input:not([type="checkbox"], [type="radio"], [type="range"]), select, textarea {
 .lyrics-picker-results { gap: 24px; }
 .lyrics-candidate { background: transparent; }
 .lyrics-candidate strong { font-size: 13px; }
+.lyrics-candidate:not(.lyrics-instrumental) > span { display: flex; flex: 1; flex-wrap: wrap; align-items: baseline; gap: 3px 8px; }
+.lyrics-candidate:not(.lyrics-instrumental) > span > strong { flex-basis: 100%; }
+.lyrics-candidate:not(.lyrics-instrumental) > span > span[dir] { flex-basis: 100%; order: 1; }
+.lyrics-candidate .candidate-source, .lyrics-candidate .script-chip { order: 2; }
+.lyrics-candidate .candidate-confidence { flex-basis: 100%; order: 3; }
 .lyrics-preview-pane { padding: 0; }
 .lyrics-preview-content pre { font: 13px/2 var(--font-mono); }
 .lyrics-provider-status { gap: 4px 12px; }
@@ -1892,7 +1899,9 @@ input:not([type="checkbox"], [type="radio"], [type="range"]), select, textarea {
   .job-row { padding: 14px 0; }
   .jobs-panel .task { padding: 14px 0; }
   .settings-panel .form-grid { grid-template-columns: 1fr; }
-  .settings-save > button { padding: 5px 10px; }
+  .settings-save { bottom: calc(60px + env(safe-area-inset-bottom)); }
+  .settings-save > button { min-height: 40px; padding: 8px 12px; }
+  .settings-form :is(input, select, textarea) { scroll-margin-bottom: 180px; }
   .comparison-result-heading > strong { grid-column: 2; grid-row: 2; }
 }
 

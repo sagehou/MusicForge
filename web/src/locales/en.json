@@ -119,7 +119,7 @@
   "settings.paths": "Library paths",
   "settings.pathsHint": "Use container paths. The output directory must be empty when first enabled.",
   "settings.source": "Source audio directory",
-  "settings.sourceHint": "Read-only container path. Supports FLAC, MP3, AAC/ALAC, WAV/AIFF, Ogg/Opus, WMA, APE, WavPack and MKA.",
+  "settings.sourceHint": "Container path (read-only). FLAC/MP3, AAC/ALAC, WAV/AIFF, Ogg/Opus, WMA, APE, WavPack, MKA.",
   "settings.output": "Transcoded output directory",
   "settings.outputHint": "Read-write mount; give Navidrome read-only access to this directory.",
   "settings.enabled": "Enable library scanning and background jobs",

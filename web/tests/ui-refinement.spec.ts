@@ -101,6 +101,11 @@ test("settings layouts in both themes and narrow viewports", async ({ page }) =>
         await page.getByRole("tab", { name: label, exact: true }).click();
         expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
         if (width <= 600) {
+          if (id === "library") {
+            const sourceHint = page.locator('[data-settings-section="library"] .field > small').first();
+            expect(await sourceHint.evaluate(element => element.getBoundingClientRect().height <= 2 * parseFloat(getComputedStyle(element).lineHeight) + 1)).toBe(true);
+            await expect(sourceHint).toContainText("MKA");
+          }
           for (const field of await page.locator('.settings-panel input:visible:not([type="checkbox"]), .settings-panel select:visible, .settings-panel textarea:visible').all()) {
             expect(await field.evaluate(element => parseFloat(getComputedStyle(element).fontSize))).toBeGreaterThanOrEqual(16);
           }

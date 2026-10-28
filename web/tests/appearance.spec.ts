@@ -200,13 +200,18 @@ test("checkbox, partial selection, hover, focus, switch and disabled states shar
   await page.getByRole("link", { name: "Settings", exact: true }).click();
   const save = page.getByRole("button", { name: "Save settings", exact: true });
   await expect(save).toBeDisabled();
+  // The approved neutral disabled fill keeps text readable without lowering opacity.
+  const disabledColors = await save.evaluate(element => [getComputedStyle(element).backgroundColor, getComputedStyle(element).color]);
+  expect(disabledColors[0]).not.toBe(normal);
   await save.hover();
-  expect(Number(await save.evaluate(element => getComputedStyle(element).opacity))).toBeLessThan(.5);
+  expect(await save.evaluate(element => [getComputedStyle(element).backgroundColor, getComputedStyle(element).color])).toEqual(disabledColors);
+  await page.screenshot({ path: "test-results/appearance-disabled-save.png", animations: "disabled" });
   const toggle = page.getByRole("switch");
   const before = await toggle.evaluate(element => getComputedStyle(element, "::after").transform);
   await toggle.uncheck();
   await expect.poll(() => toggle.evaluate(element => getComputedStyle(element, "::after").transform)).not.toBe(before);
   await expect(save).toBeEnabled();
+  await expect.poll(() => save.evaluate(element => getComputedStyle(element).backgroundColor)).toBe(normal);
 });
 
 test("top-right controls and color menus fit narrow screens in either language and appearance", async ({ page }) => {

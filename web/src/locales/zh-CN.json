@@ -119,7 +119,7 @@
   "settings.paths": "音乐库路径",
   "settings.pathsHint": "使用容器内路径。输出目录首次启用时必须为空。",
   "settings.source": "音频源目录",
-  "settings.sourceHint": "容器内的只读路径。支持 FLAC、MP3、AAC/ALAC、WAV/AIFF、Ogg/Opus、WMA、APE、WavPack 与 MKA。",
+  "settings.sourceHint": "容器内只读：FLAC/MP3、AAC/ALAC、WAV/AIFF、Ogg/Opus、WMA、APE、WavPack、MKA。",
   "settings.output": "转码输出目录",
   "settings.outputHint": "读写挂载；Navidrome 建议只读挂载此目录。",
   "settings.enabled": "启用音乐库扫描和后台任务",

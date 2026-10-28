@@ -231,7 +231,8 @@ test("album rows expose useful audio facts and toggle song and lyric details dir
   }
   const title = row.locator(".track-open");
   await title.click();
-  const details = page.getByRole("region", { name: "Song details", exact: true });
+  const details = page.locator(".track-details");
+  await expect(details).toHaveAccessibleName("Song details");
   await expect(title).toHaveAttribute("aria-expanded", "true");
   await expect(row.locator("xpath=following-sibling::tr[1]").getByRole("region", { name: "Song details", exact: true })).toBeVisible();
   await expect(details).toContainText(tracks[0].path);
@@ -263,6 +264,7 @@ test("album rows expose useful audio facts and toggle song and lyric details dir
   for (const width of [1440, 1101, 390, 320]) {
     await page.setViewportSize({ width, height: 1000 });
     await title.click();
+    await expect(details).toHaveAccessibleName("歌曲详情");
     await expectCompactSongHeader(details);
     for (const fact of await row.locator(".track-fact-audio dd, .track-fact-sizes dd").all()) {
       await expect(fact).toBeVisible();

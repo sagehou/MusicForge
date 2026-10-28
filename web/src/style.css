@@ -1540,10 +1540,16 @@ input[role="switch"]:checked::after { transform: translateX(22px); background: v
 .track-expanded-row:hover { background: transparent; }
 .inline-details h2:focus { outline: none; }
 .inline-details .detail-heading p { font-size: 12px; }
+.track-details .detail-heading { padding: 8px 12px; }
+.track-details .detail-titlebar { align-items: center; flex-wrap: nowrap; gap: 8px; }
+.track-details .detail-titlebar > div:first-child { display: flex; align-items: baseline; gap: 8px; flex: 1; }
+.track-details .detail-heading h2 { flex-shrink: 0; white-space: nowrap; }
+.track-details .detail-heading p { min-width: 0; margin: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .track-facts-compact { display: flex; flex-wrap: wrap; gap: 2px 12px; margin: 3px 0 0; }
 .track-facts-compact > div { display: flex; align-items: baseline; flex-wrap: wrap; gap: 2px 6px; padding: 0; }
 .track-facts-compact .track-fact-duration { display: none; }
-.track-facts-compact .track-fact-audio { flex-basis: 100%; }
+.track-facts-compact .track-fact-audio { flex-basis: auto; }
+.track-facts-compact .track-fact-sizes { flex-wrap: nowrap; white-space: nowrap; }
 .track-facts-compact dd { font-size: 11px; color: var(--muted); line-height: 1.65; }
 .track-facts-compact .track-fact-sizes dt { display: inline; font-size: 11px; }
 .track-facts-compact .track-fact-sizes dd + dt { margin-left: 8px; }
@@ -1634,6 +1640,8 @@ input[role="switch"]:checked::after { transform: translateX(22px); background: v
   .detail-titlebar { flex-wrap: wrap; gap: 8px; }
   .detail-heading .actions { margin-left: auto; gap: 4px; }
   .detail-heading .ui-button { width: 32px; height: 32px; min-height: 32px; }
+  .track-details .detail-heading { padding: 6px 8px; }
+  .track-details .detail-heading .ui-button { width: 40px; height: 40px; min-height: 40px; }
   .inline-details .detail-content { padding: 12px; }
   .inline-details .track-file dt, .inline-details .track-file dd { padding-inline: 10px; }
   .track-lyrics .lyrics-actions .lyrics-action, .lyrics-details > summary { width: 32px; height: 32px; min-height: 32px; }

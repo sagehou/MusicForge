@@ -1548,7 +1548,7 @@ input[role="switch"]:checked::after { transform: translateX(22px); background: v
 .track-facts-compact { display: flex; flex-wrap: wrap; gap: 2px 12px; margin: 3px 0 0; }
 .track-facts-compact > div { display: flex; align-items: baseline; flex-wrap: wrap; gap: 2px 6px; padding: 0; }
 .track-facts-compact .track-fact-duration { display: none; }
-.track-facts-compact .track-fact-audio { flex-basis: auto; }
+.track-facts-compact .track-fact-audio { display: contents; }
 .track-facts-compact .track-fact-sizes { flex-wrap: nowrap; white-space: nowrap; }
 .track-facts-compact dd { font-size: 11px; color: var(--muted); line-height: 1.65; }
 .track-facts-compact .track-fact-sizes dt { display: inline; font-size: 11px; }

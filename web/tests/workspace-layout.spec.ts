@@ -217,10 +217,10 @@ test("album rows expose useful audio facts and toggle song and lyric details dir
   const row = page.locator(".track-row").first();
   await expect(page.locator(".track-row").nth(2).locator(".track-byline")).toHaveText("Guest Vocalist");
   for (const text of ["3:21", "24 bit / 96 kHz", "894 kbps", "25 MiB", "5 MiB"]) await expect(row).toContainText(text);
-  for (const width of [1440, 1101]) {
+  for (const width of [1440, 1101, 390, 320]) {
     await page.setViewportSize({ width, height: 1000 });
     const facts = row.locator(".track-facts-compact");
-    expect(await facts.evaluate(element => element.getBoundingClientRect().height <= parseFloat(getComputedStyle(element.querySelector("dd")!).lineHeight) + 1)).toBe(true);
+    expect(await facts.evaluate((element, lines) => element.getBoundingClientRect().height <= parseFloat(getComputedStyle(element.querySelector("dd")!).lineHeight) * lines + 2 * (lines - 1) + 1, width > 1100 ? 1 : 2)).toBe(true);
     expect(await facts.evaluate(element => element.scrollWidth <= element.clientWidth + 1)).toBe(true);
   }
   await page.setViewportSize({ width: 1440, height: 1000 });
@@ -238,6 +238,10 @@ test("album rows expose useful audio facts and toggle song and lyric details dir
   await expect(details).toContainText(tracks[0].path);
   await expectCompactSongHeader(details);
   await page.screenshot({ path: "test-results/album-song-inline-1440-light-en.png", animations: "disabled" });
+  await page.setViewportSize({ width: 320, height: 1000 });
+  await expectCompactSongHeader(details);
+  await page.screenshot({ path: "test-results/album-song-inline-320-light-en.png", animations: "disabled" });
+  await page.setViewportSize({ width: 1440, height: 1000 });
   await expect(page.getByRole("dialog")).toHaveCount(0);
   expect(await page.evaluate(() => document.body.style.overflow)).not.toBe("hidden");
   await title.click();
@@ -270,6 +274,7 @@ test("album rows expose useful audio facts and toggle song and lyric details dir
       await expect(fact).toBeVisible();
       expect(await fact.evaluate(element => element.scrollWidth <= element.clientWidth + 1)).toBe(true);
     }
+    expect(await row.locator(".track-facts-compact").evaluate((element, lines) => element.getBoundingClientRect().height <= parseFloat(getComputedStyle(element.querySelector("dd")!).lineHeight) * lines + 2 * (lines - 1) + 1, width > 1100 ? 1 : 2)).toBe(true);
     expect(await row.locator(".track-facts-compact").evaluate(element => element.scrollWidth <= element.clientWidth + 1)).toBe(true);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
     await page.screenshot({ path: `test-results/album-song-inline-${width}-dark-zh.png`, animations: "disabled" });
@@ -279,6 +284,8 @@ test("album rows expose useful audio facts and toggle song and lyric details dir
   await expectCompactSongHeader(details);
   await expect(details.locator(".detail-heading p")).toHaveText(longTitle);
   await expect(details.locator(".track-file > dl > dd").first()).toHaveText(longTitle);
+  await details.locator(".detail-heading").scrollIntoViewIfNeeded();
+  await expect(details.locator(".detail-heading")).toBeInViewport();
   await page.screenshot({ path: "test-results/album-song-long-320-dark-zh.png", animations: "disabled" });
   await page.keyboard.press("Escape");
   await expect(page.locator(".track-row").nth(2).locator(".track-open")).toBeFocused();

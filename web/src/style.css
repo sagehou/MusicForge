@@ -1253,7 +1253,7 @@ input[role="switch"]:checked::after { transform: translateX(22px); background: v
 .settings-panel > small { margin: 0; }
 .settings-panel > .ui-button { align-self: flex-start; }
 .settings-save { position: static; display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding: 14px 0 0; margin: 0; border: 0; border-top: 1px solid var(--line); border-radius: 0; box-shadow: none; background: transparent; }
-.settings-save[data-dirty="true"] { position: sticky; padding-block: 10px; background: var(--canvas); border-color: var(--line); box-shadow: none; }
+.settings-save[data-dirty="true"], .settings-save:has(.toast) { position: sticky; padding-block: 10px; background: var(--canvas); border-color: var(--line); box-shadow: none; }
 .settings-form :is(input, select, textarea) { scroll-margin-block: 24px 120px; }
 .settings-save > span { flex: 1; font-size: 11.5px; }
 .settings-save > button { flex: none; min-height: 26px; font-size: 11.5px; padding: 2px 9px; }

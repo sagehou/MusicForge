@@ -73,9 +73,15 @@ test("settings sections preserve drafts, reveal invalid controls, discard and sa
   await page.keyboard.press("Tab");
   await page.getByRole("tab", { name: "Encoding", exact: true }).click();
   await page.getByLabel("Concurrent conversions", { exact: true }).fill("2");
+  await page.getByRole("tab", { name: "Integrations", exact: true }).click();
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await expectSaveActionsReachable();
   await page.getByRole("button", { name: "Save settings", exact: true }).click();
   await expect.poll(() => writes.length).toBe(1);
   expect(writes[0]).toMatchObject({ source: "/saved/source", concurrency: 2, webhook_secret: "", clear_nav_password: false, clear_oidc_secret: false });
+  await expect(saveBar.getByRole("status")).toHaveText("Settings saved");
+  await expectSaveActionsReachable();
+  await page.screenshot({ path: "test-results/settings-saved-390-short-light-en.png", animations: "disabled" });
 });
 
 test("settings layouts in both themes and narrow viewports", async ({ page }) => {

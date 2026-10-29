@@ -129,9 +129,10 @@ Pipeline stages lead with their headings, without repeated above-heading labels.
 
 Desktop has a fixed 232px sidebar, a fluid canvas and 28px horizontal insets.
 Manual collapse retains a 76px icon rail. At 800px navigation is icon-only
-(72px); at 600px it moves to a 64px bottom dock with four equal tracks.
+(72px); at 600px it moves to a 60px bottom dock with four equal tracks.
 Phone content reserves 76px plus the safe-area inset below the final item.
-The surface header spans the main area, with title and actions in one row.
+The surface header spans the main area, with title and actions in one row on
+desktop. Phone overview actions wrap below the title to preserve readable text.
 A compact top-right disclosure keeps appearance and language controls available
 without adding a separate header row. Insets reduce to 20px, 16px and 14px.
 The overview groups real build completion and active tracks above the recent

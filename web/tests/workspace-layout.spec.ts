@@ -32,11 +32,14 @@ async function expectCompactSongHeader(panel: Locator) {
 }
 
 async function expectCompactAlbumFacts(facts: Locator, lines: number) {
-  const layout = await facts.evaluate(element => ({
-    height: element.getBoundingClientRect().height,
-    lineHeight: element.querySelector(".track-spec-chip")!.getBoundingClientRect().height,
-    gap: parseFloat(getComputedStyle(element).rowGap),
-  }));
+  const layout = await facts.evaluate(element => {
+    const chip = getComputedStyle(element.querySelector(".track-spec-chip")!);
+    return {
+      height: element.getBoundingClientRect().height,
+      lineHeight: parseFloat(chip.lineHeight) + parseFloat(chip.paddingTop) + parseFloat(chip.paddingBottom) + parseFloat(chip.borderTopWidth) + parseFloat(chip.borderBottomWidth),
+      gap: parseFloat(getComputedStyle(element).rowGap),
+    };
+  });
   expect(layout.height).toBeLessThanOrEqual(layout.lineHeight * lines + layout.gap * (lines - 1) + 1);
   expect(await facts.evaluate(element => element.scrollWidth <= element.clientWidth + 1)).toBe(true);
 }

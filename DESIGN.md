@@ -5,12 +5,12 @@ colors:
   primary: "#e6213c"
   primary-hover: "#cf1e36"
   primary-soft: "color-mix(in srgb, var(--accent) 8%, var(--surface))"
-  canvas: "#f8f9fa"
+  canvas: "#faf9f6"
   surface: "#ffffff"
-  subtle: "#f1f3f5"
-  ink: "#14151a"
-  muted: "#616571"
-  line: "#e4e7ec"
+  subtle: "#f3f2ee"
+  ink: "#22231f"
+  muted: "#65665e"
+  line: "#e4e3dc"
   success: "#15803d"
   success-soft: "rgba(21, 128, 61, 0.08)"
   warning: "#b45309"
@@ -19,12 +19,12 @@ colors:
   danger-soft: "rgba(185, 28, 28, 0.08)"
   info: "var(--accent)"
   info-soft: "var(--accent-soft)"
-  dark-canvas: "#0b0c0e"
-  dark-surface: "#121317"
-  dark-subtle: "#191b20"
-  dark-ink: "#f3f4f6"
-  dark-muted: "#989da8"
-  dark-line: "#23262e"
+  dark-canvas: "#10120f"
+  dark-surface: "#151714"
+  dark-subtle: "#1d201b"
+  dark-ink: "#f2f1e9"
+  dark-muted: "#a3a69a"
+  dark-line: "#2b2f27"
   dark-primary: "#f06f81"
   dark-primary-hover: "#cf1e36"
   dark-primary-soft: "color-mix(in srgb, var(--accent) 16%, var(--surface))"
@@ -39,11 +39,11 @@ colors:
   dark-info-soft: "var(--accent-soft)"
 typography:
   headline:
-    fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif'
-    fontSize: "18px"
-    fontWeight: 600
-    lineHeight: 1.35
-    letterSpacing: "0"
+    fontFamily: '"Iowan Old Style", "Palatino Linotype", "Book Antiqua", Palatino, "Noto Serif CJK SC", "Songti SC", serif'
+    fontSize: "26px"
+    fontWeight: 500
+    lineHeight: 1.15
+    letterSpacing: "-0.035em"
   title:
     fontSize: "14px"
     fontWeight: 600
@@ -61,7 +61,7 @@ typography:
     fontFamily: '"SFMono-Regular", Consolas, monospace'
     fontSize: "12px"
 rounded:
-  card: "8px"
+  card: "10px"
   artwork: "8px"
   control: "6px"
 spacing:
@@ -93,15 +93,17 @@ components:
 ## Overview
 
 Studio is the active direction, documented in [the UI specification](docs/ui-refinement.md).
-It uses a quiet canvas, layered surfaces, thin borders, compact controls and
-inset task and audition panels. The [A2](designs/variant-a2-canvas.html),
+It pairs editorial serif headings with compact operational typography, warm
+paper and charcoal surfaces, thin borders, and inset task and audition panels.
+The [A2](designs/variant-a2-canvas.html),
 [A1](designs/variant-a1-compact.html), [A3](designs/variant-a3-sheet.html) and
 [Flat Studio preview](docs/ui-refinement-preview.html) remain historical explorations.
 Actual application screenshots from CI are the current visual evidence.
 
 **Key Characteristics:**
 - Real artwork with explicit missing-image fallbacks.
-- Quiet bordered panels, compact artwork grids and persistent operational feedback.
+- Editorial headings, a connected metric strip and compact artwork grids.
+- Quiet bordered panels and persistent operational feedback.
 - Equivalent light/dark surfaces and bilingual content.
 
 ## Colors
@@ -117,11 +119,12 @@ contrast adaptation in `theme-selector.tsx`.
 
 ## Typography
 
-Use the system sans-serif stack for operational content and a monospace stack
-only for paths, endpoints and diagnostics. Page headings use the headline role,
-section titles the title role, and compact metadata the label or smaller role.
-Page headings use a fixed 18px size, including mobile. Metric values use a
-26px monospace face on desktop and 24px on phones.
+Use the system sans-serif stack for operational content, a local serif stack
+for page and album headings, and monospace for paths, audio specifications and
+diagnostics. No remote font request is required. Section titles use the title
+role, and compact metadata the label or smaller role. Page headings use 26px
+on desktop and 24px on phones; album headings use 28px and 22px. Metric values
+use 32px system sans-serif on desktop and 26px on phones.
 Counters and durations use tabular numerals. Long names and paths wrap.
 Pipeline stages lead with their headings, without repeated above-heading labels.
 
@@ -131,12 +134,13 @@ Desktop has a fixed 232px sidebar, a fluid canvas and 28px horizontal insets.
 Manual collapse retains a 76px icon rail. At 800px navigation is icon-only
 (72px); at 600px it moves to a 60px bottom dock with four equal tracks.
 Phone content reserves 76px plus the safe-area inset below the final item.
-The surface header spans the main area, with title and actions in one row on
+The canvas header spans the main area, with title and actions in one row on
 desktop. Phone overview actions wrap below the title to preserve readable text.
 A compact top-right disclosure keeps appearance and language controls available
 without adding a separate header row. Insets reduce to 20px, 16px and 14px.
-The overview groups real build completion and active tracks above the recent
-jobs and lyric/storage cards. Settings use two columns of stacked labels and
+The overview groups four metrics in one divided strip, followed by real build
+completion and active tracks above the recent jobs and lyric/storage cards.
+The metric strip becomes two columns below 800px. Settings use two columns of stacked labels and
 fields on desktop, and one column on narrow screens.
 
 Library cover grids use square media and adaptive minimum tracks (100px small,
@@ -163,16 +167,18 @@ and reauthentication preserve lyric drafts.
 
 ## Elevation & Depth
 
-Operational sections use flat surface panels with thin borders and 8px corners.
-The cover grid stays on the canvas, with 8px artwork corners and no enclosing
-card around each album. Toasts retain the shared soft shadow. Settings keep their save/discard footer
+Operational sections use flat surface panels with thin borders and 10px corners.
+The cover grid stays on the canvas, with 8px artwork corners, subtle sleeve-like
+shadows and no enclosing card around each album. Missing covers use a quiet
+concentric record motif behind the existing fallback icon. Toasts retain the
+shared soft shadow. Settings keep their save/discard footer
 inside the same bordered form box in both saved and dirty states.
 
 ## Shapes
 
 Artwork uses gently softened square corners (8px), and controls use restrained
 corners (6px), including the segmented-control shell. Dots indicate status;
-square initials identify the administrator.
+round initials identify the administrator.
 Repeated library items are unframed, not nested cards.
 
 ## Components
@@ -193,8 +199,9 @@ controls share the disclosure with filtering and sorting.
 
 ### Navigation
 
-The active destination combines accent color, a tonal background and
-`aria-current`. Library hierarchy uses breadcrumbs and query-string URLs.
+The active destination combines accent color, a tonal background, an inset
+marker and `aria-current`. Library views use an accent underline. Library
+hierarchy uses breadcrumbs and query-string URLs.
 Theme and language selections preserve mounted forms, filters and selection.
 
 ### Library Artwork
@@ -230,9 +237,12 @@ targets and use neighboring bilingual labels and theme tokens.
 The focal motion carries the clicked album cover into its detail header with a
 320ms native View Transition. It is progressively enhanced, never required for
 navigation, and not replayed for polling, search or sorting. Supporting feedback
-uses 100-160ms control press/selection changes, 240ms image loading and toast
-entrance, and progress-width interpolation. Reduced-motion preference skips
-shared artwork transitions and disables CSS animation without removing feedback.
+uses 100-160ms control press/selection changes, 160ms disclosure entrances,
+240ms image loading and toast entrance, and progress-width interpolation.
+Fine-pointer cover hover and keyboard focus lift the sleeve by 3px; hovering
+the cover scales its image slightly without changing its colors. These effects
+run only when reduced motion has not been requested. Reduced-motion preference skips shared
+artwork transitions and disables CSS animation without removing feedback.
 
 ## Do's and Don'ts
 

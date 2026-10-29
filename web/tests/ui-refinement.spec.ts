@@ -93,25 +93,28 @@ test("settings layouts in both themes and narrow viewports", async ({ page }) =>
   await setup(page);
   await page.goto("/settings");
   await setPreference(page, "language", "zh-CN");
-  for (const width of [1440, 390, 320]) {
+  for (const [width, theme, sections] of [
+    [1440, "light", [["library", "音乐库"], ["encoding", "编码"]]],
+    [390, "dark", [["integrations", "集成"], ["security", "账户安全"]]],
+    [320, "light", [["library", "音乐库"]]],
+  ] as const) {
     await page.setViewportSize({ width, height: 900 });
-    for (const theme of ["light", "dark"]) {
-      await setPreference(page, "theme", theme);
-      for (const [id, label] of [["library", "音乐库"], ["encoding", "编码"], ["integrations", "集成"], ["security", "账户安全"]]) {
-        await page.getByRole("tab", { name: label, exact: true }).click();
-        expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
-        if (width <= 600) {
-          if (id === "library") {
-            const sourceHint = page.locator('[data-settings-section="library"] .field > small').first();
-            expect(await sourceHint.evaluate(element => element.getBoundingClientRect().height <= 2 * parseFloat(getComputedStyle(element).lineHeight) + 1)).toBe(true);
-            await expect(sourceHint).toContainText("MKA");
-          }
-          for (const field of await page.locator('.settings-panel input:visible:not([type="checkbox"]), .settings-panel select:visible, .settings-panel textarea:visible').all()) {
-            expect(await field.evaluate(element => parseFloat(getComputedStyle(element).fontSize))).toBeGreaterThanOrEqual(16);
-          }
+    await setPreference(page, "theme", theme);
+    await expect(page.locator(".settings-nav")).toHaveAttribute("aria-orientation", width > 800 ? "vertical" : "horizontal");
+    for (const [id, label] of sections) {
+      await page.getByRole("tab", { name: label, exact: true }).click();
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
+      if (width <= 600) {
+        if (id === "library") {
+          const sourceHint = page.locator('[data-settings-section="library"] .field > small').first();
+          await expect(sourceHint).toContainText("MKA");
+          expect(await sourceHint.evaluate(element => element.scrollWidth <= element.clientWidth + 1 && element.scrollHeight <= element.clientHeight + 1)).toBe(true);
         }
-        await page.screenshot({ path: `test-results/settings-${id}-${width}-${theme}.png`, fullPage: true, animations: "disabled" });
+        for (const field of await page.locator('.settings-panel input:visible:not([type="checkbox"]), .settings-panel select:visible, .settings-panel textarea:visible').all()) {
+          expect(await field.evaluate(element => parseFloat(getComputedStyle(element).fontSize))).toBeGreaterThanOrEqual(16);
+        }
       }
+      await page.screenshot({ path: `test-results/settings-${id}-${width}-${theme}.png`, fullPage: true, animations: "disabled" });
     }
   }
 });

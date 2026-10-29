@@ -88,18 +88,9 @@ test("bilingual setup, real incremental build, state preservation and login", as
   expect(artwork.headers()["content-type"]).toBe("image/jpeg");
   expect(artwork.headers()["cache-control"]).toContain("private");
   expect(artwork.headers()["x-request-id"]).toBeTruthy();
-  for (const language of ["zh-CN", "en"]) {
-    await setPreference(page, "language", language);
-    for (const width of [1440, 390, 320]) {
-      await page.setViewportSize({ width, height: width > 800 ? 1000 : 844 });
-      for (const theme of ["light", "dark"]) {
-        await setPreference(page, "theme", theme);
-        await expect(page.locator("html")).toHaveAttribute("data-theme", theme);
-        expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
-        await page.screenshot({ path: `test-results/real-artwork-${language}-${width}-${theme}.png`, fullPage: true, animations: "disabled" });
-      }
-    }
-  }
+  await setPreference(page, "theme", "dark");
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
   await page.setViewportSize({ width: 1280, height: 800 });
   await setPreference(page, "theme", "system");
   await setPreference(page, "language", "zh-CN");

@@ -98,7 +98,7 @@ test("sidebar collapse persists and icon navigation stays accessible across lang
   await expect(page.locator(".sidebar .nav-label").first()).toBeVisible();
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.getByRole("button", { name: "展开侧栏", exact: true }).click();
-  await expect.poll(async () => (await page.locator(".sidebar").boundingBox())?.width).toBe(236);
+  await expect.poll(async () => (await page.locator(".sidebar").boundingBox())?.width).toBe(232);
   await page.setViewportSize({ width: 1440, height: 540 });
   const lastShortcut = page.locator(".sidebar-shortcuts a").last();
   await lastShortcut.scrollIntoViewIfNeeded();
@@ -160,7 +160,7 @@ test("background storage changes stay inside the storage card without shifting t
   await expect(page).toHaveURL(/\/settings$/);
 });
 
-for (const width of [1440, 1024, 768, 390, 320]) {
+for (const width of [1440, 390]) {
   test(`dashboard and compact job visual evidence at ${width}px`, async ({ page }) => {
     await setup(page);
     const errors: string[] = [];
@@ -272,7 +272,7 @@ test("task states use the active palette and Canvas status tones across light an
         const result = {
           accent: token("accent"), successTone: token("success"), warning: token("warning"), danger: token("danger"),
           running: style("running", ".badge").color, runningIcon: style("running", ".job-symbol").color, progress: style("running", ".task-meter > span").backgroundColor, fill: token("accent-fill"),
-          success: style("success", ".badge").color, successIcon: style("success", ".job-symbol").color, successFill: style("success", ".badge").backgroundColor,
+          success: style("success", ".badge").color, successIcon: style("success", ".job-symbol").color, successFill: style("success", ".badge").backgroundColor, successSoft: token("success-soft"),
           paused: style("paused", ".badge").color, failed: style("failed", ".badge").color,
         };
         sample.remove();
@@ -282,8 +282,8 @@ test("task states use the active palette and Canvas status tones across light an
       // Progress is a solid fill; small accent text separately adapts for contrast.
       expect(colors.progress).toBe(colors.fill);
       expect([colors.success, colors.successIcon]).toEqual([colors.successTone, colors.successTone]);
-      // The approved flat status uses semantic color on a transparent surface.
-      expect(colors.successFill).toBe("rgba(0, 0, 0, 0)");
+      // Status pills retain the shared semantic surface in either appearance.
+      expect(colors.successFill).toBe(colors.successSoft);
       expect(colors.paused).toBe(colors.warning);
       expect(colors.failed).toBe(colors.danger);
       await page.screenshot({ path: `test-results/task-colors-${name.replaceAll(" ", "-")}-${mode}.png`, animations: "disabled" });

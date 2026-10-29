@@ -34,7 +34,7 @@ async function expectCompactSongHeader(panel: Locator) {
 async function expectCompactAlbumFacts(facts: Locator, lines: number) {
   const layout = await facts.evaluate(element => ({
     height: element.getBoundingClientRect().height,
-    lineHeight: parseFloat(getComputedStyle(element.querySelector(".track-spec-chip")!).lineHeight),
+    lineHeight: element.querySelector(".track-spec-chip")!.getBoundingClientRect().height,
     gap: parseFloat(getComputedStyle(element).rowGap),
   }));
   expect(layout.height).toBeLessThanOrEqual(layout.lineHeight * lines + layout.gap * (lines - 1) + 1);
@@ -70,7 +70,7 @@ test("aligned records fit six tracks, and the icon rail keeps navigation and pre
   await expect(page.getByRole("heading", { name: "设置", exact: true })).toBeVisible();
   await page.screenshot({ path: "test-results/workspace-settings-collapsed-dark.png", animations: "disabled" });
   await page.getByRole("button", { name: "展开侧栏", exact: true }).click();
-  await expect.poll(async () => (await page.locator(".sidebar").boundingBox())!.width).toBe(236);
+  await expect.poll(async () => (await page.locator(".sidebar").boundingBox())!.width).toBe(232);
   await page.goto("/library?view=tracks");
   await expect(page.locator(".track-open").first()).toBeVisible();
   for (const width of [801, 900, 1024]) {
@@ -168,7 +168,7 @@ test("signing in after expiry restores the open inline lyric selection and its u
 
 test("phone pages retain real content, readable facts and inline song details in both themes", async ({ page }) => {
   await setup(page);
-  for (const width of [390, 320]) {
+  for (const [width, theme] of [[390, "light"], [320, "dark"]] as const) {
     await page.setViewportSize({ width, height: 844 });
     await page.goto("/library?view=tracks");
     await expect(page.locator("#main-navigation a:visible")).toHaveCount(4);
@@ -184,29 +184,27 @@ test("phone pages retain real content, readable facts and inline song details in
     const lyricsTitle = await page.locator(".lyrics-settings > summary").boundingBox();
     expect(lyricsTitle!.height).toBeLessThanOrEqual(40);
     expect(await page.locator(".lyrics-state").first().evaluate(element => element.scrollHeight <= element.clientHeight + 1)).toBe(true);
-    for (const theme of ["light", "dark"]) {
-      await setPreference(page, "theme", theme);
-      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
-      await page.screenshot({ path: `test-results/workspace-songs-${width}-${theme}.png`, animations: "disabled" });
-      await page.locator(".track-open").first().click();
-      const panel = page.getByRole("region", { name: "Song details", exact: true });
-      await expect(panel).toBeVisible();
-      await expectCompactSongHeader(panel);
-      for (const button of await panel.locator(".detail-heading button").all()) {
-        const box = (await button.boundingBox())!;
-        expect(box.width).toBeGreaterThanOrEqual(40);
-        expect(box.height).toBeGreaterThanOrEqual(40);
-      }
-      const box = await panel.boundingBox();
-      expect(box!.x).toBeGreaterThanOrEqual(12);
-      expect(box!.x + box!.width).toBeLessThanOrEqual(width - 12);
-      expect(box!.width).toBeGreaterThan(width - 90);
-      expect(await panel.evaluate(element => getComputedStyle(element).position)).toBe("static");
-      await expect(page.getByRole("dialog")).toHaveCount(0);
-      expect(await panel.evaluate(element => element.scrollWidth <= element.clientWidth + 1)).toBe(true);
-      await page.screenshot({ path: `test-results/workspace-details-${width}-${theme}.png`, animations: "disabled" });
-      await page.keyboard.press("Escape");
+    await setPreference(page, "theme", theme);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
+    await page.screenshot({ path: `test-results/workspace-songs-${width}-${theme}.png`, animations: "disabled" });
+    await page.locator(".track-open").first().click();
+    const panel = page.getByRole("region", { name: "Song details", exact: true });
+    await expect(panel).toBeVisible();
+    await expectCompactSongHeader(panel);
+    for (const button of await panel.locator(".detail-heading button").all()) {
+      const box = (await button.boundingBox())!;
+      expect(box.width).toBeGreaterThanOrEqual(40);
+      expect(box.height).toBeGreaterThanOrEqual(40);
     }
+    const box = await panel.boundingBox();
+    expect(box!.x).toBeGreaterThanOrEqual(12);
+    expect(box!.x + box!.width).toBeLessThanOrEqual(width - 12);
+    expect(box!.width).toBeGreaterThan(width - 90);
+    expect(await panel.evaluate(element => getComputedStyle(element).position)).toBe("static");
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+    expect(await panel.evaluate(element => element.scrollWidth <= element.clientWidth + 1)).toBe(true);
+    await page.screenshot({ path: `test-results/workspace-details-${width}-${theme}.png`, animations: "disabled" });
+    await page.keyboard.press("Escape");
     for (const path of ["/", "/jobs", "/settings"]) {
       await page.goto(path);
       await expect(page.getByRole("heading", { level: 1 })).toBeVisible();

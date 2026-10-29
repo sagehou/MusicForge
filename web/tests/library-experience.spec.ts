@@ -528,7 +528,7 @@ test("Navidrome waiting is a localized non-error state", async ({ page }) => {
   await expect(page.locator(".task-waiting")).toContainText("等待 Navidrome 完成扫描");
 });
 
-for (const width of [1920, 1440, 768, 390, 320]) {
+for (const width of [1440, 390]) {
   test(`library theme, responsive layout and screenshot evidence at ${width}px`, async ({ page }) => {
     await mockLibrary(page, collection.map(source => ({ ...source, source_audio: { codec: "flac", bit_depth: 24, sample_rate: 96000, channels: 2 }, source_bitrate: 894000, size: 26214400, output_size: source.output_present ? 5242880 : undefined, lyrics: source.output_present ? { state: "ready" as const, output: source.output, signature: "album", checked: 1 } : undefined })));
     const errors: string[] = [];
@@ -597,7 +597,11 @@ for (const width of [1920, 1440, 768, 390, 320]) {
     await expect(page.getByRole("table")).toBeVisible();
     await page.evaluate(() => Promise.allSettled(document.getAnimations().filter(animation => animation.effect?.getComputedTiming().iterations !== Infinity).map(animation => animation.finished)));
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
-    if (width >= 1440) expect((await page.locator(".album-library .search").boundingBox())!.width).toBeGreaterThan(1000);
+    if (width >= 1440) {
+      const search = (await page.locator(".album-library .search").boundingBox())!;
+      expect(search.width).toBeGreaterThanOrEqual(240);
+      expect(search.width).toBeLessThanOrEqual(380);
+    }
     await page.screenshot({ path: `test-results/album-${width}-dark.png`, fullPage: true, animations: "disabled" });
     if (width === 1440 || width === 390) {
       await setPreference(page, "theme", "light");

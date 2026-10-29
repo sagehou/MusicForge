@@ -126,7 +126,7 @@ select {
   cursor: pointer;
 }
 textarea { resize: vertical; }
-input::placeholder { color: var(--muted); opacity: 1; }
+input::placeholder, textarea::placeholder { font: inherit; color: var(--muted); opacity: 1; }
 input:not(:disabled):not(:focus):hover, select:not(:disabled):not(:focus):hover, textarea:not(:disabled):not(:focus):hover { border-color: var(--line-strong); }
 input:focus, select:focus, textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 14%, transparent); }
 input[readonly], textarea[readonly] { background: var(--subtle); color: var(--muted); }
@@ -246,7 +246,7 @@ input:not([type="checkbox"], [type="radio"]):focus-visible, select:focus-visible
 .sidebar nav a > svg { width: 16px; height: 16px; flex-shrink: 0; stroke-width: 1.75; }
 .sidebar nav a:hover { background: var(--subtle); color: var(--ink); }
 .sidebar nav a.active { background: var(--accent-soft); color: var(--accent); font-weight: 600; box-shadow: inset 2px 0 var(--accent); }
-.nav-dot { width: 4px; height: 4px; margin-left: auto; border-radius: 50%; background: currentColor; }
+.nav-dot { display: none; }
 
 .sidebar-shortcuts { padding-top: 6px; }
 .sidebar-group + .sidebar-group { margin-top: 24px; }
@@ -1428,6 +1428,7 @@ input[role="switch"]:checked::after { transform: translateX(20px); background: v
 @media (hover: hover) and (pointer: fine) and (prefers-reduced-motion: no-preference) {
   .library-grid .library-group:is(:hover, :focus-within) .library-cover-open { transform: translateY(-3px); box-shadow: 0 5px 8px rgba(0, 0, 0, .07), 0 12px 24px -10px rgba(0, 0, 0, .2); }
   .library-grid .library-cover-open:hover img.cover-loaded { transform: scale(1.025); }
+  .library-grid .library-group .library-cover-open:active { transform: translateY(0) scale(.99); }
 }
 
 /* Responsive Breakpoints */
@@ -1435,6 +1436,7 @@ input[role="switch"]:checked::after { transform: translateX(20px); background: v
   .library-grid .library-group-body > input[type="checkbox"] { opacity: 1; }
 }
 @media (min-width: 801px) {
+  .library-surface:not(.album-library) .library-toolbar-box > .search { margin-inline-start: auto; }
   .app-shell[data-sidebar-collapsed="true"] { --sidebar-width: 76px; }
   [data-sidebar-collapsed="true"] .sidebar { padding: 16px 10px; }
   [data-sidebar-collapsed="true"] .brand-row { flex-direction: column; gap: 10px; }

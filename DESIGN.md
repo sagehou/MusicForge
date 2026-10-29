@@ -240,7 +240,8 @@ navigation, and not replayed for polling, search or sorting. Supporting feedback
 uses 100-160ms control press/selection changes, 160ms disclosure entrances,
 240ms image loading and toast entrance, and progress-width interpolation.
 Fine-pointer cover hover and keyboard focus lift the sleeve by 3px; hovering
-the cover scales its image slightly without changing its colors. These effects
+the cover scales its image slightly without changing its colors, and pressing
+settles the sleeve back onto the canvas. These effects
 run only when reduced motion has not been requested. Reduced-motion preference skips shared
 artwork transitions and disables CSS animation without removing feedback.
 

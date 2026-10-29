@@ -137,8 +137,8 @@ Section titles use the title role, and compact metadata the label or smaller rol
 Page headings use 36px Latin / 30px Chinese on desktop and 30px / 26px on phones;
 album headings use 36px / 28px and 28px / 24px respectively. Metric values use 38px
 system sans-serif on desktop and 30px on phones. The live completion value uses
-60px display type on desktop and 48px on phones. Short-screen lyric workspaces
-retain a compact 20px system heading.
+60px display type on desktop and 48px on phones. Standalone lyric workspaces
+at 800px and below retain a compact 20px system heading.
 Counters and durations use tabular numerals. Long names and paths wrap.
 Pipeline stages lead with their headings, without repeated above-heading labels.
 

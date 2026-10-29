@@ -283,7 +283,7 @@ input:not([type="checkbox"], [type="radio"]):focus-visible, select:focus-visible
 
 .sidebar-shortcuts { padding-top: 6px; }
 .sidebar-group + .sidebar-group { margin-top: 24px; }
-.sidebar-group-title { margin: 0 10px 8px; color: var(--nav-muted); font-size: 9px; font-weight: 500; letter-spacing: .16em; line-height: 18px; text-transform: uppercase; }
+.sidebar-group-title { margin: 0 10px 8px; color: var(--nav-muted); font-size: 10px; font-weight: 500; letter-spacing: .12em; line-height: 18px; text-transform: uppercase; }
 .sidebar .sidebar-shortcuts a { min-height: 32px; font-size: 12.5px; padding: 5px 10px; }
 .sidebar .sidebar-shortcuts a > svg { width: 15px; height: 15px; }
 
@@ -306,7 +306,7 @@ input:not([type="checkbox"], [type="radio"]):focus-visible, select:focus-visible
   gap: 12px;
   min-height: 80px;
   margin: 0 calc(-1 * var(--page-inset)) 24px;
-  padding: 11px var(--page-inset);
+  padding: 10px var(--page-inset);
   background: var(--canvas);
   border-bottom: 1px solid var(--line);
 }
@@ -1585,6 +1585,7 @@ input[role="switch"]:checked::after { transform: translateX(20px); background: v
   .app-shell:has(.lyrics-page) > .main { margin-left: 0; padding-bottom: 0; }
   .app-shell:has(.lyrics-page) .page-content { padding: max(12px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(12px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left)); height: 100dvh; }
   .lyrics-page > .page-heading { flex: none; margin: 0 -16px; padding: 10px 16px; min-height: 56px; }
+  :root .lyrics-page > .page-heading .heading-content h1 { font-family: inherit; font-size: 20px; line-height: 1.25; font-weight: 600; letter-spacing: -.015em; }
   .lyrics-page .lyrics-picker-results { grid-template-rows: auto minmax(96px, 1fr) minmax(220px, 42%); gap: 10px; }
   .lyrics-page > .page-heading .heading-content > div:first-child { flex: 1; min-width: 0; }
   .lyrics-page > .page-heading .heading-content > .ui-button { width: 32px; padding: 5px; font-size: 0; }
@@ -1695,7 +1696,6 @@ input[role="switch"]:checked::after { transform: translateX(20px); background: v
   .settings-form :is(input, select, textarea) { scroll-margin-bottom: 180px; }
   .comparison-result-heading > strong { grid-column: 2; grid-row: 2; }
   .toast { right: 14px; bottom: calc(76px + env(safe-area-inset-bottom)); }
-  .lyrics-page > .page-heading .heading-content h1 { font-family: inherit; font-size: 20px; line-height: 1.25; font-weight: 600; letter-spacing: -.015em; }
 }
 @media (max-width: 440px) {
   .library-grid[data-density="compact"] { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }

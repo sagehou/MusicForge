@@ -1440,9 +1440,9 @@ input[role="switch"]:checked::after { transform: translateX(20px); background: v
 @media (min-width: 1101px) {
   .track-table:not(.album-track-table) .track-open strong,
   .track-table:not(.album-track-table) .track-byline { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .track-table:not(.album-track-table) .track-fact-audio { font: 12px/1.55 var(--font-mono); }
-  .track-table:not(.album-track-table) .track-fact-audio > dd { display: inline; line-height: 1.55; }
-  .track-table:not(.album-track-table) .track-fact-audio > .track-bitrate { display: inline-block; margin-inline-start: 8px; white-space: nowrap; }
+  .track-table:not(.album-track-table) .track-fact-audio { font: 12px/22px var(--font-mono); }
+  .track-table:not(.album-track-table) .track-fact-audio > dd { display: inline; line-height: inherit; }
+  .track-table:not(.album-track-table) .track-fact-audio > .track-bitrate { margin-inline-start: 8px; white-space: nowrap; }
   .track-lyrics .lyrics-state { min-width: 0; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; overflow-wrap: anywhere; }
 }
 @media (max-width: 1100px) {

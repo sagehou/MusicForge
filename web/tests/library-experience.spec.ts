@@ -209,7 +209,8 @@ test("all songs share filters, pagination and batch lyrics with visible file fac
   for (const width of [1440, 1101]) {
     await page.setViewportSize({ width, height: 900 });
     const audio = first.locator(".track-fact-audio");
-    expect(await audio.evaluate(element => element.getBoundingClientRect().height <= 2 * parseFloat(getComputedStyle(element).lineHeight) + 1)).toBe(true);
+    const layout = await audio.evaluate(element => ({ height: element.getBoundingClientRect().height, lineHeight: parseFloat(getComputedStyle(element).lineHeight) }));
+    expect(layout.height).toBeLessThanOrEqual(2 * layout.lineHeight + 1);
     expect((await first.boundingBox())!.height).toBeLessThanOrEqual(80);
     await expect(audio).toContainText("FLAC · 24 bit / 96 kHz · 2 声道");
     await expect(audio).toContainText("894 kbps");

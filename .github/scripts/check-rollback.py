@@ -5,6 +5,7 @@ import http.cookiejar
 import json
 import os
 from pathlib import Path
+import re
 import sqlite3
 import struct
 import subprocess
@@ -66,6 +67,18 @@ def docker(*args):
     if result.returncode:
         raise RuntimeError("docker " + args[0] + " failed: " + result.stderr.strip())
     return result.stdout
+
+
+def rollback_releases(baseline):
+    if not isinstance(baseline, str) or not re.fullmatch(r"v0\.2\.\d+", baseline):
+        raise ValueError("A published schema-2 rollback baseline is required")
+    digest = docker("buildx", "imagetools", "inspect", "ghcr.io/sagehou/musicforge:" + baseline,
+                    "--format", "{{.Manifest.Digest}}").strip()
+    if not re.fullmatch(r"sha256:[a-f0-9]{64}", digest):
+        raise ValueError("Invalid published rollback manifest digest: " + baseline)
+    if baseline in LEGACY and digest != LEGACY[baseline]:
+        raise ValueError("Published rollback manifest changed: " + baseline)
+    return {baseline: digest, **LEGACY}
 
 
 def wait_for(read, ready, description):
@@ -188,6 +201,8 @@ def verify(api, expected_tracks, pending, stopped):
 
 
 def main():
+    baseline = json.loads(Path(".ci/rollback-scope.json").read_text()).get("baseline")
+    releases = rollback_releases(baseline)
     for directory in ("config", "source/Album", "output"):
         (ROOT / directory).mkdir(parents=True, exist_ok=True)
     (ROOT / "config/config.json").write_text(json.dumps({"public_url": ORIGIN, "allowed_origins": ["http://localhost:18788"], "source_timeout_seconds": 120}) + "\n")
@@ -332,7 +347,7 @@ def main():
         assert held[4] == "pending" and held[8] == 253402300799, "paused task changed schema-2 job semantics"
         assert all(path in expected["output"] for path in ("Album/01.opus", "Album/02.opus", "Album/03.opus", "Album/cover.jpg", "Album/01.lrc", "Album/02.lrc", online_path)), "mixed audio/cover/LRC fixture missing"
         evidence = []
-        for version, digest in LEGACY.items():
+        for version, digest in releases.items():
             image = "ghcr.io/sagehou/musicforge@" + digest
             docker("pull", image)
             for actual_image in (image, CANDIDATE):
@@ -364,7 +379,7 @@ def main():
             evidence.append({"release": version, "manifest": digest, "image_id": docker("image", "inspect", "--format", "{{.Id}}", image).strip(), "round_trip": "passed"})
             print("Passed: candidate -> " + version + " -> candidate on the same config/source/output", flush=True)
         pending_checks = []
-        for version, digest in LEGACY.items():
+        for version, digest in releases.items():
             rel = "Pending/" + version + ".flac"
             (ROOT / "source/Pending").mkdir(exist_ok=True)
             docker(*media, "-f", "lavfi", "-i", "sine=duration=1", "-c:a", "flac", "-metadata", "title=Metadata indexed before content verification", "/fixture/" + rel)
@@ -400,7 +415,7 @@ def main():
             assert library_record(restored) == library_record(row), "candidate cannot reopen older worker's completed artifact"
             stop()
             pending_checks.append({"release": version, "pending_verify_then_old_worker_build": "passed", "source_hash": expected_hash})
-        Path(".ci/rollback-evidence.json").write_text(json.dumps({"architecture": os.environ["ARCH"], "schema": 2, "source_format_replacement": "passed", "instrumental_placeholder": "passed", "additional_lyrics_provider": "passed", "checks": evidence, "pending_verification_checks": pending_checks}, indent=2) + "\n")
+        Path(".ci/rollback-evidence.json").write_text(json.dumps({"architecture": os.environ["ARCH"], "schema": 2, "baseline": baseline, "baseline_manifest": releases[baseline], "source_format_replacement": "passed", "instrumental_placeholder": "passed", "additional_lyrics_provider": "passed", "checks": evidence, "pending_verification_checks": pending_checks}, indent=2) + "\n")
     finally:
         subprocess.run(["docker", "rm", "-f", NAME], capture_output=True)
 

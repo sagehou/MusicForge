@@ -29,6 +29,10 @@ colors:
   dark-primary-hover: "#cf1e36"
   dark-primary-soft: "color-mix(in srgb, var(--accent) 16%, var(--surface))"
   dark-primary-ink: "#ffffff"
+  navigation: "#1b1e1b"
+  navigation-dark: "#11140f"
+  navigation-ink: "#f5f3eb"
+  navigation-muted: "#afb2a6"
   dark-success: "#86efac"
   dark-success-soft: "rgba(34, 197, 94, 0.11)"
   dark-warning: "#fcd34d"
@@ -39,11 +43,11 @@ colors:
   dark-info-soft: "var(--accent-soft)"
 typography:
   headline:
-    fontFamily: '"Iowan Old Style", "Palatino Linotype", "Book Antiqua", Palatino, "Noto Serif CJK SC", "Songti SC", serif'
-    fontSize: "26px"
-    fontWeight: 500
-    lineHeight: 1.15
-    letterSpacing: "-0.035em"
+    fontFamily: '"Instrument Serif", "Noto Serif CJK SC", "Songti SC", "Iowan Old Style", "Palatino Linotype", serif'
+    fontSize: "36px"
+    fontWeight: 400
+    lineHeight: 1
+    letterSpacing: "-0.02em"
   title:
     fontSize: "14px"
     fontWeight: 600
@@ -93,8 +97,10 @@ components:
 ## Overview
 
 Studio is the active direction, documented in [the UI specification](docs/ui-refinement.md).
-It pairs editorial serif headings with compact operational typography, warm
-paper and charcoal surfaces, thin borders, and inset task and audition panels.
+The Monograph refinement pairs self-hosted Instrument Serif headings with
+compact operational typography, a deep charcoal navigation rail and warm paper
+surfaces. Ruled metrics and a calibrated completion meter give the real library
+and its processing state the visual character of an archive and mastering desk.
 The [A2](designs/variant-a2-canvas.html),
 [A1](designs/variant-a1-compact.html), [A3](designs/variant-a3-sheet.html) and
 [Flat Studio preview](docs/ui-refinement-preview.html) remain historical explorations.
@@ -102,7 +108,8 @@ Actual application screenshots from CI are the current visual evidence.
 
 **Key Characteristics:**
 - Real artwork with explicit missing-image fallbacks.
-- Editorial headings, a connected metric strip and compact artwork grids.
+- Distinctive editorial headings, ruled metrics and compact artwork grids.
+- A high-contrast navigation rail and an enlarged live completion value.
 - Quiet bordered panels and persistent operational feedback.
 - Equivalent light/dark surfaces and bilingual content.
 
@@ -112,19 +119,26 @@ Apple Music red is the default fill. Spotify green, violet, amber and custom
 colors remain available with unchanged browser preferences. Accent text and
 button foregrounds adapt for contrast in both appearances. Green, amber and red
 identify success, waiting and failure; activity follows the chosen accent.
-Status always includes text. Theme values live in `web/src/style.css`, with
+The navigation keeps warm charcoal surfaces in both appearances, using cream
+text, a tinted signal marker and a visible focus ring. Status always includes text.
+Theme values live in `web/src/style.css`, with
 contrast adaptation in `theme-selector.tsx`.
 
 **The Status Rule.** Never communicate artifact or job state by color alone.
 
 ## Typography
 
-Use the system sans-serif stack for operational content, a local serif stack
-for page and album headings, and monospace for paths, audio specifications and
-diagnostics. No remote font request is required. Section titles use the title
-role, and compact metadata the label or smaller role. Page headings use 26px
-on desktop and 24px on phones; album headings use 28px and 22px. Metric values
-use 32px system sans-serif on desktop and 26px on phones.
+Use the system sans-serif stack for operational content, self-hosted Instrument
+Serif for Latin page and album headings, CJK serif fallbacks for Chinese, and
+monospace for paths, audio specifications and diagnostics. The two WOFF2 subsets
+total 32,636 bytes, with Latin preloaded. Fonts require only same-origin requests;
+their [OFL license and source provenance](docs/font-assets.md) ship with the site.
+Section titles use the title role, and compact metadata the label or smaller role.
+Page headings use 36px Latin / 30px Chinese on desktop and 30px / 26px on phones;
+album headings use 36px / 28px and 28px / 24px respectively. Metric values use 38px
+system sans-serif on desktop and 30px on phones. The live completion value uses
+60px display type on desktop and 48px on phones. Short-screen lyric workspaces
+retain a compact 20px system heading.
 Counters and durations use tabular numerals. Long names and paths wrap.
 Pipeline stages lead with their headings, without repeated above-heading labels.
 
@@ -138,8 +152,10 @@ The canvas header spans the main area, with title and actions in one row on
 desktop. Phone overview actions wrap below the title to preserve readable text.
 A compact top-right disclosure keeps appearance and language controls available
 without adding a separate header row. Insets reduce to 20px, 16px and 14px.
-The overview groups four metrics in one divided strip, followed by real build
-completion and active tracks above the recent jobs and lyric/storage cards.
+The overview groups four metrics between horizontal rules, followed by a display
+completion value, a precise progress track and small calibration ticks. Active
+tracks use simple divided rows above the recent jobs and lyric/storage cards;
+lyric coverage and storage paths use rules instead of nested framed boxes.
 The metric strip becomes two columns below 800px. Settings use two columns of stacked labels and
 fields on desktop, and one column on narrow screens.
 
@@ -235,10 +251,12 @@ wrapping hashes inside the narrow status column. Both retain mobile touch
 targets and use neighboring bilingual labels and theme tokens.
 
 The focal motion carries the clicked album cover into its detail header with a
-320ms native View Transition. It is progressively enhanced, never required for
+360ms native View Transition. It is progressively enhanced, never required for
 navigation, and not replayed for polling, search or sorting. Supporting feedback
-uses 100-160ms control press/selection changes, 160ms disclosure entrances,
-240ms image loading and toast entrance, and progress-width interpolation.
+uses 100-200ms control press/selection changes, 180ms disclosure entrances,
+220ms inline inspector entrances, 240ms image loading and progress-width
+interpolation. Library underlines reveal from their leading edge; primary actions
+gain a short tonal shadow, and pressing settles controls by one pixel.
 Fine-pointer cover hover and keyboard focus lift the sleeve by 3px; hovering
 the cover scales its image slightly without changing its colors, and pressing
 settles the sleeve back onto the canvas. These effects

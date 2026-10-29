@@ -656,10 +656,11 @@ input:not([type="checkbox"], [type="radio"]):focus-visible, select:focus-visible
 .library-comparison > summary::-webkit-details-marker, .lyrics-settings > summary::-webkit-details-marker { display: none; }
 .library-comparison > summary > svg, .lyrics-settings > summary > svg { flex-shrink: 0; color: var(--muted); width: 15px; height: 15px; }
 .library-comparison[open] > summary > svg:last-child, .lyrics-settings[open] > summary > svg:last-child { transform: rotate(90deg); }
-.maintenance-count { border: 1px solid var(--line); background: var(--subtle); border-radius: 4px; padding: 0 6px; color: var(--muted); font-family: var(--font-mono); font-size: 11.5px; line-height: 18px; }
+.maintenance-count { border: 1px solid var(--line); background: var(--subtle); border-radius: 4px; padding: 0 6px; color: var(--muted); font-family: var(--font-mono); font-size: 11.5px; line-height: 18px; white-space: nowrap; }
 
 .lyrics-panel { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 8px; }
-.lyrics-settings { flex: 1; min-width: 0; }
+.lyrics-settings { flex: 1 0 auto; min-width: 0; }
+.lyrics-settings > summary { white-space: nowrap; }
 .lyrics-settings[open] { flex-basis: 100%; }
 .lyrics-panel .lyrics-body { display: contents; }
 .library-maintenance > .library-comparison[open], .library-maintenance > .lyrics-panel:has(.lyrics-settings[open]) { flex: 1 0 100%; padding: 14px 16px; }
@@ -1430,6 +1431,7 @@ input[role="switch"]:checked::after { transform: translateX(20px); background: v
   .library-list .library-cover-open, .library-list .cover { grid-column: 1; width: 56px; height: 56px; }
   .library-list .library-group-body { display: grid; grid-template-columns: 16px minmax(0, 1fr) auto; align-items: start; gap: 5px 8px; min-width: 0; }
   .library-list .library-group-title { grid-column: 2; }
+  .library-list .library-open strong { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
   .library-list .library-group-body > .badge { grid-column: 3; grid-row: 1; }
   .library-list .group-facts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 12px; grid-column: 2 / -1; }
   .library-list .group-facts > div:nth-child(n) { grid-column: auto; grid-row: auto; }
@@ -1438,6 +1440,7 @@ input[role="switch"]:checked::after { transform: translateX(20px); background: v
 @media (min-width: 1101px) {
   .track-table:not(.album-track-table) .track-open strong,
   .track-table:not(.album-track-table) .track-byline { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .track-table:not(.album-track-table) .track-fact-audio { font: 12px/1.55 var(--font-mono); }
   .track-table:not(.album-track-table) .track-fact-audio > dd { display: inline; line-height: 1.55; }
   .track-table:not(.album-track-table) .track-fact-audio > .track-bitrate { display: inline-block; margin-inline-start: 8px; white-space: nowrap; }
   .track-lyrics .lyrics-state { min-width: 0; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; overflow-wrap: anywhere; }
@@ -1565,9 +1568,15 @@ input[role="switch"]:checked::after { transform: translateX(20px); background: v
   .auth-card input { font-size: 16px; min-height: 36px; }
   .custom-color .color-hex { width: 104px; }
   .track-title-line .track-audition-trigger { width: 40px; height: 40px; min-height: 40px; }
+  .track-table td.track-output { grid-column: 1 / -1; }
+  .track-table td.track-lyrics { grid-column: 1 / -1; grid-row: 4; }
+  .album-track-table td.track-lyrics { grid-row: 3; }
+  .track-lyrics .lyrics-track { justify-content: space-between; flex-wrap: nowrap; }
+  .track-lyrics .lyrics-state { min-width: 0; }
   .track-lyrics .lyrics-actions .lyrics-action, .lyrics-details > summary { width: 40px; min-height: 40px; height: 40px; }
   .detail-heading { padding: 8px; }
-  .track-details .detail-heading { padding-block: 6px; }
+  .track-details .detail-heading { padding: 6px 4px; }
+  .track-details .detail-titlebar > div:first-child { gap: 6px; }
   .detail-titlebar { gap: 4px; }
   .detail-heading .actions { gap: 0; }
   .detail-heading .ui-button, .hash-value .ui-button { width: 40px; min-width: 40px; height: 40px; min-height: 40px; }

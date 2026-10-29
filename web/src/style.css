@@ -1445,6 +1445,15 @@ input[role="switch"]:checked::after { transform: translateX(20px); background: v
   .track-table:not(.album-track-table) .track-fact-audio > .track-bitrate { margin-inline-start: 8px; white-space: nowrap; }
   .track-lyrics .lyrics-state { min-width: 0; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; overflow-wrap: anywhere; }
 }
+@media (min-width: 1101px) and (max-width: 1199px) {
+  .track-table:not(.album-track-table) th.track-duration-column { width: 56px; }
+  .track-table:not(.album-track-table) th.track-audio-column { width: 176px; }
+  .track-table:not(.album-track-table) th.track-size-column { width: 96px; }
+  .track-table:not(.album-track-table) th.track-status-column { width: 96px; }
+  .track-table:not(.album-track-table) th.track-lyrics-column { width: 168px; }
+  .track-table:not(.album-track-table) .track-facts { grid-template-columns: 56px minmax(0, 1fr) 96px; }
+  .track-table:not(.album-track-table) .track-output .badge { max-width: 100%; white-space: normal; }
+}
 @media (max-width: 1100px) {
   .comparison-metrics { grid-template-columns: repeat(4, minmax(0, 1fr)); }
   .audition-body { grid-template-columns: minmax(0, 1fr); gap: 12px; }

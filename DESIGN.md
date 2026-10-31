@@ -61,9 +61,9 @@ typography:
     fontFamily: '"SFMono-Regular", Consolas, monospace'
     fontSize: "12px"
 rounded:
-  card: "8px"
-  artwork: "8px"
-  control: "6px"
+  card: "14px"
+  artwork: "12px"
+  control: "8px"
 spacing:
   compact: "8px"
   control: "12px"
@@ -93,15 +93,16 @@ components:
 ## Overview
 
 Studio is the active direction, documented in [the UI specification](docs/ui-refinement.md).
-It uses a quiet canvas, layered surfaces, thin borders, compact controls and
-inset task and audition panels. The [A2](designs/variant-a2-canvas.html),
+It uses a refined rounded glassmorphism visual language: an atmospheric ambient canvas,
+frosted glass surfaces with backdrop blur (`backdrop-filter: blur(...)`), subtle specular borders,
+harmonious rounded corners, and compact ergonomic control layouts. The [A2](designs/variant-a2-canvas.html),
 [A1](designs/variant-a1-compact.html), [A3](designs/variant-a3-sheet.html) and
 [Flat Studio preview](docs/ui-refinement-preview.html) remain historical explorations.
 Actual application screenshots from CI are the current visual evidence.
 
 **Key Characteristics:**
 - Real artwork with explicit missing-image fallbacks.
-- Quiet bordered panels, compact artwork grids and persistent operational feedback.
+- Frosted glass layered surfaces, translucent cards, and persistent operational feedback.
 - Equivalent light/dark surfaces and bilingual content.
 
 ## Colors
@@ -131,7 +132,7 @@ Desktop has a fixed 232px sidebar, a fluid canvas and 28px horizontal insets.
 Manual collapse retains a 76px icon rail. At 800px navigation is icon-only
 (72px); at 600px it moves to a 60px bottom dock with four equal tracks.
 Phone content reserves 76px plus the safe-area inset below the final item.
-The surface header spans the main area, with title and actions in one row on
+The floating frosted header spans the main area with backdrop blur, with title and actions in one row on
 desktop. Phone overview actions wrap below the title to preserve readable text.
 A compact top-right disclosure keeps appearance and language controls available
 without adding a separate header row. Insets reduce to 20px, 16px and 14px.
@@ -163,16 +164,21 @@ and reauthentication preserve lyric drafts.
 
 ## Elevation & Depth
 
-Operational sections use flat surface panels with thin borders and 8px corners.
-The cover grid stays on the canvas, with 8px artwork corners and no enclosing
-card around each album. Toasts retain the shared soft shadow. Settings keep their save/discard footer
-inside the same bordered form box in both saved and dirty states.
+Operational sections use translucent frosted glass surfaces (`--glass-surface` with `backdrop-filter: blur(20px) saturate(180%)`),
+paired with subtle specular borders (`--glass-border`) and soft luminous elevation (`--shadow-card`).
+Interactive elements feature subtle hover-lift micro-interactions (`translateY(-2px)`).
+The cover grid stays on the atmospheric canvas, with 12px artwork corners and gentle lift on hover.
+Toasts, the floating capsule batch-selection bar, and the sticky capsule save bar float over the content
+with elevated frosted glass layers (`--glass-surface-elevated`) and diffused floating shadows (`--shadow-float`).
 
 ## Shapes
 
-Artwork uses gently softened square corners (8px), and controls use restrained
-corners (6px), including the segmented-control shell. Dots indicate status;
-square initials identify the administrator.
+Geometry follows a cohesive rounded hierarchy:
+- Primary interactive controls and inputs use 8px rounded corners (`--radius-control: 8px`).
+- Artwork covers use refined 12px rounded corners (`--radius-artwork: 12px`).
+- Operational panels, bento metric cards, and dialogs use 14px rounded corners (`--radius-card: 14px`).
+- Badges, status pills, segmented switcher tabs, the search input capsule, and floating action docks use full pill geometry (`--radius-pill: 999px`).
+Dots indicate status; square initials identify the administrator.
 Repeated library items are unframed, not nested cards.
 
 ## Components
@@ -181,7 +187,7 @@ Repeated library items are unframed, not nested cards.
 
 Lucide icons name tools, paired with text for explicit commands. Icon-only
 controls have localized names and native title tooltips. Primary buttons use
-the accent, secondary buttons use a surface and stroke, and destructive buttons
+the accent with a specular top highlight, secondary buttons use a translucent surface and stroke, and destructive buttons
 use danger tones. Focus uses a visible two-pixel accent outline. Controls retain
 loading/disabled states, 32px standard and 28px compact controls. Phone track, lyric, detail and save
 actions retain at least 40px touch targets.
@@ -193,7 +199,7 @@ controls share the disclosure with filtering and sorting.
 
 ### Navigation
 
-The active destination combines accent color, a tonal background and
+The active destination combines accent color, a luminous translucent pill background and
 `aria-current`. Library hierarchy uses breadcrumbs and query-string URLs.
 Theme and language selections preserve mounted forms, filters and selection.
 

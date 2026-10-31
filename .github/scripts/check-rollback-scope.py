@@ -17,7 +17,7 @@ def baseline_release(releases, current_tag):
 
 
 def presentation_or_test(path):
-    # ponytail: allowlist known non-persistent paths; everything else runs rollback.
+    # allowlist known non-persistent paths; everything else runs rollback.
     return (path.startswith(("web/src/", "web/public/", "web/tests/"))
             or path == "web/index.html"
             or path.endswith(".md") and ("/" not in path or path.startswith("docs/"))

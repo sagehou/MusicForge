@@ -2,7 +2,7 @@
 FROM --platform=$BUILDPLATFORM node:26.10.0-trixie-slim@sha256:930557a230abacbc3f4fd9b8648abf8f4bee1e17cb72195dcdfb2f709bc85b33 AS frontend
 WORKDIR /src/web
 COPY web/package*.json ./
-RUN npm ci
+RUN npm ci --no-audit --no-fund
 COPY web/ ./
 RUN npm run build
 

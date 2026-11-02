@@ -5,6 +5,7 @@ import http.cookiejar
 import json
 import os
 from pathlib import Path
+import re
 import sqlite3
 import struct
 import subprocess
@@ -59,6 +60,32 @@ LEGACY = {
     "v0.2.1": "sha256:39a12fbd9db368d4dc688cb929ae74b731ba10ae863b03aec915be3a77d35240",
     "v0.2.0": "sha256:3a176c2fa79dd3e2a47c53803e3d5ac055e9c406061ec69402b63fe4523a2e7c",
 }
+
+
+def selected_releases(baseline, extended=False, current_tag=""):
+    if not isinstance(baseline, str) or not re.fullmatch(r"v0\.2\.\d+", baseline) or baseline == current_tag:
+        raise ValueError("A previous published schema-2 stable release is required for rollback")
+    # Daily acceptance checks the actual published predecessor. Historical
+    # compatibility remains an explicit maintenance run, not a growing tax.
+    selected = dict(LEGACY) if extended else {}
+    selected.pop(current_tag, None)
+    selected[baseline] = LEGACY.get(baseline)
+    return selected
+
+
+def rollback_images():
+    plan = json.loads(Path(".ci/rollback-scope.json").read_text())
+    selected = selected_releases(plan.get("baseline"), os.environ.get("MUSICFORGE_EXTENDED_ROLLBACK") == "true",
+                                 os.environ.get("GITHUB_REF_NAME", ""))
+    for version, manifest in selected.items():
+        if manifest is None:
+            inspected = docker("buildx", "imagetools", "inspect", "ghcr.io/sagehou/musicforge:" + version)
+            match = re.search(r"^Digest:\s+(sha256:[a-f0-9]{64})\s*$", inspected, re.M)
+            if not match:
+                raise ValueError("Cannot resolve the published rollback manifest: " + version)
+            selected[version] = match[1]
+    print("Rollback releases: " + ", ".join(selected), flush=True)
+    return selected
 
 
 def docker(*args):
@@ -332,7 +359,8 @@ def main():
         assert held[4] == "pending" and held[8] == 253402300799, "paused task changed schema-2 job semantics"
         assert all(path in expected["output"] for path in ("Album/01.opus", "Album/02.opus", "Album/03.opus", "Album/cover.jpg", "Album/01.lrc", "Album/02.lrc", online_path)), "mixed audio/cover/LRC fixture missing"
         evidence = []
-        for version, digest in LEGACY.items():
+        releases = rollback_images()
+        for version, digest in releases.items():
             image = "ghcr.io/sagehou/musicforge@" + digest
             docker("pull", image)
             for actual_image in (image, CANDIDATE):
@@ -364,7 +392,7 @@ def main():
             evidence.append({"release": version, "manifest": digest, "image_id": docker("image", "inspect", "--format", "{{.Id}}", image).strip(), "round_trip": "passed"})
             print("Passed: candidate -> " + version + " -> candidate on the same config/source/output", flush=True)
         pending_checks = []
-        for version, digest in LEGACY.items():
+        for version, digest in releases.items():
             rel = "Pending/" + version + ".flac"
             (ROOT / "source/Pending").mkdir(exist_ok=True)
             docker(*media, "-f", "lavfi", "-i", "sine=duration=1", "-c:a", "flac", "-metadata", "title=Metadata indexed before content verification", "/fixture/" + rel)

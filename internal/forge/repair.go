@@ -252,7 +252,7 @@ func (a *App) startRepairs(sources []Source, settings Settings, waitCapacity boo
 		for i, source := range sources {
 			ctx, entry := contexts[i], entries[i]
 			var result RepairStatus
-			err := a.waitRepairCapacity(ctx, settings.Concurrency)
+			err := a.waitOutputMaintenanceCapacity(ctx)
 			if err == nil {
 				a.reportMediaProgress(ctx, 0, Activity{Phase: "storage", Path: source.Rel, Artist: source.Artist, Album: source.Album, Title: source.Title}, 0)
 				result, err = a.makeRepair(ctx, source, settings)
@@ -290,30 +290,6 @@ func (a *App) startRepairs(sources []Source, settings Settings, waitCapacity boo
 		}
 	}()
 	return group, nil
-}
-
-func (a *App) waitRepairCapacity(ctx context.Context, concurrency int) error {
-	for {
-		if err := ctx.Err(); err != nil {
-			return err
-		}
-		capacity, err := a.conversionCapacity(ctx, concurrency)
-		if err != nil {
-			return err
-		}
-		a.jobsMu.Lock()
-		running, err := a.runningConversions()
-		a.jobsMu.Unlock()
-		if err != nil {
-			return err
-		}
-		if running < capacity {
-			return nil
-		}
-		if !pause(ctx, 100*time.Millisecond) {
-			return ctx.Err()
-		}
-	}
 }
 
 func (a *App) removeRepair(id int64) error {

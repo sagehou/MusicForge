@@ -421,14 +421,14 @@ func (a *App) getSettings(w http.ResponseWriter, r *http.Request) {
 func (a *App) putSettings(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		Settings
-		WebhookSecret    string            `json:"webhook_secret"`
-		ClearWebhook     bool              `json:"clear_webhook"`
-		ClearNavPassword bool              `json:"clear_nav_password"`
-		ClearOIDCSecret  bool              `json:"clear_oidc_secret"`
-		UnbindOIDC       bool              `json:"unbind_oidc"`
-		LidarrConnection *lidarrConnection `json:"lidarr_connection"`
-		Maintenance *maintenanceOptions `json:"maintenance"`
-		ClearNotificationToken bool `json:"clear_notification_token"`
+		WebhookSecret          string              `json:"webhook_secret"`
+		ClearWebhook           bool                `json:"clear_webhook"`
+		ClearNavPassword       bool                `json:"clear_nav_password"`
+		ClearOIDCSecret        bool                `json:"clear_oidc_secret"`
+		UnbindOIDC             bool                `json:"unbind_oidc"`
+		LidarrConnection       *lidarrConnection   `json:"lidarr_connection"`
+		Maintenance            *maintenanceOptions `json:"maintenance"`
+		ClearNotificationToken bool                `json:"clear_notification_token"`
 	}
 	if !decode(w, r, &body) {
 		return

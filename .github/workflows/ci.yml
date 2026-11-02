@@ -200,6 +200,19 @@ jobs:
           if git ls-files --error-unmatch go.sum >/dev/null 2>&1; then
             git diff --exit-code -- go.mod go.sum web/package-lock.json
           fi
+      - name: CI-generated source snapshot
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: canonical-source
+          path: |
+            go.mod
+            go.sum
+            cmd/**/*.go
+            internal/**/*.go
+            web/embed.go
+            web/package-lock.json
+          retention-days: 14
       - name: Start the real Navidrome integration service
         run: |
           mkdir -p .ci/nav-output
@@ -260,19 +273,6 @@ jobs:
       - name: Stop the Navidrome validation service
         if: always()
         run: docker rm -f musicforge-nav-validation || true
-      - name: CI-generated source snapshot
-        if: always()
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: canonical-source
-          path: |
-            go.mod
-            go.sum
-            cmd/**/*.go
-            internal/**/*.go
-            web/embed.go
-            web/package-lock.json
-          retention-days: 14
       - name: Browser reports
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -557,7 +557,7 @@ jobs:
 
           status, rel = api(f'repos/{repo}/releases/tags/{version}')
           if status == 404:
-              payload = {'tag_name': version, 'name': f'MusicForge {version}', 'body': f'MusicForge {version} release with glassmorphism UI refinement and multiarch container images.', 'draft': False, 'prerelease': False, 'make_latest': 'true' if '-' not in version else 'false'}
+              payload = {'tag_name': version, 'name': f'MusicForge {version}', 'body': f'MusicForge {version}. Container image: `ghcr.io/{repo.lower()}:{version}` (`linux/amd64`, `linux/arm64`).', 'generate_release_notes': True, 'draft': False, 'prerelease': '-' in version, 'make_latest': 'true' if '-' not in version else 'false'}
               status, rel = api(f'repos/{repo}/releases', 'POST', payload)
               assert status == 201, (status, rel)
               print(f'Created release {version}: {rel.get("html_url")}')

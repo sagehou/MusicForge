@@ -81,8 +81,8 @@ Scan supported audio files and store artist, album, title, track/disc number, me
 
 Ordinary scanning uses a fast check:
 
-1. On discovery, read tags and hash the complete file.
-2. If size or mtime changes, read again and compare hashes.
+1. On discovery, index tags, size and mtime, then queue complete-file verification and conversion. Do not hash all audio during tag indexing.
+2. If size or mtime changes, update tags and invalidate the content fingerprint, then queue verification and building.
 3. If both are unchanged, skip content reads.
 4. Provide manual full verification to check source hashes again.
 

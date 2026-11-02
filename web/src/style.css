@@ -1080,7 +1080,7 @@ input:not([type="checkbox"], [type="radio"]):focus-visible, select:focus-visible
 .library-comparison > summary::-webkit-details-marker, .lyrics-settings > summary::-webkit-details-marker { display: none; }
 .library-comparison > summary > svg, .lyrics-settings > summary > svg { flex-shrink: 0; color: var(--muted); width: 15px; height: 15px; }
 .library-comparison[open] > summary > svg:last-child, .lyrics-settings[open] > summary > svg:last-child { transform: rotate(90deg); }
-.maintenance-count { border: 1px solid var(--line); background: var(--subtle); border-radius: var(--radius-pill); padding: 0 7px; color: var(--muted); font-family: var(--font-mono); font-size: 11.5px; line-height: 18px; white-space: nowrap; }
+.maintenance-count, .quality-count { border: 1px solid var(--line); background: var(--subtle); border-radius: var(--radius-pill); padding: 0 7px; color: var(--muted); font-family: var(--font-mono); font-size: 11.5px; line-height: 18px; white-space: nowrap; }
 
 .lyrics-panel { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .lyrics-settings { flex: 1 0 auto; min-width: 0; }

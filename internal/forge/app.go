@@ -578,7 +578,9 @@ func (a *App) ensureRecovery(ctx context.Context, s Settings) error {
 	if err := a.recoverFiles(ctx, s); err != nil {
 		return err
 	}
-	if err := a.recoverOutputGains(ctx); err != nil { return err }
+	if err := a.recoverOutputGains(ctx); err != nil {
+		return err
+	}
 	a.recovered = true
 	return nil
 }

@@ -24,9 +24,11 @@ type notificationDelivery struct {
 	Version int `json:"version"`
 	Endpoint string `json:"endpoint"`
 	FailedID int64 `json:"failed_id"`
+	FailedAt int64 `json:"failed_at,omitempty"`
 	CompletedID int64 `json:"completed_id"`
 	CompletedAt int64 `json:"completed_at"`
 	Offline bool `json:"offline"`
+	OfflineAt int64 `json:"offline_at,omitempty"`
 	LowDisk bool `json:"low_disk"`
 }
 
@@ -67,10 +69,16 @@ func (a *App) notificationTick(ctx context.Context, s Settings) {
 	a.notifyMu.Lock()
 	defer a.notifyMu.Unlock()
 	now := time.Now()
-	if now.Before(a.notifyNext) { return }
-	a.notifyNext = now.Add(time.Minute)
 	options, err := a.maintenanceOptions(ctx)
 	if err != nil || options.NotifyURL == "" { return }
+	// Refresh the cached storage check on scheduler ticks. Checking only once a
+	// minute would always see an expired cache and could miss unattended outages.
+	online, _, checking := a.storageStatus(s)
+	if !checking {
+		if online { a.offlineSince=time.Time{} } else if a.offlineSince.IsZero() { a.offlineSince=now }
+	}
+	if now.Before(a.notifyNext) { return }
+	a.notifyNext = now.Add(time.Minute)
 	state := notificationDelivery{Version: 1, Endpoint: digest(options.NotifyURL+"\x00"+options.NotifyMode+"\x00"+options.NotifyToken)}
 	raw, err := a.metaContext(ctx, "maintenance:notifications")
 	if err == nil {
@@ -89,20 +97,20 @@ func (a *App) notificationTick(ctx context.Context, s Settings) {
 		}
 		return true
 	}
-	var failedID int64
+	var failedID, failedAt int64
 	var failures int
-	if err = a.reads.QueryRowContext(ctx, "SELECT coalesce(max(id),0),count(*) FROM jobs WHERE state='failed' AND attempts>=3").Scan(&failedID, &failures); err != nil { return }
-	if failedID > state.FailedID {
+	if err = a.reads.QueryRowContext(ctx, "SELECT coalesce(max(id),0),coalesce(max(updated),0),count(*) FROM jobs WHERE state='failed' AND attempts>=3").Scan(&failedID, &failedAt, &failures); err != nil { return }
+	if failures>0 && (failedID > state.FailedID || failedAt>state.FailedAt) {
 		if !deliver("failed_jobs", fmt.Sprintf("%d track jobs exhausted their retries. Open MusicForge Jobs to review them.", failures)) { return }
-		state.FailedID = failedID
+		state.FailedID, state.FailedAt = max(state.FailedID,failedID),max(state.FailedAt,failedAt)
 	}
-	online, _, checking := a.storageStatus(s)
 	if !checking {
-		if online { a.offlineSince, state.Offline = time.Time{}, false } else {
-			if a.offlineSince.IsZero() { a.offlineSince = now }
+		if online { state.Offline = false } else {
+			if state.OfflineAt != a.offlineSince.Unix() { state.Offline=false }
 			if !state.Offline && now.Sub(a.offlineSince) >= 5*time.Minute {
 				if !deliver("storage_offline", "MusicForge storage has been unavailable for at least five minutes. Check the mounts and library settings.") { return }
 				state.Offline = true
+				state.OfflineAt = a.offlineSince.Unix()
 			}
 		}
 	}

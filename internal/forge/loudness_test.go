@@ -30,6 +30,7 @@ func TestLoudnessRemuxPreservesAudioAndReadyLyrics(t *testing.T) {
 		raw,_:=json.Marshal(status); if err=a.setMeta("lyrics-status:"+strconv.FormatInt(source.ID,10),string(raw)); err != nil { t.Fatal(err) }
 		warning,_:=json.Marshal(RepairStatus{State:"imported",PCMVerified:false,Diagnostics:"test damage annotation"})
 		if err=a.setMeta(repairArtifactKey(source.ID,signature),string(warning)); err != nil { t.Fatal(err) }
+		if _,err=a.db.Exec("UPDATE sources SET error='retained source read error' WHERE id=?",source.ID); err!=nil { t.Fatal(err) }
 		tracks,album,err:=a.analyzeAlbum(context.Background(),[]Source{source}); if err != nil || len(tracks)!=1 { t.Fatal(err,tracks) }
 		updated,err:=a.writeOutputGain(context.Background(),tracks[0],gainTags(codec,tracks[0].Loudness,album)); if err != nil || !updated { t.Fatal(updated,err) }
 		if after:=decode(); !bytes.Equal(before,after) { t.Fatal("tag maintenance changed decoded audio") }
@@ -38,7 +39,7 @@ func TestLoudnessRemuxPreservesAudioAndReadyLyrics(t *testing.T) {
 		tags:=probe.tags()
 		if codec=="mp3" && tags["replaygain_track_gain"]!="-6.00 dB" { t.Fatal("replaced manual ReplayGain",tags) }
 		if codec=="opus" && (tags["r128_track_gain"]=="" || tags["r128_album_gain"]=="") { t.Fatal("missing Opus R128",tags) }
-		list,err:=a.sourcesWithStatus(); if err==nil { err=a.annotateLyrics(context.Background(),list) }; if err != nil || len(list)!=1 || list[0].OutputGain==nil || list[0].Lyrics==nil || list[0].Lyrics.Checked!=1234567890 || list[0].Lyrics.Provider!="source" || !list[0].PossiblyDamaged { t.Fatal("lost ready/manual/damage metadata",list,err) }
+		list,err:=a.sourcesWithStatus(); if err==nil { err=a.annotateLyrics(context.Background(),list) }; if err != nil || len(list)!=1 || list[0].OutputGain==nil || list[0].Lyrics==nil || list[0].Lyrics.Checked!=1234567890 || list[0].Lyrics.Provider!="source" || !list[0].PossiblyDamaged || list[0].Error!="retained source read error" { t.Fatal("lost ready/manual/damage metadata",list,err) }
 		// A cached repeat is a database-only no-op even with output offline.
 		if err=os.Rename(s.Output,s.Output+".offline"); err != nil { t.Fatal(err) }
 		w:=lyricsSession(t,a)("POST","/api/maintenance/loudness",map[string]any{"all":true})

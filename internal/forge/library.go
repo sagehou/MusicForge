@@ -1924,10 +1924,18 @@ func (a *App) publishArtwork(ctx context.Context, s Settings, dir, input, signat
 	if len(canonical) > 0 && canonical[0] {
 		var source, destination *os.File
 		source, err = os.Open(input)
-		if err == nil { destination, err = os.OpenFile(temp, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600) }
-		if err == nil { _, err = io.Copy(destination, io.LimitReader(source, 8*1024*1024)) }
-		if source != nil { err = errors.Join(err, source.Close()) }
-		if destination != nil { err = errors.Join(err, destination.Close()) }
+		if err == nil {
+			destination, err = os.OpenFile(temp, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
+		}
+		if err == nil {
+			_, err = io.Copy(destination, io.LimitReader(source, 8*1024*1024))
+		}
+		if source != nil {
+			err = errors.Join(err, source.Close())
+		}
+		if destination != nil {
+			err = errors.Join(err, destination.Close())
+		}
 	} else {
 		_, err = a.mediaTool(artCtx, a.cfg.FFmpeg, args...)
 	}

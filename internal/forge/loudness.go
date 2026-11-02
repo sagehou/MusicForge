@@ -58,6 +58,8 @@ type outputGainJournal struct {
 	ID int64 `json:"id"`
 	Previous string `json:"previous"`
 	Gain outputGain `json:"gain"`
+	SourceHash string `json:"source_hash,omitempty"`
+	SourceError string `json:"source_error,omitempty"`
 }
 
 func outputGainFor(path, signature string, tags map[string]string) outputGain {
@@ -89,6 +91,7 @@ func (a *App) recoverOutputGains(ctx context.Context) error {
 			if err == nil { _, err = tx.ExecContext(ctx,`UPDATE meta SET value=json_set(value,'$.signature',?) WHERE key=? AND json_valid(value) AND json_extract(value,'$.signature')=? AND json_extract(value,'$.output')=?`, signature,"lyrics-status:"+strconv.FormatInt(pending.ID,10),pending.Previous,pending.Gain.Path) }
 			if err == nil { _, err = tx.ExecContext(ctx,`UPDATE meta SET value=json_set(value,'$.audio_signature',?) WHERE key=? AND json_valid(value) AND json_extract(value,'$.audio_signature')=? AND json_extract(value,'$.output')=?`,signature,lyricsScriptPrefix+strconv.FormatInt(pending.ID,10),pending.Previous,pending.Gain.Path) }
 			if err == nil { _, err = tx.ExecContext(ctx,`INSERT INTO meta(key,value) SELECT ?,value FROM meta WHERE key=? ON CONFLICT(key) DO UPDATE SET value=excluded.value`,repairArtifactKey(pending.ID,signature),repairArtifactKey(pending.ID,pending.Previous)) }
+			if err == nil && pending.SourceError!="" { _, err = tx.ExecContext(ctx,"UPDATE sources SET error=? WHERE id=? AND hash=? AND output=? AND error=''",pending.SourceError,pending.ID,pending.SourceHash,pending.Gain.Path) }
 		}
 		if err == nil { _, err = tx.ExecContext(ctx,"DELETE FROM meta WHERE key=?",value.key) }
 		if err != nil { tx.Rollback(); return err }
@@ -290,7 +293,7 @@ func (a *App) writeOutputGain(ctx context.Context, track measuredOutput, tags ma
 	p := promotion{ID: source.ID, Temp: tempRel, Target: source.Output, Old: source.Output, Hash: source.BuiltHash, Profile: source.BuiltProfile, ArtifactHash: hash}
 	journal, _ := json.Marshal(p)
 	gain := outputGainFor(source.Output, hash, actualTags)
-	pending, _ := json.Marshal(outputGainJournal{ID: source.ID, Previous: track.Signature, Gain: gain})
+	pending, _ := json.Marshal(outputGainJournal{ID: source.ID, Previous: track.Signature, Gain: gain, SourceHash: source.Hash, SourceError: source.Error})
 	tx, err := a.db.BeginTx(ctx, nil)
 	if err != nil { return false, err }
 	defer tx.Rollback()
@@ -365,7 +368,7 @@ func (a *App) startLoudness(w http.ResponseWriter, r *http.Request) {
 		keys := []string{}; for key := range groups { keys = append(keys, key) }; sort.Strings(keys)
 		for _, key := range keys {
 			if ctx.Err() != nil { break }
-			capacityErr := a.waitLoudnessCapacity(ctx, s.Concurrency)
+			capacityErr := a.waitOutputMaintenanceCapacity(ctx)
 			var tracks []measuredOutput; var album loudnessMeasurement
 			if capacityErr == nil { tracks, album, capacityErr = a.analyzeAlbum(ctx, groups[key]) }
 			// Reuse any consistent existing album gain for its codec. Missing tags
@@ -380,6 +383,7 @@ func (a *App) startLoudness(w http.ResponseWriter, r *http.Request) {
 				} }
 			}
 			if capacityErr != nil {
+				if ctx.Err()!=nil { break }
 				a.loudnessMu.Lock()
 				for _, source := range groups[key] { if (body.All || selected[source.ID]) && (source.OutputGain == nil || source.OutputGain.Track == "" || source.OutputGain.Album == "") { a.loudnessReport.Processed++; a.loudnessReport.Failed++ } }
 				a.loudnessReport.Error = capacityErr.Error(); a.saveLoudnessReport(); a.loudnessMu.Unlock()
@@ -394,6 +398,7 @@ func (a *App) startLoudness(w http.ResponseWriter, r *http.Request) {
 				tags := gainTags(strings.TrimPrefix(filepath.Ext(track.Source.Output), "."), track.Loudness, album)
 				for name, value := range existing { if _, ok := tags[name]; ok { tags[name] = value } }
 				updated, err := a.writeOutputGain(ctx, track, tags)
+				if err!=nil && ctx.Err()!=nil { break }
 				a.loudnessMu.Lock(); a.loudnessReport.Processed++
 				if err != nil { a.loudnessReport.Failed++; a.loudnessReport.Error = err.Error() } else if updated { a.loudnessReport.Updated++ } else { a.loudnessReport.Skipped++ }
 				a.saveLoudnessReport(); a.loudnessMu.Unlock()
@@ -406,18 +411,6 @@ func (a *App) startLoudness(w http.ResponseWriter, r *http.Request) {
 		a.loudnessMu.Unlock()
 	}()
 	respond(w, 202, map[string]bool{"started": true})
-}
-
-func (a *App) waitLoudnessCapacity(ctx context.Context, configured int) error {
-	for ctx.Err() == nil {
-		capacity, err := a.conversionCapacity(ctx, configured)
-		if err != nil { return err }
-		a.jobsMu.Lock(); running, err := a.runningConversions(); a.jobsMu.Unlock()
-		if err != nil { return err }
-		if running < capacity { return nil }
-		if !pause(ctx, time.Second) { return ctx.Err() }
-	}
-	return ctx.Err()
 }
 
 func (a *App) stopLoudness(w http.ResponseWriter, r *http.Request) {

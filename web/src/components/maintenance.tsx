@@ -60,7 +60,7 @@ export function MaintenanceWorkbench({ sources, selected, select, notify }: { so
     if (element) { element.open = true; element.scrollIntoView({ block: "nearest", behavior: "smooth" }); element.querySelector("summary")?.focus(); }
   }
   return <details className="maintenance-workbench" id="maintenance-workbench" onToggle={event => setOpen(event.currentTarget.open)}>
-    <summary><ClipboardList size={18} /><span>{t("maintenance.title")}</span><small className="maintenance-count">{number(attention)}</small></summary>
+    <summary><ClipboardList size={18} /><span>{t("maintenance.title")}</span><small className="quality-count">{number(attention)}</small></summary>
     {open && <div className="comparison-body">
       <p>{t("maintenance.hint")}</p>
       <div className="maintenance-actions"><BuildPreview selection={{ ids: sources.map(source => source.id) }} currentScope notify={notify} />{selected.length > 0 && <BuildPreview selection={{ ids: selected.map(source => source.id) }} notify={notify} />}<Button size="sm" variant="ghost" onClick={() => reveal(".lyrics-panel > details")}>{t("lyrics.title")}</Button><Button size="sm" variant="ghost" onClick={() => reveal("#library-comparison")}>{t("compare.heading")}</Button><a href="/settings?section=encoding">{t("maintenance.scheduleLink")}</a></div>

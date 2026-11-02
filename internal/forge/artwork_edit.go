@@ -118,6 +118,7 @@ func canonicalArtwork(data []byte) ([]byte, error) {
 	if err != nil { return nil, err }
 	var buffer bytes.Buffer
 	if err = jpeg.Encode(&buffer, img, &jpeg.Options{Quality: 90}); err != nil { return nil, err }
+	if buffer.Len()>8*1024*1024 { return nil, errors.New("Artwork JPEG exceeds 8 MiB; resize the image before uploading") }
 	return buffer.Bytes(), nil
 }
 

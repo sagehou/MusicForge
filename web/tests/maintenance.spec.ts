@@ -33,6 +33,12 @@ test("quality report flags exact duplicates and numbering without changing sourc
 test("maintenance workbench previews before queueing and preserves scope on phone", async ({ page }) => {
   await mock(page);
   let builds = 0;
+  let gainState = "idle";
+  await page.route("**/api/maintenance/loudness", route => {
+    if (route.request().method() === "POST") { expect(route.request().postDataJSON()).toEqual({ ids: [1, 2] }); gainState = "running"; }
+    if (route.request().method() === "DELETE") gainState = "stopped";
+    return route.fulfill({ json: { state: gainState, total: 1, processed: 0, updated: 0, skipped: 0, failed: 0 } });
+  });
   await page.route("**/api/library/plan", route => {
     expect(route.request().postDataJSON()).toEqual({ ids: [1, 2] });
     return route.fulfill({ json: { encoding: settings.encoding, tracks: 1, skipped: 1, unverified: 0, input_bytes: 1000000, estimated_output_bytes: 2880000, current_output_bytes: 0, largest_source_bytes: 1000000, staging_limit_bytes: 4294967296, unknown_duration: 0, reasons: { missing: 1 } } });
@@ -51,6 +57,10 @@ test("maintenance workbench previews before queueing and preserves scope on phon
   await workbench.getByRole("button", { name: "Identical source file hashes 2", exact: true }).click();
   await expect(page.locator(".selection-bar")).toContainText("2");
   await expect(page.locator(".track-table tbody > tr.track-row")).toHaveCount(2);
+  await workbench.getByRole("button", { name: "Fill selected outputs", exact: true }).click();
+  await expect(workbench.getByRole("button", { name: "Fill current scope", exact: true })).toBeDisabled();
+  await workbench.getByRole("button", { name: "Stop loudness maintenance", exact: true }).click();
+  await expect.poll(() => gainState).toBe("stopped");
   await page.setViewportSize({ width: 390, height: 844 });
   await setPreference(page, "theme", "dark");
   await workbench.scrollIntoViewIfNeeded();
@@ -111,4 +121,29 @@ test("lyric editor previews imports and preserves drafts after publication confl
   await expect(editor.getByRole("alert")).toContainText("file preserved");
   await expect(editor.getByLabel("LRC text", { exact: true })).toHaveValue("[00:02.00]Imported");
   expect(saved).toBe(true);
+});
+
+test("output cover correction previews a crop and sends an owned replacement explicitly", async ({ page }) => {
+  await mock(page);
+  let writes = 0;
+  await page.route("**/api/library/1/artwork/edit", route => {
+    if (route.request().method() === "GET") return route.fulfill({ json: { token: "cover-token", override: false } });
+    const body = route.request().postDataJSON();
+    expect(body.token).toBe("cover-token"); expect(Buffer.from(body.image, "base64").subarray(0, 2)).toEqual(Buffer.from([255, 216]));
+    writes++; return route.fulfill({ json: { ok: true } });
+  });
+  await page.goto("/library?view=tracks");
+  await page.getByRole("button", { name: "View details for First track", exact: true }).click();
+  await page.getByRole("button", { name: "Correct output cover", exact: true }).click();
+  const editor = page.getByRole("region", { name: "Correct output cover", exact: true });
+  const png = await page.evaluate(() => { const canvas = document.createElement("canvas"); canvas.width = 64; canvas.height = 32; const ctx = canvas.getContext("2d")!; ctx.fillStyle = "#4ca3b2"; ctx.fillRect(0, 0, 64, 32); return canvas.toDataURL("image/png").split(",")[1]; });
+  await editor.getByLabel("Choose JPEG / PNG", { exact: true }).setInputFiles({ name: "cover.png", mimeType: "image/png", buffer: Buffer.from(png, "base64") });
+  const preview = editor.getByRole("img", { name: "Output cover preview", exact: true });
+  await expect.poll(() => preview.evaluate(node => (node as HTMLImageElement).naturalWidth)).toBe(64);
+  await editor.getByLabel("Center crop to square", { exact: true }).check();
+  await expect.poll(() => preview.evaluate(node => (node as HTMLImageElement).naturalWidth)).toBe(32);
+  expect(writes).toBe(0);
+  await editor.getByRole("button", { name: "Save output cover", exact: true }).click();
+  await expect.poll(() => writes).toBe(1);
+  await expect(editor).toHaveCount(0);
 });

@@ -2,8 +2,10 @@ package forge
 
 import (
 	"context"
+	"database/sql"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -33,6 +35,38 @@ func TestMaintenanceScheduleBoundariesAndTimezone(t *testing.T) {
 	if o.concurrency(2,time.Now()) != 2 { t.Fatal("disabled schedule changed capacity") }
 	o.ScheduleEnabled=true; o.End=o.Start
 	if o.validate() == nil { t.Fatal("accepted an empty build window") }
+}
+
+func TestNewTrackPriorityAndReducedCapacity(t *testing.T) {
+	a,s:=testApp(t)
+	if _,err:=a.db.Exec(`INSERT INTO sources(id,rel,hash,output_present) VALUES(1,'Album/old.flac','old',1),(2,'Album/new.flac','new',0)`); err!=nil { t.Fatal(err) }
+	oldID,err:=a.queueBuild(Source{ID:1,Hash:"old"},s.Encoding,false,true); if err!=nil { t.Fatal(err) }
+	newID,err:=a.queueBuild(Source{ID:2,Hash:"new"},s.Encoding,false,true); if err!=nil { t.Fatal(err) }
+	o:=defaultMaintenanceOptions(); o.PrioritizeNew=true; raw,_:=json.Marshal(o)
+	if err=a.setMeta(maintenanceOptionsKey,string(raw)); err!=nil { t.Fatal(err) }
+	job,err:=a.claimWithRepairCapacity(true,2); if err!=nil || job.ID!=newID { t.Fatal("new output was not prioritized",job,err) }
+	if _,err=a.claimWithRepairCapacity(true,1); err!=sql.ErrNoRows { t.Fatal("reduced capacity admitted another job",err) }
+	if _,err=a.db.Exec("UPDATE jobs SET state='success' WHERE id=?",newID); err!=nil { t.Fatal(err) }
+	a.loudnessBusy.Store(true)
+	if _,err=a.claimWithRepairCapacity(true,1); err!=sql.ErrNoRows { t.Fatal("loudness reservation exceeded concurrency",err) }
+	a.loudnessBusy.Store(false)
+	job,err=a.claimWithRepairCapacity(true,1); if err!=nil || job.ID!=oldID { t.Fatal(job,err) }
+}
+
+func TestMaintenanceSettingsTokenPreservationAndAtomicValidation(t *testing.T) {
+	a,s:=testApp(t); request:=lyricsSession(t,a)
+	options:=defaultMaintenanceOptions(); options.NotifyURL,options.NotifyToken="https://ntfy.example.com/topic","private-token"
+	raw,_:=json.Marshal(options); if err:=a.setMeta(maintenanceOptionsKey,string(raw)); err!=nil { t.Fatal(err) }
+	body:=map[string]any{}; raw,_=json.Marshal(s); if err:=json.Unmarshal(raw,&body); err!=nil { t.Fatal(err) }
+	options.NotifyToken=""; options.PrioritizeNew=true; body["maintenance"]=options
+	w:=request("PUT","/api/settings",body); if w.Code!=200 { t.Fatal(w.Code,w.Body.String()) }
+	saved,err:=a.maintenanceOptions(context.Background()); if err!=nil || saved.NotifyToken!="private-token" || !saved.PrioritizeNew { t.Fatal(saved,err) }
+	options.Timezone="invalid/timezone"; body["maintenance"]=options; body["concurrency"]=4
+	w=request("PUT","/api/settings",body); if w.Code!=400 { t.Fatal(w.Code,w.Body.String()) }
+	unchanged,err:=a.settings(); if err!=nil || unchanged.Concurrency!=s.Concurrency { t.Fatal("invalid maintenance saved partial settings",unchanged,err) }
+	options.Timezone="UTC"; options.NotifyURL="https://ntfy.example.com/other"; body["maintenance"]=options
+	w=request("PUT","/api/settings",body); if w.Code!=200 { t.Fatal(w.Code,w.Body.String()) }
+	saved,err=a.maintenanceOptions(context.Background()); if err!=nil || saved.NotifyToken!="" { t.Fatal("forwarded saved token to changed endpoint",saved,err) }
 }
 
 func TestBuildPreviewUsesOnlyIndexAndMatchesRebuildEligibility(t *testing.T) {
@@ -68,8 +102,12 @@ func TestLyricsTimingAndManualImportOutputOnly(t *testing.T) {
 	ready,err:=a.meta("lyrics-status:1"); if err != nil { t.Fatal(err) }
 	// Ready results still skip all file/provider work after manual publication.
 	if err=os.Rename(s.Output,s.Output+".offline"); err != nil { t.Fatal(err) }
-	status:=a.maintainLyrics(context.Background(),s,source.ID,lyricsBatchOptions{MinScore:99})
-	if status.State != "ready" || status.Provider != "source" { t.Fatal(status) }
+	w=request("PUT","/api/lyrics/options",map[string]any{"auto_search":false,"min_score":99})
+	if w.Code!=200 { t.Fatal(w.Code,w.Body.String()) }
+	w=request("POST","/api/lyrics/search",map[string]any{"ids":[]int64{source.ID}})
+	if w.Code!=202 { t.Fatal(w.Code,w.Body.String()) }
+	var skipped struct{Selected,Skipped int}; if json.Unmarshal(w.Body.Bytes(),&skipped)!=nil || skipped.Selected!=0 || skipped.Skipped!=1 { t.Fatal(w.Body.String()) }
+	waitLyrics(t,a)
 	after,_:=a.meta("lyrics-status:1"); if ready != after { t.Fatal("ordinary filling rewrote a manual ready result") }
 	if w=request("PUT","/api/library/1/lyrics/edit",map[string]any{"token":edit.Token,"text":"[00:01]again"}); w.Code != 409 { t.Fatal("reused edit token",w.Code) }
 }
@@ -120,4 +158,20 @@ func TestNotificationsDeduplicateAndNeverFollowRedirects(t *testing.T) {
 	options.NotifyURL=redirect.URL
 	if err:=sendNotification(context.Background(),options,"test","test"); err==nil || strings.Contains(err.Error(),options.NotifyToken) { t.Fatal(err) }
 	if calls.Load()!=1 { t.Fatal("followed notification redirect") }
+}
+
+func TestNotificationOfflineThresholdWithoutDashboardPolling(t *testing.T) {
+	a,s:=testApp(t); var calls atomic.Int32
+	server:=httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter,r *http.Request){ calls.Add(1); w.WriteHeader(204) })); defer server.Close()
+	o:=defaultMaintenanceOptions(); o.NotifyURL=server.URL; raw,_:=json.Marshal(o)
+	if err:=a.setMeta(maintenanceOptionsKey,string(raw)); err!=nil { t.Fatal(err) }
+	a.storageMu.Lock(); a.storageSource,a.storageOutput=s.Source,s.Output; a.storageCheck=true; a.storageAt=time.Now(); a.storageError=errors.New("offline"); a.storageMu.Unlock()
+	a.notificationTick(context.Background(),s)
+	if calls.Load()!=0 || a.offlineSince.IsZero() { t.Fatal("outage was not tracked before the notification interval",calls.Load()) }
+	a.offlineSince=time.Now().Add(-6*time.Minute); a.notifyNext=time.Time{}
+	a.notificationTick(context.Background(),s); a.notifyNext=time.Time{}; a.notificationTick(context.Background(),s)
+	if calls.Load()!=1 { t.Fatal("offline threshold or deduplication failed",calls.Load()) }
+	a.storageMu.Lock(); a.storageError=nil; a.storageMu.Unlock()
+	a.notificationTick(context.Background(),s)
+	if !a.offlineSince.IsZero() { t.Fatal("online recovery did not reset the outage while delivery was throttled") }
 }

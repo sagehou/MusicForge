@@ -134,17 +134,12 @@ func (a *App) saveLyricsEdit(w http.ResponseWriter, r *http.Request) {
 		apiError(w, 400, err)
 		return
 	}
-	if err = a.publishLyricsTarget(r.Context(), target, text, "source"); err != nil {
-		apiError(w, 409, err)
-		return
-	}
 	status := LyricsStatus{State: "ready", Output: target.Source.Output, Signature: target.Signature,
 		Path: lyricsRel(target.Source.Output), Provider: "source", Checked: time.Now().Unix(), Instrumental: text == instrumentalLRC}
-	raw, _ := json.Marshal(status)
-	if err = a.setMeta("lyrics-status:"+strconv.FormatInt(id, 10), string(raw)); err != nil {
-		apiError(w, 500, err)
-		return
-	}
+	if err = a.publishLyricsTarget(r.Context(), target, text, "source", func() error {
+		raw, _ := json.Marshal(status)
+		return a.setMeta("lyrics-status:"+strconv.FormatInt(id,10),string(raw))
+	}); err != nil { apiError(w,409,err); return }
 	a.discardLyricsSearches(id)
 	a.lyricsMu.Lock()
 	delete(a.lyricsChoices, body.Token)

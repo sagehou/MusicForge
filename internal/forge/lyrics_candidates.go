@@ -83,7 +83,7 @@ func (a *App) captureLyricsTarget(ctx context.Context, id int64, outputOnly ...b
 	return
 }
 
-func (a *App) publishLyricsTarget(ctx context.Context, target lyricsTarget, text, provider string) error {
+func (a *App) publishLyricsTarget(ctx context.Context, target lyricsTarget, text, provider string, saved ...func() error) error {
 	if err := a.lockFiles(ctx); err != nil {
 		return err
 	}
@@ -126,7 +126,9 @@ func (a *App) publishLyricsTarget(ctx context.Context, target lyricsTarget, text
 	if present != target.FilePresent || present && digest(existing) != target.FileSignature {
 		return errors.New("LRC changed during publication; file preserved")
 	}
-	return a.writeLyricsFile(ctx, settings, current, text, provider)
+	if err = a.writeLyricsFile(ctx, settings, current, text, provider); err != nil { return err }
+	if len(saved)>0 { return saved[0]() }
+	return nil
 }
 
 // Live selection tokens are short-lived memory only. Search records are
@@ -390,18 +392,13 @@ func (a *App) applyLyricsCandidate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	candidate := set.Candidates[body.Index]
-	if err = a.publishLyricsTarget(r.Context(), set.Target, text, candidate.Provider); err != nil {
-		apiError(w, 409, err)
-		return
-	}
-	a.discardLyricsSearches(set.Target.Source.ID)
 	status := LyricsStatus{State: "ready", Output: set.Target.Source.Output, Signature: set.Target.Signature,
 		Path: lyricsRel(set.Target.Source.Output), Provider: candidate.Provider, Checked: time.Now().Unix(), Instrumental: text == instrumentalLRC}
-	raw, _ := json.Marshal(status)
-	if err = a.setMeta("lyrics-status:"+strconv.FormatInt(set.Target.Source.ID, 10), string(raw)); err != nil {
-		apiError(w, 500, err)
-		return
-	}
+	if err = a.publishLyricsTarget(r.Context(), set.Target, text, candidate.Provider, func() error {
+		raw, _ := json.Marshal(status)
+		return a.setMeta("lyrics-status:"+strconv.FormatInt(set.Target.Source.ID,10),string(raw))
+	}); err != nil { apiError(w,409,err); return }
+	a.discardLyricsSearches(set.Target.Source.ID)
 	a.lyricsMu.Lock()
 	delete(a.lyricsChoices, body.Token)
 	a.lyricsMu.Unlock()

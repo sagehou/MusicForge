@@ -106,6 +106,21 @@ func (a *App) conversionCapacity(ctx context.Context, configured int) (int, erro
 	return options.concurrency(configured, time.Now()), nil
 }
 
+func (a *App) waitOutputMaintenanceCapacity(ctx context.Context) error {
+	for ctx.Err()==nil {
+		s,err:=a.settingsContext(ctx)
+		if err!=nil { return err }
+		capacity:=0
+		if s.Enabled { capacity,err=a.conversionCapacity(ctx,s.Concurrency) }
+		if err!=nil { return err }
+		a.jobsMu.Lock(); running,err:=a.runningConversions(); a.jobsMu.Unlock()
+		if err!=nil { return err }
+		if running<capacity { return nil }
+		if !pause(ctx,500*time.Millisecond) { return ctx.Err() }
+	}
+	return ctx.Err()
+}
+
 func (a *App) getMaintenance(w http.ResponseWriter, r *http.Request) {
 	options, err := a.maintenanceOptions(r.Context())
 	if err != nil {

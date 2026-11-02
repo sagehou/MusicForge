@@ -414,9 +414,8 @@ func (a *App) startLyrics(s Settings, sources []Source, batch lyricsBatchOptions
 			if !published {
 				status.Checked = time.Now().Unix()
 			}
-			raw, _ := json.Marshal(status)
 			if !batch.InspectOnly && !published {
-				if err := a.setMeta("lyrics-status:"+strconv.FormatInt(source.ID, 10), string(raw)); err != nil {
+				if err := a.saveUnpublishedLyricsStatus(ctx, source.ID, status); err != nil {
 					status.State, status.Error = "failed", err.Error()
 				}
 			}
@@ -452,6 +451,35 @@ func (a *App) startLyrics(s Settings, sources []Source, batch lyricsBatchOptions
 		a.lyricsCancel = nil
 	}()
 	return len(sources), true
+}
+
+// A batch may finish after a manual choice or a lossless gain remux. Keep the
+// newer ready record, and never save a status bound to a retired audio version.
+func (a *App) saveUnpublishedLyricsStatus(ctx context.Context, id int64, status LyricsStatus) error {
+	if err := a.lockFiles(ctx); err != nil {
+		return err
+	}
+	defer a.files.Unlock()
+	var output, signature string
+	err := a.reads.QueryRowContext(ctx, `SELECT s.output,m.signature FROM sources s JOIN managed m
+	 ON m.source_id=s.id AND m.path=s.output AND m.kind='audio' WHERE s.id=? AND s.output_present=1`, id).Scan(&output, &signature)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return err
+	}
+	if status.Signature != "" && (output != status.Output || signature != status.Signature) {
+		return errors.New("Artifact changed before lyrics status was saved; result discarded")
+	}
+	key := "lyrics-status:" + strconv.FormatInt(id, 10)
+	previous, err := a.metaContext(ctx, key)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return err
+	}
+	var ready LyricsStatus
+	if err == nil && signature != "" && json.Unmarshal([]byte(previous), &ready) == nil && ready.State == "ready" && ready.Output == output && ready.Signature == signature {
+		return nil
+	}
+	raw, _ := json.Marshal(status)
+	return a.setMeta(key, string(raw))
 }
 
 func (a *App) maintainLyrics(ctx context.Context, s Settings, id int64, batch lyricsBatchOptions) (status LyricsStatus) {

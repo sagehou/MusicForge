@@ -247,6 +247,36 @@ func TestLyricsEditorPreservesConcurrentOutput(t *testing.T) {
 	}
 }
 
+func TestLyricsBatchStatusPreservesConcurrentChoicesAndRemux(t *testing.T) {
+	a, s := testApp(t)
+	source := seedLyricsArtifact(t, a, s)
+	previous := digest("registered audio fixture")
+	signature := digest("remuxed audio")
+	if _, err := a.db.Exec("UPDATE managed SET signature=? WHERE kind='audio'", signature); err != nil {
+		t.Fatal(err)
+	}
+	ready := LyricsStatus{State: "ready", Output: source.Output, Signature: signature, Provider: "source", Checked: 77}
+	raw, _ := json.Marshal(ready)
+	if err := a.setMeta("lyrics-status:1", string(raw)); err != nil {
+		t.Fatal(err)
+	}
+	stale := ready
+	stale.Signature, stale.Checked = previous, 99
+	if err := a.saveUnpublishedLyricsStatus(context.Background(), source.ID, stale); err == nil {
+		t.Fatal("saved a status bound to the retired audio signature")
+	}
+	for _, state := range []string{"failed", "ready"} {
+		stale.Signature, stale.State = signature, state
+		if err := a.saveUnpublishedLyricsStatus(context.Background(), source.ID, stale); err != nil {
+			t.Fatal(err)
+		}
+	}
+	after, err := a.meta("lyrics-status:1")
+	if err != nil || after != string(raw) {
+		t.Fatal("overwrote the concurrent ready choice or check time", after, err)
+	}
+}
+
 func TestArtworkOverrideOwnershipAndSourcePreservation(t *testing.T) {
 	a, s := testApp(t)
 	seedLyricsArtifact(t, a, s)

@@ -407,7 +407,7 @@ jobs:
     needs: [image, ci]
     runs-on: ubuntu-24.04
     permissions:
-      contents: read
+      contents: write
       packages: write
     steps:
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
@@ -419,6 +419,7 @@ jobs:
       - name: Publish multiarchitecture version and stable latest
         env:
           VERSION: ${{ github.ref_name }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           [[ "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]
           image="ghcr.io/${GITHUB_REPOSITORY,,}"
@@ -426,3 +427,6 @@ jobs:
           if [[ "$VERSION" != *-* ]]; then tags+=(--tag "$image:latest"); fi
           docker buildx imagetools create "${tags[@]}" "$image:$VERSION-amd64" "$image:$VERSION-arm64"
           docker buildx imagetools inspect "$image:$VERSION"
+          if ! gh release view "$VERSION" >/dev/null 2>&1; then
+            gh release create "$VERSION" --title "$VERSION" --generate-notes
+          fi

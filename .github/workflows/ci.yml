@@ -427,6 +427,31 @@ jobs:
           if [[ "$VERSION" != *-* ]]; then tags+=(--tag "$image:latest"); fi
           docker buildx imagetools create "${tags[@]}" "$image:$VERSION-amd64" "$image:$VERSION-arm64"
           docker buildx imagetools inspect "$image:$VERSION"
-          if ! gh release view "$VERSION" >/dev/null 2>&1; then
-            gh release create "$VERSION" --title "$VERSION" --generate-notes
-          fi
+          python3 - << 'PY'
+          import json, os, urllib.request, urllib.error
+          version = os.environ['VERSION']
+          repo = os.environ['GITHUB_REPOSITORY']
+          token = os.environ['GH_TOKEN']
+          headers = {'Authorization': f'Bearer {token}', 'Accept': 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28', 'Content-Type': 'application/json'}
+          
+          def api(endpoint, method='GET', data=None):
+              body = None if data is None else json.dumps(data).encode()
+              req = urllib.request.Request(f'https://api.github.com/{endpoint}', method=method, data=body, headers=headers)
+              try:
+                  with urllib.request.urlopen(req, timeout=30) as resp:
+                      raw = resp.read()
+                      return resp.status, json.loads(raw) if raw else None
+              except urllib.error.HTTPError as err:
+                  raw = err.read()
+                  return err.code, json.loads(raw) if raw else None
+
+          status, rel = api(f'repos/{repo}/releases/tags/{version}')
+          if status == 404:
+              payload = {'tag_name': version, 'name': f'MusicForge {version}', 'body': f'MusicForge {version} release with glassmorphism UI refinement and multiarch container images.', 'draft': False, 'prerelease': False, 'make_latest': 'true' if '-' not in version else 'false'}
+              status, rel = api(f'repos/{repo}/releases', 'POST', payload)
+              assert status == 201, (status, rel)
+              print(f'Created release {version}: {rel.get("html_url")}')
+          else:
+              status, rel = api(f'repos/{repo}/releases/{rel["id"]}', 'PATCH', {'make_latest': 'true' if '-' not in version else 'false'})
+              print(f'Updated release {version} as latest')
+          PY

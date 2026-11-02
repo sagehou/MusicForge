@@ -67,6 +67,10 @@ test("maintenance workbench previews before queueing and preserves scope on phon
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
   await page.screenshot({ path: "test-results/maintenance-phone-dark.png", animations: "disabled" });
+  await page.goto("/library?view=albums&artist=Artist&album=Artist%2FAlbum");
+  await page.locator("#maintenance-workbench > summary").click();
+  await expect(page.locator("#library-comparison")).toHaveCount(0);
+  await expect(page.locator("#maintenance-workbench").getByRole("button", { name: "Compare with Lidarr", exact: true })).toHaveCount(0);
 });
 
 test("schedule and notifications share save, discard and secret controls", async ({ page }) => {

@@ -425,7 +425,7 @@ export function Library({ notify }: { notify: Notice }) {
 
       </div>
     <div className="library-maintenance">
-      <MaintenanceWorkbench sources={scopedSources} selected={chosen} notify={notify} select={ids => { clearDetails(); setSelected(new Set(ids)); navigate({ ...scope, view: "tracks" }); setFilter("all"); setLyricsFilter("all"); setScriptFilter("all"); setQuery(""); setOffset(0); }} />
+      <MaintenanceWorkbench comparisonAvailable={!scope.artist && !isAlbum} sources={scopedSources} selected={chosen} notify={notify} select={ids => { clearDetails(); setSelected(new Set(ids)); navigate({ ...scope, view: "tracks" }); setFilter("all"); setLyricsFilter("all"); setScriptFilter("all"); setQuery(""); setOffset(0); }} />
       {!scope.artist && !isAlbum && <LibraryComparison sources={data} notify={notify} />}
       <LyricsMaintenance sources={scopedSources} scope={isAlbum ? "album" : scope.artist ? "artist" : undefined} notify={notify} />
     </div>

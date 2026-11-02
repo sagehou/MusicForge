@@ -23,9 +23,10 @@ type lyricsTarget struct {
 	FilePresent              bool
 	FileScript               string
 	Instrumental             bool
+	OutputOnly               bool
 }
 
-func (a *App) captureLyricsTarget(ctx context.Context, id int64) (target lyricsTarget, err error) {
+func (a *App) captureLyricsTarget(ctx context.Context, id int64, outputOnly ...bool) (target lyricsTarget, err error) {
 	if err = a.lockFiles(ctx); err != nil {
 		return
 	}
@@ -38,10 +39,16 @@ func (a *App) captureLyricsTarget(ctx context.Context, id int64) (target lyricsT
 		err = errors.New("Enable the library before searching for lyrics")
 		return
 	}
-	if err = a.storageContext(ctx, target.Settings); err != nil {
-		return
+	target.OutputOnly = len(outputOnly) > 0 && outputOnly[0]
+	if target.OutputOnly {
+		err = a.verifyOutputStorage(ctx, target.Settings)
+	} else {
+		err = a.storageContext(ctx, target.Settings)
+		if err == nil {
+			err = a.ensureRecovery(ctx, target.Settings)
+		}
 	}
-	if err = a.ensureRecovery(ctx, target.Settings); err != nil {
+	if err != nil {
 		return
 	}
 	target.Source, err = a.source(id)
@@ -49,7 +56,7 @@ func (a *App) captureLyricsTarget(ctx context.Context, id int64) (target lyricsT
 		return
 	}
 	source := target.Source
-	if source.Output == "" || !source.OutputPresent || source.Hash != source.BuiltHash {
+	if source.Output == "" || !source.OutputPresent || !target.OutputOnly && source.Hash != source.BuiltHash {
 		err = errors.New("Artifact missing or waiting for rebuild; search again after conversion")
 		return
 	}
@@ -97,7 +104,12 @@ func (a *App) publishLyricsTarget(ctx context.Context, target lyricsTarget, text
 	if !settings.Enabled || settings.Source != target.Settings.Source || settings.Output != target.Settings.Output || current.Output != target.Source.Output || current.Rel != target.Source.Rel || current.Hash != target.Source.Hash || current.BuiltHash != target.Source.BuiltHash || !current.OutputPresent || signature != target.Signature {
 		return errors.New("Artifact or library settings changed during lyrics search; result discarded")
 	}
-	if err = a.storageContext(ctx, settings); err != nil {
+	if target.OutputOnly {
+		err = a.verifyOutputStorage(ctx, settings)
+	} else {
+		err = a.storageContext(ctx, settings)
+	}
+	if err != nil {
 		return err
 	}
 	path, err := safePath(settings.Output, current.Output)

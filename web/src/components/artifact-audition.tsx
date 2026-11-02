@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Loader2, Pause, Play, RotateCcw } from "lucide-react";
+import { Loader2, Pause, Play, RotateCcw, Pencil } from "lucide-react";
 import { api } from "../api";
 import { useI18n } from "../i18n";
 import { activeLyric, audioTime, lyricsTimeline } from "../lyrics-timeline";
 import type { Source } from "../types";
 import { InlineDetails } from "./inline-details";
 import { Button } from "./ui/button";
+import { LyricsEditor } from "./lyrics-editor";
 
 type Audition = { audio_url: string; format: string; size: number; lyrics: string; lyrics_state: "ready" | "missing" | "unavailable" };
 
@@ -45,7 +46,10 @@ function AudioPreview({ data, source, reload }: { data: Audition; source: Source
   const [follow, setFollow] = useState(true);
   const [failed, setFailed] = useState(false);
   const [blocked, setBlocked] = useState(false);
-  const cues = useMemo(() => lyricsTimeline(data.lyrics), [data.lyrics]);
+  const [editing, setEditing] = useState(false);
+  const [savedLyrics, setSavedLyrics] = useState(data.lyrics);
+  const [previewLyrics, setPreviewLyrics] = useState(data.lyrics);
+  const cues = useMemo(() => lyricsTimeline(editing ? previewLyrics : savedLyrics), [editing, previewLyrics, savedLyrics]);
   const current = activeLyric(cues, position);
   useEffect(() => {
     mounted.current = true;
@@ -112,10 +116,11 @@ function AudioPreview({ data, source, reload }: { data: Audition; source: Source
       {failed ? <div className="audition-error" role="alert"><p>{t("audition.failed")}</p><Button size="sm" variant="outline" onClick={reload}><RotateCcw size={14} />{t("audition.reload")}</Button></div> : blocked && <p role="status" className="audition-note">{t("audition.blocked")}</p>}
     </div>
     <div className="audition-transcript">
-      <div className="audition-lyrics-heading"><span>{t("audition.outputLyrics")}{cues.length > 0 && <small>{t("audition.seekHint")}</small>}</span>{cues.length > 0 && <Button size="sm" variant="ghost" aria-pressed={follow} onClick={() => setFollow(value => !value)}>{t("audition.follow")}</Button>}</div>
+      <div className="audition-lyrics-heading"><span>{t("audition.outputLyrics")}{cues.length > 0 && <small>{t("audition.seekHint")}</small>}</span><div className="actions">{cues.length > 0 && <Button size="sm" variant="ghost" aria-pressed={follow} onClick={() => setFollow(value => !value)}>{t("audition.follow")}</Button>}<Button size="sm" variant="outline" aria-expanded={editing} onClick={() => { setPreviewLyrics(savedLyrics); setEditing(value => !value); }}><Pencil size={14} />{t("lyricsEdit.title")}</Button></div></div>
       <div className="audition-lyrics" ref={lyrics} role="region" aria-label={t("audition.outputLyrics")} tabIndex={0}>
         {cues.length ? cues.map((cue, index) => <button type="button" key={cue.time} className="audition-line" aria-current={current === index ? "true" : undefined} disabled={!duration || failed || cue.time > duration} aria-label={t("audition.seekLyric", { time: audioTime(cue.time), text: cue.text || "♪" })} onClick={() => seekTo(cue.time)}><time>{audioTime(cue.time)}</time><span dir="auto">{cue.text || "♪"}</span></button>) : <p className="audition-empty">{t(data.lyrics_state === "unavailable" ? "audition.lyricsUnavailable" : "audition.noLyrics")}</p>}
       </div>
+      {editing && <LyricsEditor id={source.id} position={position} preview={setPreviewLyrics} saved={text => { setSavedLyrics(text); setEditing(false);  }} close={() => setEditing(false)} />}
     </div>
   </div>;
 }

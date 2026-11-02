@@ -23,6 +23,9 @@ type App struct {
 	repairState
 	lidarrCheckState
 	lyricsState
+	artworkEditState
+	notificationState
+	loudnessState
 	cfg       Runtime
 	db        *sql.DB
 	reads     *sql.DB
@@ -150,12 +153,15 @@ func (a *App) Close() {
 	if a.ioCancel != nil {
 		a.repairMu.Lock()
 		a.lyricsMu.Lock()
+		a.loudnessMu.Lock()
 		a.ioCancel()
+		a.loudnessMu.Unlock()
 		a.lyricsMu.Unlock()
 		a.repairMu.Unlock()
 	}
 	a.repairWG.Wait()
 	a.lyricsWG.Wait()
+	a.loudnessWG.Wait()
 	a.lidarrMu.Lock()
 	a.lidarrMu.Unlock()
 	a.lidarrWG.Wait()
@@ -241,6 +247,7 @@ func (a *App) scheduler(ctx context.Context) {
 				a.logger.Error("scan scheduling failed", "error", err)
 			}
 			a.scheduleLyrics(s)
+			a.notificationTick(ctx, s)
 			var dirty, active int
 			var latest int64
 			if err = a.reads.QueryRow("SELECT count(*),coalesce(max(updated),0) FROM dirty_dirs").Scan(&dirty, &latest); err == nil && dirty > 0 && time.Since(time.Unix(0, latest)) >= 5*time.Second {
@@ -261,14 +268,18 @@ func (a *App) scheduler(ctx context.Context) {
 func (a *App) worker(ctx context.Context, conversion bool, slot int) {
 	for ctx.Err() == nil {
 		s, err := a.settings()
-		if err != nil || !s.Enabled || (conversion && slot >= s.Concurrency) {
+		capacity := s.Concurrency
+		if err == nil && s.Enabled && conversion {
+			capacity, err = a.conversionCapacity(ctx, capacity)
+		}
+		if err != nil || !s.Enabled || (conversion && slot >= capacity) {
 			if !pause(ctx, time.Second) {
 				return
 			}
 			continue
 		}
 		a.jobsMu.Lock()
-		j, err := a.claimWithRepairCapacity(conversion, s.Concurrency)
+		j, err := a.claimWithRepairCapacity(conversion, capacity)
 		jobCtx, cancel := context.WithCancel(ctx)
 		if err == nil {
 			a.activeJobs[j.ID] = cancel
@@ -567,6 +578,7 @@ func (a *App) ensureRecovery(ctx context.Context, s Settings) error {
 	if err := a.recoverFiles(ctx, s); err != nil {
 		return err
 	}
+	if err := a.recoverOutputGains(ctx); err != nil { return err }
 	a.recovered = true
 	return nil
 }

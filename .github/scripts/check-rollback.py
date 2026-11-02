@@ -1,5 +1,6 @@
 """Run only in Actions: exercise older releases on the candidate's real volumes."""
 
+import base64
 import hashlib
 import http.cookiejar
 import json
@@ -170,6 +171,8 @@ def snapshot():
         tables = ("meta", "settings", "admin", "sources", "managed", "jobs", "migrations", "dirty_dirs", "oidc_flows")
         result = {table: db.execute(f"SELECT * FROM {table} ORDER BY 1").fetchall() for table in tables}
         result["schema"] = db.execute("SELECT type,name,sql FROM sqlite_master WHERE name NOT LIKE 'sqlite_%' ORDER BY type,name").fetchall()
+    result["artwork_overrides"] = {path.name: hashlib.sha256(path.read_bytes()).hexdigest()
+                                   for path in sorted((ROOT / "config/artwork-overrides").glob("*.jpg"))}
     result["runtime_config"] = (ROOT / "config/config.json").read_text()
     for directory in ("source", "output"):
         result[directory] = {str(path.relative_to(ROOT / directory)): hashlib.sha256(path.read_bytes()).hexdigest()
@@ -185,7 +188,7 @@ def verification_queued(rel):
 
 def library_record(track):
     # Optional display annotations are absent in older API responses.
-    return {key: value for key, value in track.items() if key not in ("artwork_url", "lyrics", "source_bitrate", "source_audio", "output_size", "lyrics_script")}
+    return {key: value for key, value in track.items() if key not in ("artwork_url", "lyrics", "source_bitrate", "source_audio", "output_size", "lyrics_script", "output_gain")}
 
 
 def seed_refresh():
@@ -200,7 +203,7 @@ def verify(api, expected_tracks, pending, stopped):
     tracks = [library_record(track) for track in api("/api/library")]
     assert sorted(tracks, key=lambda track: track["id"]) == expected_tracks, "library/artifact records changed"
     settings = api("/api/settings")
-    assert settings["configured"] == {"webhook": True, "nav_password": True, "oidc_secret": True}, "saved credentials lost"
+    assert all(settings["configured"].get(key) for key in ("webhook", "nav_password", "oidc_secret")), "saved credentials lost"
     assert not settings["settings"]["enabled"], "rollback must keep background work paused"
     jobs = api("/api/jobs?state=all")["jobs"]
     assert any(job["id"] == pending and job["args"] == {"manual": True} and job["state"] in ("paused", "pending") for job in jobs), "paused task lost"
@@ -276,6 +279,22 @@ def main():
         assert preview["original"] == "[00:00.00]纯音乐，请欣赏\n", "instrumental preview differs from the local placeholder"
         confirmed = api(instrumental_base, "PUT", choice)
         assert confirmed["state"] == "ready" and confirmed["instrumental"] and confirmed["provider"] == "source", "manual instrumental result is not backward-compatible ready state"
+        # Exercise real optional maintenance state before older readers/writers.
+        edit_path = f"/api/library/{lyrics_track['id']}/lyrics/edit"
+        edit = api(edit_path)
+        shifted = api(edit_path, "PUT", {"token": edit["token"], "text": edit["text"], "delay_ms": 250})
+        assert "[00:00.250]" in shifted["text"]
+        cover_path = f"/api/library/{lyrics_track['id']}/artwork/edit"
+        cover_choice = api(cover_path)
+        api(cover_path, "PUT", {"token": cover_choice["token"], "image": base64.b64encode(cover).decode()})
+        api("/api/maintenance/loudness", "POST", {"all": True})
+        gain_report = wait_for(lambda: api("/api/maintenance/loudness"), lambda report: report["state"] == "complete", "output loudness completion")
+        assert gain_report["failed"] == 0 and gain_report["updated"] == 3, gain_report
+        gains = [row.get("output_gain") for row in api("/api/library") if row["output_present"]]
+        assert all(gain and gain["track"] and gain["album"] for gain in gains), "loudness tags missing"
+        maintained = api("/api/settings")
+        maintained["maintenance"]["prioritize_new"] = True
+        save_settings(api, {**maintained["settings"], "maintenance": maintained["maintenance"]})
         tracks = sorted((library_record(track) for track in api("/api/library")), key=lambda track: track["id"])
         values = api("/api/settings")["settings"]
         api("/api/lidarr/connection", "PUT", {"url": "http://lidarr.example.test:8686", "api_key": "ci-only-lidarr-key"})
@@ -428,7 +447,7 @@ def main():
             assert library_record(restored) == library_record(row), "candidate cannot reopen older worker's completed artifact"
             stop()
             pending_checks.append({"release": version, "pending_verify_then_old_worker_build": "passed", "source_hash": expected_hash})
-        Path(".ci/rollback-evidence.json").write_text(json.dumps({"architecture": os.environ["ARCH"], "schema": 2, "source_format_replacement": "passed", "instrumental_placeholder": "passed", "additional_lyrics_provider": "passed", "checks": evidence, "pending_verification_checks": pending_checks}, indent=2) + "\n")
+        Path(".ci/rollback-evidence.json").write_text(json.dumps({"architecture": os.environ["ARCH"], "schema": 2, "source_format_replacement": "passed", "instrumental_placeholder": "passed", "additional_lyrics_provider": "passed", "output_maintenance": "passed", "checks": evidence, "pending_verification_checks": pending_checks}, indent=2) + "\n")
     finally:
         subprocess.run(["docker", "rm", "-f", NAME], capture_output=True)
 

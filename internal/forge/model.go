@@ -363,6 +363,7 @@ type Source struct {
 	PossiblyDamaged bool              `json:"possibly_damaged,omitempty"`
 	Lyrics          *LyricsStatus     `json:"lyrics,omitempty"`
 	LyricsScript    string            `json:"lyrics_script,omitempty"`
+	OutputGain      *outputGain       `json:"output_gain,omitempty"`
 
 	mediaInfoKnown bool
 }

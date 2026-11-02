@@ -149,14 +149,16 @@ func (a *App) runningConversions() (int, error) {
 // jobsMu protects the capacity check together with the subsequent queue claim.
 func (a *App) claimWithRepairCapacity(conversion bool, concurrency int) (Job, error) {
 	a.repairMu.Lock()
-	reserved := a.repairRunning
+	reserved := 0
+	if a.repairRunning { reserved++ }
 	a.repairMu.Unlock()
-	if conversion && reserved {
+	if a.loudnessBusy.Load() { reserved++ }
+	if conversion {
 		running, err := a.runningConversions()
 		if err != nil {
 			return Job{}, err
 		}
-		if running >= concurrency-1 {
+		if running >= concurrency-reserved {
 			return Job{}, sql.ErrNoRows
 		}
 	}
@@ -183,6 +185,7 @@ func (a *App) startRepairs(sources []Source, settings Settings, waitCapacity boo
 	if a.repairRunning {
 		return "", errors.New("A best-effort repair is already running")
 	}
+	if a.loudnessBusy.Load() { return "", errors.New("Another output maintenance operation is running") }
 	if len(sources) == 0 {
 		return "", errors.New("Only failed native FLAC tracks without an existing output can be repaired")
 	}
@@ -294,13 +297,17 @@ func (a *App) waitRepairCapacity(ctx context.Context, concurrency int) error {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
+		capacity, err := a.conversionCapacity(ctx, concurrency)
+		if err != nil {
+			return err
+		}
 		a.jobsMu.Lock()
 		running, err := a.runningConversions()
 		a.jobsMu.Unlock()
 		if err != nil {
 			return err
 		}
-		if running < concurrency {
+		if running < capacity {
 			return nil
 		}
 		if !pause(ctx, 100*time.Millisecond) {

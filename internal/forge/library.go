@@ -1799,6 +1799,11 @@ func (a *App) embeddedArtwork(ctx context.Context, s Settings, dir string, track
 }
 
 func (a *App) artwork(ctx context.Context, s Settings, dir string, tracks []Source) error {
+	if input, signature, overridden, err := a.overrideArtwork(ctx, dir); err != nil {
+		return err
+	} else if overridden {
+		return a.publishArtwork(ctx, s, dir, input, signature, false, true)
+	}
 	var input, signature string
 	embedded := false
 	for _, name := range []string{"cover.jpg", "folder.jpg", "Cover.jpg", "Folder.jpg", "cover.png", "folder.png", "cover.jpeg", "folder.jpeg"} {
@@ -1838,6 +1843,11 @@ func (a *App) artwork(ctx context.Context, s Settings, dir string, tracks []Sour
 		}
 		input = staged.Path
 	}
+	return a.publishArtwork(ctx, s, dir, input, signature, embedded)
+}
+
+func (a *App) publishArtwork(ctx context.Context, s Settings, dir, input, signature string, embedded bool, canonical ...bool) error {
+	staged, _ := ctx.Value(stagedSourceKey{}).(*stagedSource)
 	target := filepath.Join(dir, "cover.jpg")
 	var kind, oldSig string
 	registered := a.db.QueryRow("SELECT kind,signature FROM managed WHERE path=?", target).Scan(&kind, &oldSig) == nil
@@ -1911,7 +1921,17 @@ func (a *App) artwork(ctx context.Context, s Settings, dir string, tracks []Sour
 	args = append(args, "-frames:v", "1", "-c:v", "mjpeg", "-f", "image2", temp)
 	artCtx, cancel := context.WithTimeout(ctx, a.sourceTimeout())
 	defer cancel()
-	if _, err = a.mediaTool(artCtx, a.cfg.FFmpeg, args...); err != nil {
+	if len(canonical) > 0 && canonical[0] {
+		var source, destination *os.File
+		source, err = os.Open(input)
+		if err == nil { destination, err = os.OpenFile(temp, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600) }
+		if err == nil { _, err = io.Copy(destination, io.LimitReader(source, 8*1024*1024)) }
+		if source != nil { err = errors.Join(err, source.Close()) }
+		if destination != nil { err = errors.Join(err, destination.Close()) }
+	} else {
+		_, err = a.mediaTool(artCtx, a.cfg.FFmpeg, args...)
+	}
+	if err != nil {
 		return err
 	}
 	file, err := os.OpenFile(temp, os.O_RDWR, 0)

@@ -303,7 +303,17 @@ func (a *App) claim(conversion bool) (Job, error) {
 		activeIDs = append(activeIDs, strconv.FormatInt(id, 10))
 	}
 	busy := strings.Join(activeIDs, ",")
-	j, err := readJob(a.reads.QueryRow("SELECT "+jobCols+" FROM jobs candidate WHERE state='pending' AND id NOT IN ("+busy+") AND "+operator+" (kind='convert' OR dedup LIKE 'scan:prepare:%') AND not_before<=? AND (dedup NOT LIKE 'scan:finalize:%' OR NOT EXISTS(SELECT 1 FROM jobs p LEFT JOIN meta pm ON pm.key='task-member:'||p.id WHERE p.dedup LIKE 'scan:prepare:%' AND p.state IN ('pending','running') AND coalesce(CAST(pm.value AS INTEGER),p.id)=coalesce((SELECT CAST(value AS INTEGER) FROM meta WHERE key='task-member:'||candidate.id),candidate.id))) AND NOT EXISTS(SELECT 1 FROM meta member JOIN jobs parent ON parent.id=CAST(member.value AS INTEGER) WHERE member.key='task-member:'||candidate.id AND parent.id<>candidate.id AND parent.kind='scan' AND parent.state IN ('pending','running')) AND NOT EXISTS(SELECT 1 FROM jobs active WHERE (active.state='running' OR active.id IN ("+busy+")) AND active.id<>candidate.id AND ((active.kind IN ('convert','move') AND candidate.kind IN ('convert','move') AND json_extract(active.args,'$.id')=json_extract(candidate.args,'$.id')) OR (active.dedup LIKE 'scan:prepare:%' AND candidate.dedup LIKE 'scan:prepare:%' AND json_extract(active.args,'$.dirs[0]')=json_extract(candidate.args,'$.dirs[0]')) OR (active.dedup LIKE 'scan:prepare:%' AND candidate.kind IN ('convert','move') AND json_extract(active.args,'$.dirs[0]')=(SELECT rel FROM sources WHERE id=json_extract(candidate.args,'$.id'))) OR (candidate.dedup LIKE 'scan:prepare:%' AND active.kind IN ('convert','move') AND json_extract(candidate.args,'$.dirs[0]')=(SELECT rel FROM sources WHERE id=json_extract(active.args,'$.id'))))) ORDER BY CASE kind WHEN 'scan' THEN 0 WHEN 'move' THEN 1 WHEN 'delete' THEN 2 ELSE 3 END,id LIMIT 1", time.Now().Unix()))
+	prioritySQL := ""
+	if conversion {
+		options, optionErr := a.maintenanceOptions(context.Background())
+		if optionErr != nil {
+			return Job{}, optionErr
+		}
+		if options.PrioritizeNew {
+			prioritySQL = "CASE WHEN coalesce((SELECT output_present FROM sources WHERE id=json_extract(candidate.args,'$.id') OR rel=json_extract(candidate.args,'$.dirs[0]')),0)=0 THEN 0 ELSE 1 END,"
+		}
+	}
+	j, err := readJob(a.reads.QueryRow("SELECT "+jobCols+" FROM jobs candidate WHERE state='pending' AND id NOT IN ("+busy+") AND "+operator+" (kind='convert' OR dedup LIKE 'scan:prepare:%') AND not_before<=? AND (dedup NOT LIKE 'scan:finalize:%' OR NOT EXISTS(SELECT 1 FROM jobs p LEFT JOIN meta pm ON pm.key='task-member:'||p.id WHERE p.dedup LIKE 'scan:prepare:%' AND p.state IN ('pending','running') AND coalesce(CAST(pm.value AS INTEGER),p.id)=coalesce((SELECT CAST(value AS INTEGER) FROM meta WHERE key='task-member:'||candidate.id),candidate.id))) AND NOT EXISTS(SELECT 1 FROM meta member JOIN jobs parent ON parent.id=CAST(member.value AS INTEGER) WHERE member.key='task-member:'||candidate.id AND parent.id<>candidate.id AND parent.kind='scan' AND parent.state IN ('pending','running')) AND NOT EXISTS(SELECT 1 FROM jobs active WHERE (active.state='running' OR active.id IN ("+busy+")) AND active.id<>candidate.id AND ((active.kind IN ('convert','move') AND candidate.kind IN ('convert','move') AND json_extract(active.args,'$.id')=json_extract(candidate.args,'$.id')) OR (active.dedup LIKE 'scan:prepare:%' AND candidate.dedup LIKE 'scan:prepare:%' AND json_extract(active.args,'$.dirs[0]')=json_extract(candidate.args,'$.dirs[0]')) OR (active.dedup LIKE 'scan:prepare:%' AND candidate.kind IN ('convert','move') AND json_extract(active.args,'$.dirs[0]')=(SELECT rel FROM sources WHERE id=json_extract(candidate.args,'$.id'))) OR (candidate.dedup LIKE 'scan:prepare:%' AND active.kind IN ('convert','move') AND json_extract(candidate.args,'$.dirs[0]')=(SELECT rel FROM sources WHERE id=json_extract(active.args,'$.id'))))) ORDER BY CASE kind WHEN 'scan' THEN 0 WHEN 'move' THEN 1 WHEN 'delete' THEN 2 ELSE 3 END,"+prioritySQL+"id LIMIT 1", time.Now().Unix()))
 	if err != nil {
 		return j, err
 	}
@@ -343,7 +353,7 @@ func (a *App) saveSettings(s Settings) error {
 	return a.saveSettingsUpdate(s, false, nil)
 }
 
-func (a *App) saveSettingsUpdate(s Settings, oidcChanged bool, connection *lidarrConnection) error {
+func (a *App) saveSettingsUpdate(s Settings, oidcChanged bool, connection *lidarrConnection, maintenance ...*maintenanceOptions) error {
 	raw, err := json.Marshal(s)
 	if err != nil {
 		return err
@@ -370,6 +380,15 @@ func (a *App) saveSettingsUpdate(s Settings, oidcChanged bool, connection *lidar
 			return err
 		}
 		if _, err = tx.Exec("INSERT INTO meta(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", lidarrConnectionKey, string(raw)); err != nil {
+			return err
+		}
+	}
+	if len(maintenance) > 0 && maintenance[0] != nil {
+		raw, err = json.Marshal(maintenance[0])
+		if err != nil {
+			return err
+		}
+		if _, err = tx.Exec("INSERT INTO meta(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", maintenanceOptionsKey, string(raw)); err != nil {
 			return err
 		}
 	}

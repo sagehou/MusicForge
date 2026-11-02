@@ -58,46 +58,53 @@ func (a *App) initializeStaging() error {
 	return nil
 }
 
-func (a *App) stageSource(ctx context.Context, settings Settings, source Source, job int64, activity Activity) (*stagedSource, error) {
+func (a *App) reserveStaging(ctx context.Context, size int64, job int64, activity Activity) error {
 	limit := a.cfg.StagingMaxBytes
 	if limit == 0 {
 		limit = 4 * 1024 * 1024 * 1024
 	}
-	if source.Size < 1 || source.Size > limit {
-		return nil, fmt.Errorf("source requires %d staging bytes; MUSICFORGE_STAGING_MAX_BYTES is %d", source.Size, limit)
+	if size < 1 || size > limit {
+		return fmt.Errorf("source requires %d staging bytes; MUSICFORGE_STAGING_MAX_BYTES is %d", size, limit)
 	}
 	for {
 		if err := ctx.Err(); err != nil {
-			return nil, err
+			return err
 		}
 		a.stagingMu.Lock()
-		if source.Size <= limit-a.stagingBytes {
+		if size <= limit-a.stagingBytes {
 			var disk syscall.Statfs_t
 			err := syscall.Statfs(a.stagingDir, &disk)
 			// Account conservatively for reservations whose copies are still writing.
 			free := int64(disk.Bavail) * int64(disk.Bsize)
-			if err != nil || free < source.Size+64*1024*1024 && a.stagingBytes == 0 {
+			if err != nil || free < size+64*1024*1024 && a.stagingBytes == 0 {
 				a.stagingMu.Unlock()
 				if err != nil {
-					return nil, err
+					return err
 				}
-				return nil, errors.New("insufficient local disk space for source staging; keep at least 64 MiB free for /config")
+				return errors.New("insufficient local disk space for source staging; keep at least 64 MiB free for /config")
 			}
-			if free >= source.Size+a.stagingBytes+64*1024*1024 {
-				a.stagingBytes += source.Size
+			if free >= size+a.stagingBytes+64*1024*1024 {
+				a.stagingBytes += size
 				a.stagingMu.Unlock()
 				break
 			}
 		}
 		a.stagingMu.Unlock()
 		if noWait, _ := ctx.Value(stagingNoWaitKey{}).(bool); noWait {
-			return nil, later("Waiting for local source staging space", 1)
+			return later("Waiting for local source staging space", 1)
 		}
 		activity.Phase = "staging_wait"
 		a.reportMediaProgress(ctx, job, activity, 0)
 		if !pause(ctx, time.Second) {
-			return nil, ctx.Err()
+			return ctx.Err()
 		}
+	}
+	return nil
+}
+
+func (a *App) stageSource(ctx context.Context, settings Settings, source Source, job int64, activity Activity) (*stagedSource, error) {
+	if err := a.reserveStaging(ctx, source.Size, job, activity); err != nil {
+		return nil, err
 	}
 	staged := &stagedSource{Path: filepath.Join(a.stagingDir, ".musicforge-"+randomToken()+".source"), Rel: source.Rel, size: source.Size, app: a}
 	f, err := os.OpenFile(staged.Path, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600)

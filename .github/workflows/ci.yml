@@ -147,9 +147,9 @@ jobs:
           curl -fsS http://127.0.0.1:8787/library >/dev/null
           if [[ "$SCOPE" == ui ]]; then
             mapfile -t ui_specs < ../.ci/ui-specs.txt
-            MUSICFORGE_TEST_ROOT="$(dirname "$PWD")/.ci" npm test -- language.spec.ts "${ui_specs[@]}" --project=chromium --grep "$(cat ../.ci/ui-grep.txt)"
+            MUSICFORGE_TEST_ROOT="$(dirname "$PWD")/.ci" npm test -- --workers=2 language.spec.ts "${ui_specs[@]}" --project=chromium --grep "$(cat ../.ci/ui-grep.txt)"
           else
-            MUSICFORGE_TEST_ROOT="$(dirname "$PWD")/.ci" npm test -- --grep-invert 'bilingual setup, real incremental build'
+            MUSICFORGE_TEST_ROOT="$(dirname "$PWD")/.ci" npm test -- --workers=2 --grep-invert 'bilingual setup, real incremental build'
           fi
       - name: Browser reports and representative screenshots
         if: always()

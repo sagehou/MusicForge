@@ -1316,7 +1316,6 @@ table { width: 100%; border-collapse: collapse; text-align: left; }
 .track-cell { display: flex; align-items: center; gap: 10px; }
 .track-cell > div { min-width: 0; flex: 1; }
 
-/* 独立精巧播放位：序号在最左，播放按钮独立微钮居中，曲目标题紧随其后 */
 .track-title-line {
   display: flex;
   align-items: center;
@@ -1349,25 +1348,18 @@ table { width: 100%; border-collapse: collapse; text-align: left; }
   color: var(--muted);
   font-family: var(--font-mono);
   font-size: 12px;
-  font-weight: 600;
-  margin-right: 4px;
+  font-weight: 500;
+  margin-right: 2px;
   opacity: 0.85;
 }
 .track-expand-icon { flex: none; color: var(--muted); transition: transform 150ms var(--ease); }
 .track-open[aria-expanded="true"] .track-expand-icon { transform: rotate(90deg); color: var(--accent); }
 
-/* 独立精巧播放位：紧跟在序号后作为一个独立的微型毛玻璃圆钮 */
-.track-title-line:has(.track-audition-trigger) {
-  display: grid;
-  grid-template-columns: auto auto minmax(0, 1fr);
-  align-items: center;
-}
 .track-title-line .track-audition-trigger {
-  grid-column: 2;
   flex: none;
-  width: 24px;
-  min-height: 24px;
-  height: 24px;
+  width: 26px;
+  min-height: 26px;
+  height: 26px;
   padding: 0;
   display: inline-flex;
   align-items: center;
@@ -1383,21 +1375,15 @@ table { width: 100%; border-collapse: collapse; text-align: left; }
   color: var(--accent-ink);
   background: var(--accent-fill);
   border-color: var(--accent);
-  transform: scale(1.1);
+  transform: scale(1.08);
   box-shadow: 0 2px 8px color-mix(in srgb, var(--accent) 35%, transparent);
 }
-.track-title-line:has(.track-audition-trigger) .track-open {
-  grid-column: 3;
-}
-.track-title-line .track-duration {
-  margin-inline-start: auto;
-  font: 12px/1.4 var(--font-mono);
+.track-duration {
+  flex: none;
+  font: 12px var(--font-mono);
   color: var(--muted);
   font-variant-numeric: tabular-nums;
-  padding: 1px 6px;
-  background: var(--glass-subtle);
-  border-radius: var(--radius-badge);
-  border: 1px solid var(--glass-border);
+  margin-inline-start: auto;
 }
 .track-byline { display: block; color: var(--muted); font-size: 12px; line-height: 1.5; margin-top: 2px; overflow-wrap: anywhere; }
 .source-missing { color: var(--warning); font-size: 12px; margin-top: 2px; }
@@ -1409,13 +1395,12 @@ table { width: 100%; border-collapse: collapse; text-align: left; }
 .track-bitrate, .track-facts dd.track-output-size { color: var(--muted); }
 .track-bitrate > span { display: none; }
 
-/* 多重分离小微标：【FLAC】高光金标，【16bit / 44.1kHz】极简小胶囊，体积等宽小字在后 */
 .track-facts-compact {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 4px 8px;
-  margin: 3px 0 0;
+  gap: 4px 12px;
+  margin: 4px 0 0;
 }
 .track-facts-compact > div {
   display: inline-flex;
@@ -1426,36 +1411,25 @@ table { width: 100%; border-collapse: collapse; text-align: left; }
 }
 .track-facts-compact .track-fact-duration { display: none; }
 .track-facts-compact .track-fact-audio { display: contents; }
-.track-facts-compact .track-fact-sizes { flex-wrap: nowrap; white-space: nowrap; margin-left: 4px; }
+.track-facts-compact .track-fact-sizes { flex-wrap: nowrap; white-space: nowrap; }
 .track-facts-compact dd {
-  font: 11px/1.4 var(--font-mono);
+  font: 11.5px/1.5 var(--font-mono);
   color: var(--muted);
   font-variant-numeric: tabular-nums;
 }
 .track-facts-compact .track-spec-chip {
-  display: inline-flex;
-  align-items: center;
   background: color-mix(in srgb, var(--accent) 7%, var(--glass-subtle));
-  border: 1px solid color-mix(in srgb, var(--accent) 20%, var(--glass-border));
+  border: 1px solid color-mix(in srgb, var(--accent) 18%, var(--glass-border));
   border-radius: var(--radius-badge);
-  padding: 0 7px;
+  padding: 0 6px;
   color: var(--ink);
-  font: 600 11px/18px var(--font-mono);
-  letter-spacing: -0.01em;
+  font: 11px/18px var(--font-mono);
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
-}
-.track-facts-compact .track-bitrate {
-  font-weight: 500;
-  color: var(--muted);
 }
 .track-facts-compact .track-fact-sizes dt {
   display: inline;
-  font-size: 10px;
-  font-weight: 600;
+  font-size: 11px;
   color: var(--muted);
-  text-transform: uppercase;
-  letter-spacing: .02em;
-  opacity: 0.75;
 }
 .track-facts-compact .track-fact-sizes dd + dt {
   margin-left: 8px;

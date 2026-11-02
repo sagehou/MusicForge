@@ -126,8 +126,12 @@ func (a *App) publishLyricsTarget(ctx context.Context, target lyricsTarget, text
 	if present != target.FilePresent || present && digest(existing) != target.FileSignature {
 		return errors.New("LRC changed during publication; file preserved")
 	}
-	if err = a.writeLyricsFile(ctx, settings, current, text, provider); err != nil { return err }
-	if len(saved)>0 { return saved[0]() }
+	if err = a.writeLyricsFile(ctx, settings, current, text, provider); err != nil {
+		return err
+	}
+	if len(saved) > 0 {
+		return saved[0]()
+	}
 	return nil
 }
 
@@ -396,8 +400,11 @@ func (a *App) applyLyricsCandidate(w http.ResponseWriter, r *http.Request) {
 		Path: lyricsRel(set.Target.Source.Output), Provider: candidate.Provider, Checked: time.Now().Unix(), Instrumental: text == instrumentalLRC}
 	if err = a.publishLyricsTarget(r.Context(), set.Target, text, candidate.Provider, func() error {
 		raw, _ := json.Marshal(status)
-		return a.setMeta("lyrics-status:"+strconv.FormatInt(set.Target.Source.ID,10),string(raw))
-	}); err != nil { apiError(w,409,err); return }
+		return a.setMeta("lyrics-status:"+strconv.FormatInt(set.Target.Source.ID, 10), string(raw))
+	}); err != nil {
+		apiError(w, 409, err)
+		return
+	}
 	a.discardLyricsSearches(set.Target.Source.ID)
 	a.lyricsMu.Lock()
 	delete(a.lyricsChoices, body.Token)

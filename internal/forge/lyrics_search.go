@@ -411,7 +411,9 @@ func (a *App) startLyrics(s Settings, sources []Source, batch lyricsBatchOptions
 				break
 			}
 			published := status.Checked != 0
-			if !published { status.Checked = time.Now().Unix() }
+			if !published {
+				status.Checked = time.Now().Unix()
+			}
 			raw, _ := json.Marshal(status)
 			if !batch.InspectOnly && !published {
 				if err := a.setMeta("lyrics-status:"+strconv.FormatInt(source.ID, 10), string(raw)); err != nil {
@@ -500,8 +502,10 @@ func (a *App) maintainLyrics(ctx context.Context, s Settings, id int64, batch ly
 				status.Instrumental = text == instrumentalLRC
 				status.Checked = time.Now().Unix()
 				raw, _ := json.Marshal(status)
-				err := a.setMeta("lyrics-status:"+strconv.FormatInt(id,10),string(raw))
-				if err != nil { status.Checked=0 }
+				err := a.setMeta("lyrics-status:"+strconv.FormatInt(id, 10), string(raw))
+				if err != nil {
+					status.Checked = 0
+				}
 				return err
 			})
 		}

@@ -107,16 +107,30 @@ func (a *App) conversionCapacity(ctx context.Context, configured int) (int, erro
 }
 
 func (a *App) waitOutputMaintenanceCapacity(ctx context.Context) error {
-	for ctx.Err()==nil {
-		s,err:=a.settingsContext(ctx)
-		if err!=nil { return err }
-		capacity:=0
-		if s.Enabled { capacity,err=a.conversionCapacity(ctx,s.Concurrency) }
-		if err!=nil { return err }
-		a.jobsMu.Lock(); running,err:=a.runningConversions(); a.jobsMu.Unlock()
-		if err!=nil { return err }
-		if running<capacity { return nil }
-		if !pause(ctx,500*time.Millisecond) { return ctx.Err() }
+	for ctx.Err() == nil {
+		s, err := a.settingsContext(ctx)
+		if err != nil {
+			return err
+		}
+		capacity := 0
+		if s.Enabled {
+			capacity, err = a.conversionCapacity(ctx, s.Concurrency)
+		}
+		if err != nil {
+			return err
+		}
+		a.jobsMu.Lock()
+		running, err := a.runningConversions()
+		a.jobsMu.Unlock()
+		if err != nil {
+			return err
+		}
+		if running < capacity {
+			return nil
+		}
+		if !pause(ctx, 500*time.Millisecond) {
+			return ctx.Err()
+		}
 	}
 	return ctx.Err()
 }
@@ -157,17 +171,17 @@ func buildReason(source Source, encoding Encoding) string {
 }
 
 type buildPlan struct {
-	Encoding       Encoding       `json:"encoding"`
-	Tracks         int            `json:"tracks"`
-	Skipped        int            `json:"skipped"`
-	Unverified     int            `json:"unverified"`
-	InputBytes     int64          `json:"input_bytes"`
-	OutputBytes    int64          `json:"estimated_output_bytes"`
-	CurrentBytes   int64          `json:"current_output_bytes"`
-	LargestSource  int64          `json:"largest_source_bytes"`
-	StagingLimit   int64          `json:"staging_limit_bytes"`
-	UnknownTime    int            `json:"unknown_duration"`
-	Reasons        map[string]int `json:"reasons"`
+	Encoding      Encoding       `json:"encoding"`
+	Tracks        int            `json:"tracks"`
+	Skipped       int            `json:"skipped"`
+	Unverified    int            `json:"unverified"`
+	InputBytes    int64          `json:"input_bytes"`
+	OutputBytes   int64          `json:"estimated_output_bytes"`
+	CurrentBytes  int64          `json:"current_output_bytes"`
+	LargestSource int64          `json:"largest_source_bytes"`
+	StagingLimit  int64          `json:"staging_limit_bytes"`
+	UnknownTime   int            `json:"unknown_duration"`
+	Reasons       map[string]int `json:"reasons"`
 }
 
 func estimateBuild(list []Source, encoding Encoding, limit int64) buildPlan {

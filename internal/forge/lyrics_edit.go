@@ -47,7 +47,9 @@ func shiftLRC(text string, delay int64) (string, error) {
 	}
 	offset := int64(0)
 	match := lrcOffset.FindStringSubmatch(text)
-	if delay == 0 && len(match) == 0 { return text, nil }
+	if delay == 0 && len(match) == 0 {
+		return text, nil
+	}
 	if len(match) > 0 {
 		offset, err = strconv.ParseInt(match[1], 10, 64)
 		if err != nil || offset < -86400000 || offset > 86400000 {
@@ -69,7 +71,7 @@ func shiftLRC(text string, delay int64) (string, error) {
 			second, _ := strconv.ParseInt(parts[0], 10, 64)
 			fraction := int64(0)
 			if len(parts) > 1 {
-				fraction, _ = strconv.ParseInt((parts[1]+"000")[:3], 10, 64)
+				fraction, _ = strconv.ParseInt((parts[1] + "000")[:3], 10, 64)
 			}
 			millis := max(0, minute*60000+second*1000+fraction-offset+delay)
 			if millis/60000 > 9999 {
@@ -109,8 +111,8 @@ func (a *App) getLyricsEdit(w http.ResponseWriter, r *http.Request) {
 func (a *App) saveLyricsEdit(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		Token string `json:"token"`
-		Text string `json:"text"`
-		Delay int64 `json:"delay_ms"`
+		Text  string `json:"text"`
+		Delay int64  `json:"delay_ms"`
 	}
 	if !decode(w, r, &body, 8*maxLyricsBytes+4096) {
 		return
@@ -138,8 +140,11 @@ func (a *App) saveLyricsEdit(w http.ResponseWriter, r *http.Request) {
 		Path: lyricsRel(target.Source.Output), Provider: "source", Checked: time.Now().Unix(), Instrumental: text == instrumentalLRC}
 	if err = a.publishLyricsTarget(r.Context(), target, text, "source", func() error {
 		raw, _ := json.Marshal(status)
-		return a.setMeta("lyrics-status:"+strconv.FormatInt(id,10),string(raw))
-	}); err != nil { apiError(w,409,err); return }
+		return a.setMeta("lyrics-status:"+strconv.FormatInt(id, 10), string(raw))
+	}); err != nil {
+		apiError(w, 409, err)
+		return
+	}
 	a.discardLyricsSearches(id)
 	a.lyricsMu.Lock()
 	delete(a.lyricsChoices, body.Token)

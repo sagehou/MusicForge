@@ -150,9 +150,13 @@ func (a *App) runningConversions() (int, error) {
 func (a *App) claimWithRepairCapacity(conversion bool, concurrency int) (Job, error) {
 	a.repairMu.Lock()
 	reserved := 0
-	if a.repairRunning { reserved++ }
+	if a.repairRunning {
+		reserved++
+	}
 	a.repairMu.Unlock()
-	if a.loudnessBusy.Load() { reserved++ }
+	if a.loudnessBusy.Load() {
+		reserved++
+	}
 	if conversion {
 		running, err := a.runningConversions()
 		if err != nil {
@@ -185,7 +189,9 @@ func (a *App) startRepairs(sources []Source, settings Settings, waitCapacity boo
 	if a.repairRunning {
 		return "", errors.New("A best-effort repair is already running")
 	}
-	if a.loudnessBusy.Load() { return "", errors.New("Another output maintenance operation is running") }
+	if a.loudnessBusy.Load() {
+		return "", errors.New("Another output maintenance operation is running")
+	}
 	if len(sources) == 0 {
 		return "", errors.New("Only failed native FLAC tracks without an existing output can be repaired")
 	}

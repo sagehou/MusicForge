@@ -182,6 +182,8 @@ def main():
     except (OSError, ValueError, KeyError, TypeError):
         runs = []
     result = plan(result, runs)
+    if os.environ.get("MUSICFORGE_EXTENDED_ROLLBACK") == "true":
+        result.update(required=True, reason="manual historical rollback requested")
     Path(".ci").mkdir(exist_ok=True)
     Path(".ci/rollback-scope.json").write_text(json.dumps(result, indent=2) + "\n")
     Path(".ci/ci-scope.json").write_text(json.dumps(result, indent=2) + "\n")

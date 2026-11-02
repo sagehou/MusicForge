@@ -39,6 +39,7 @@ jobs:
         id: plan
         env:
           GITHUB_TOKEN: ${{ github.token }}
+          MUSICFORGE_EXTENDED_ROLLBACK: ${{ inputs.historical_rollback || false }}
         run: python3 .github/scripts/check-ci-scope.py
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         if: steps.plan.outputs.scope == 'ui' && steps.plan.outputs.reuse_run == ''
@@ -335,7 +336,7 @@ jobs:
 
   audit:
     needs: plan
-    if: startsWith(github.ref, 'refs/tags/v') || (needs.plan.outputs.scope != 'docs' && needs.plan.outputs.reuse_run == '')
+    if: startsWith(github.ref, 'refs/tags/v') || inputs.historical_rollback || (needs.plan.outputs.scope != 'docs' && needs.plan.outputs.reuse_run == '')
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
@@ -349,7 +350,7 @@ jobs:
 
   image:
     needs: [validate, audit]
-    if: ${{ !cancelled() && needs.validate.result == 'success' && (needs.audit.result == 'success' || needs.audit.result == 'skipped') && ((needs.validate.outputs.scope == 'full' && needs.validate.outputs.reuse_run == '') || startsWith(github.ref, 'refs/tags/v')) }}
+    if: ${{ !cancelled() && needs.validate.result == 'success' && (needs.audit.result == 'success' || needs.audit.result == 'skipped') && ((needs.validate.outputs.scope == 'full' && needs.validate.outputs.reuse_run == '') || startsWith(github.ref, 'refs/tags/v') || inputs.historical_rollback) }}
     strategy:
       fail-fast: false
       matrix:
@@ -499,14 +500,15 @@ jobs:
           SCOPE: ${{ needs.validate.outputs.scope }}
           REUSED: ${{ needs.validate.outputs.reuse_run }}
           RELEASE: ${{ startsWith(github.ref, 'refs/tags/v') }}
+          HISTORICAL: ${{ inputs.historical_rollback || false }}
         run: |
           test "$VALIDATE" = success
-          if [[ "$RELEASE" == true || "$SCOPE" != docs && -z "$REUSED" ]]; then
+          if [[ "$RELEASE" == true || "$HISTORICAL" == true || "$SCOPE" != docs && -z "$REUSED" ]]; then
             test "$AUDIT" = success
           else
             test "$AUDIT" = skipped
           fi
-          if [[ "$SCOPE" == full && -z "$REUSED" || "$RELEASE" == true ]]; then
+          if [[ "$SCOPE" == full && -z "$REUSED" || "$RELEASE" == true || "$HISTORICAL" == true ]]; then
             test "$IMAGE" = success
           else
             test "$IMAGE" = skipped

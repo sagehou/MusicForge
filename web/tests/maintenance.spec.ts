@@ -17,7 +17,113 @@ async function mock(page: Page) {
   await page.route("**/api/library", route => route.fulfill({ json: sources }));
   await page.route("**/api/lyrics", route => route.fulfill({ json: { options: { auto_search: false }, report: { state: "idle", total: 0, processed: 0 } } }));
   await page.route("**/api/maintenance/loudness", route => route.fulfill({ json: { state: "idle", total: 0, processed: 0, updated: 0, skipped: 0, failed: 0 } }));
+  await page.route("**/api/maintenance/issues", route => route.fulfill({ json: [] }));
 }
+
+test("quality decisions require an ignore reason and can be reopened", async ({ page }) => {
+  await mock(page);
+  let decisions: { id: number; kind: string; state: string; reason: string }[] = [], writes = 0;
+  await page.route("**/api/maintenance/issues", route => {
+    if (route.request().method() === "PUT") {
+      const body = route.request().postDataJSON();
+      expect(body.ids).toEqual([1, 2]); expect(body.kind).toBe("duplicates");
+      decisions = body.state === "open" ? [] : body.ids.map((id: number) => ({ id, kind: body.kind, state: body.state, reason: body.reason })); writes++;
+      return route.fulfill({ json: { updated: 2 } });
+    }
+    return route.fulfill({ json: decisions });
+  });
+  await page.goto("/library?view=tracks");
+  await page.locator("#maintenance-workbench > summary").click();
+  const quality = page.getByRole("region", { name: "Library quality report", exact: true });
+  await quality.getByRole("button", { name: "Identical source file hashes 2", exact: true }).click();
+  await quality.locator(".quality-decisions > summary").click();
+  await quality.getByLabel("Decision", { exact: true }).selectOption("ignored");
+  await expect(quality.getByRole("button", { name: "Save decision", exact: true })).toBeDisabled();
+  await quality.getByLabel("Reason / note", { exact: true }).fill("Intentional duplicate edition");
+  expect(writes).toBe(0);
+  await quality.getByRole("button", { name: "Save decision", exact: true }).click();
+  await expect(quality.getByRole("button", { name: "Identical source file hashes 0", exact: true })).toBeDisabled();
+  await quality.getByLabel("Show ignored issues (2)", { exact: true }).check();
+  await expect(quality.locator(".review-issues")).toContainText("Intentional duplicate edition");
+  await quality.getByLabel("Decision", { exact: true }).selectOption("open");
+  await quality.getByRole("button", { name: "Save decision", exact: true }).click();
+  await expect(quality.getByRole("button", { name: "Identical source file hashes 2", exact: true })).toBeEnabled();
+  expect(writes).toBe(2);
+});
+
+test("maintenance suggestions preview exact groups and retain failed selections", async ({ page }) => {
+  await mock(page);
+  const third: Source = { ...sources[0], id: 3, path: "Artist/Album/04.flac", title: "Fourth track", track: 4, output: "Artist/Album/04.opus", lyrics: { state: "ready", output: "Artist/Album/04.opus", signature: "fourth", checked: 77 } };
+  await page.route("**/api/library", route => route.fulfill({ json: [...sources, third] }));
+  const writes: { path: string; ids: number[] }[] = [];
+  for (const path of ["/library/rebuild", "/lyrics/search", "/maintenance/loudness"]) await page.route(`**/api${path}`, route => {
+    if (route.request().method() === "GET") return route.fulfill({ json: { state: "idle" } });
+    writes.push({ path, ids: route.request().postDataJSON().ids });
+    return route.fulfill(path === "/lyrics/search" ? { status: 409, json: { error: "Lyrics maintenance is already running" } } : { status: 202, json: { ok: true } });
+  });
+  await page.goto("/library"); await page.locator("#maintenance-workbench > summary").click();
+  await page.locator(".library-tool > summary").filter({ hasText: "Maintenance suggestions" }).click();
+  const review = page.getByRole("region", { name: "Maintenance suggestions", exact: true });
+  await review.getByRole("button", { name: "Preview maintenance suggestions", exact: true }).click();
+  await expect(review).toContainText("3 suggested actions"); expect(writes).toHaveLength(0);
+  await review.getByLabel("Select all suggestions", { exact: true }).check();
+  await review.getByRole("button", { name: "Start 3 selected actions", exact: true }).click();
+  await expect(review.getByRole("alert")).toContainText("already running");
+  await expect(review.getByRole("button", { name: "Start 1 selected actions", exact: true })).toBeEnabled();
+  expect(writes).toEqual([{ path: "/library/rebuild", ids: [2] }, { path: "/lyrics/search", ids: [1] }, { path: "/maintenance/loudness", ids: [3] }]);
+});
+
+test("operation snapshots precede explicit undo and conflicts stay visible", async ({ page }) => {
+  await mock(page);
+  const operation = { id: "operation", kind: "lyrics", created: 1700000000000000000, items: [{ id: 1, path: sources[0].path, output: sources[0].output, state: "applied", undoable: true }] };
+  let writes = 0;
+  await page.route("**/api/maintenance/operations", route => route.fulfill({ json: [operation] }));
+  await page.route("**/api/maintenance/operations/operation/snapshot?*", route => route.fulfill({ json: { text: new URL(route.request().url()).searchParams.get("side") === "before" ? "[00:01]Original" : "[00:02]New" } }));
+  await page.route("**/api/maintenance/operations/operation/undo", route => { expect(route.request().postDataJSON()).toEqual({ items: [0] }); writes++; return route.fulfill({ status: 202, json: { ok: true } }); });
+  await page.route("**/api/maintenance/undo", route => route.fulfill({ json: writes ? { state: "complete", total: 1, processed: 1, updated: 0, failed: 1, skipped: 0, issues: [{ id: 1, error: "Maintenance undo conflict: lyrics changed; current file preserved" }] } : { state: "idle" } }));
+  await page.goto("/library"); await page.locator("#maintenance-workbench > summary").click();
+  await page.locator(".library-tool > summary").filter({ hasText: "Operation records and undo" }).click();
+  const log = page.getByRole("region", { name: "Operation records and undo", exact: true });
+  await log.getByRole("button", { name: "Review operation", exact: true }).click();
+  await log.getByRole("button", { name: "Compare saved snapshots", exact: true }).click();
+  await expect(log.getByRole("textbox", { name: "Before", exact: true })).toHaveValue("[00:01]Original");
+  await expect(log.getByRole("textbox", { name: "After", exact: true })).toHaveValue("[00:02]New"); expect(writes).toBe(0);
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await log.screenshot({ path: "test-results/maintenance-undo-desktop.png", animations: "disabled" });
+  await log.getByRole("button", { name: "Confirm undo of 1 items", exact: true }).click();
+  await expect(log.getByRole("status")).toContainText("current file preserved"); expect(writes).toBe(1);
+});
+
+test("storage checks and migration previews keep settings unchanged on desktop and phone", async ({ page }) => {
+  await mock(page);
+  let checks = 0, previews = 0, settingsWrites = 0, verifies = 0;
+  const space = { path: "/new/output", total_bytes: 1000000000, free_bytes: 800000000, empty: true };
+  await page.route("**/api/settings", route => { if (route.request().method() === "PUT") settingsWrites++; return route.fulfill({ json: { settings } }); });
+  await page.route("**/api/maintenance/storage/health", route => route.fulfill({ json: { source: "/music/source", output: "/music/output", config: "/config", online: true, checking: false, message: "", tracks: 2, outputs: 1, output_bytes: 12345, staging_bytes: 0, staging_limit_bytes: 4294967296 } }));
+  await page.route("**/api/maintenance/storage/check", route => { checks++; return route.fulfill({ json: { output: space, source: { error: "Source mount offline" } } }); });
+  await page.route("**/api/maintenance/storage/verify", route => { expect(route.request().postDataJSON()).toEqual({ ids: [1] }); verifies++; return route.fulfill({ status: 202, json: { ok: true } }); });
+  await page.route("**/api/maintenance/storage", route => route.fulfill({ json: verifies ? { state: "complete", total: 1, processed: 1, updated: 1, failed: 0, skipped: 0 } : { state: "idle" } }));
+  await page.route("**/api/maintenance/migration/preview", route => { expect(route.request().postDataJSON()).toEqual({ source: "/new/source", output: "/new/output" }); previews++; return route.fulfill({ json: { source: "/new/source", output: space, source_bytes: 1000000, output_bytes: 12345, paths_applied: false } }); });
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.goto("/library"); await page.locator("#maintenance-workbench > summary").click();
+  await page.locator(".library-tool > summary").filter({ hasText: "Storage health" }).click();
+  const storage = page.getByRole("region", { name: "Storage health", exact: true });
+  await expect(storage).toContainText("/music/output"); expect(checks + previews + verifies + settingsWrites).toBe(0);
+  await storage.getByRole("button", { name: "Check mounts and free space", exact: true }).click();
+  await expect(storage).toContainText("Source mount offline");
+  await storage.getByRole("button", { name: "Verify 1 output checksums", exact: true }).click();
+  await storage.locator(".migration-guide > summary").click();
+  await storage.getByLabel("Proposed source directory", { exact: true }).fill("/new/source");
+  await storage.getByLabel("Proposed output directory", { exact: true }).fill("/new/output");
+  await storage.getByRole("button", { name: "Check migration paths", exact: true }).click();
+  await expect(storage).toContainText("Settings have not changed");
+  await expect(storage.getByRole("link", { name: "Open library path settings", exact: true })).toHaveAttribute("href", "/settings?section=library");
+  expect(checks).toBe(1); expect(previews).toBe(1); expect(verifies).toBe(1); expect(settingsWrites).toBe(0);
+  await storage.screenshot({ path: "test-results/maintenance-storage-desktop.png", animations: "disabled" });
+  await page.setViewportSize({ width: 390, height: 844 }); await setPreference(page, "theme", "dark");
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
+  await storage.screenshot({ path: "test-results/maintenance-storage-phone-dark.png", animations: "disabled" });
+});
 
 test("quality report flags exact duplicates and numbering without changing source data", () => {
   const before = JSON.stringify(sources);

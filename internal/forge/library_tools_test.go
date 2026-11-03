@@ -162,8 +162,8 @@ func TestEditHistoryRestoresLyricsAndBoundsSnapshots(t *testing.T) {
 		t.Fatal(w.Code, w.Body.String())
 	}
 	files, err := os.ReadDir(filepath.Join(a.cfg.ConfigDir, "edit-history"))
-	if err != nil || len(files) != 10 {
-		t.Fatal("unbounded history snapshots", len(files), err)
+	if err != nil || len(files) != 12 {
+		t.Fatal("operation snapshots must outlive the ten-entry editor history", len(files), err)
 	}
 	w = request("GET", "/api/library/1/history?kind=lyrics&revision="+history.Entries[9].Hash, nil)
 	var revision struct{ Text string }

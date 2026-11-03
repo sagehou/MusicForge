@@ -56,6 +56,7 @@ type sourceEvent struct {
 	Complete bool         `json:"complete,omitempty"`
 	Text     string       `json:"text,omitempty"`
 	Audio    *audioFormat `json:"audio,omitempty"`
+	Storage  *storageProbe `json:"storage,omitempty"`
 }
 
 // RunSourceIO handles only the internal child-process mode, before app startup.
@@ -85,6 +86,10 @@ func readSourceIO(operation, root, rel string, emit func(sourceEvent) error, sta
 		return err
 	}
 	switch operation {
+	case "storage":
+		probe, err := inspectStorageDirectory(path)
+		if err != nil { return err }
+		return emit(sourceEvent{Storage:&probe})
 	case "flac-info":
 		file, err := os.Open(path)
 		if err != nil {

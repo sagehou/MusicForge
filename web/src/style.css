@@ -2236,8 +2236,20 @@ input[role="switch"]:checked::after { transform: translateX(20px); background: v
 .cover-candidates li > div { display: grid; gap: 4px; min-width: 0; overflow-wrap: anywhere; }
 .cover-candidates a { font-size: var(--font-size-small); }
 .saved-playlists { display: grid; gap: 8px; }
+.quality-decisions, .migration-guide { min-width: 0; margin-block: 12px; }
+.quality-decisions > summary, .migration-guide > summary { cursor: pointer; padding-block: 8px; font-weight: 600; }
+.quality-decisions > summary:focus-visible, .migration-guide > summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.quality-decisions .field { margin-block: 12px; }
+.review-issues { list-style: none; padding: 0 !important; max-height: 360px; overflow: auto; }
+.review-issues li { padding-block: 10px; border-bottom: 1px solid var(--line); overflow-wrap: anywhere; }
+.review-issues .check-field { align-items: flex-start; }
+.maintenance-report code, .maintenance-report dd, .migration-guide li { overflow-wrap: anywhere; }
+.maintenance-report dd { margin: 4px 0 12px; }
+.operation-snapshots { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-block: 12px; }
+.operation-snapshots textarea { width: 100%; margin-block: 8px; resize: vertical; }
 @media (max-width: 600px) {
   .tag-editor-fields { grid-template-columns: minmax(0, 1fr); }
+  .operation-snapshots { grid-template-columns: minmax(0, 1fr); }
   .cover-candidates li { flex-wrap: wrap; }
 }
 @media (max-width: 600px) {

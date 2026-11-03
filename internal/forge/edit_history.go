@@ -71,8 +71,23 @@ func (a *App) rememberEdit(ctx context.Context, s Settings, kind, path string, d
 	if len(history.Entries) > 0 && history.Entries[0].Hash == hash {
 		return nil
 	}
+	if err = a.saveEditBlob(ctx,kind,data);err!=nil{return err}
+	history.Entries = append([]editRevision{{Hash: hash, At: time.Now().Unix(), Bytes: len(data)}}, history.Entries...)
+	prune := len(history.Entries) > 10
+	if prune { history.Entries = history.Entries[:10] }
+	raw, _ := json.Marshal(history)
+	if err = a.setMeta(key, string(raw)); err != nil { return err }
+	if prune { return a.cleanEditHistory(ctx) }
+	return nil
+}
+
+func (a *App) saveEditBlob(ctx context.Context,kind string,data []byte) error {
+	if kind!="lyrics" && kind!="artwork" {return errors.New("Invalid history kind")}
+	limit:=8*1024*1024;if kind=="lyrics"{limit=maxLyricsBytes}
+	if len(data)==0 || len(data)>limit{return errors.New("Edit history snapshot exceeds the size limit")}
+	hash:=digest(string(data))
 	dir := filepath.Join(a.cfg.ConfigDir, "edit-history")
-	if err = os.MkdirAll(dir, 0700); err != nil {
+	if err := os.MkdirAll(dir, 0700); err != nil {
 		return err
 	}
 	name := hash + "." + kind
@@ -93,19 +108,16 @@ func (a *App) rememberEdit(ctx context.Context, s Settings, kind, path string, d
 	if err = syncDirectory(dir); err != nil {
 		return err
 	}
-	history.Entries = append([]editRevision{{Hash: hash, At: time.Now().Unix(), Bytes: len(data)}}, history.Entries...)
-	prune := len(history.Entries) > 10
-	if prune {
-		history.Entries = history.Entries[:10]
-	}
-	raw, _ := json.Marshal(history)
-	if err = a.setMeta(key, string(raw)); err != nil {
-		return err
-	}
-	if prune {
-		return a.cleanEditHistory(ctx)
-	}
 	return nil
+}
+
+func (a *App) readEditBlob(ctx context.Context,kind,hash string)([]byte,error){
+	if !validDigest(hash) || kind!="lyrics" && kind!="artwork"{return nil,errors.New("Invalid edit snapshot")}
+	root,err:=os.OpenRoot(filepath.Join(a.cfg.ConfigDir,"edit-history"));if err!=nil{return nil,err};defer root.Close()
+	file,err:=openAuditionFile(root,hash+"."+kind);if err!=nil{return nil,err};defer file.Close()
+	limit:=int64(8*1024*1024);if kind=="lyrics"{limit=maxLyricsBytes}
+	if err=ctx.Err();err!=nil{return nil,err}
+	data,err:=readLimited(file,limit);if err!=nil{return nil,err};if digest(string(data))!=hash{return nil,errors.New("Edit history snapshot changed")};return data,nil
 }
 
 func (a *App) cleanEditHistory(ctx context.Context) error {
@@ -137,8 +149,17 @@ func (a *App) cleanEditHistory(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	operations,err:=a.reads.QueryContext(ctx,"SELECT value FROM meta WHERE key GLOB 'maintenance-operation:*'")
+	if err!=nil{return err}
+	for operations.Next(){var raw string;var operation maintenanceOperation
+		if err=operations.Scan(&raw);err==nil{err=json.Unmarshal([]byte(raw),&operation)}
+		if err!=nil{operations.Close();return err}
+		if operation.Kind=="lyrics" || operation.Kind=="artwork"{for _,item:=range operation.Items{for _,hash:=range []string{item.BeforeHash,item.AfterHash,item.PriorOverrideHash}{if validDigest(hash){used[hash+"."+operation.Kind]=true}}}}
+	}
+	err=errors.Join(operations.Err(),operations.Close());if err!=nil{return err}
 	dir := filepath.Join(a.cfg.ConfigDir, "edit-history")
 	files, err := os.ReadDir(dir)
+	if os.IsNotExist(err){return nil}
 	if err != nil {
 		return err
 	}

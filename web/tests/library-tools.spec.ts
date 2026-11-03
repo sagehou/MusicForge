@@ -12,6 +12,7 @@ async function mock(page: Page) {
   await page.route("**/api/library", route => route.fulfill({ json: tracks }));
   await page.route("**/api/lyrics", route => route.fulfill({ json: { options: { auto_search: false }, report: { state: "idle", total: 0, processed: 0 } } }));
   await page.route("**/api/maintenance/*", route => route.fulfill({ json: idle }));
+  await page.route("**/api/maintenance/issues", route => route.fulfill({ json: [] }));
   await page.route("**/api/playlists", route => route.fulfill({ json: [] }));
   await page.goto("/library?view=tracks");
 }

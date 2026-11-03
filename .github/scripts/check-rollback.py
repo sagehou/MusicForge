@@ -298,6 +298,24 @@ def main():
         api("/api/maintenance/tags", "POST", {"token": tag_preview["token"]})
         tag_report = wait_for(lambda: api("/api/maintenance/tags"), lambda report: report["state"] == "complete", "output tag correction")
         assert tag_report["failed"] == 0 and tag_report["updated"] == 1, tag_report
+        # Undo a second correction through the same durable publication path,
+        # retaining both active and undone operation records for old writers.
+        temporary = api("/api/library/tags/preview", "POST", {"ids": [lyrics_track["id"]], "tags": {"title": "Temporary undo exercise"}})
+        api("/api/maintenance/tags", "POST", {"token": temporary["token"]})
+        temporary_report = wait_for(lambda: api("/api/maintenance/tags"), lambda report: report["state"] == "complete", "temporary tag correction")
+        assert temporary_report["failed"] == 0 and temporary_report["updated"] == 1, temporary_report
+        api(f"/api/maintenance/operations/{temporary['token']}/undo", "POST", {"items": [0]})
+        undo_report = wait_for(lambda: api("/api/maintenance/undo"), lambda report: report["state"] == "complete", "tag batch undo")
+        assert undo_report["failed"] == 0 and undo_report["updated"] == 1, undo_report
+        operation_records = api("/api/maintenance/operations")
+        assert any(item["state"] == "applied" for operation in operation_records for item in operation["items"]), "active operation record missing"
+        assert any(item["state"] == "undone" for operation in operation_records for item in operation["items"]), "undone record missing"
+        api("/api/maintenance/issues", "PUT", {"ids": [lyrics_track["id"]], "kind": "duration", "state": "ignored", "reason": "Intentional short rollback fixture"})
+        issue_decisions = api("/api/maintenance/issues")
+        assert len(issue_decisions) == 1 and issue_decisions[0]["state"] == "ignored", issue_decisions
+        api("/api/maintenance/storage/verify", "POST", {"ids": [row["id"] for row in api("/api/library") if row["output_present"]]})
+        storage_report = wait_for(lambda: api("/api/maintenance/storage"), lambda report: report["state"] == "complete", "output checksum verification")
+        assert storage_report["failed"] == 0 and storage_report["updated"] == 3, storage_report
         history = api(f"/api/library/{lyrics_track['id']}/history?kind=lyrics")
         assert len(history["entries"]) >= 2, "lyric edit history missing"
         playlist = api("/api/playlists", "POST", {"name": "Rollback playlist", "text": "Album/01.flac\nAlbum/02.opus\nAlbum/missing.flac", "base": ""})
@@ -409,6 +427,9 @@ def main():
                     assert len(api(f"/api/library/{lyrics_track['id']}/history?kind=lyrics")["entries"]) >= 2, "history lost through rollback"
                     assert api("/api/playlists/" + playlist["id"])["ready"] == 2, "playlist mapping lost through rollback"
                     assert api("/api/maintenance/fingerprints")["state"] == "complete", "fingerprint report lost through rollback"
+                    assert api("/api/maintenance/operations") == operation_records, "operation records changed through rollback"
+                    assert api("/api/maintenance/issues") == issue_decisions, "issue decisions changed through rollback"
+                    assert api("/api/maintenance/storage")["state"] == "complete", "checksum report lost through rollback"
                 online_lyrics = next(row for row in api("/api/library") if row["id"] == online_track["id"]).get("lyrics")
                 if online_lyrics:
                     assert online_lyrics["state"] == "ready" and not online_lyrics.get("provider"), "additional provider changed legacy ready fields"
@@ -466,7 +487,7 @@ def main():
             assert library_record(restored) == library_record(row), "candidate cannot reopen older worker's completed artifact"
             stop()
             pending_checks.append({"release": version, "pending_verify_then_old_worker_build": "passed", "source_hash": expected_hash})
-        Path(".ci/rollback-evidence.json").write_text(json.dumps({"architecture": os.environ["ARCH"], "schema": 2, "source_format_replacement": "passed", "instrumental_placeholder": "passed", "additional_lyrics_provider": "passed", "output_maintenance": "passed", "checks": evidence, "pending_verification_checks": pending_checks}, indent=2) + "\n")
+        Path(".ci/rollback-evidence.json").write_text(json.dumps({"architecture": os.environ["ARCH"], "schema": 2, "source_format_replacement": "passed", "instrumental_placeholder": "passed", "additional_lyrics_provider": "passed", "output_maintenance": "passed", "maintenance_review_and_undo": "passed", "checks": evidence, "pending_verification_checks": pending_checks}, indent=2) + "\n")
     finally:
         subprocess.run(["docker", "rm", "-f", NAME], capture_output=True)
 

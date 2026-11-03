@@ -25,6 +25,7 @@ type lyricsBatchOptions struct {
 	ReplaceTraditional bool `json:"replace_traditional,omitempty"`
 	InspectOnly        bool `json:"inspect_only,omitempty"`
 	MinScore           int  `json:"-"`
+	OperationBatch string `json:"-"`
 }
 
 type LyricsStatus struct {
@@ -387,7 +388,8 @@ func (a *App) startLyrics(s Settings, sources []Source, batch lyricsBatchOptions
 	go func() {
 		defer a.lyricsWG.Done()
 		defer cancel()
-		for _, source := range sources {
+		for index, source := range sources {
+			if (batch.Refresh || batch.ReplaceTraditional) && index%1000==0 { batch.OperationBatch=randomToken() }
 			if ctx.Err() != nil {
 				break
 			}
@@ -486,6 +488,7 @@ func (a *App) maintainLyrics(ctx context.Context, s Settings, id int64, batch ly
 	status.State = "failed"
 	target, err := a.captureLyricsTarget(ctx, id)
 	target.RecordHistory = batch.Refresh || batch.ReplaceTraditional
+	target.OperationBatch = batch.OperationBatch
 	status.Output, status.Signature = target.Source.Output, target.Signature
 	if target.FilePresent {
 		status.Path, status.Provider = target.File.Path, target.File.Provider

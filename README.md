@@ -22,6 +22,8 @@ Use Library → Maintenance workbench to review quality issues, preview build si
 
 The workbench also offers output-tag correction, M3U/M3U8 mapping/export and acoustic duplicate candidates. Lyric and cover editors retain recent revisions for preview and restore; cover correction can search MusicBrainz / Cover Art Archive. Acoustic results are review clues based on generated audio, with no automatic deletion.
 
+Record quality issues as to do or ignore them with a reason; changed indexed facts reopen the issue. Preview maintenance suggestions, then explicitly start selected actions. Recent tag, lyric and cover edits have operation records with snapshot comparison and conflict-checked batch undo. Storage health adds explicit mount/free-space checks, output-only checksum verification and a migration checklist that leaves paths and files unchanged. Keep a matching stopped configuration backup and output snapshot before migrating storage.
+
 ## Supported source audio
 
 Scan FLAC, MP3, AAC/ALAC in M4A/M4B/MP4, raw AAC, PCM WAV/AIFF, Ogg/Vorbis/Opus, WMA, APE, WavPack and MKA. Extensions are case-insensitive; ffprobe checks actual audio and rejects ordinary video streams while allowing attached artwork. Source formats can coexist in one library. All tracks are re-encoded with the selected Opus/MP3 profile, including lossy inputs; another lossy encode can reduce quality.

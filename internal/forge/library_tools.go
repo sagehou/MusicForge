@@ -39,7 +39,7 @@ func (a *App) saveToolReport(kind string) {
 
 func (a *App) getLibraryTool(w http.ResponseWriter, r *http.Request) {
 	kind := r.PathValue("tool")
-	if kind != "tags" && kind != "fingerprints" {
+	if kind != "tags" && kind != "fingerprints" && kind != "storage" && kind != "undo" {
 		apiError(w, 404, errors.New("Unknown maintenance operation"))
 		return
 	}

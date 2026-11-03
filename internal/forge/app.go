@@ -117,6 +117,7 @@ func New(cfg Runtime, logger *slog.Logger, version string, assets fs.FS) (*App, 
 	if err = a.recoverRepairTasks(); err != nil {
 		return fail(err)
 	}
+	if err = a.recoverOperations();err!=nil{return fail(err)}
 	if _, err = a.settings(); err == sql.ErrNoRows {
 		err = a.saveSettings(DefaultSettings())
 	}

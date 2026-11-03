@@ -7,14 +7,14 @@ import { Button } from "./ui/button";
 import { ResourceWarning, useResource, type Notice } from "./resource";
 
 type ToolReport = LoudnessReport & { issues?: { id: number; error: string }[]; groups?: number[][] };
-function useTool(kind: string) {
+export function useTool(kind: string) {
   const [poll, setPoll] = useState(false);
   const resource = useResource<ToolReport>(`/maintenance/${kind}`, poll);
   const running = resource.data?.state === "running";
   useEffect(() => { setPoll(running); }, [running]);
   return { ...resource, running };
 }
-function ToolStatus({ report, kind, retry, notify }: { report?: ToolReport; kind: string; retry: () => void; notify: Notice }) {
+export function ToolStatus({ report, kind, retry, notify }: { report?: ToolReport; kind: string; retry: () => void; notify: Notice }) {
   const { t, number, errorMessage } = useI18n();
   const [busy, setBusy] = useState(false);
   async function stop() {
@@ -27,7 +27,7 @@ function ToolStatus({ report, kind, retry, notify }: { report?: ToolReport; kind
   return <div className="maintenance-report" role="status"><p>{t(`gain.state.${report.state}`)} · {t("gain.progress", { done: number(report.processed), total: number(report.total), updated: number(report.updated), skipped: number(report.skipped), failed: number(report.failed) })}</p>{report.current && <code>{report.current}</code>}{report.state === "running" && <Button size="sm" variant="outline" disabled={busy} onClick={() => void stop()}><Square size={14} />{t("tools.stop")}</Button>}{report.issues?.map((issue, index) => <p className="repair-warning" key={`${issue.id}-${index}`}>#{issue.id}: {errorMessage(issue.error)}</p>)}</div>;
 }
 
-function ToolSection({ title, icon, children }: { title: string; icon: ReactNode; children: ReactNode }) {
+export function ToolSection({ title, icon, children }: { title: string; icon: ReactNode; children: ReactNode }) {
   const [open, setOpen] = useState(false);
   return <details className="library-tool" onToggle={event => setOpen(event.currentTarget.open)}><summary>{icon}{title}</summary>{open && <div className="comparison-body">{children}</div>}</details>;
 }

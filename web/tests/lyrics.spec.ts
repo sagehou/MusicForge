@@ -331,9 +331,9 @@ test("lyrics candidates keep partial results, preview languages and save an expl
   const picker = page.getByRole("region", { name: "Choose lyrics", exact: true });
   await picker.getByLabel("Title or artist", { exact: true }).fill("別名 Artist");
   await picker.getByRole("button", { name: "Search candidates", exact: true }).click();
-  await expect.poll(() => searches.length).toBe(5);
-  expect(searches.map(search => search.provider).sort()).toEqual(["kugou", "lrclib", "netease", "petitlyrics", "qq"]);
-  await expect(picker.locator(".lyrics-provider-status fieldset > legend")).toHaveText(["QQ Music First on ties", "Kugou", "NetEase", "PetitLyrics", "LRCLIB"]);
+  await expect.poll(() => searches.length).toBe(7);
+  expect(searches.map(search => search.provider).sort()).toEqual(["kugou", "kuwo", "lrclib", "migu", "netease", "petitlyrics", "qq"]);
+  await expect(picker.locator(".lyrics-provider-status fieldset > legend")).toHaveText(["QQ Music First on ties", "Kugou", "NetEase", "PetitLyrics", "LRCLIB", "Kuwo", "Migu"]);
   expect(searches.every(search => search.query === "別名 Artist")).toBe(true);
   await expect(picker).toContainText("QQ Music returned HTTP 403; retry later");
   await expect(picker).toContainText("No candidates found");
@@ -606,12 +606,12 @@ test("song details and automatic saved recommendations survive reopening and pag
   expect(searches).toHaveLength(0);
   await picker.locator(".lyrics-guidance > summary").click();
   await picker.getByRole("button", { name: "Force new search", exact: true }).click();
-  await expect.poll(() => searches.length).toBe(5);
+  await expect.poll(() => searches.length).toBe(7);
   expect(searches.every(search => search.refresh)).toBe(true);
   await expect(picker.getByRole("button", { name: "Search candidates", exact: true })).toBeEnabled();
   await picker.getByRole("button", { name: "Search candidates", exact: true }).click();
-  await expect.poll(() => searches.length).toBe(10);
-  expect(searches.slice(5).every(search => !search.refresh)).toBe(true);
+  await expect.poll(() => searches.length).toBe(14);
+  expect(searches.slice(7).every(search => !search.refresh)).toBe(true);
   await page.keyboard.press("Escape");
   await setPreference(page, "language", "zh-CN");
   await page.setViewportSize({ width: 320, height: 844 });

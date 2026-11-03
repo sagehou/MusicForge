@@ -2203,6 +2203,27 @@ input[role="switch"]:checked::after { transform: translateX(20px); background: v
 .maintenance-workbench > summary::-webkit-details-marker { display: none; }
 .maintenance-actions { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 8px; }
 .maintenance-actions a { align-self: center; font-size: var(--font-size-small); }
+.saved-library-views { min-width: 0; border-top: 1px solid var(--line); }
+.saved-library-views > summary { display: flex; align-items: center; gap: 6px; padding: 8px 0; font-size: var(--font-size-small); cursor: pointer; }
+.saved-library-views .comparison-body { padding: 8px 0; }
+.saved-library-views form { align-items: end; }
+.saved-library-views .field { flex: 1 1 180px; max-width: 320px; margin: 0; }
+.saved-view-list { display: flex; flex-wrap: wrap; gap: 4px 12px; margin-top: 8px; }
+.saved-view-list .actions { min-width: 0; max-width: 100%; }
+.saved-view-list .ui-button { white-space: normal; overflow-wrap: anywhere; }
+.maintenance-progress, .maintenance-failures { margin-bottom: 16px; }
+.maintenance-progress > p, .maintenance-progress-row > p { color: var(--muted); font-size: var(--font-size-small); margin-block: 8px; }
+.maintenance-progress-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); gap: 12px; }
+.maintenance-progress-row { min-width: 0; padding: 12px; border: 1px solid var(--line); border-radius: var(--radius-control); }
+.maintenance-progress-row code, .maintenance-progress-row p, .maintenance-failures p, .maintenance-failures strong { overflow-wrap: anywhere; }
+.maintenance-progress-row .section-heading { gap: 8px; align-items: start; }
+.maintenance-progress-row .section-heading h3 { font-size: var(--font-size-small); }
+.maintenance-progress-row .section-heading > span { flex-shrink: 0; color: var(--muted); font-size: var(--font-size-small); }
+.maintenance-progress-row .task-meter { margin-block: 10px; }
+.maintenance-progress-row .actions, .maintenance-failures .actions { flex-wrap: wrap; margin-top: 8px; }
+.maintenance-failures > summary { font-weight: 600; cursor: pointer; }
+.maintenance-failures .comparison-body { padding: 12px 0 0; }
+.provider-cooldowns { margin-top: 12px; }
 .maintenance-report { margin-block: 12px; padding: 16px; border: 1px solid var(--line); border-radius: var(--radius-control); background: var(--subtle); }
 .maintenance-report p, .maintenance-workbench p { margin-block: 8px; color: var(--muted); overflow-wrap: anywhere; }
 .maintenance-report ul { margin: 8px 0; padding-inline-start: 20px; }

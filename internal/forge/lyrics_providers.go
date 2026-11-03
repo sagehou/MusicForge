@@ -22,7 +22,7 @@ import (
 	"unicode"
 )
 
-var lyricsProviders = []string{"qq", "kugou", "netease", "petitlyrics", "lrclib"}
+var lyricsProviders = []string{"qq", "kugou", "netease", "petitlyrics", "lrclib", "kuwo", "migu"}
 
 func lyricsProviderPriority(provider string) int {
 	for i, name := range lyricsProviders {
@@ -60,6 +60,7 @@ type lyricsCandidate struct {
 	Script                      string   `json:"script"`
 	TranslationScript           string   `json:"translation_script,omitempty"`
 	remoteID, mid, hash         string
+	lyricsURL, translationURL   string
 	titleAliases, artistAliases []string
 	text                        *lyricsText
 }
@@ -376,6 +377,10 @@ func (a *App) providerCandidates(ctx context.Context, provider string, source So
 		candidates, err = a.neteaseCandidates(ctx, query)
 	case "petitlyrics":
 		candidates, err = a.petitLyricsCandidates(ctx, source, query)
+	case "kuwo":
+		candidates, err = a.kuwoCandidates(ctx, query)
+	case "migu":
+		candidates, err = a.miguCandidates(ctx, query)
 	default:
 		return nil, false, errors.New("Unknown lyrics provider")
 	}
@@ -596,6 +601,12 @@ func (a *App) candidateLyrics(ctx context.Context, candidate lyricsCandidate) (l
 	switch candidate.Provider {
 	case "petitlyrics":
 		return a.petitLyricsText(ctx, candidate)
+	case "kuwo", "migu":
+		var err error
+		if candidate.Provider == "kuwo" { text, err = a.kuwoLyrics(ctx, candidate) } else { text, err = a.miguLyrics(ctx, candidate) }
+		if err != nil { return text, err }
+		diagnostic.add("lyric", text.Original)
+		if text.Translation != "" { diagnostic.add("translation", text.Translation) }
 	case "qq":
 		params := url.Values{"songmid": {candidate.mid}, "format": {"json"}, "nobase64": {"1"}, "g_tk": {"5381"}}
 		var response struct {
@@ -740,6 +751,7 @@ func (a *App) lyricsRequest(ctx context.Context, provider, method, endpoint stri
 		request.Header.Set("Referer", "https://y.qq.com/")
 		request.Header.Set("Cookie", "tmeLoginType=-1;")
 	}
+	if provider == "kuwo" { request.Header.Set("Referer", "https://www.kuwo.cn/") }
 	response, raw, err := a.lyricsHTTPResponse(provider, request)
 	if response == nil {
 		return 0, err

@@ -258,7 +258,7 @@ func (a *App) startRepairs(sources []Source, settings Settings, waitCapacity boo
 		for i, source := range sources {
 			ctx, entry := contexts[i], entries[i]
 			var result RepairStatus
-			err := a.waitOutputMaintenanceCapacity(ctx)
+			err := a.waitOutputMaintenanceCapacity(ctx, "")
 			if err == nil {
 				a.reportMediaProgress(ctx, 0, Activity{Phase: "storage", Path: source.Rel, Artist: source.Artist, Album: source.Album, Title: source.Title}, 0)
 				result, err = a.makeRepair(ctx, source, settings)

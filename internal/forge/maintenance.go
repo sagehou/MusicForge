@@ -106,7 +106,20 @@ func (a *App) conversionCapacity(ctx context.Context, configured int) (int, erro
 	return options.concurrency(configured, time.Now()), nil
 }
 
-func (a *App) waitOutputMaintenanceCapacity(ctx context.Context) error {
+func (a *App) maintenanceWaiting(kind, reason string) {
+	if kind == "loudness" {
+		a.loudnessMu.Lock()
+		if a.loudnessReport != nil { a.loudnessReport.WaitingReason = reason }
+		a.loudnessMu.Unlock()
+	} else if kind != "" {
+		a.toolMu.Lock()
+		if report := a.toolReports[kind]; report != nil { report.WaitingReason = reason }
+		a.toolMu.Unlock()
+	}
+}
+
+func (a *App) waitOutputMaintenanceCapacity(ctx context.Context, kind string) error {
+	defer a.maintenanceWaiting(kind, "")
 	for ctx.Err() == nil {
 		s, err := a.settingsContext(ctx)
 		if err != nil {
@@ -128,6 +141,9 @@ func (a *App) waitOutputMaintenanceCapacity(ctx context.Context) error {
 		if running < capacity {
 			return nil
 		}
+		reason := "capacity"
+		if !s.Enabled { reason = "disabled" } else if capacity == 0 { reason = "schedule" }
+		a.maintenanceWaiting(kind, reason)
 		if !pause(ctx, 500*time.Millisecond) {
 			return ctx.Err()
 		}

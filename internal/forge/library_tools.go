@@ -43,6 +43,15 @@ func (a *App) getLibraryTool(w http.ResponseWriter, r *http.Request) {
 		apiError(w, 404, errors.New("Unknown maintenance operation"))
 		return
 	}
+	report, err := a.libraryToolSnapshot(r.Context(), kind)
+	if err != nil {
+		apiError(w, 500, err)
+		return
+	}
+	respond(w, 200, report)
+}
+
+func (a *App) libraryToolSnapshot(ctx context.Context, kind string) (libraryToolReport, error) {
 	a.toolMu.Lock()
 	defer a.toolMu.Unlock()
 	if a.toolReports == nil {
@@ -50,20 +59,22 @@ func (a *App) getLibraryTool(w http.ResponseWriter, r *http.Request) {
 	}
 	if a.toolReports[kind] == nil {
 		report := &libraryToolReport{loudnessReport: loudnessReport{State: "idle"}}
-		raw, err := a.metaContext(r.Context(), "maintenance:"+kind)
+		raw, err := a.metaContext(ctx, "maintenance:"+kind)
 		if err == nil {
 			err = json.Unmarshal([]byte(raw), report)
 		}
 		if err != nil && !errors.Is(err, sql.ErrNoRows) {
-			apiError(w, 500, err)
-			return
+			return libraryToolReport{}, err
 		}
 		if report.State == "running" {
-			report.State, report.Current = "stopped", ""
+			report.State, report.Current, report.WaitingReason = "stopped", "", ""
 		}
 		a.toolReports[kind] = report
 	}
-	respond(w, 200, a.toolReports[kind])
+	report := *a.toolReports[kind]
+	report.Issues = append([]toolIssue(nil), report.Issues...)
+	report.Groups = append([][]int64(nil), report.Groups...)
+	return report, nil
 }
 
 func (a *App) stopLibraryTool(w http.ResponseWriter, r *http.Request) {

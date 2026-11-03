@@ -313,7 +313,7 @@ func (a *App) startOutputTags(w http.ResponseWriter, r *http.Request) {
 				break
 			}
 			a.toolCurrent("tags", entry.Path)
-			err := a.waitOutputMaintenanceCapacity(ctx)
+			err := a.waitOutputMaintenanceCapacity(ctx, "tags")
 			updated := false
 			if err == nil {
 				updated, err = a.editOutputTags(ctx, preview.Settings, entry)

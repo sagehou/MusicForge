@@ -443,8 +443,13 @@ func (a *App) controlJobs(w http.ResponseWriter, r *http.Request) {
 		State          string   `json:"state"`
 		RepairIDs      []string `json:"repair_ids"`
 		IncludeRepairs bool     `json:"include_repairs"`
+		Failure        string   `json:"failure"`
 	}
 	if !decode(w, r, &body) {
+		return
+	}
+	if body.Failure != "" && (!validMaintenanceFailureReason(body.Failure) || body.Action != "retry" || body.IncludeRepairs || len(body.RepairIDs) != 0) {
+		apiError(w, 400, errors.New("Invalid failure retry filter"))
 		return
 	}
 	switch body.Action {
@@ -471,7 +476,7 @@ func (a *App) controlJobs(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	n, err := a.changeTasksFiltered(body.Action, body.selection, body.State)
+	n, err := a.changeTasksMatching(body.Action, body.selection, body.State, body.Failure)
 	if err != nil {
 		apiError(w, 409, err)
 		return
@@ -492,6 +497,10 @@ func (a *App) changeTasks(action string, chosen selection) (int, error) {
 }
 
 func (a *App) changeTasksFiltered(action string, chosen selection, filter string) (int, error) {
+	return a.changeTasksMatching(action, chosen, filter, "")
+}
+
+func (a *App) changeTasksMatching(action string, chosen selection, filter, failure string) (int, error) {
 	a.jobsMu.Lock()
 	defer a.jobsMu.Unlock()
 	targets := map[int64]bool{}
@@ -575,6 +584,7 @@ func (a *App) changeTasksFiltered(action string, chosen selection, filter string
 		id    int64
 		state string
 		wait  int64
+		log   string
 	}
 	rootIDs := []string{}
 	for root := range targets {
@@ -582,7 +592,7 @@ func (a *App) changeTasksFiltered(action string, chosen selection, filter string
 	}
 	// Resolve members once for the whole selection, rather than scanning all
 	// history again for every selected task.
-	rows, err := tx.Query("SELECT coalesce(CAST(m.value AS INTEGER),j.id),j.id,j.state,j.not_before FROM jobs j LEFT JOIN meta m ON m.key='task-member:'||j.id WHERE coalesce(CAST(m.value AS INTEGER),j.id) IN (" + strings.Join(rootIDs, ",") + ")")
+	rows, err := tx.Query("SELECT coalesce(CAST(m.value AS INTEGER),j.id),j.id,j.state,j.not_before,j.log FROM jobs j LEFT JOIN meta m ON m.key='task-member:'||j.id WHERE coalesce(CAST(m.value AS INTEGER),j.id) IN (" + strings.Join(rootIDs, ",") + ")")
 	if err != nil {
 		return 0, err
 	}
@@ -590,7 +600,7 @@ func (a *App) changeTasksFiltered(action string, chosen selection, filter string
 	for rows.Next() {
 		var root int64
 		var m member
-		if err = rows.Scan(&root, &m.id, &m.state, &m.wait); err != nil {
+		if err = rows.Scan(&root, &m.id, &m.state, &m.wait, &m.log); err != nil {
 			break
 		}
 		byRoot[root] = append(byRoot[root], m)
@@ -617,6 +627,7 @@ func (a *App) changeTasksFiltered(action string, chosen selection, filter string
 		if action == "retry" && control == "stopped" && chosen.All && !filteredAll {
 			continue
 		}
+		if failure != "" && control != "" { continue }
 		workerBusy := false
 		for _, m := range members {
 			_, executing := a.activeJobs[m.id]
@@ -627,7 +638,7 @@ func (a *App) changeTasksFiltered(action string, chosen selection, filter string
 				workerBusy = true
 			}
 			if (action == "resume" || action == "retry") && executing {
-				if !filteredAll {
+				if !filteredAll && failure == "" {
 					return 0, errors.New("the worker is still pausing; try again shortly")
 				}
 				workerBusy = true
@@ -638,6 +649,7 @@ func (a *App) changeTasksFiltered(action string, chosen selection, filter string
 		}
 		eligible := false
 		for _, m := range members {
+			if failure != "" && (m.state != "failed" || m.log == "Stopped by administrator" || maintenanceFailureReason(m.log) != failure) { continue }
 			if (action == "pause" || action == "stop") && (m.state == "pending" || m.state == "running") ||
 				action == "resume" && m.state == "pending" && m.wait == heldUntil ||
 				action == "retry" && m.state == "failed" || action == "delete" {
@@ -668,6 +680,7 @@ func (a *App) changeTasksFiltered(action string, chosen selection, filter string
 		}
 		mutated := false
 		for _, m := range members {
+			if failure != "" && (m.state != "failed" || m.log == "Stopped by administrator" || maintenanceFailureReason(m.log) != failure) { continue }
 			var result sql.Result
 			switch action {
 			case "pause":

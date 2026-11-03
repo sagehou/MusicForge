@@ -6,7 +6,7 @@ export type Settings = {
   bound_username?: string; bound_email?: string;
 };
 export type RepairStatus = { state: "running" | "imported" | "failed"; decoded_samples?: number; declared_samples?: number; pcm_verified: boolean; duration?: number; diagnostics?: string };
-export type LyricsProvider = "source" | "lrclib" | "qq" | "kugou" | "netease" | "petitlyrics";
+export type LyricsProvider = "source" | "lrclib" | "qq" | "kugou" | "netease" | "petitlyrics" | "kuwo" | "migu";
 export type LyricsAttempt = { provider: LyricsProvider; state: "ready" | "not_found" | "instrumental" | "failed" | "needs_review"; error?: string };
 export type LyricsStatus = { state: "ready" | "not_found" | "instrumental" | "failed" | "needs_review"; instrumental?: boolean; output: string; signature: string; path?: string; provider?: LyricsProvider; additional_provider?: LyricsProvider; error?: string; checked: number; attempts?: LyricsAttempt[]; additional_attempts?: LyricsAttempt[] };
 export type Source = { id: number; path: string; hash?: string; artist: string; album: string; title: string; track: number; disc: number; duration?: number; artwork_url?: string; present: boolean; output: string; output_present: boolean; status: string; error: string; size: number; source_bitrate?: number; source_audio?: { codec?: string; sample_rate?: number; bit_depth?: number; channels?: number }; output_size?: number; metadata: Record<string, string>; can_repair?: boolean; repair?: RepairStatus; possibly_damaged?: boolean; lyrics?: LyricsStatus; output_gain?: { version: number; path: string; signature: string; track: string; album: string; checked: number }; output_tags?: Record<string, string>; lyrics_script?: "simplified" | "traditional" | "unknown" };

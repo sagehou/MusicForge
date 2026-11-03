@@ -345,21 +345,21 @@ def main():
         # Optional read counters must survive older readers and Settings writers too.
         with sqlite3.connect(ROOT / "config/musicforge.db") as db:
             # New provider labels must not reach the closed label catalogs in
-            # published frontends. Seed an owned, ready PetitLyrics artifact
+            # published frontends. Seed an owned, ready Migu artifact
             # with the unchanged schema-2 identity/signature contract.
             online_track = next(track for track in tracks if track["path"] == "Album/03.wv")
             online_path = str(Path(online_track["output"]).with_suffix(".lrc"))
-            online_text = "[00:00.00]Rollback PetitLyrics fixture\n"
+            online_text = "[00:00.00]Rollback Migu fixture\n"
             (ROOT / "output" / online_path).write_text(online_text, encoding="utf-8")
             online_signature = hashlib.sha256(online_text.encode()).hexdigest()
             audio_signature = db.execute("SELECT signature FROM managed WHERE kind='audio' AND source_id=? AND path=?",
                                          (online_track["id"], online_track["output"])).fetchone()[0]
             online_status = {"state": "ready", "output": online_track["output"], "signature": audio_signature,
-                             "path": online_path, "checked": int(time.time()), "additional_provider": "petitlyrics",
+                             "path": online_path, "checked": int(time.time()), "additional_provider": "migu",
                              "attempts": [{"provider": "qq", "state": "not_found"}],
-                             "additional_attempts": [{"provider": "petitlyrics", "state": "ready"}]}
+                             "additional_attempts": [{"provider": "petitlyrics", "state": "not_found"}, {"provider": "kuwo", "state": "failed"}, {"provider": "migu", "state": "ready"}]}
             online_file = {"path": online_path, "source_id": online_track["id"], "source_hash": online_track["built_hash"],
-                           "signature": online_signature, "provider": "", "additional_provider": "petitlyrics"}
+                           "signature": online_signature, "provider": "", "additional_provider": "migu"}
             db.execute("INSERT INTO meta(key,value) VALUES(?,?)", ("lyrics-status:" + str(online_track["id"]), json.dumps(online_status)))
             db.execute("INSERT INTO meta(key,value) VALUES(?,?)",
                        ("lyrics-file:" + hashlib.sha256(online_path.encode()).hexdigest(), json.dumps(online_file)))
@@ -399,9 +399,9 @@ def main():
                                       "text": {"original": "[00:01.000]爱这风云\\n"}}]}
             db.execute("INSERT INTO meta(key,value) VALUES(?,?)",
                        ("lyrics-search:" + str(tracks[0]["id"]) + ":" + "0" * 64, json.dumps(search)))
-            additional_search = {**search, "provider": "petitlyrics", "candidates": [
-                {**search["candidates"][0], "remote_id": "123", "candidate": {
-                    **search["candidates"][0]["candidate"], "provider": "petitlyrics"}}]}
+            additional_search = {**search, "provider": "migu", "candidates": [
+                {**search["candidates"][0], "remote_id": "123", "lyrics_url": "https://d.musicapp.migu.cn/data/oss/resource/fixture/original.lrc", "candidate": {
+                    **search["candidates"][0]["candidate"], "provider": "migu"}}]}
             db.execute("INSERT INTO meta(key,value) VALUES(?,?)",
                        ("lyrics-search:" + str(online_track["id"]) + ":" + "1" * 64, json.dumps(additional_search)))
         expected = snapshot()
@@ -442,7 +442,7 @@ def main():
                     assert restored_lyrics and restored_lyrics["state"] == "ready" and restored_lyrics["provider"] == "source", "older writer lost optional lyrics annotation"
                     restored_instrumental = next(row for row in api("/api/library") if row["id"] == instrumental_track["id"]).get("lyrics")
                     assert restored_instrumental and restored_instrumental["state"] == "ready" and restored_instrumental.get("instrumental"), "older reader/writer lost the manually confirmed placeholder"
-                    assert online_lyrics and online_lyrics.get("additional_provider") == "petitlyrics", "older reader/writer lost the additional provider identity"
+                    assert online_lyrics and online_lyrics.get("additional_provider") == "migu", "older reader/writer lost the additional provider identity"
                     assert online_lyrics.get("additional_attempts") == online_status["additional_attempts"], "older reader/writer lost the additional provider diagnosis"
                 stop()
                 actual = snapshot()

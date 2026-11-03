@@ -57,7 +57,7 @@ func emptyLyricsProviderResponse(t *testing.T, w http.ResponseWriter, r *http.Re
 	case "on.petitlyrics.com/api/GetPetitLyricsData.php":
 		petitLyricsXML(t, w)
 	default:
-		return false
+		return additionalLyricsResponse(t, w, r, "", Source{})
 	}
 	return true
 }

@@ -13,6 +13,7 @@ import { ArtifactAudition } from "./artifact-audition";
 import { LibraryComparison } from "./library-comparison";
 import { InlineDetails } from "./inline-details";
 import { PageHeading } from "./page-heading";
+import { SavedLibraryViews } from "./saved-library-views";
 import { LyricsMaintenance, LyricsPicker, LyricsSearchButton, LyricsTrack, lyricsMatchState, lyricsMatchStates, type LyricsMatchState } from "./lyrics";
 
 type Scope = { view: "artists" | "albums" | "tracks"; artist?: string; album?: string };
@@ -391,6 +392,12 @@ export function Library({ notify }: { notify: Notice }) {
       </div>}
 
       </div>
+      <SavedLibraryViews disabled={lyricsBusy || busy} search={new URLSearchParams({ view: scope.view, ...(scope.artist !== undefined ? { artist: scope.artist } : {}), ...(scope.album !== undefined ? { album: scope.album } : {}), q: query, status: filter, lyrics: lyricsFilter, lyrics_script: scriptFilter, sort }).toString()} apply={search => {
+        if (lyricsBusy || busy) return;
+        setSelected(new Set()); setCoverID(undefined);
+        history.pushState(null, "", `/library?${search}`);
+        window.dispatchEvent(new Event("route-changed"));
+      }} />
       <div className="table-toolbar library-toolbar">
         <div className="library-display-actions">
 

@@ -153,7 +153,7 @@ func (a *App) fingerprintOutput(ctx context.Context, source Source) (audioFinger
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return fingerprint, false, err
 	}
-	if err = a.waitOutputMaintenanceCapacity(ctx); err != nil {
+	if err = a.waitOutputMaintenanceCapacity(ctx, "fingerprints"); err != nil {
 		return fingerprint, false, err
 	}
 	staged, track, err := a.stageOutput(ctx, source.ID, signature)

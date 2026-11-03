@@ -149,7 +149,7 @@ export function LyricsTrack({ source, notify, onChoose, pickerHref, expanded = f
   </div>;
 }
 
-const onlineProviders = ["qq", "kugou", "netease", "petitlyrics", "lrclib"] as const;
+const onlineProviders = ["qq", "kugou", "netease", "petitlyrics", "lrclib", "kuwo", "migu"] as const;
 type OnlineProvider = Exclude<LyricsProvider, "source">;
 type Candidate = { index: number; provider: OnlineProvider; title: string; artist: string; album: string; duration: number; high_confidence: boolean; identity_match?: boolean; match_score: number; duration_delta?: number; script: string; translation_script?: string };
 type CandidateGroup = { provider: OnlineProvider; token?: string; candidates: Candidate[]; cached?: boolean; searched?: number; loading: boolean; error?: string };

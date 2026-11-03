@@ -6,8 +6,10 @@ import (
 )
 
 func TestAdditionalLyricsProvidersKeepPublishedJSONReadable(t *testing.T) {
-	status := LyricsStatus{State: "ready", Output: "Album/01.opus", Signature: "audio", Path: "Album/01.lrc", Provider: "petitlyrics", Checked: 123,
-		Attempts: []lyricsAttempt{{Provider: "qq", State: "not_found"}, {Provider: "petitlyrics", State: "ready"}, {Provider: "lrclib", State: "not_found"}}}
+	for _, provider := range []string{"petitlyrics", "kuwo", "migu"} {
+		t.Run(provider, func(t *testing.T) {
+	status := LyricsStatus{State: "ready", Output: "Album/01.opus", Signature: "audio", Path: "Album/01.lrc", Provider: provider, Checked: 123,
+		Attempts: []lyricsAttempt{{Provider: "qq", State: "not_found"}, {Provider: provider, State: "ready"}, {Provider: "lrclib", State: "not_found"}}}
 	raw, err := json.Marshal(status)
 	if err != nil {
 		t.Fatal(err)
@@ -27,7 +29,7 @@ func TestAdditionalLyricsProvidersKeepPublishedJSONReadable(t *testing.T) {
 	if json.Unmarshal(raw, &restored) != nil || restored.Provider != status.Provider || restored.Checked != status.Checked || len(restored.Attempts) != 3 {
 		t.Fatal("new provider identity did not round-trip", restored)
 	}
-	file := lyricsFile{Path: status.Path, ID: 1, SourceHash: "source", Signature: "lyrics", Provider: "petitlyrics"}
+	file := lyricsFile{Path: status.Path, ID: 1, SourceHash: "source", Signature: "lyrics", Provider: provider}
 	raw, err = json.Marshal(file)
 	var oldFile lyricsFileJSON
 	if err != nil || json.Unmarshal(raw, &oldFile) != nil || oldFile.Provider != "" || oldFile.Path != file.Path || oldFile.Signature != file.Signature {
@@ -36,6 +38,8 @@ func TestAdditionalLyricsProvidersKeepPublishedJSONReadable(t *testing.T) {
 	var newFile lyricsFile
 	if json.Unmarshal(raw, &newFile) != nil || newFile != file {
 		t.Fatal("lost provider ownership identity", newFile)
+	}
+		})
 	}
 }
 

@@ -478,7 +478,7 @@ func (a *App) startUndoOperation(w http.ResponseWriter, r *http.Request) {
 				readErr = errors.New("Operation was already undone")
 			}
 			if readErr == nil {
-				readErr = a.waitOutputMaintenanceCapacity(ctx)
+				readErr = a.waitOutputMaintenanceCapacity(ctx, "undo")
 			}
 			if readErr == nil {
 				readErr = a.undoOperationItem(ctx, operation, index)

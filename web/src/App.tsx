@@ -13,6 +13,7 @@ import { LyricsSettings } from "./components/lyrics";
 import { BatchRepairButton } from "./components/repair";
 import { RepairTaskDetails } from "./components/repair-tasks";
 import { Overview } from "./components/overview";
+import { MaintenanceFailures, MaintenanceProgress } from "./components/maintenance-progress";
 import { defaultMaintenance, MaintenanceSchedule, NotificationSettings } from "./components/maintenance-settings";
 import { taskPercent } from "./lib/utils";
 
@@ -225,6 +226,8 @@ function Jobs({ notify }: { notify: Notice }) {
   return <>
     {data && <ResourceWarning error={error} retry={retryResource} />}
     <PageHeading><div><h1>{t("jobs.title")}</h1><p>{t("jobs.description")}</p></div></PageHeading>
+    <MaintenanceProgress notify={notify} />
+    <MaintenanceFailures notify={notify} refresh={retryResource} />
     {!data ? <Loading error={error} retry={retryResource} /> : <div className="panel jobs-panel"><div className="table-toolbar"><div className="filter-tabs">{["all", "pending", "running", "paused", "success", "failed", "stopped"].map(state => <button key={state} className={filter === state ? "active" : ""} aria-pressed={filter === state} onClick={() => { setFilter(state); setOffset(0); clearSelection(); setExpanded(undefined); }}>{state === "all" ? t("jobs.all") : status(state)}</button>)}</div><Button variant="outline" disabled={busy} onClick={() => void control("retry")}><RefreshCw size={16} />{t("jobs.retryAll")}</Button></div>
       {data.jobs.length > 0 && <div className="selection-bar"><label className="check-field"><input type="checkbox" checked={pageChecked} ref={node => { if (node) node.indeterminate = !pageChecked && chosen.length > 0; }} disabled={busy} onChange={event => { setAllSelected(false); setSelected(event.target.checked ? new Set(data.jobs.map(taskKey)) : new Set()); }} /><span>{t("jobs.selectPage")}</span></label><Button variant="ghost" size="sm" disabled={busy || allSelected} onClick={() => { setAllSelected(true); setSelected(new Set()); }}>{t("jobs.selectMatching", { count: data.total })}</Button>{selectedCount > 0 && <Button variant="ghost" size="sm" disabled={busy} onClick={clearSelection}>{t("library.clearSelection")}</Button>}</div>}
       {selectedCount > 0 && <div className="selection-bar"><span>{t(allSelected ? "jobs.allSelected" : "library.selected", { count: selectedCount })}</span><Button size="sm" disabled={busy || !canBulk("pause")} onClick={() => bulk("pause")}>{t("jobs.pause")}</Button><Button size="sm" disabled={busy || !canBulk("resume")} onClick={() => bulk("resume")}>{t("jobs.resume")}</Button><Button size="sm" variant="outline" disabled={busy || !canBulk("stop")} onClick={() => bulk("stop")}>{t("jobs.stop")}</Button><Button size="sm" variant="outline" disabled={busy || !canBulk("retry")} onClick={() => bulk("retry")}>{t("jobs.retry")}</Button><Button size="sm" variant="destructive" disabled={busy || !canBulk("delete")} onClick={() => bulk("delete")}>{t("jobs.delete")}</Button><small className="selection-hint">{t("jobs.bulkHint")}</small></div>}

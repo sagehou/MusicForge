@@ -132,6 +132,8 @@ func (a *App) Handler() http.Handler {
 	mux.HandleFunc("POST /api/maintenance/tags", a.auth(a.startOutputTags))
 	mux.HandleFunc("POST /api/maintenance/fingerprints", a.auth(a.startFingerprints))
 	mux.HandleFunc("GET /api/maintenance/loudness", a.auth(a.getLoudness))
+	mux.HandleFunc("GET /api/maintenance/progress", a.auth(a.getMaintenanceProgress))
+	mux.HandleFunc("GET /api/maintenance/failures", a.auth(a.getMaintenanceFailures))
 	mux.HandleFunc("POST /api/maintenance/loudness", a.auth(a.startLoudness))
 	mux.HandleFunc("DELETE /api/maintenance/loudness", a.auth(a.stopLoudness))
 	mux.HandleFunc("GET /api/lidarr/connection", a.auth(a.getLidarrConnection))

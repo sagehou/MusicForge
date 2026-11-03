@@ -54,17 +54,18 @@ export function BuildPreview({ selection, notify, currentScope = false }: { sele
 
 export function MaintenanceWorkbench({ sources, selected, select, notify, comparisonAvailable }: { sources: Source[]; selected: Source[]; select: (ids: number[]) => void; notify: Notice; comparisonAvailable: boolean }) {
   const { t, number } = useI18n();
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(() => location.hash === "#maintenance-workbench");
   const quality = useMemo(() => libraryQuality(sources), [sources]);
   const attention = new Set(qualityKinds.flatMap(kind => quality[kind].map(source => source.id))).size;
   function reveal(selector: string) {
     const element = document.querySelector<HTMLDetailsElement>(selector);
     if (element) { element.open = true; element.scrollIntoView({ block: "nearest", behavior: "smooth" }); element.querySelector("summary")?.focus(); }
   }
-  return <details className="maintenance-workbench" id="maintenance-workbench" onToggle={event => setOpen(event.currentTarget.open)}>
+  return <details className="maintenance-workbench" id="maintenance-workbench" open={open} onToggle={event => setOpen(event.currentTarget.open)}>
     <summary><ClipboardList size={18} /><span>{t("maintenance.title")}</span><small className="quality-count">{number(attention)}</small></summary>
     {open && <div className="comparison-body">
       <p>{t("maintenance.hint")}</p>
+      <p><a href="/jobs#maintenance-progress">{t("progress.open")}</a></p>
       <div className="maintenance-actions"><BuildPreview selection={{ ids: sources.map(source => source.id) }} currentScope notify={notify} />{selected.length > 0 && <BuildPreview selection={{ ids: selected.map(source => source.id) }} notify={notify} />}<Button size="sm" variant="ghost" onClick={() => reveal(".lyrics-panel > details")}>{t("lyrics.title")}</Button>{comparisonAvailable && <Button size="sm" variant="ghost" onClick={() => reveal("#library-comparison")}>{t("compare.heading")}</Button>}<a href="/settings?section=encoding">{t("maintenance.scheduleLink")}</a></div>
       <QualityReview sources={sources} selected={selected} select={select} notify={notify} />
       <LoudnessMaintenance selected={selected} sources={sources} notify={notify} />

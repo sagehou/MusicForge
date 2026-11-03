@@ -40,6 +40,7 @@ type loudnessReport struct {
 	Failed    int    `json:"failed"`
 	Current   string `json:"current,omitempty"`
 	Error     string `json:"error,omitempty"`
+	WaitingReason string `json:"waiting_reason,omitempty"`
 }
 
 type outputGain struct {
@@ -550,26 +551,33 @@ func (a *App) remuxOutputTags(ctx context.Context, track measuredOutput, tags ma
 }
 
 func (a *App) getLoudness(w http.ResponseWriter, r *http.Request) {
+	report, err := a.loudnessSnapshot(r.Context())
+	if err != nil {
+		apiError(w, 500, err)
+		return
+	}
+	respond(w, 200, report)
+}
+
+func (a *App) loudnessSnapshot(ctx context.Context) (loudnessReport, error) {
 	a.loudnessMu.Lock()
 	defer a.loudnessMu.Unlock()
 	if a.loudnessReport == nil {
 		var saved loudnessReport
-		raw, err := a.metaContext(r.Context(), "maintenance:loudness")
+		raw, err := a.metaContext(ctx, "maintenance:loudness")
 		if err == nil && json.Unmarshal([]byte(raw), &saved) == nil {
 			if saved.State == "running" {
-				saved.State, saved.Current = "stopped", ""
+				saved.State, saved.Current, saved.WaitingReason = "stopped", "", ""
 			}
 			a.loudnessReport = &saved
 		} else if err != nil && !errors.Is(err, sql.ErrNoRows) {
-			apiError(w, 500, err)
-			return
+			return loudnessReport{}, err
 		}
 	}
 	if a.loudnessReport == nil {
-		respond(w, 200, loudnessReport{State: "idle"})
-		return
+		return loudnessReport{State: "idle"}, nil
 	}
-	respond(w, 200, a.loudnessReport)
+	return *a.loudnessReport, nil
 }
 
 func (a *App) saveLoudnessReport() {
@@ -673,7 +681,7 @@ func (a *App) startLoudness(w http.ResponseWriter, r *http.Request) {
 			if ctx.Err() != nil {
 				break
 			}
-			capacityErr := a.waitOutputMaintenanceCapacity(ctx)
+			capacityErr := a.waitOutputMaintenanceCapacity(ctx, "loudness")
 			var tracks []measuredOutput
 			var album loudnessMeasurement
 			if capacityErr == nil {

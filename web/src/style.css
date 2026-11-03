@@ -2227,6 +2227,17 @@ input[role="switch"]:checked::after { transform: translateX(20px); background: v
 .provider-cooldowns { margin-top: 12px; }
 .maintenance-report { margin-block: 12px; padding: 16px; border: 1px solid var(--line); border-radius: var(--radius-control); background: var(--subtle); }
 .maintenance-report p, .maintenance-workbench p { margin-block: 8px; color: var(--muted); overflow-wrap: anywhere; }
+.lyrics-provider-options { min-width: 0; margin: 20px 0 0; padding: 16px 0 0; border: 0; border-top: 1px solid var(--line); }
+.lyrics-provider-options legend { font-weight: 600; }
+.lyrics-provider-options > p { color: var(--muted); font-size: var(--font-size-small); }
+.lyrics-provider-options ol { list-style: none; margin: 12px 0 0; padding: 0; }
+.lyrics-provider-options li { display: flex; align-items: center; gap: 10px; padding: 6px 0; border-bottom: 1px solid var(--line); }
+.lyrics-provider-options .check-field { flex: 1; min-width: 0; }
+.lyrics-provider-options .check-field span { min-width: 0; overflow-wrap: anywhere; }
+.lyrics-provider-options .check-field small { display: block; margin-top: 2px; }
+.lyrics-provider-options .actions { flex-wrap: nowrap; flex-shrink: 0; gap: 2px; }
+.lyrics-provider-options .ui-button { min-width: 40px; min-height: 40px; }
+.lyrics-provider-rank { width: 18px; flex-shrink: 0; color: var(--muted); font-family: var(--font-mono); text-align: center; }
 .maintenance-report ul { margin: 8px 0; padding-inline-start: 20px; }
 .build-preview:has(.maintenance-report) { flex: 1 1 100%; min-width: 0; }
 .quality-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); gap: 8px; margin-block: 12px; }

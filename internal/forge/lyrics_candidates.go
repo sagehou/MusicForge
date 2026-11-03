@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"os"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -236,6 +237,15 @@ func (a *App) requestLyricsCandidates(w http.ResponseWriter, r *http.Request) {
 		apiError(w, 400, errors.New("Invalid lyrics provider or search query"))
 		return
 	}
+	providers, err := a.lyricsProviderOrder(r.Context())
+	if err != nil {
+		apiError(w, 500, err)
+		return
+	}
+	if !slices.Contains(providers, body.Provider) {
+		apiError(w, 409, errors.New("Lyrics provider is disabled in settings"))
+		return
+	}
 	ctx, cancel := context.WithTimeout(r.Context(), 12*time.Second)
 	defer cancel()
 	stop := context.AfterFunc(a.ioContext, cancel)
@@ -289,6 +299,11 @@ func (a *App) getLyricsCandidates(w http.ResponseWriter, r *http.Request) {
 		apiError(w, 400, errors.New("invalid source ID"))
 		return
 	}
+	providers, err := a.lyricsProviderOrder(r.Context())
+	if err != nil {
+		apiError(w, 500, err)
+		return
+	}
 	target, err := a.captureLyricsTarget(r.Context(), id)
 	if err != nil {
 		apiError(w, 409, err)
@@ -300,11 +315,14 @@ func (a *App) getLyricsCandidates(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	query := lyricsSearchQuery(target.Source, "")
-	if len(records) > 0 {
-		query = records[0].Query
+	for _, record := range records {
+		if slices.Contains(providers, record.Provider) {
+			query = record.Query
+			break
+		}
 	}
 	groups := []lyricsCandidateGroup{}
-	for _, provider := range lyricsProviders {
+	for _, provider := range providers {
 		for _, record := range records {
 			if record.Query == query && record.Provider == provider {
 				groups = append(groups, a.newLyricsChoices(target, provider, query, record.candidates(target.Source), true, record.Searched))
@@ -352,6 +370,17 @@ func (a *App) previewLyricsCandidate(w http.ResponseWriter, r *http.Request) {
 	body, set, ok := a.lyricsChoice(w, r)
 	if !ok {
 		return
+	}
+	if set.Provider != "source" {
+		providers, err := a.lyricsProviderOrder(r.Context())
+		if err != nil {
+			apiError(w, 500, err)
+			return
+		}
+		if !slices.Contains(providers, set.Provider) {
+			apiError(w, 409, errors.New("Lyrics provider is disabled in settings"))
+			return
+		}
 	}
 	a.lyricsMu.Lock()
 	current := a.lyricsChoices[body.Token]

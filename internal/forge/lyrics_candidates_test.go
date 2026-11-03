@@ -83,6 +83,10 @@ func TestLyricsCandidatePreviewAndExplicitLanguageSelection(t *testing.T) {
 	source := seedLyricsArtifact(t, a, s)
 	request := lyricsSession(t, a)
 	token, index := previewTestLyrics(t, a, request)
+	// A settings change does not revoke an already previewed manual choice.
+	if w := request("PUT", "/api/lyrics/options", map[string]any{"providers": []string{}}); w.Code != 200 {
+		t.Fatal(w.Code, w.Body.String())
+	}
 	path := filepath.Join(s.Output, "Album/01.lrc")
 	if _, err := os.Stat(path); !os.IsNotExist(err) {
 		t.Fatal("search or preview wrote a file", err)

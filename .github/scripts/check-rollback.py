@@ -270,7 +270,8 @@ def main():
             assert successor["hash"] == hashlib.sha256((ROOT / "source" / new_rel).read_bytes()).hexdigest(), "format replacement lost complete source identity"
             wait_for(lambda: api("/api/jobs")["jobs"], lambda rows: all(row["state"] == "success" for row in rows), "completed source format replacement jobs")
         lyrics_track = next(row for row in tracks if row["path"] == "Album/01.flac")
-        api("/api/lyrics/options", "PUT", {"auto_search": False, "min_score": 98})
+        lyric_providers = ["petitlyrics", "lrclib", "migu"]
+        api("/api/lyrics/options", "PUT", {"auto_search": False, "min_score": 98, "providers": lyric_providers})
         api("/api/lyrics/search", "POST", {"ids": [lyrics_track["id"]]})
         wait_for(lambda: api("/api/lyrics")["report"], lambda row: row["state"] == "complete" and row["found"] == 1, "candidate source LRC publication")
         instrumental_track = next(row for row in tracks if row["path"] == "Album/02.opus")
@@ -421,7 +422,7 @@ def main():
                 api, running = start(actual_image)
                 if actual_image == image:
                     assert running == version, "wrong rollback release"
-                if actual_image == image and version in ("v0.2.31", "v0.2.32"):
+                if actual_image == image and int(version.removeprefix("v0.2.")) >= 31:
                     api("/api/lyrics/options", "PUT", {"auto_search": False})
                     api("/api/lyrics/search", "DELETE")
                 verify(api, tracks, pending, stopped)
@@ -439,7 +440,7 @@ def main():
                     assert online_lyrics["state"] == "ready" and not online_lyrics.get("provider"), "additional provider changed legacy ready fields"
                     assert all(item["provider"] in ("lrclib", "qq", "kugou", "netease") for item in online_lyrics.get("attempts", [])), "old frontend received an unknown provider label"
                 if actual_image == CANDIDATE:
-                    assert api("/api/lyrics")["options"] == {"auto_search": False, "min_score": 98}, "older option/Stop writer lost lyrics settings"
+                    assert api("/api/lyrics")["options"] == {"auto_search": False, "min_score": 98, "providers": lyric_providers}, "older option/Stop writer lost lyrics settings"
                     restored_track = next(row for row in api("/api/library") if row["path"] == "Album/01.flac")
                     assert restored_track.get("lyrics_script") == "traditional", "older writer lost script classification"
                     restored_lyrics = next(row for row in api("/api/library") if row["path"] == "Album/01.flac").get("lyrics")

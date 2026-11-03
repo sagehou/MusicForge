@@ -54,7 +54,7 @@ func TestReadyLyricsAreSkippedWithoutStorageReadsAfterRestart(t *testing.T) {
 			cfg, logger, assets := a.cfg, a.logger, a.assets
 			a.Close()
 			// Neither volume is accessible: ordinary fill must decide entirely from
-			// persisted state, even after restart and a matching-threshold change.
+			// persisted state, even after restart and threshold/provider changes.
 			for _, root := range []string{settings.Source, settings.Output} {
 				if err = os.Rename(root, root+"-offline"); err != nil {
 					t.Fatal(err)
@@ -70,7 +70,7 @@ func TestReadyLyricsAreSkippedWithoutStorageReadsAfterRestart(t *testing.T) {
 				w.WriteHeader(500)
 			})
 			request = lyricsSession(t, reopened)
-			if w := request("PUT", "/api/lyrics/options", map[string]any{"auto_search": true, "min_score": 100}); w.Code != 200 {
+			if w := request("PUT", "/api/lyrics/options", map[string]any{"auto_search": true, "min_score": 100, "providers": []string{}}); w.Code != 200 {
 				t.Fatal(w.Code, w.Body.String())
 			}
 			for _, body := range []map[string]any{{"all": true}, {"ids": []int64{1}}, {"all": true}} {

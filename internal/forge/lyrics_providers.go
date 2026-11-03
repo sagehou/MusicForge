@@ -245,13 +245,22 @@ func validLyricsSearch(source Source) error {
 
 func (a *App) searchOnlineLyrics(ctx context.Context, target lyricsTarget, batch lyricsBatchOptions) (text, provider, state string, attempts []lyricsAttempt, err error) {
 	source := target.Source
+	providers := batch.Providers
+	if providers == nil {
+		if providers, err = a.lyricsProviderOrder(ctx); err != nil {
+			return
+		}
+	}
+	if len(providers) == 0 {
+		return "", "", "not_found", nil, nil
+	}
 	if err = validLyricsSearch(source); err != nil {
 		return
 	}
 	review, instrumental, failed := false, false, false
 	var bestText, bestProvider string
 	bestScore := -1
-	for _, name := range lyricsProviders {
+	for _, name := range providers {
 		candidates, noVocals, _, searched, searchErr := a.cachedLyricsCandidates(ctx, target, name, "", false, batch.Refresh)
 		instrumental = instrumental || noVocals
 		result, resultState := "", "not_found"

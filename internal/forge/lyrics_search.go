@@ -16,16 +16,18 @@ const lyricsMatchingKey = "lyrics:matching"
 const defaultLyricsMinScore = 96
 
 type lyricsOptions struct {
-	AutoSearch bool `json:"auto_search"`
-	MinScore   int  `json:"min_score"`
+	AutoSearch bool     `json:"auto_search"`
+	MinScore   int      `json:"min_score"`
+	Providers  []string `json:"providers"`
 }
 
 type lyricsBatchOptions struct {
-	Refresh            bool   `json:"refresh"`
-	ReplaceTraditional bool   `json:"replace_traditional,omitempty"`
-	InspectOnly        bool   `json:"inspect_only,omitempty"`
-	MinScore           int    `json:"-"`
-	OperationBatch     string `json:"-"`
+	Refresh            bool     `json:"refresh"`
+	ReplaceTraditional bool     `json:"replace_traditional,omitempty"`
+	InspectOnly        bool     `json:"inspect_only,omitempty"`
+	MinScore           int      `json:"-"`
+	Providers          []string `json:"-"`
+	OperationBatch     string   `json:"-"`
 }
 
 type LyricsStatus struct {
@@ -77,7 +79,11 @@ type lyricsState struct {
 }
 
 func (a *App) lyricsOptions(ctx context.Context) (lyricsOptions, error) {
-	options := lyricsOptions{MinScore: defaultLyricsMinScore}
+	providers, err := a.lyricsProviderOrder(ctx)
+	options := lyricsOptions{MinScore: defaultLyricsMinScore, Providers: providers}
+	if err != nil {
+		return options, err
+	}
 	raw, err := a.metaContext(ctx, lyricsOptionsKey)
 	if err == nil {
 		var legacy struct {
@@ -127,14 +133,19 @@ func (a *App) getLyrics(w http.ResponseWriter, r *http.Request) {
 
 func (a *App) putLyricsOptions(w http.ResponseWriter, r *http.Request) {
 	var body struct {
-		AutoSearch bool `json:"auto_search"`
-		MinScore   *int `json:"min_score"`
+		AutoSearch bool      `json:"auto_search"`
+		MinScore   *int      `json:"min_score"`
+		Providers  *[]string `json:"providers"`
 	}
 	if !decode(w, r, &body) {
 		return
 	}
 	if body.MinScore != nil && (*body.MinScore < 0 || *body.MinScore > 100) {
 		apiError(w, 400, errors.New("Lyrics minimum match score must be an integer between 0 and 100"))
+		return
+	}
+	if body.Providers != nil && !validLyricsProviderOrder(*body.Providers) {
+		apiError(w, 400, errors.New("Invalid lyrics provider settings"))
 		return
 	}
 	a.lyricsMu.Lock()
@@ -147,6 +158,9 @@ func (a *App) putLyricsOptions(w http.ResponseWriter, r *http.Request) {
 	options.AutoSearch = body.AutoSearch
 	if body.MinScore != nil {
 		options.MinScore = *body.MinScore
+	}
+	if body.Providers != nil {
+		options.Providers = append([]string{}, (*body.Providers)...)
 	}
 	tx, err := a.db.BeginTx(r.Context(), nil)
 	if err != nil {
@@ -161,6 +175,10 @@ func (a *App) putLyricsOptions(w http.ResponseWriter, r *http.Request) {
 	if err == nil && body.MinScore != nil {
 		raw, _ = json.Marshal(map[string]int{"version": 1, "min_score": options.MinScore})
 		_, err = tx.ExecContext(r.Context(), "INSERT INTO meta(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", lyricsMatchingKey, string(raw))
+	}
+	if err == nil && body.Providers != nil {
+		raw, _ = json.Marshal(lyricsProviderPolicy{Version: 1, Providers: options.Providers})
+		_, err = tx.ExecContext(r.Context(), "INSERT INTO meta(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", lyricsProvidersKey, string(raw))
 	}
 	if err == nil {
 		err = tx.Commit()
@@ -342,6 +360,7 @@ func (a *App) startLyrics(s Settings, sources []Source, batch lyricsBatchOptions
 		return 0, false
 	}
 	batch.MinScore = options.MinScore
+	batch.Providers = append([]string{}, options.Providers...)
 	if automatic {
 		// Stop/options writes share this lock: a previously selected automatic
 		// batch must not start after the administrator disables filling.

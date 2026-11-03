@@ -3,6 +3,7 @@ import { test, expect } from "@playwright/test";
 import type { Source } from "../src/types";
 
 const settings = { enabled: true, source: "/music/source", output: "/music/output", encoding: { codec: "opus", mode: "vbr", bitrate: 192, quality: 2 }, concurrency: 1, scan_minutes: 60, lidarr_prefix: "", nav_url: "", nav_user: "", nav_library: 1, oidc_issuer: "", oidc_client_id: "" };
+const defaultProviders = ["qq", "kugou", "netease", "petitlyrics", "lrclib", "kuwo", "migu"];
 
 test.beforeEach(async ({ page }) => {
   await page.route("**/api/lyrics", route => route.fulfill({ json: { options: { auto_search: false }, report: { state: "idle", total: 0, processed: 0, found: 0, not_found: 0, failed: 0, stopping: false } } }));
@@ -45,7 +46,7 @@ test("lyrics settings save thresholds, retain drafts and offer output-only inspe
   await page.addInitScript(() => localStorage.setItem("musicforge.language", "en"));
   await page.route("**/api/auth/me", route => route.fulfill({ json: { initialized: true, authenticated: true, username: "admin", method: "local", csrf: "test", oidc: false, version: "test" } }));
   await page.route("**/api/settings", route => route.fulfill({ json: { settings, configured: { webhook: false, nav_password: false, oidc_secret: false }, public_url: "", allowed_origins: [] } }));
-  let options = { auto_search: false, min_score: 96 };
+  let options = { auto_search: false, min_score: 96, providers: [...defaultProviders] };
   const saves: unknown[] = [], batches: unknown[] = [];
   await page.route("**/api/lyrics", route => route.fulfill({ json: { options, report: { state: "idle", total: 0, processed: 0, found: 0, not_found: 0, failed: 0, stopping: false } } }));
   await page.route("**/api/lyrics/options", route => { expect(route.request().headers()["x-csrf-token"]).toBe("test"); options = route.request().postDataJSON(); saves.push(options); return route.fulfill({ json: options }); });
@@ -54,18 +55,34 @@ test("lyrics settings save thresholds, retain drafts and offer output-only inspe
   await expect(page.getByRole("tab", { name: "Lyrics", exact: true })).toHaveAttribute("aria-selected", "true");
   const score = page.getByLabel("Minimum score for automatic matching", { exact: true });
   await expect(score).toHaveValue("96");
+  const sources = page.getByRole("group", { name: "Online lyric sources and priority", exact: true });
+  await expect(sources.getByRole("checkbox", { checked: true })).toHaveCount(7);
+  await expect(sources).toContainText("Japanese synchronized lyrics");
+  await sources.getByRole("checkbox", { name: "QQ Music", exact: true }).uncheck();
+  await sources.getByRole("button", { name: "Move PetitLyrics up", exact: true }).click();
+  await sources.getByRole("button", { name: "Move PetitLyrics up", exact: true }).click();
+  await expect(sources.locator("li").first()).toContainText("PetitLyrics");
+  await expect(sources.getByRole("button", { name: "Move PetitLyrics up", exact: true })).toBeDisabled();
   await page.getByRole("button", { name: "90 · Relaxed", exact: true }).click();
   await page.getByRole("switch", { name: "Automatically fill lyrics for new and existing artifacts", exact: true }).check();
   await page.getByRole("tab", { name: "Encoding", exact: true }).click();
   await page.getByRole("tab", { name: "Lyrics", exact: true }).click();
   await expect(score).toHaveValue("90");
+  await expect(sources.getByRole("checkbox", { name: "QQ Music", exact: true })).not.toBeChecked();
+  await expect(sources.locator("li").first()).toContainText("PetitLyrics");
   expect(saves).toHaveLength(0);
   await page.getByRole("button", { name: "Save settings", exact: true }).click();
   await expect.poll(() => saves.length).toBe(1);
-  expect(options).toEqual({ auto_search: true, min_score: 90 });
+  expect(options).toEqual({ auto_search: true, min_score: 90, providers: ["petitlyrics", "kugou", "netease", "lrclib", "kuwo", "migu"] });
   await page.getByRole("button", { name: "100 · Strictest", exact: true }).click();
+  await sources.getByRole("checkbox", { name: "QQ Music", exact: true }).focus();
+  await page.keyboard.press("Space");
+  await expect(sources.locator("li").last()).toContainText("QQ Music");
+  await sources.getByRole("button", { name: "Move PetitLyrics down", exact: true }).click();
   await page.getByRole("button", { name: "Discard changes", exact: true }).click();
   await expect(score).toHaveValue("90");
+  await expect(sources.getByRole("checkbox", { name: "QQ Music", exact: true })).not.toBeChecked();
+  await expect(sources.locator("li").first()).toContainText("PetitLyrics");
   await score.fill("101");
   await page.getByRole("button", { name: "Save settings", exact: true }).click();
   expect(saves).toHaveLength(1);
@@ -75,16 +92,70 @@ test("lyrics settings save thresholds, retain drafts and offer output-only inspe
   expect(batches[0]).toEqual({ all: true, refresh: false, inspect_only: true });
   await page.reload();
   await expect(score).toHaveValue("90");
+  await expect(sources.getByRole("checkbox", { name: "QQ Music", exact: true })).not.toBeChecked();
+  await expect(sources.locator("li").first()).toContainText("PetitLyrics");
   await page.screenshot({ path: "test-results/lyrics-settings-desktop-en.png", fullPage: true });
   await setPreference(page, "language", "zh-CN");
+  await setPreference(page, "theme", "dark");
   await page.setViewportSize({ width: 320, height: 844 });
   await expect(page.getByRole("tab", { name: "歌词设置", exact: true })).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
   await page.screenshot({ path: "test-results/lyrics-settings-mobile-zh-CN.png", fullPage: true });
+  const checkedSources = page.locator(".lyrics-provider-options input[type=checkbox]:checked");
+  while (await checkedSources.count()) await checkedSources.first().uncheck();
+  await expect(page.locator(".lyrics-provider-options")).toContainText("未启用在线来源");
+  await page.getByRole("button", { name: "保存设置", exact: true }).click();
+  await expect.poll(() => saves.length).toBe(2);
+  expect(options.providers).toEqual([]);
   await page.route("**/api/library", route => route.fulfill({ json: [] }));
   await page.getByRole("link", { name: "查看繁体歌词并批量替换", exact: true }).click();
   await expect(page).toHaveURL(/view=tracks&lyrics_script=traditional/);
 });
+
+for (const providers of [["petitlyrics", "lrclib"], []]) {
+  test(`candidate searches honor enabled sources and priority: ${providers.join(",") || "local only"}`, async ({ page }) => {
+    await page.addInitScript(() => localStorage.setItem("musicforge.language", "en"));
+    const source: Source = { id: 1, path: "Album/01.flac", artist: "Artist", album: "Album", title: "Track", track: 1, disc: 1, duration: 183, present: true, output: "Album/01.opus", output_present: true, status: "ready", error: "", size: 123, metadata: {} };
+    const candidate = (provider: string) => ({ index: 0, provider, title: "Track", artist: "Artist", album: "Album", duration: 183, high_confidence: true, match_score: 100, script: "unknown" });
+    const searches: string[] = [], previews: unknown[] = [];
+    let saves = 0;
+    await page.route("**/api/auth/me", route => route.fulfill({ json: { initialized: true, authenticated: true, username: "admin", method: "local", csrf: "test", oidc: false, version: "test" } }));
+    await page.route("**/api/library", route => route.fulfill({ json: [source] }));
+    await page.route("**/api/lyrics", route => route.fulfill({ json: { options: { auto_search: false, min_score: 96, providers }, report: { state: "idle" } } }));
+    await page.route("**/api/library/1/lyrics/candidates", route => {
+      if (route.request().method() === "GET") return route.fulfill({ json: { query: "Track Artist", groups: [{ provider: "qq", token: "disabled-cache", candidates: [candidate("qq")] }], instrumental: { token: "local", candidates: [{ index: 0 }] } } });
+      const { provider } = route.request().postDataJSON(); searches.push(provider);
+      return route.fulfill({ json: { provider, token: provider, candidates: [candidate(provider)] } });
+    });
+    await page.route("**/api/library/1/lyrics/preview", route => { const body = route.request().postDataJSON(); previews.push(body); return route.fulfill({ json: { original: body.token === "local" ? "[00:00.00]纯音乐，请欣赏\n" : "[00:01.00]日本語の歌\n" } }); });
+    await page.route("**/api/library/1/lyrics", route => { saves++; return route.fulfill({ json: {} }); });
+    await page.goto("/library?view=tracks");
+    await page.getByRole("button", { name: "Choose lyrics", exact: true }).click();
+    const picker = page.getByRole("region", { name: "Choose lyrics", exact: true });
+    const search = picker.getByRole("button", { name: "Search candidates", exact: true });
+    await expect(picker.getByRole("radio", { name: "Preview Track · Artist · QQ Music", exact: true })).toHaveCount(0);
+    if (providers.length) {
+      await expect(search).toBeEnabled();
+      await search.click();
+      const online = picker.locator(".lyrics-candidate:not(.lyrics-instrumental)");
+      await expect(online).toHaveCount(2);
+      await expect(online.first()).toContainText("PetitLyrics");
+      await expect(online.first().getByRole("radio")).toBeChecked();
+      await expect.poll(() => searches.length).toBe(2);
+      expect([...searches].sort()).toEqual([...providers].sort());
+      await expect.poll(() => previews).toEqual([{ token: "petitlyrics", index: 0 }]);
+    } else {
+      await expect(search).toBeDisabled();
+      await expect(picker).toContainText("No online sources are enabled");
+      expect(searches).toHaveLength(0);
+      await picker.getByRole("radio", { name: "Mark as instrumental", exact: true }).check();
+      await expect(picker.locator("pre")).toContainText("纯音乐，请欣赏");
+      await picker.getByRole("button", { name: "Confirm instrumental", exact: true }).click();
+      await expect.poll(() => saves).toBe(1);
+      expect(searches).toHaveLength(0);
+    }
+  });
+}
 
 test("traditional script filter supports cross-page batch replacement and shared URLs", async ({ page }) => {
   await page.addInitScript(() => localStorage.setItem("musicforge.language", "en"));

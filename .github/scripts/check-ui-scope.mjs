@@ -101,7 +101,7 @@ function main() {
   // unrelated authentication, retry and multi-page batch scenarios.
   const cases = ["translation catalogs", "default albums", "top-right controls", "aligned records", "phone pages retain",
     "album rows expose", "settings sections preserve", "sidebar collapse", "dashboard uses", "task details expand",
-    "lyrics selection, background", "failed lyric parsing", "file comparison explains", "best-effort repair requires", "maintenance workbench", "schedule and notifications", "lyric editor previews", "output cover correction", "inline audition plays", "saved library views", "saved views reject", "maintenance progress and grouped recovery"];
+    "lyrics selection, background", "lyrics settings save thresholds", "failed lyric parsing", "file comparison explains", "best-effort repair requires", "maintenance workbench", "schedule and notifications", "lyric editor previews", "output cover correction", "inline audition plays", "saved library views", "saved views reject", "maintenance progress and grouped recovery"];
   writeFileSync(".ci/ui-grep.txt", cases.join("|") + "\n");
   plan.scope = scope;
   if (uncertain.length) {

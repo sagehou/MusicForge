@@ -364,6 +364,7 @@ type Source struct {
 	Lyrics          *LyricsStatus     `json:"lyrics,omitempty"`
 	LyricsScript    string            `json:"lyrics_script,omitempty"`
 	OutputGain      *outputGain       `json:"output_gain,omitempty"`
+	OutputTags      map[string]string `json:"output_tags,omitempty"`
 
 	mediaInfoKnown bool
 }

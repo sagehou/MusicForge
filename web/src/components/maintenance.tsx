@@ -6,6 +6,7 @@ import { libraryQuality, qualityKinds } from "../library-quality";
 import type { Encoding, LoudnessReport, Source } from "../types";
 import { Button } from "./ui/button";
 import { ResourceWarning, useResource, type Notice } from "./resource";
+import { LibraryTools } from "./library-tools";
 
 export function storageSize(bytes: number, locale: string) {
   const unit = Math.min(4, Math.floor(Math.log2(Math.max(bytes, 1)) / 10));
@@ -66,6 +67,7 @@ export function MaintenanceWorkbench({ sources, selected, select, notify, compar
       <div className="maintenance-actions"><BuildPreview selection={{ ids: sources.map(source => source.id) }} currentScope notify={notify} />{selected.length > 0 && <BuildPreview selection={{ ids: selected.map(source => source.id) }} notify={notify} />}<Button size="sm" variant="ghost" onClick={() => reveal(".lyrics-panel > details")}>{t("lyrics.title")}</Button>{comparisonAvailable && <Button size="sm" variant="ghost" onClick={() => reveal("#library-comparison")}>{t("compare.heading")}</Button>}<a href="/settings?section=encoding">{t("maintenance.scheduleLink")}</a></div>
       <section aria-label={t("quality.title")}><h3>{t("quality.title")}</h3><p>{t("quality.hint")}</p><div className="quality-grid">{qualityKinds.map(kind => <Button key={kind} variant="outline" size="sm" disabled={!quality[kind].length} onClick={() => select(quality[kind].map(source => source.id))}><span>{t(`quality.${kind}`)}</span><strong>{number(quality[kind].length)}</strong></Button>)}</div><p className="audition-note">{t("quality.caution")}</p></section>
       <LoudnessMaintenance selected={selected} sources={sources} notify={notify} />
+      <LibraryTools sources={sources} selected={selected} select={select} notify={notify} />
     </div>}
   </details>;
 }

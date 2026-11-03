@@ -4,6 +4,8 @@ import { api } from "../api";
 import { useI18n } from "../i18n";
 import type { Source } from "../types";
 import { Button } from "./ui/button";
+import { EditHistory } from "./edit-history";
+import { ArtworkSearch, artworkFile } from "./artwork-search";
 
 export function ArtworkEditor({ source, saved, close }: { source: Source; saved: () => void; close: () => void }) {
   const { t, errorMessage } = useI18n();
@@ -13,6 +15,7 @@ export function ArtworkEditor({ source, saved, close }: { source: Source; saved:
   const [image, setImage] = useState("");
   const [busy, setBusy] = useState(false);
   const [processing, setProcessing] = useState(false);
+  const [searching, setSearching] = useState(false);
   const [error, setError] = useState<Error>();
   const [attempt, setAttempt] = useState(0);
   const generation = useRef(0);
@@ -53,10 +56,10 @@ export function ArtworkEditor({ source, saved, close }: { source: Source; saved:
     finally { setBusy(false); }
   }
   return <section className="maintenance-report artwork-editor" aria-label={t("coverEdit.title")}>
-    <div className="section-heading"><h3>{t("coverEdit.title")}</h3><Button size="icon" variant="ghost" disabled={busy} aria-label={t("app.dismiss")} onClick={close}><X size={16} /></Button></div>
+    <div className="section-heading"><h3>{t("coverEdit.title")}</h3><Button size="icon" variant="ghost" disabled={busy || searching} aria-label={t("app.dismiss")} onClick={close}><X size={16} /></Button></div>
     <p>{t("coverEdit.hint", { path: source.path.split("/").slice(0, -1).join("/") || "." })}</p>
     {error && <div role="alert" className="error-box"><p>{errorMessage(error.message)}</p>{!data && <Button size="sm" variant="outline" onClick={() => setAttempt(value => value + 1)}>{t("audition.reload")}</Button>}</div>}
     {!data && !error && <Loader2 size={18} className="animate-spin" />}
-    {data && <><div className="artwork-editor-preview">{(image || source.artwork_url) && <img src={image || source.artwork_url} alt={t("coverEdit.preview")} />}</div><div className="actions"><label className="maintenance-upload"><Upload size={14} />{t("coverEdit.upload")}<input type="file" accept="image/jpeg,image/png" disabled={busy || processing} onChange={event => { setFile(event.target.files?.[0]); event.target.value = ""; }} /></label><label className="check-field"><input type="checkbox" checked={crop} disabled={busy || processing} onChange={event => setCrop(event.target.checked)} />{t("coverEdit.crop")}</label></div><p className="audition-note">{t("coverEdit.limit")}</p><div className="actions"><Button size="sm" disabled={busy || processing || !image} onClick={() => void save()}>{busy || processing ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}{t("coverEdit.save")}</Button><Button size="sm" variant="outline" disabled={busy || !data.override} onClick={() => { if (confirm(t("coverEdit.resetConfirm"))) void save(true); }}><RotateCcw size={14} />{t("coverEdit.reset")}</Button></div></>}
+    {data && <><ArtworkSearch source={source} disabled={busy || processing} loading={setSearching} choose={file => { setFile(file); setCrop(false); }} /><div className="artwork-editor-preview">{(image || source.artwork_url) && <img src={image || source.artwork_url} alt={t("coverEdit.preview")} />}</div><div className="actions"><label className="maintenance-upload"><Upload size={14} />{t("coverEdit.upload")}<input type="file" accept="image/jpeg,image/png" disabled={busy || processing || searching} onChange={event => { setFile(event.target.files?.[0]); event.target.value = ""; }} /></label><label className="check-field"><input type="checkbox" checked={crop} disabled={busy || processing || searching} onChange={event => setCrop(event.target.checked)} />{t("coverEdit.crop")}</label></div><p className="audition-note">{t("coverEdit.limit")}</p><div className="actions"><Button size="sm" disabled={busy || processing || searching || !image} onClick={() => void save()}>{busy || processing ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}{t("coverEdit.save")}</Button><Button size="sm" variant="outline" disabled={busy || searching || !data.override} onClick={() => { if (confirm(t("coverEdit.resetConfirm"))) void save(true); }}><RotateCcw size={14} />{t("coverEdit.reset")}</Button></div><EditHistory id={source.id} kind="artwork" disabled={busy || processing || searching} restore={content => { if (content.image) { setFile(artworkFile(content.image)); setCrop(false); } }} /></>}
   </section>;
 }

@@ -2220,6 +2220,26 @@ input[role="switch"]:checked::after { transform: translateX(20px); background: v
 .lyrics-editor input[type="number"] { width: 110px; min-width: 0; }
 .lyrics-editor select { min-width: 0; width: 100%; }
 .artwork-editor-preview img { width: 180px; max-width: 100%; max-height: 240px; object-fit: contain; margin-bottom: 12px; border-radius: var(--radius-artwork); }
+
+.library-tools { display: grid; gap: 8px; min-width: 0; }
+.library-tool, .edit-history, .cover-search { min-width: 0; border-top: 1px solid var(--line); padding-top: 12px; margin-top: 12px; }
+.library-tool > summary, .edit-history > summary, .cover-search > summary { display: flex; align-items: center; gap: 8px; cursor: pointer; font-weight: 600; padding-block: 8px; }
+.library-tool > summary:focus-visible, .edit-history > summary:focus-visible, .cover-search > summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.library-tool .field, .edit-history .field, .cover-search .field { margin-block: 12px; min-width: 0; }
+.tag-editor-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 16px; }
+.tool-table-scroll { overflow: auto; max-height: 360px; margin-block: 12px; }
+.tool-table { width: 100%; border-collapse: collapse; font-size: var(--font-size-small); }
+.tool-table th, .tool-table td { text-align: start; padding: 8px; border-bottom: 1px solid var(--line); vertical-align: top; overflow-wrap: anywhere; min-width: 120px; }
+.history-image { display: block; max-width: min(100%, 240px); max-height: 240px; object-fit: contain; margin-block: 12px; border-radius: var(--radius-artwork); }
+.cover-candidates { list-style: none; padding: 0; max-height: 320px; overflow: auto; }
+.cover-candidates li { display: flex; justify-content: space-between; gap: 12px; align-items: center; padding-block: 10px; border-bottom: 1px solid var(--line); }
+.cover-candidates li > div { display: grid; gap: 4px; min-width: 0; overflow-wrap: anywhere; }
+.cover-candidates a { font-size: var(--font-size-small); }
+.saved-playlists { display: grid; gap: 8px; }
+@media (max-width: 600px) {
+  .tag-editor-fields { grid-template-columns: minmax(0, 1fr); }
+  .cover-candidates li { flex-wrap: wrap; }
+}
 @media (max-width: 600px) {
   .maintenance-report { padding: 12px; }
   .maintenance-workbench .actions, .lyrics-editor .actions, .artwork-editor .actions, .audition-lyrics-heading { flex-wrap: wrap; }

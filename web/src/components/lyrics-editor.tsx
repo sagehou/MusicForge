@@ -4,6 +4,7 @@ import { api } from "../api";
 import { useI18n } from "../i18n";
 import { audioTime, lyricsTimeline, shiftLyrics } from "../lyrics-timeline";
 import { Button } from "./ui/button";
+import { EditHistory } from "./edit-history";
 
 export function LyricsEditor({ id, position, preview, saved, close }: { id: number; position: number; preview: (text: string) => void; saved: (text: string) => void; close: () => void }) {
   const { t, errorMessage } = useI18n();
@@ -51,6 +52,7 @@ export function LyricsEditor({ id, position, preview, saved, close }: { id: numb
       <div className="field"><span className="field-label">{t("lyricsEdit.delay")}</span><div className="actions"><Button size="sm" variant="outline" disabled={busy || delay <= -3600000} onClick={() => setDelay(value => Math.max(-3600000, value - 100))}>−100 ms</Button><input aria-label={t("lyricsEdit.delay")} type="number" min={-3600000} max={3600000} step={1} disabled={busy} value={delay} onChange={event => setDelay(Math.max(-3600000, Math.min(3600000, Math.round(Number(event.target.value)))))} /><Button size="sm" variant="outline" disabled={busy || delay >= 3600000} onClick={() => setDelay(value => Math.min(3600000, value + 100))}>+100 ms</Button></div></div>
       <label className="field"><span className="field-label">{t("lyricsEdit.anchor")}</span><select disabled={busy || !cues.length} value={Math.min(anchor, Math.max(0, cues.length - 1))} onChange={event => setAnchor(Number(event.target.value))}>{cues.map((cue, index) => <option key={cue.time} value={index}>{audioTime(cue.time)} · {cue.text.slice(0, 80)}</option>)}</select></label>
       <div className="actions"><Button size="sm" variant="outline" disabled={busy || !cues[anchor]} onClick={() => setDelay(Math.max(-3600000, Math.min(3600000, Math.round((position - cues[anchor].time) * 1000))))}>{t("lyricsEdit.align", { time: audioTime(position) })}</Button><Button size="sm" disabled={busy || !cues.length || text === initial && delay === 0} onClick={() => void save()}>{busy ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}{t("lyricsEdit.save")}</Button></div>
+      <EditHistory id={id} kind="lyrics" disabled={busy} restore={content => { setText(content.text || ""); setDelay(0); setAnchor(0); }} />
     </>}
   </section>;
 }

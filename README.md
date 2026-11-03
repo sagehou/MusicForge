@@ -20,6 +20,8 @@ One container, one administrator, one source library and one output library. Ima
 
 Use Library → Maintenance workbench to review quality issues, preview build size and source reads, or fill missing MP3 ReplayGain / Opus R128 tags without re-encoding. Audition offers LRC import and timing correction; album/track details offer output-cover correction. Settings → Encoding adds build windows, daytime concurrency and new-track priority. Settings → Integrations adds webhook/ntfy alerts and a saved-connection test. Sources remain read-only. See the [maintenance behavior and limits](docs/mvp-design.en.md#output-maintenance-and-scheduling).
 
+The workbench also offers output-tag correction, M3U/M3U8 mapping/export and acoustic duplicate candidates. Lyric and cover editors retain recent revisions for preview and restore; cover correction can search MusicBrainz / Cover Art Archive. Acoustic results are review clues based on generated audio, with no automatic deletion.
+
 ## Supported source audio
 
 Scan FLAC, MP3, AAC/ALAC in M4A/M4B/MP4, raw AAC, PCM WAV/AIFF, Ogg/Vorbis/Opus, WMA, APE, WavPack and MKA. Extensions are case-insensitive; ffprobe checks actual audio and rejects ordinary video streams while allowing attached artwork. Source formats can coexist in one library. All tracks are re-encoded with the selected Opus/MP3 profile, including lossy inputs; another lossy encode can reduce quality.

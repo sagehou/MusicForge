@@ -20,6 +20,8 @@ Navidrome（只读）
 
 在音乐库 → 维护工作台查看质量问题、预览构建大小与源读取量，或补全 MP3 ReplayGain／Opus R128 标签而不重编码。试听支持 LRC 导入和时间轴修正，专辑／曲目详情支持修正输出封面。设置 → 编码可配置构建窗口、日间并发与新曲目优先；设置 → 集成可配置 webhook／ntfy 提醒并测试已保存的连接。源库保持只读。详见[维护行为与限制](docs/mvp-design.md#输出维护与构建调度)。
 
+维护工作台还支持输出标签修正、M3U／M3U8 路径映射与导出，以及声学重复候选。歌词和封面编辑器保留近期版本供预览和恢复，封面可从 MusicBrainz／Cover Art Archive 搜索。声学结果基于已生成音频，仅供排查，不会自动删除文件。
+
 ## 支持的源音频
 
 支持 FLAC、MP3、M4A/M4B/MP4 中的 AAC/ALAC、裸 AAC、PCM WAV/AIFF、Ogg/Vorbis/Opus、WMA、APE、WavPack 与 MKA，可混合存放。后缀不区分大小写；ffprobe 检查实际音频内容，允许内嵌封面，拒绝普通视频流。所有源文件均按所选 Opus/MP3 配置重新编码；有损源再次编码可能降低音质。

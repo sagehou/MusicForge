@@ -154,7 +154,7 @@ func (a *App) claimWithRepairCapacity(conversion bool, concurrency int) (Job, er
 		reserved++
 	}
 	a.repairMu.Unlock()
-	if a.loudnessBusy.Load() {
+	if a.loudnessBusy.Load() || a.toolBusy.Load() {
 		reserved++
 	}
 	if conversion {
@@ -189,7 +189,7 @@ func (a *App) startRepairs(sources []Source, settings Settings, waitCapacity boo
 	if a.repairRunning {
 		return "", errors.New("A best-effort repair is already running")
 	}
-	if a.loudnessBusy.Load() {
+	if a.loudnessBusy.Load() || a.toolBusy.Load() {
 		return "", errors.New("Another output maintenance operation is running")
 	}
 	if len(sources) == 0 {
@@ -401,13 +401,15 @@ func (a *App) makeRepair(ctx context.Context, source Source, settings Settings) 
 	}
 	args := append([]string{"-nostdin", "-hide_banner", "-loglevel", "error", "-n", "-xerror"}, pcm.inputArgs()...)
 	args = append(args, "-i", "pipe:0", "-map", "0:a:0", "-vn", "-sn", "-dn")
-	keys := make([]string, 0, len(source.Metadata))
-	for key := range source.Metadata {
+	outputTags, err := a.buildOutputMetadata(ctx, settings, source)
+	if err != nil { return fail(err) }
+	keys := make([]string, 0, len(outputTags))
+	for key := range outputTags {
 		keys = append(keys, key)
 	}
 	sort.Strings(keys)
 	for _, key := range keys {
-		args = append(args, "-metadata", key+"="+source.Metadata[key])
+		args = append(args, "-metadata", key+"="+outputTags[key])
 	}
 	args = append(args, settings.Encoding.Args()...)
 	args = append(args, path)

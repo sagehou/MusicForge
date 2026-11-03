@@ -138,7 +138,7 @@ func (a *App) recoverOutputGains(ctx context.Context) error {
 			return err
 		}
 	}
-	return nil
+	return a.recoverOutputTagEdits(ctx)
 }
 
 type loudnessMeasurement struct{ Integrated, Peak float64 }
@@ -348,9 +348,13 @@ func (a *App) analyzeAlbum(ctx context.Context, sources []Source) ([]measuredOut
 }
 
 func (a *App) writeOutputGain(ctx context.Context, track measuredOutput, tags map[string]string) (bool, error) {
+	return a.remuxOutputTags(ctx, track, tags, false, nil)
+}
+
+func (a *App) remuxOutputTags(ctx context.Context, track measuredOutput, tags map[string]string, replace bool, override *outputTagOverride) (bool, error) {
 	missing := map[string]string{}
 	for key, value := range tags {
-		if strings.TrimSpace(track.Tags[key]) == "" {
+		if replace && track.Tags[key] != value || !replace && strings.TrimSpace(track.Tags[key]) == "" {
 			missing[key] = value
 		}
 	}
@@ -363,6 +367,15 @@ func (a *App) writeOutputGain(ctx context.Context, track measuredOutput, tags ma
 		err := a.reads.QueryRowContext(ctx, "SELECT signature FROM managed WHERE path=? AND source_id=? AND kind='audio'", track.Source.Output, track.Source.ID).Scan(&signature)
 		if err != nil || signature != track.Signature {
 			return false, errAuditionUnavailable
+		}
+		settings, err := a.settingsContext(ctx)
+		if err != nil { return false, err }
+		source, err := a.source(track.Source.ID)
+		if err != nil { return false, err }
+		if !settings.Enabled || settings.Source != track.Settings.Source || settings.Output != track.Settings.Output || source.Rel != track.Source.Rel || source.Output != track.Source.Output || source.BuiltHash != track.Source.BuiltHash || source.Hash != track.Source.Hash { return false, errAuditionUnavailable }
+		if override != nil {
+			raw, _ := json.Marshal(override)
+			return false, a.setMeta("output-tags:"+strconv.FormatInt(track.Source.ID, 10), string(raw))
 		}
 		gain := outputGainFor(track.Source.Output, signature, track.Tags)
 		raw, _ := json.Marshal(gain)
@@ -401,6 +414,11 @@ func (a *App) writeOutputGain(ctx context.Context, track measuredOutput, tags ma
 	}()
 	codec := strings.TrimPrefix(filepath.Ext(track.Source.Output), ".")
 	args := []string{"-nostdin", "-v", "error", "-n", "-xerror", "-i", staged.Path, "-map", "0:a:0", "-map_metadata", "0", "-c:a", "copy"}
+	if replace {
+		for key, alias := range map[string]string{"track":"tracknumber", "disc":"discnumber", "album_artist":"albumartist"} {
+			if _, ok := tags[key]; ok { args = append(args, "-metadata", alias+"=") }
+		}
+	}
 	keys := []string{}
 	for key := range missing {
 		keys = append(keys, key)
@@ -480,6 +498,10 @@ func (a *App) writeOutputGain(ctx context.Context, track measuredOutput, tags ma
 	}
 	if _, err = tx.Exec("INSERT INTO meta(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", "output-gain-pending:"+strconv.FormatInt(source.ID, 10), string(pending)); err != nil {
 		return false, err
+	}
+	if override != nil {
+		raw, _ := json.Marshal(outputTagPending{ID: source.ID, Path: source.Output, Signature: hash, Override: *override})
+		if _, err = tx.Exec("INSERT INTO meta(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", "output-tags-pending:"+strconv.FormatInt(source.ID, 10), string(raw)); err != nil { return false, err }
 	}
 	if err = tx.Commit(); err != nil {
 		return false, err
@@ -589,7 +611,7 @@ func (a *App) startLoudness(w http.ResponseWriter, r *http.Request) {
 	repairing := a.repairRunning
 	a.repairMu.Unlock()
 	a.loudnessMu.Lock()
-	if repairing || a.loudnessBusy.Load() || a.ioContext.Err() != nil {
+	if repairing || a.loudnessBusy.Load() || a.toolBusy.Load() || a.ioContext.Err() != nil {
 		a.loudnessMu.Unlock()
 		a.jobsMu.Unlock()
 		apiError(w, 409, errors.New("Another output maintenance operation is running"))

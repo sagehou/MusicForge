@@ -26,6 +26,7 @@ type App struct {
 	artworkEditState
 	notificationState
 	loudnessState
+	libraryToolsState
 	cfg       Runtime
 	db        *sql.DB
 	reads     *sql.DB
@@ -154,7 +155,9 @@ func (a *App) Close() {
 		a.repairMu.Lock()
 		a.lyricsMu.Lock()
 		a.loudnessMu.Lock()
+		a.toolMu.Lock()
 		a.ioCancel()
+		a.toolMu.Unlock()
 		a.loudnessMu.Unlock()
 		a.lyricsMu.Unlock()
 		a.repairMu.Unlock()
@@ -162,6 +165,7 @@ func (a *App) Close() {
 	a.repairWG.Wait()
 	a.lyricsWG.Wait()
 	a.loudnessWG.Wait()
+	a.toolWG.Wait()
 	a.lidarrMu.Lock()
 	a.lidarrMu.Unlock()
 	a.lidarrWG.Wait()

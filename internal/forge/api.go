@@ -112,6 +112,16 @@ func (a *App) Handler() http.Handler {
 	mux.HandleFunc("GET /api/maintenance", a.auth(a.getMaintenance))
 	mux.HandleFunc("POST /api/maintenance/notify-test", a.auth(a.testNotification))
 	mux.HandleFunc("POST /api/library/plan", a.auth(a.planBuild))
+	mux.HandleFunc("GET /api/maintenance/{tool}", a.auth(a.getLibraryTool))
+	mux.HandleFunc("DELETE /api/maintenance/{tool}", a.auth(a.stopLibraryTool))
+	mux.HandleFunc("POST /api/library/tags/preview", a.auth(a.previewOutputTags))
+	mux.HandleFunc("POST /api/library/playlists/preview", a.auth(a.previewPlaylist))
+	mux.HandleFunc("POST /api/playlists", a.auth(a.previewPlaylist))
+	mux.HandleFunc("GET /api/playlists", a.auth(a.listPlaylists))
+	mux.HandleFunc("GET /api/playlists/{playlist}", a.auth(a.exportPlaylist))
+	mux.HandleFunc("DELETE /api/playlists/{playlist}", a.auth(a.exportPlaylist))
+	mux.HandleFunc("POST /api/maintenance/tags", a.auth(a.startOutputTags))
+	mux.HandleFunc("POST /api/maintenance/fingerprints", a.auth(a.startFingerprints))
 	mux.HandleFunc("GET /api/maintenance/loudness", a.auth(a.getLoudness))
 	mux.HandleFunc("POST /api/maintenance/loudness", a.auth(a.startLoudness))
 	mux.HandleFunc("DELETE /api/maintenance/loudness", a.auth(a.stopLoudness))
@@ -120,6 +130,9 @@ func (a *App) Handler() http.Handler {
 	mux.HandleFunc("GET /api/lidarr/check", a.auth(a.getLidarrCheck))
 	mux.HandleFunc("POST /api/lidarr/check", a.auth(a.startLidarrCheck))
 	mux.HandleFunc("GET /api/library/{id}/artwork", a.auth(a.libraryArtwork))
+	mux.HandleFunc("GET /api/library/{id}/history", a.auth(a.getEditHistory))
+	mux.HandleFunc("POST /api/library/{id}/artwork/search", a.auth(a.searchArtwork))
+	mux.HandleFunc("GET /api/library/{id}/artwork/preview", a.auth(a.previewArtwork))
 	mux.HandleFunc("GET /api/library/{id}/artwork/edit", a.auth(a.getArtworkEdit))
 	mux.HandleFunc("PUT /api/library/{id}/artwork/edit", a.auth(a.saveArtworkEdit))
 	mux.HandleFunc("DELETE /api/library/{id}/artwork/edit", a.auth(a.saveArtworkEdit))
@@ -257,6 +270,7 @@ func (a *App) sourcesWithStatusContext(ctx context.Context) ([]Source, error) {
 	if err = a.annotateOutputGain(ctx, list); err != nil {
 		return nil, err
 	}
+	if err = a.annotateOutputTags(ctx, s, list); err != nil { return nil, err }
 	for i := range list {
 		source := &list[i]
 		switch {

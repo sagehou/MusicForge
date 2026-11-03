@@ -24,6 +24,7 @@ type lyricsTarget struct {
 	FileScript               string
 	Instrumental             bool
 	OutputOnly               bool
+	RecordHistory            bool
 }
 
 func (a *App) captureLyricsTarget(ctx context.Context, id int64, outputOnly ...bool) (target lyricsTarget, err error) {
@@ -126,9 +127,13 @@ func (a *App) publishLyricsTarget(ctx context.Context, target lyricsTarget, text
 	if present != target.FilePresent || present && digest(existing) != target.FileSignature {
 		return errors.New("LRC changed during publication; file preserved")
 	}
+	if target.RecordHistory && present && existing != text {
+		if err = a.rememberEdit(ctx, settings, "lyrics", current.Rel, []byte(existing)); err != nil { return err }
+	}
 	if err = a.writeLyricsFile(ctx, settings, current, text, provider); err != nil {
 		return err
 	}
+	if target.RecordHistory { if err = a.rememberEdit(ctx, settings, "lyrics", current.Rel, []byte(text)); err != nil { return err } }
 	if len(saved) > 0 {
 		return saved[0]()
 	}
@@ -229,6 +234,7 @@ type lyricsCandidateGroup struct {
 }
 
 func (a *App) newLyricsChoices(target lyricsTarget, provider, query string, candidates []lyricsCandidate, cached bool, searched int64) lyricsCandidateGroup {
+	target.RecordHistory = true
 	// JSON must encode an empty result as [], so each provider can finish alone.
 	if candidates == nil {
 		candidates = []lyricsCandidate{}

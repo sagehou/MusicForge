@@ -22,6 +22,7 @@ import (
 type artworkEditState struct {
 	artworkMu      sync.Mutex
 	artworkChoices map[string]artworkChoice
+	artworkSearched time.Time
 }
 
 type artworkChoice struct {
@@ -241,6 +242,9 @@ func (a *App) saveArtworkEdit(w http.ResponseWriter, r *http.Request) {
 			apiError(w, 409, errors.New("Artwork or library settings changed; reopen the editor"))
 			return
 		}
+		previous, readErr := os.ReadFile(path)
+		if readErr == nil { readErr = a.rememberEdit(r.Context(), s, "artwork", choice.Path, previous) }
+		if readErr != nil { apiError(w, 500, readErr); return }
 	}
 	if r.Method == http.MethodDelete {
 		_, err = a.db.ExecContext(r.Context(), "DELETE FROM meta WHERE key=?", artworkOverrideKey(choice.Path))
@@ -277,6 +281,9 @@ func (a *App) saveArtworkEdit(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		apiError(w, 500, err)
 		return
+	}
+	if len(data) > 0 {
+		if err = a.rememberEdit(r.Context(), s, "artwork", choice.Path, data); err != nil { apiError(w, 500, err); return }
 	}
 	if err = a.cleanArtworkOverrides(r.Context()); err != nil {
 		a.logger.Warn("artwork override cleanup failed", "error", err)

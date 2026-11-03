@@ -485,6 +485,7 @@ func (a *App) saveUnpublishedLyricsStatus(ctx context.Context, id int64, status 
 func (a *App) maintainLyrics(ctx context.Context, s Settings, id int64, batch lyricsBatchOptions) (status LyricsStatus) {
 	status.State = "failed"
 	target, err := a.captureLyricsTarget(ctx, id)
+	target.RecordHistory = batch.Refresh || batch.ReplaceTraditional
 	status.Output, status.Signature = target.Source.Output, target.Signature
 	if target.FilePresent {
 		status.Path, status.Provider = target.File.Path, target.File.Provider

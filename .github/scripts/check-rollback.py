@@ -173,6 +173,8 @@ def snapshot():
         result["schema"] = db.execute("SELECT type,name,sql FROM sqlite_master WHERE name NOT LIKE 'sqlite_%' ORDER BY type,name").fetchall()
     result["artwork_overrides"] = {path.name: hashlib.sha256(path.read_bytes()).hexdigest()
                                    for path in sorted((ROOT / "config/artwork-overrides").glob("*.jpg"))}
+    result["edit_history"] = {path.name: hashlib.sha256(path.read_bytes()).hexdigest()
+                              for path in sorted((ROOT / "config/edit-history").glob("*")) if path.is_file()}
     result["runtime_config"] = (ROOT / "config/config.json").read_text()
     for directory in ("source", "output"):
         result[directory] = {str(path.relative_to(ROOT / directory)): hashlib.sha256(path.read_bytes()).hexdigest()
@@ -188,7 +190,7 @@ def verification_queued(rel):
 
 def library_record(track):
     # Optional display annotations are absent in older API responses.
-    return {key: value for key, value in track.items() if key not in ("artwork_url", "lyrics", "source_bitrate", "source_audio", "output_size", "lyrics_script", "output_gain")}
+    return {key: value for key, value in track.items() if key not in ("artwork_url", "lyrics", "source_bitrate", "source_audio", "output_size", "lyrics_script", "output_gain", "output_tags")}
 
 
 def seed_refresh():
@@ -292,6 +294,17 @@ def main():
         assert gain_report["failed"] == 0 and gain_report["updated"] == 3, gain_report
         gains = [row.get("output_gain") for row in api("/api/library") if row["output_present"]]
         assert all(gain and gain["track"] and gain["album"] for gain in gains), "loudness tags missing"
+        tag_preview = api("/api/library/tags/preview", "POST", {"ids": [lyrics_track["id"]], "tags": {"title": "Output-only correction", "album_artist": "Rollback artist"}})
+        api("/api/maintenance/tags", "POST", {"token": tag_preview["token"]})
+        tag_report = wait_for(lambda: api("/api/maintenance/tags"), lambda report: report["state"] == "complete", "output tag correction")
+        assert tag_report["failed"] == 0 and tag_report["updated"] == 1, tag_report
+        history = api(f"/api/library/{lyrics_track['id']}/history?kind=lyrics")
+        assert len(history["entries"]) >= 2, "lyric edit history missing"
+        playlist = api("/api/playlists", "POST", {"name": "Rollback playlist", "text": "Album/01.flac\nAlbum/02.opus\nAlbum/missing.flac", "base": ""})
+        assert playlist["ready"] == 2 and len(playlist["missing"]) == 1, playlist
+        api("/api/maintenance/fingerprints", "POST", {"ids": [row["id"] for row in tracks]})
+        fingerprints = wait_for(lambda: api("/api/maintenance/fingerprints"), lambda report: report["state"] == "complete", "acoustic fingerprint analysis")
+        assert fingerprints["failed"] == 0 and fingerprints["updated"] == 3, fingerprints
         maintained = api("/api/settings")
         maintained["maintenance"]["prioritize_new"] = True
         save_settings(api, {**maintained["settings"], "maintenance": maintained["maintenance"]})
@@ -390,6 +403,12 @@ def main():
                     api("/api/lyrics/options", "PUT", {"auto_search": False})
                     api("/api/lyrics/search", "DELETE")
                 verify(api, tracks, pending, stopped)
+                if actual_image == CANDIDATE:
+                    corrected = next(row for row in api("/api/library") if row["id"] == lyrics_track["id"])
+                    assert corrected["output_tags"]["title"] == "Output-only correction", "output tag correction lost"
+                    assert len(api(f"/api/library/{lyrics_track['id']}/history?kind=lyrics")["entries"]) >= 2, "history lost through rollback"
+                    assert api("/api/playlists/" + playlist["id"])["ready"] == 2, "playlist mapping lost through rollback"
+                    assert api("/api/maintenance/fingerprints")["state"] == "complete", "fingerprint report lost through rollback"
                 online_lyrics = next(row for row in api("/api/library") if row["id"] == online_track["id"]).get("lyrics")
                 if online_lyrics:
                     assert online_lyrics["state"] == "ready" and not online_lyrics.get("provider"), "additional provider changed legacy ready fields"

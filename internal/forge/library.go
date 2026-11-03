@@ -13,6 +13,7 @@ import (
 	"io"
 	"io/fs"
 	"math"
+	"maps"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -1171,13 +1172,15 @@ func (a *App) buildStaged(ctx context.Context, j Job, r BuildRequest, staged *st
 	activity.Phase = j.Kind
 	a.reportProgress(j.ID, activity, .1)
 	args := []string{"-nostdin", "-hide_banner", "-loglevel", "error", "-n", "-xerror", "-err_detect", "crccheck+explode", "-i", in, "-map", "0:a:0", "-map_metadata", "0", "-vn", "-sn", "-dn"}
-	keys := make([]string, 0, len(source.Metadata))
-	for key := range source.Metadata {
+	outputTags, err := a.buildOutputMetadata(ctx, s, source)
+	if err != nil { return err }
+	keys := make([]string, 0, len(outputTags))
+	for key := range outputTags {
 		keys = append(keys, key)
 	}
 	sort.Strings(keys)
 	for _, key := range keys {
-		args = append(args, "-metadata", key+"="+source.Metadata[key])
+		args = append(args, "-metadata", key+"="+outputTags[key])
 	}
 	args = append(args, r.Profile.Args()...)
 	args = append(args, temp)
@@ -1239,6 +1242,9 @@ func (a *App) buildStaged(ctx context.Context, j Job, r BuildRequest, staged *st
 	if settings.Encoding.Fingerprint() != r.Profile.Fingerprint() {
 		return nil
 	}
+	currentTags, err := a.buildOutputMetadata(ctx, settings, latest)
+	if err != nil { return err }
+	if !maps.Equal(outputTags, currentTags) { return later("Output tag corrections changed during conversion; retrying", 1) }
 	if err = a.targetAvailable(s, target, source.ID); err != nil {
 		a.recordSourceError(source.ID, err)
 		return err

@@ -270,7 +270,9 @@ func (a *App) sourcesWithStatusContext(ctx context.Context) ([]Source, error) {
 	if err = a.annotateOutputGain(ctx, list); err != nil {
 		return nil, err
 	}
-	if err = a.annotateOutputTags(ctx, s, list); err != nil { return nil, err }
+	if err = a.annotateOutputTags(ctx, s, list); err != nil {
+		return nil, err
+	}
 	for i := range list {
 		source := &list[i]
 		switch {

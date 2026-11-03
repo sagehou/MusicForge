@@ -128,12 +128,18 @@ func (a *App) publishLyricsTarget(ctx context.Context, target lyricsTarget, text
 		return errors.New("LRC changed during publication; file preserved")
 	}
 	if target.RecordHistory && present && existing != text {
-		if err = a.rememberEdit(ctx, settings, "lyrics", current.Rel, []byte(existing)); err != nil { return err }
+		if err = a.rememberEdit(ctx, settings, "lyrics", current.Rel, []byte(existing)); err != nil {
+			return err
+		}
 	}
 	if err = a.writeLyricsFile(ctx, settings, current, text, provider); err != nil {
 		return err
 	}
-	if target.RecordHistory { if err = a.rememberEdit(ctx, settings, "lyrics", current.Rel, []byte(text)); err != nil { return err } }
+	if target.RecordHistory {
+		if err = a.rememberEdit(ctx, settings, "lyrics", current.Rel, []byte(text)); err != nil {
+			return err
+		}
+	}
 	if len(saved) > 0 {
 		return saved[0]()
 	}

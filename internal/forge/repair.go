@@ -402,12 +402,16 @@ func (a *App) makeRepair(ctx context.Context, source Source, settings Settings) 
 	args := append([]string{"-nostdin", "-hide_banner", "-loglevel", "error", "-n", "-xerror"}, pcm.inputArgs()...)
 	args = append(args, "-i", "pipe:0", "-map", "0:a:0", "-vn", "-sn", "-dn")
 	outputTags, err := a.buildOutputMetadata(ctx, settings, source)
-	if err != nil { return fail(err) }
+	if err != nil {
+		return fail(err)
+	}
 	keys := make([]string, 0, len(outputTags))
 	for key := range outputTags {
 		keys = append(keys, key)
 	}
 	sort.Strings(keys)
+	// Clear aliases before assigning canonical Vorbis/ID3 fields.
+	sort.SliceStable(keys, func(i, j int) bool { return outputTags[keys[i]] == "" && outputTags[keys[j]] != "" })
 	for _, key := range keys {
 		args = append(args, "-metadata", key+"="+outputTags[key])
 	}

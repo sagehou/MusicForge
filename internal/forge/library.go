@@ -12,8 +12,8 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
-	"math"
 	"maps"
+	"math"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -1173,12 +1173,16 @@ func (a *App) buildStaged(ctx context.Context, j Job, r BuildRequest, staged *st
 	a.reportProgress(j.ID, activity, .1)
 	args := []string{"-nostdin", "-hide_banner", "-loglevel", "error", "-n", "-xerror", "-err_detect", "crccheck+explode", "-i", in, "-map", "0:a:0", "-map_metadata", "0", "-vn", "-sn", "-dn"}
 	outputTags, err := a.buildOutputMetadata(ctx, s, source)
-	if err != nil { return err }
+	if err != nil {
+		return err
+	}
 	keys := make([]string, 0, len(outputTags))
 	for key := range outputTags {
 		keys = append(keys, key)
 	}
 	sort.Strings(keys)
+	// Clear aliases before assigning canonical Vorbis/ID3 fields.
+	sort.SliceStable(keys, func(i, j int) bool { return outputTags[keys[i]] == "" && outputTags[keys[j]] != "" })
 	for _, key := range keys {
 		args = append(args, "-metadata", key+"="+outputTags[key])
 	}
@@ -1243,8 +1247,12 @@ func (a *App) buildStaged(ctx context.Context, j Job, r BuildRequest, staged *st
 		return nil
 	}
 	currentTags, err := a.buildOutputMetadata(ctx, settings, latest)
-	if err != nil { return err }
-	if !maps.Equal(outputTags, currentTags) { return later("Output tag corrections changed during conversion; retrying", 1) }
+	if err != nil {
+		return err
+	}
+	if !maps.Equal(outputTags, currentTags) {
+		return later("Output tag corrections changed during conversion; retrying", 1)
+	}
 	if err = a.targetAvailable(s, target, source.ID); err != nil {
 		a.recordSourceError(source.ID, err)
 		return err

@@ -369,10 +369,16 @@ func (a *App) remuxOutputTags(ctx context.Context, track measuredOutput, tags ma
 			return false, errAuditionUnavailable
 		}
 		settings, err := a.settingsContext(ctx)
-		if err != nil { return false, err }
+		if err != nil {
+			return false, err
+		}
 		source, err := a.source(track.Source.ID)
-		if err != nil { return false, err }
-		if !settings.Enabled || settings.Source != track.Settings.Source || settings.Output != track.Settings.Output || source.Rel != track.Source.Rel || source.Output != track.Source.Output || source.BuiltHash != track.Source.BuiltHash || source.Hash != track.Source.Hash { return false, errAuditionUnavailable }
+		if err != nil {
+			return false, err
+		}
+		if !settings.Enabled || settings.Source != track.Settings.Source || settings.Output != track.Settings.Output || source.Rel != track.Source.Rel || source.Output != track.Source.Output || source.BuiltHash != track.Source.BuiltHash || source.Hash != track.Source.Hash {
+			return false, errAuditionUnavailable
+		}
 		if override != nil {
 			raw, _ := json.Marshal(override)
 			return false, a.setMeta("output-tags:"+strconv.FormatInt(track.Source.ID, 10), string(raw))
@@ -415,8 +421,10 @@ func (a *App) remuxOutputTags(ctx context.Context, track measuredOutput, tags ma
 	codec := strings.TrimPrefix(filepath.Ext(track.Source.Output), ".")
 	args := []string{"-nostdin", "-v", "error", "-n", "-xerror", "-i", staged.Path, "-map", "0:a:0", "-map_metadata", "0", "-c:a", "copy"}
 	if replace {
-		for key, alias := range map[string]string{"track":"tracknumber", "disc":"discnumber", "album_artist":"albumartist"} {
-			if _, ok := tags[key]; ok { args = append(args, "-metadata", alias+"=") }
+		for key, alias := range map[string]string{"track": "tracknumber", "disc": "discnumber", "album_artist": "albumartist"} {
+			if _, ok := tags[key]; ok {
+				args = append(args, "-metadata", alias+"=")
+			}
 		}
 	}
 	keys := []string{}
@@ -501,7 +509,9 @@ func (a *App) remuxOutputTags(ctx context.Context, track measuredOutput, tags ma
 	}
 	if override != nil {
 		raw, _ := json.Marshal(outputTagPending{ID: source.ID, Path: source.Output, Signature: hash, Override: *override})
-		if _, err = tx.Exec("INSERT INTO meta(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", "output-tags-pending:"+strconv.FormatInt(source.ID, 10), string(raw)); err != nil { return false, err }
+		if _, err = tx.Exec("INSERT INTO meta(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", "output-tags-pending:"+strconv.FormatInt(source.ID, 10), string(raw)); err != nil {
+			return false, err
+		}
 	}
 	if err = tx.Commit(); err != nil {
 		return false, err

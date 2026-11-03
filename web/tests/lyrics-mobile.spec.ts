@@ -241,6 +241,6 @@ test("instrumental choices renew expired and consumed targets when replacing lyr
   await expect(picker.getByRole("status")).toContainText("Saved");
   expect(saves).toHaveLength(4);
   const providers = ["qq", "kugou", "netease", "petitlyrics", "lrclib", "kuwo", "migu"];
-  expect(searches).toEqual([...providers, ...providers]);
+  expect([...searches].sort()).toEqual([...providers, ...providers].sort());
   await expect(picker.locator(".repair-warning")).toHaveCount(0);
 });

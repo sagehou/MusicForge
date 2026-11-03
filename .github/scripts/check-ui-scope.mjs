@@ -90,10 +90,10 @@ function main() {
   const specs = new Set(["appearance.spec.ts", "workspace-layout.spec.ts"]);
   const global = paths.some(path => path.endsWith(".css") || path.includes("/locales/") || ["web/src/App.tsx", "web/src/i18n.tsx", "web/src/main.tsx"].includes(path) || path.includes("/ui/") || /\/(resource|page-heading|detail-panel|theme-selector)\.tsx$/.test(path));
   const affected = {
-    "library": ["library-experience", "lyrics", "library-comparison", "maintenance"], "lyrics": ["lyrics"],
-    "repair": ["repair"], "maintenance": ["maintenance"], "artwork-editor": ["maintenance"], "artifact-audition": ["artifact-audition", "maintenance"], "overview": ["cleanup-and-ui"],
+    "library": ["library-experience", "lyrics", "library-comparison", "maintenance", "maintenance-progress"], "lyrics": ["lyrics"],
+    "repair": ["repair"], "maintenance": ["maintenance", "maintenance-progress"], "artwork-editor": ["maintenance"], "artifact-audition": ["artifact-audition", "maintenance"], "overview": ["cleanup-and-ui"],
   };
-  if (global) for (const name of ["library-experience", "ui-refinement", "cleanup-and-ui", "bulk-jobs", "repair", "lyrics", "library-comparison", "session-recovery", "maintenance"]) specs.add(`${name}.spec.ts`);
+  if (global) for (const name of ["library-experience", "ui-refinement", "cleanup-and-ui", "bulk-jobs", "repair", "lyrics", "library-comparison", "session-recovery", "maintenance", "maintenance-progress"]) specs.add(`${name}.spec.ts`);
   else for (const [part, names] of Object.entries(affected)) if (paths.some(path => path.includes(part))) for (const name of names) specs.add(`${name}.spec.ts`);
   writeFileSync(".ci/ui-specs.txt", [...specs].join("\n") + "\n");
   // Existing representative cases retain desktop/phone, theme and keyboard checks.
@@ -101,7 +101,7 @@ function main() {
   // unrelated authentication, retry and multi-page batch scenarios.
   const cases = ["translation catalogs", "default albums", "top-right controls", "aligned records", "phone pages retain",
     "album rows expose", "settings sections preserve", "sidebar collapse", "dashboard uses", "task details expand",
-    "lyrics selection, background", "failed lyric parsing", "file comparison explains", "best-effort repair requires", "maintenance workbench", "schedule and notifications", "lyric editor previews", "output cover correction", "inline audition plays"];
+    "lyrics selection, background", "failed lyric parsing", "file comparison explains", "best-effort repair requires", "maintenance workbench", "schedule and notifications", "lyric editor previews", "output cover correction", "inline audition plays", "saved library views", "saved views reject", "maintenance progress and grouped recovery"];
   writeFileSync(".ci/ui-grep.txt", cases.join("|") + "\n");
   plan.scope = scope;
   if (uncertain.length) {

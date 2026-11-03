@@ -97,6 +97,7 @@ test("maintenance progress and grouped recovery reuse exact existing actions", a
   await expect(progress).toHaveAccessibleName("Maintenance progress");
   await expect(progress).toContainText("Waiting for the configured maintenance window");
   await expect(progress).toContainText("skipped 18");
+  await expect(progress.getByRole("progressbar", { name: "LRC lyrics", exact: true })).toBeVisible();
   expect(writes).toHaveLength(0);
   await page.locator(".maintenance-failures > summary").click();
   const decode = page.getByRole("region", { name: "Audio decoding", exact: true });

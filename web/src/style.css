@@ -1682,8 +1682,8 @@ table { width: 100%; border-collapse: collapse; text-align: left; }
 .jobs-panel .task-activity > span, .jobs-panel .task-activity small { display: none; }
 .jobs-panel .task-activity small.task-counter { display: inline; color: var(--muted); font-family: var(--font-mono); margin: 0; }
 .jobs-panel .task-percent { color: var(--task-color); font: 600 12px/18px var(--font-mono); }
-.jobs-panel .task-meter { height: 5px; margin-top: 6px; background: var(--subtle); border-radius: var(--radius-pill); overflow: hidden; }
-.jobs-panel .task-meter > span { display: block; height: 100%; border-radius: inherit; background: var(--task-color); transition: width 400ms var(--ease); }
+.jobs-panel .task-meter, .maintenance-progress .task-meter { height: 5px; margin-top: 6px; background: var(--subtle); border-radius: var(--radius-pill); overflow: hidden; }
+.jobs-panel .task-meter > span, .maintenance-progress .task-meter > span { display: block; height: 100%; border-radius: inherit; background: var(--task-color, var(--accent-fill)); transition: width 400ms var(--ease); }
 .jobs-panel .task:not([data-state="running"]):not([data-state="paused"]) .task-meter,
 .jobs-panel .task:not([data-state="running"]):not([data-state="paused"]) .task-percent { display: none; }
 .jobs-panel .task-failure { grid-column: 3; grid-row: 3; padding: 0; color: var(--danger); font-size: 12px; overflow-wrap: anywhere; }

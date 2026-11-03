@@ -24,7 +24,7 @@ func (a *App) getMaintenanceProgress(w http.ResponseWriter, r *http.Request) {
 	}
 	type cooldown struct {
 		Provider string `json:"provider"`
-		RetryAt int64 `json:"retry_at"`
+		RetryAt  int64  `json:"retry_at"`
 	}
 	untilByProvider := map[string]time.Time{}
 	for _, provider := range lyricsProviders {
@@ -36,20 +36,36 @@ func (a *App) getMaintenanceProgress(w http.ResponseWriter, r *http.Request) {
 	if netease != nil {
 		select {
 		case netease.gate <- struct{}{}:
-			if netease.retryAt.After(untilByProvider["netease"]) { untilByProvider["netease"] = netease.retryAt }
+			if netease.retryAt.After(untilByProvider["netease"]) {
+				untilByProvider["netease"] = netease.retryAt
+			}
 			<-netease.gate
 		default:
 		}
 	}
 	cooldowns := []cooldown{}
-	for _, provider := range lyricsProviders { if until := untilByProvider[provider]; until.After(time.Now().Add(2*time.Second)) { cooldowns = append(cooldowns, cooldown{provider, until.Unix()}) } }
+	for _, provider := range lyricsProviders {
+		if until := untilByProvider[provider]; until.After(time.Now().Add(2 * time.Second)) {
+			cooldowns = append(cooldowns, cooldown{provider, until.Unix()})
+		}
+	}
 	gain, err := a.loudnessSnapshot(r.Context())
-	if err != nil { apiError(w, 500, err); return }
-	if gain.State != "idle" { reports = append(reports, maintenanceProgress{Kind: "loudness", loudnessReport: gain}) }
+	if err != nil {
+		apiError(w, 500, err)
+		return
+	}
+	if gain.State != "idle" {
+		reports = append(reports, maintenanceProgress{Kind: "loudness", loudnessReport: gain})
+	}
 	for _, kind := range []string{"tags", "fingerprints", "storage", "undo"} {
 		report, err := a.libraryToolSnapshot(r.Context(), kind)
-		if err != nil { apiError(w, 500, err); return }
-		if report.State != "idle" { reports = append(reports, maintenanceProgress{Kind: kind, loudnessReport: report.loudnessReport}) }
+		if err != nil {
+			apiError(w, 500, err)
+			return
+		}
+		if report.State != "idle" {
+			reports = append(reports, maintenanceProgress{Kind: kind, loudnessReport: report.loudnessReport})
+		}
 	}
 	respond(w, 200, map[string]any{"reports": reports, "cooldowns": cooldowns})
 }

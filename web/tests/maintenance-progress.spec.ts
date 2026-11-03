@@ -93,7 +93,8 @@ test("maintenance progress and grouped recovery reuse exact existing actions", a
   await page.route("**/api/lyrics/search", route => { writes.push({ path: "/lyrics/search", body: route.request().postDataJSON() }); return route.fulfill({ status: 202, json: { selected: 1 } }); });
   await page.route("**/api/maintenance/loudness", route => { expect(route.request().method()).toBe("DELETE"); stopped = true; writes.push({ path: "/maintenance/loudness" }); return route.fulfill({ json: { ok: true } }); });
   await page.setViewportSize({ width: 1440, height: 1000 }); await page.goto("/jobs");
-  const progress = page.getByRole("region", { name: "Maintenance progress", exact: true });
+  const progress = page.locator("#maintenance-progress");
+  await expect(progress).toHaveAccessibleName("Maintenance progress");
   await expect(progress).toContainText("Waiting for the configured maintenance window");
   await expect(progress).toContainText("skipped 18");
   expect(writes).toHaveLength(0);
@@ -111,6 +112,7 @@ test("maintenance progress and grouped recovery reuse exact existing actions", a
   await expect(progress).toContainText("Migu");
   await progress.screenshot({ path: "test-results/maintenance-progress-desktop.png", animations: "disabled" });
   await page.setViewportSize({ width: 390, height: 844 }); await setPreference(page, "theme", "dark"); await setPreference(page, "language", "zh-CN");
+  await expect(progress).toHaveAccessibleName("维护进度");
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
   await page.screenshot({ path: "test-results/maintenance-progress-phone-dark.png", fullPage: true, animations: "disabled" });
   await progress.locator('.maintenance-progress-row').filter({ hasText: "补全响度标签" }).getByRole("button").click();

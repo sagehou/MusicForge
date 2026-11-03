@@ -20,7 +20,9 @@ func mockLyricsServices(t *testing.T, a *App, handler http.HandlerFunc) {
 		if r.URL.Host == "on.petitlyrics.com" {
 			accept = "application/xml"
 		}
-		if r.URL.Host == "d.musicapp.migu.cn" { accept = "text/plain" }
+		if r.URL.Host == "d.musicapp.migu.cn" {
+			accept = "text/plain"
+		}
 		if r.URL.Scheme != "https" || !strings.Contains(r.Header.Get("User-Agent"), "MusicForge/") || r.Header.Get("Accept") != accept {
 			t.Error("lyrics request lost HTTPS or client identity")
 		}
@@ -149,7 +151,9 @@ func TestLyricsProviderPriorityAndFallback(t *testing.T) {
 						petitLyricsXML(t, w)
 					}
 				default:
-					if additionalLyricsResponse(t, w, r, provider, track) { return }
+					if additionalLyricsResponse(t, w, r, provider, track) {
+						return
+					}
 					t.Error("unexpected lyrics request", r.URL.Host+r.URL.Path)
 					w.WriteHeader(500)
 				}

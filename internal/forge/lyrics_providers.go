@@ -603,10 +603,18 @@ func (a *App) candidateLyrics(ctx context.Context, candidate lyricsCandidate) (l
 		return a.petitLyricsText(ctx, candidate)
 	case "kuwo", "migu":
 		var err error
-		if candidate.Provider == "kuwo" { text, err = a.kuwoLyrics(ctx, candidate) } else { text, err = a.miguLyrics(ctx, candidate) }
-		if err != nil { return text, err }
+		if candidate.Provider == "kuwo" {
+			text, err = a.kuwoLyrics(ctx, candidate)
+		} else {
+			text, err = a.miguLyrics(ctx, candidate)
+		}
+		if err != nil {
+			return text, err
+		}
 		diagnostic.add("lyric", text.Original)
-		if text.Translation != "" { diagnostic.add("translation", text.Translation) }
+		if text.Translation != "" {
+			diagnostic.add("translation", text.Translation)
+		}
 	case "qq":
 		params := url.Values{"songmid": {candidate.mid}, "format": {"json"}, "nobase64": {"1"}, "g_tk": {"5381"}}
 		var response struct {
@@ -751,7 +759,9 @@ func (a *App) lyricsRequest(ctx context.Context, provider, method, endpoint stri
 		request.Header.Set("Referer", "https://y.qq.com/")
 		request.Header.Set("Cookie", "tmeLoginType=-1;")
 	}
-	if provider == "kuwo" { request.Header.Set("Referer", "https://www.kuwo.cn/") }
+	if provider == "kuwo" {
+		request.Header.Set("Referer", "https://www.kuwo.cn/")
+	}
 	response, raw, err := a.lyricsHTTPResponse(provider, request)
 	if response == nil {
 		return 0, err

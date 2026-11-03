@@ -593,8 +593,10 @@ func (a *App) changeTasksMatching(action string, chosen selection, filter, failu
 	// Resolve members once for the whole selection, rather than scanning all
 	// history again for every selected task.
 	logColumn := "''"
-	if failure != "" { logColumn = "j.log" }
-	rows, err := tx.Query("SELECT coalesce(CAST(m.value AS INTEGER),j.id),j.id,j.state,j.not_before,"+logColumn+" FROM jobs j LEFT JOIN meta m ON m.key='task-member:'||j.id WHERE coalesce(CAST(m.value AS INTEGER),j.id) IN (" + strings.Join(rootIDs, ",") + ")")
+	if failure != "" {
+		logColumn = "j.log"
+	}
+	rows, err := tx.Query("SELECT coalesce(CAST(m.value AS INTEGER),j.id),j.id,j.state,j.not_before," + logColumn + " FROM jobs j LEFT JOIN meta m ON m.key='task-member:'||j.id WHERE coalesce(CAST(m.value AS INTEGER),j.id) IN (" + strings.Join(rootIDs, ",") + ")")
 	if err != nil {
 		return 0, err
 	}
@@ -629,7 +631,9 @@ func (a *App) changeTasksMatching(action string, chosen selection, filter, failu
 		if action == "retry" && control == "stopped" && chosen.All && !filteredAll {
 			continue
 		}
-		if failure != "" && control != "" { continue }
+		if failure != "" && control != "" {
+			continue
+		}
 		workerBusy := false
 		for _, m := range members {
 			_, executing := a.activeJobs[m.id]
@@ -651,7 +655,9 @@ func (a *App) changeTasksMatching(action string, chosen selection, filter, failu
 		}
 		eligible := false
 		for _, m := range members {
-			if failure != "" && (m.state != "failed" || m.log == "Stopped by administrator" || maintenanceFailureReason(m.log) != failure) { continue }
+			if failure != "" && (m.state != "failed" || m.log == "Stopped by administrator" || maintenanceFailureReason(m.log) != failure) {
+				continue
+			}
 			if (action == "pause" || action == "stop") && (m.state == "pending" || m.state == "running") ||
 				action == "resume" && m.state == "pending" && m.wait == heldUntil ||
 				action == "retry" && m.state == "failed" || action == "delete" {
@@ -682,7 +688,9 @@ func (a *App) changeTasksMatching(action string, chosen selection, filter, failu
 		}
 		mutated := false
 		for _, m := range members {
-			if failure != "" && (m.state != "failed" || m.log == "Stopped by administrator" || maintenanceFailureReason(m.log) != failure) { continue }
+			if failure != "" && (m.state != "failed" || m.log == "Stopped by administrator" || maintenanceFailureReason(m.log) != failure) {
+				continue
+			}
 			var result sql.Result
 			switch action {
 			case "pause":

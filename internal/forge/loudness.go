@@ -32,14 +32,14 @@ type loudnessState struct {
 }
 
 type loudnessReport struct {
-	State     string `json:"state"`
-	Total     int    `json:"total"`
-	Processed int    `json:"processed"`
-	Updated   int    `json:"updated"`
-	Skipped   int    `json:"skipped"`
-	Failed    int    `json:"failed"`
-	Current   string `json:"current,omitempty"`
-	Error     string `json:"error,omitempty"`
+	State         string `json:"state"`
+	Total         int    `json:"total"`
+	Processed     int    `json:"processed"`
+	Updated       int    `json:"updated"`
+	Skipped       int    `json:"skipped"`
+	Failed        int    `json:"failed"`
+	Current       string `json:"current,omitempty"`
+	Error         string `json:"error,omitempty"`
 	WaitingReason string `json:"waiting_reason,omitempty"`
 }
 

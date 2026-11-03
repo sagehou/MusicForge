@@ -2204,6 +2204,7 @@ input[role="switch"]:checked::after { transform: translateX(20px); background: v
 .maintenance-actions { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 8px; }
 .maintenance-actions a { align-self: center; font-size: var(--font-size-small); }
 .saved-library-views { min-width: 0; border-top: 1px solid var(--line); }
+.library-toolbar-box > .saved-library-views { flex: 1 0 100%; order: 4; grid-column: 1 / -1; }
 .saved-library-views > summary { display: flex; align-items: center; gap: 6px; padding: 8px 0; font-size: var(--font-size-small); cursor: pointer; }
 .saved-library-views .comparison-body { padding: 8px 0; }
 .saved-library-views form { align-items: end; }

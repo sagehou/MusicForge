@@ -11,6 +11,8 @@ export async function openAccount(page: Page) {
 }
 
 export async function setPreference(page: Page, kind: "language" | "theme", value: string) {
+  // Wait for authentication to replace the temporary loading controls.
+  await expect(page.locator(".heading-preferences, .auth-card, .auth-layout [role='alert']").first()).toBeVisible();
   const login = page.locator(".session-dialog");
   const root = await login.count() ? login : page.locator("body");
   const preferences = root.locator(".heading-preferences");

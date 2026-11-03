@@ -399,6 +399,10 @@ def main():
                                       "text": {"original": "[00:01.000]爱这风云\\n"}}]}
             db.execute("INSERT INTO meta(key,value) VALUES(?,?)",
                        ("lyrics-search:" + str(tracks[0]["id"]) + ":" + "0" * 64, json.dumps(search)))
+            gain_raw = db.execute("SELECT value FROM meta WHERE key='maintenance:loudness'").fetchone()[0]
+            gain_snapshot = json.loads(gain_raw)
+            gain_snapshot["waiting_reason"] = ""
+            db.execute("UPDATE meta SET value=? WHERE key='maintenance:loudness'", (json.dumps(gain_snapshot),))
             additional_search = {**search, "provider": "migu", "candidates": [
                 {**search["candidates"][0], "remote_id": "123", "lyrics_url": "https://d.musicapp.migu.cn/data/oss/resource/fixture/original.lrc", "candidate": {
                     **search["candidates"][0]["candidate"], "provider": "migu"}}]}

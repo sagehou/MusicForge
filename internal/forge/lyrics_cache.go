@@ -17,15 +17,15 @@ const lyricsSearchTTL = 7 * 24 * time.Hour
 // Optional schema-2 metadata. Store public recording identifiers and lyrics,
 // never account credentials, download access keys, or live selection tokens.
 type cachedLyricsCandidate struct {
-	Candidate     lyricsCandidate `json:"candidate"`
-	RemoteID      string          `json:"remote_id,omitempty"`
-	MID           string          `json:"mid,omitempty"`
-	Hash          string          `json:"hash,omitempty"`
-	LyricsURL     string          `json:"lyrics_url,omitempty"`
-	TranslationURL string         `json:"translation_url,omitempty"`
-	TitleAliases  []string        `json:"title_aliases,omitempty"`
-	ArtistAliases []string        `json:"artist_aliases,omitempty"`
-	Text          *lyricsText     `json:"text,omitempty"`
+	Candidate      lyricsCandidate `json:"candidate"`
+	RemoteID       string          `json:"remote_id,omitempty"`
+	MID            string          `json:"mid,omitempty"`
+	Hash           string          `json:"hash,omitempty"`
+	LyricsURL      string          `json:"lyrics_url,omitempty"`
+	TranslationURL string          `json:"translation_url,omitempty"`
+	TitleAliases   []string        `json:"title_aliases,omitempty"`
+	ArtistAliases  []string        `json:"artist_aliases,omitempty"`
+	Text           *lyricsText     `json:"text,omitempty"`
 }
 
 type lyricsSearchRecord struct {

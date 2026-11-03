@@ -22,7 +22,8 @@ export function QualityReview({ sources, selected, select, notify }: { sources: 
   const revision = JSON.stringify(sources.map(source => [source.id, source.path, source.hash, source.output, source.present, source.output_present, source.artist, source.album, source.title, source.track, source.disc, source.metadata, source.duration, source.error, source.possibly_damaged, source.artwork_url, source.lyrics?.state]));
   useEffect(() => { saved.retry(); }, [revision]);
   const selectedIDs = new Set(selected.map(source => source.id));
-  const decision = (id: number, issue: QualityKind) => saved.data?.find(item => item.id === id && item.kind === issue);
+  const decisions = useMemo(() => new Map((saved.data || []).map(item => [`${item.kind}:${item.id}`, item] as const)), [saved.data]);
+  const decision = (id: number, issue: QualityKind) => decisions.get(`${issue}:${id}`);
   const visible = quality[kind].filter(source => showIgnored || decision(source.id, kind)?.state !== "ignored");
   const chosen = visible.filter(source => selectedIDs.has(source.id));
   const ignored = quality[kind].filter(source => decision(source.id, kind)?.state === "ignored").length;

@@ -170,7 +170,9 @@ func (a *App) recoverOutputTagEdits(ctx context.Context) error {
 			return err
 		}
 		if signature == pending.Signature {
-			if len(pending.Override.Tags)==0 {_,err=tx.ExecContext(ctx,"DELETE FROM meta WHERE key=?","output-tags:"+strconv.FormatInt(pending.ID,10))}else{
+			if len(pending.Override.Tags) == 0 {
+				_, err = tx.ExecContext(ctx, "DELETE FROM meta WHERE key=?", "output-tags:"+strconv.FormatInt(pending.ID, 10))
+			} else {
 				raw, _ := json.Marshal(pending.Override)
 				_, err = tx.ExecContext(ctx, "INSERT INTO meta(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", "output-tags:"+strconv.FormatInt(pending.ID, 10), string(raw))
 			}
@@ -190,15 +192,15 @@ func (a *App) recoverOutputTagEdits(ctx context.Context) error {
 }
 
 type tagPreviewTrack struct {
-	ID        int64             `json:"id"`
-	Path      string            `json:"path"`
-	Before    map[string]string `json:"before"`
-	After     map[string]string `json:"after"`
-	Source    Source            `json:"-"`
-	Signature string            `json:"-"`
-	Batch string `json:"-"`
-	Restore *map[string]string `json:"-"`
-	SkipAudit bool `json:"-"`
+	ID        int64              `json:"id"`
+	Path      string             `json:"path"`
+	Before    map[string]string  `json:"before"`
+	After     map[string]string  `json:"after"`
+	Source    Source             `json:"-"`
+	Signature string             `json:"-"`
+	Batch     string             `json:"-"`
+	Restore   *map[string]string `json:"-"`
+	SkipAudit bool               `json:"-"`
 }
 type tagPreview struct {
 	Token    string            `json:"token"`
@@ -306,7 +308,7 @@ func (a *App) startOutputTags(w http.ResponseWriter, r *http.Request) {
 	}
 	err := a.runLibraryTool("tags", len(preview.Tracks), func(ctx context.Context) {
 		for _, entry := range preview.Tracks {
-			entry.Batch=preview.Token
+			entry.Batch = preview.Token
 			if ctx.Err() != nil {
 				break
 			}
@@ -348,20 +350,41 @@ func (a *App) editOutputTags(ctx context.Context, settings Settings, entry tagPr
 	if err != nil {
 		return false, err
 	}
-	prior:=map[string]string{};for key,value:=range changes{prior[key]=value}
+	prior := map[string]string{}
+	for key, value := range changes {
+		prior[key] = value
+	}
 	for key, value := range entry.After {
 		changes[key] = value
 	}
-	if entry.Restore!=nil {changes=*entry.Restore}
+	if entry.Restore != nil {
+		changes = *entry.Restore
+	}
 	override := outputTagOverride{Version: 1, SourceRoot: settings.Source, OutputRoot: settings.Output, Rel: track.Source.Rel, SourceHash: track.Source.BuiltHash, Tags: changes}
 	if !entry.SkipAudit {
-		item:=operationTrack(track.Source,track.Signature);item.PriorTags=prior;item.AppliedTags=changes;item.Before=map[string]string{};item.After=entry.After
-		for key:=range entry.After {item.Before[key]=track.Tags[key]}
-		if err=a.lockFiles(ctx);err!=nil{return false,err}
-		operation,index,prepareErr:=a.prepareOperation(ctx,settings,"tags",entry.Batch,item)
-		a.files.Unlock();if prepareErr!=nil{return false,prepareErr}
-		resultSignature:="";track.ResultSignature=&resultSignature
-		defer func(){a.files.Lock();defer a.files.Unlock();a.finishOperation(operation,index,resultSignature,err)}()
+		item := operationTrack(track.Source, track.Signature)
+		item.PriorTags = prior
+		item.AppliedTags = changes
+		item.Before = map[string]string{}
+		item.After = entry.After
+		for key := range entry.After {
+			item.Before[key] = track.Tags[key]
+		}
+		if err = a.lockFiles(ctx); err != nil {
+			return false, err
+		}
+		operation, index, prepareErr := a.prepareOperation(ctx, settings, "tags", entry.Batch, item)
+		a.files.Unlock()
+		if prepareErr != nil {
+			return false, prepareErr
+		}
+		resultSignature := ""
+		track.ResultSignature = &resultSignature
+		defer func() {
+			a.files.Lock()
+			defer a.files.Unlock()
+			a.finishOperation(operation, index, resultSignature, err)
+		}()
 	}
 	return a.remuxOutputTags(ctx, track, entry.After, true, &override)
 }

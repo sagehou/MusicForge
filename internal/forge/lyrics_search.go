@@ -21,11 +21,11 @@ type lyricsOptions struct {
 }
 
 type lyricsBatchOptions struct {
-	Refresh            bool `json:"refresh"`
-	ReplaceTraditional bool `json:"replace_traditional,omitempty"`
-	InspectOnly        bool `json:"inspect_only,omitempty"`
-	MinScore           int  `json:"-"`
-	OperationBatch string `json:"-"`
+	Refresh            bool   `json:"refresh"`
+	ReplaceTraditional bool   `json:"replace_traditional,omitempty"`
+	InspectOnly        bool   `json:"inspect_only,omitempty"`
+	MinScore           int    `json:"-"`
+	OperationBatch     string `json:"-"`
 }
 
 type LyricsStatus struct {
@@ -389,7 +389,9 @@ func (a *App) startLyrics(s Settings, sources []Source, batch lyricsBatchOptions
 		defer a.lyricsWG.Done()
 		defer cancel()
 		for index, source := range sources {
-			if (batch.Refresh || batch.ReplaceTraditional) && index%1000==0 { batch.OperationBatch=randomToken() }
+			if (batch.Refresh || batch.ReplaceTraditional) && index%1000 == 0 {
+				batch.OperationBatch = randomToken()
+			}
 			if ctx.Err() != nil {
 				break
 			}

@@ -251,25 +251,59 @@ func (a *App) saveArtworkEdit(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	item:=operationTrack(source,"")
-	_ = a.reads.QueryRowContext(r.Context(),"SELECT signature FROM managed WHERE source_id=? AND path=? AND kind='audio'",source.ID,source.Output).Scan(&item.Signature)
-	item.Undoable=r.Method!=http.MethodDelete && source.OutputPresent && validDigest(item.Signature)
-	item.BeforeMarker=choice.Signature
-	if choice.Present{item.BeforeHash=choice.Hash}
-	if len(data)>0{item.AfterHash=digest(string(data));item.AfterMarker="external:"+item.AfterHash;if err=a.saveEditBlob(r.Context(),"artwork",data);err!=nil{apiError(w,500,err);return}}
-	item.PriorOverride,err=a.optionalMeta(r.Context(),artworkOverrideKey(choice.Path));if err!=nil{apiError(w,500,err);return}
-	if item.PriorOverride!=""{
-		path,_,_,readErr:=a.overrideArtwork(r.Context(),filepath.Dir(choice.Path));if readErr!=nil{apiError(w,409,readErr);return}
-		prior,readErr:=os.ReadFile(path);if readErr==nil{readErr=a.saveEditBlob(r.Context(),"artwork",prior)};if readErr!=nil{apiError(w,500,readErr);return};item.PriorOverrideHash=digest(string(prior))
+	item := operationTrack(source, "")
+	_ = a.reads.QueryRowContext(r.Context(), "SELECT signature FROM managed WHERE source_id=? AND path=? AND kind='audio'", source.ID, source.Output).Scan(&item.Signature)
+	item.Undoable = r.Method != http.MethodDelete && source.OutputPresent && validDigest(item.Signature)
+	item.BeforeMarker = choice.Signature
+	if choice.Present {
+		item.BeforeHash = choice.Hash
 	}
-	operation,index,prepareErr:=a.prepareOperation(r.Context(),s,"artwork","",item);if prepareErr!=nil{apiError(w,500,prepareErr);return}
-	operationErr:=errors.New("Artwork edit did not complete")
-	defer func(){if err!=nil{operationErr=err};a.finishOperation(operation,index,"",operationErr)}()
+	if len(data) > 0 {
+		item.AfterHash = digest(string(data))
+		item.AfterMarker = "external:" + item.AfterHash
+		if err = a.saveEditBlob(r.Context(), "artwork", data); err != nil {
+			apiError(w, 500, err)
+			return
+		}
+	}
+	item.PriorOverride, err = a.optionalMeta(r.Context(), artworkOverrideKey(choice.Path))
+	if err != nil {
+		apiError(w, 500, err)
+		return
+	}
+	if item.PriorOverride != "" {
+		path, _, _, readErr := a.overrideArtwork(r.Context(), filepath.Dir(choice.Path))
+		if readErr != nil {
+			apiError(w, 409, readErr)
+			return
+		}
+		prior, readErr := os.ReadFile(path)
+		if readErr == nil {
+			readErr = a.saveEditBlob(r.Context(), "artwork", prior)
+		}
+		if readErr != nil {
+			apiError(w, 500, readErr)
+			return
+		}
+		item.PriorOverrideHash = digest(string(prior))
+	}
+	operation, index, prepareErr := a.prepareOperation(r.Context(), s, "artwork", "", item)
+	if prepareErr != nil {
+		apiError(w, 500, prepareErr)
+		return
+	}
+	operationErr := errors.New("Artwork edit did not complete")
+	defer func() {
+		if err != nil {
+			operationErr = err
+		}
+		a.finishOperation(operation, index, "", operationErr)
+	}()
 	if r.Method == http.MethodDelete {
 		_, err = a.db.ExecContext(r.Context(), "DELETE FROM meta WHERE key=?", artworkOverrideKey(choice.Path))
 	} else {
 		var path string
-		path,err=a.storeArtworkBlob(r.Context(),data)
+		path, err = a.storeArtworkBlob(r.Context(), data)
 		if err == nil {
 			hash := digest(string(data))
 			if err == nil {
@@ -299,22 +333,36 @@ func (a *App) saveArtworkEdit(w http.ResponseWriter, r *http.Request) {
 	a.artworkMu.Unlock()
 	if r.Method == http.MethodDelete {
 		job, queueErr := a.enqueue("scan", "scan:manual:false", ScanRequest{Dirs: []string{filepath.Dir(choice.Source)}}, true)
-		operationErr=queueErr
+		operationErr = queueErr
 		a.jobResult(w, job, queueErr)
 		return
 	}
-	operationErr=nil
+	operationErr = nil
 	respond(w, 200, map[string]bool{"ok": true})
 }
 
-func (a *App) storeArtworkBlob(ctx context.Context,data []byte)(string,error){
-	dir:=filepath.Join(a.cfg.ConfigDir,"artwork-overrides")
-	if err:=os.MkdirAll(dir,0700);err!=nil{return "",err}
-	hash:=digest(string(data));path:=filepath.Join(dir,hash+".jpg")
-	file,err:=os.OpenFile(path,os.O_WRONLY|os.O_CREATE|os.O_EXCL,0600)
-	if errors.Is(err,os.ErrExist){actual,readErr:=fileHash(ctx,path);err=readErr;if err==nil && actual!=hash{err=errors.New("Artwork override changed; upload the cover again")}}else if err==nil{_,writeErr:=file.Write(data);err=errors.Join(writeErr,file.Sync(),file.Close())}
-	if err==nil{err=syncDirectory(dir)}
-	return path,err
+func (a *App) storeArtworkBlob(ctx context.Context, data []byte) (string, error) {
+	dir := filepath.Join(a.cfg.ConfigDir, "artwork-overrides")
+	if err := os.MkdirAll(dir, 0700); err != nil {
+		return "", err
+	}
+	hash := digest(string(data))
+	path := filepath.Join(dir, hash+".jpg")
+	file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
+	if errors.Is(err, os.ErrExist) {
+		actual, readErr := fileHash(ctx, path)
+		err = readErr
+		if err == nil && actual != hash {
+			err = errors.New("Artwork override changed; upload the cover again")
+		}
+	} else if err == nil {
+		_, writeErr := file.Write(data)
+		err = errors.Join(writeErr, file.Sync(), file.Close())
+	}
+	if err == nil {
+		err = syncDirectory(dir)
+	}
+	return path, err
 }
 
 // Only this feature's content-addressed blobs are eligible for cleanup. Caller

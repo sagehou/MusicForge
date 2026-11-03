@@ -47,15 +47,15 @@ func sourceSnapshot(path, rel string, info fs.FileInfo) sourceInfo {
 }
 
 type sourceEvent struct {
-	Info     *sourceInfo  `json:"info,omitempty"`
-	Path     string       `json:"path,omitempty"`
-	Read     int64        `json:"read,omitempty"`
-	Hash     string       `json:"hash,omitempty"`
-	Error    string       `json:"error,omitempty"`
-	Missing  bool         `json:"missing,omitempty"`
-	Complete bool         `json:"complete,omitempty"`
-	Text     string       `json:"text,omitempty"`
-	Audio    *audioFormat `json:"audio,omitempty"`
+	Info     *sourceInfo   `json:"info,omitempty"`
+	Path     string        `json:"path,omitempty"`
+	Read     int64         `json:"read,omitempty"`
+	Hash     string        `json:"hash,omitempty"`
+	Error    string        `json:"error,omitempty"`
+	Missing  bool          `json:"missing,omitempty"`
+	Complete bool          `json:"complete,omitempty"`
+	Text     string        `json:"text,omitempty"`
+	Audio    *audioFormat  `json:"audio,omitempty"`
 	Storage  *storageProbe `json:"storage,omitempty"`
 }
 
@@ -88,8 +88,10 @@ func readSourceIO(operation, root, rel string, emit func(sourceEvent) error, sta
 	switch operation {
 	case "storage":
 		probe, err := inspectStorageDirectory(path)
-		if err != nil { return err }
-		return emit(sourceEvent{Storage:&probe})
+		if err != nil {
+			return err
+		}
+		return emit(sourceEvent{Storage: &probe})
 	case "flac-info":
 		file, err := os.Open(path)
 		if err != nil {

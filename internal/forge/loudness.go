@@ -143,12 +143,12 @@ func (a *App) recoverOutputGains(ctx context.Context) error {
 
 type loudnessMeasurement struct{ Integrated, Peak float64 }
 type measuredOutput struct {
-	Source    Source
-	Settings  Settings
-	Signature string
-	Tags      map[string]string
-	Duration  float64
-	Loudness  loudnessMeasurement
+	Source          Source
+	Settings        Settings
+	Signature       string
+	Tags            map[string]string
+	Duration        float64
+	Loudness        loudnessMeasurement
 	ResultSignature *string
 }
 
@@ -381,8 +381,12 @@ func (a *App) remuxOutputTags(ctx context.Context, track measuredOutput, tags ma
 			return false, errAuditionUnavailable
 		}
 		if override != nil {
-			if track.ResultSignature!=nil{*track.ResultSignature=signature}
-			if len(override.Tags)==0{return false,a.restoreOptionalMeta("output-tags:"+strconv.FormatInt(track.Source.ID,10),"")}
+			if track.ResultSignature != nil {
+				*track.ResultSignature = signature
+			}
+			if len(override.Tags) == 0 {
+				return false, a.restoreOptionalMeta("output-tags:"+strconv.FormatInt(track.Source.ID, 10), "")
+			}
 			raw, _ := json.Marshal(override)
 			return false, a.setMeta("output-tags:"+strconv.FormatInt(track.Source.ID, 10), string(raw))
 		}
@@ -465,7 +469,9 @@ func (a *App) remuxOutputTags(ctx context.Context, track measuredOutput, tags ma
 	if err != nil {
 		return false, err
 	}
-	if track.ResultSignature!=nil{*track.ResultSignature=hash}
+	if track.ResultSignature != nil {
+		*track.ResultSignature = hash
+	}
 	file, err := os.Open(temp)
 	if err != nil {
 		return false, err

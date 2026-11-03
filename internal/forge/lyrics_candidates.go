@@ -25,7 +25,7 @@ type lyricsTarget struct {
 	Instrumental             bool
 	OutputOnly               bool
 	RecordHistory            bool
-	OperationBatch string
+	OperationBatch           string
 }
 
 func (a *App) captureLyricsTarget(ctx context.Context, id int64, outputOnly ...bool) (target lyricsTarget, err error) {
@@ -133,14 +133,30 @@ func (a *App) publishLyricsTarget(ctx context.Context, target lyricsTarget, text
 			return err
 		}
 	}
-	if target.RecordHistory && existing!=text {
-		item:=operationTrack(current,signature);item.PriorProvider=target.File.Provider;item.AfterProvider=provider;item.AfterHash=digest(text)
-		if present{item.BeforeHash=digest(existing)}
-		if err=a.saveEditBlob(ctx,"lyrics",[]byte(text));err!=nil{return err}
-		item.PriorLyrics,err=a.optionalMeta(ctx,"lyrics-status:"+strconv.FormatInt(current.ID,10));if err!=nil{return err}
-		item.PriorScript,err=a.optionalMeta(ctx,lyricsScriptPrefix+strconv.FormatInt(current.ID,10));if err!=nil{return err}
-		operation,index,prepareErr:=a.prepareOperation(ctx,settings,"lyrics",target.OperationBatch,item);if prepareErr!=nil{return prepareErr}
-		defer func(){a.finishOperation(operation,index,"",err)}()
+	if target.RecordHistory && existing != text {
+		item := operationTrack(current, signature)
+		item.PriorProvider = target.File.Provider
+		item.AfterProvider = provider
+		item.AfterHash = digest(text)
+		if present {
+			item.BeforeHash = digest(existing)
+		}
+		if err = a.saveEditBlob(ctx, "lyrics", []byte(text)); err != nil {
+			return err
+		}
+		item.PriorLyrics, err = a.optionalMeta(ctx, "lyrics-status:"+strconv.FormatInt(current.ID, 10))
+		if err != nil {
+			return err
+		}
+		item.PriorScript, err = a.optionalMeta(ctx, lyricsScriptPrefix+strconv.FormatInt(current.ID, 10))
+		if err != nil {
+			return err
+		}
+		operation, index, prepareErr := a.prepareOperation(ctx, settings, "lyrics", target.OperationBatch, item)
+		if prepareErr != nil {
+			return prepareErr
+		}
+		defer func() { a.finishOperation(operation, index, "", err) }()
 	}
 	if err = a.writeLyricsFile(ctx, settings, current, text, provider); err != nil {
 		return err

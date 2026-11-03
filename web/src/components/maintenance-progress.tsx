@@ -9,7 +9,7 @@ import { Button } from "./ui/button";
 const labels = { lyrics: "lyrics.title", loudness: "gain.title", tags: "tags.title", fingerprints: "fingerprint.title", storage: "progress.storage", undo: "operations.title" } as const;
 type MaintenanceKind = keyof typeof labels;
 type Report = LoudnessReport & { kind: MaintenanceKind; stopping?: boolean; waiting_reason?: "schedule" | "capacity" | "disabled" };
-type Progress = { reports: Report[]; cooldowns: { provider: LyricsProvider; retry_at: number }[] };
+type Progress = { reports: Report[]; cooldowns: { provider: Exclude<LyricsProvider, "source">; retry_at: number }[] };
 
 export function MaintenanceProgress({ notify }: { notify: Notice }) {
   const { t, number, date, errorMessage } = useI18n();
@@ -85,7 +85,7 @@ function FailureGroups({ notify, refresh }: { notify: Notice; refresh: () => voi
     decode: { href: "/library?view=tracks&status=failed", label: "overview.viewLibrary" },
     encode: { href: "/settings?section=encoding", label: "overview.openSettings" },
     validate: { href: "/library?view=tracks&status=failed", label: "overview.viewLibrary" },
-    other: { href: "/library?view=tracks&lyrics=failed", label: "overview.viewLibrary" },
+    other: { href: "/library?view=tracks&sort=attention", label: "overview.viewLibrary" },
   };
   return <div className="comparison-body">
     <p>{t("failures.hint")}</p>

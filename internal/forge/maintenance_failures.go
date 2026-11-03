@@ -62,7 +62,8 @@ func (a *App) getMaintenanceFailures(w http.ResponseWriter, r *http.Request) {
 	busy := map[int64]bool{}
 	for id := range a.activeJobs { busy[a.taskIDContext(r.Context(), id)] = true }
 	a.jobsMu.Unlock()
-	rows, err := a.reads.QueryContext(r.Context(), `SELECT j.id,j.log,coalesce(CAST(m.value AS INTEGER),j.id),coalesce(c.value,'') FROM jobs j
+	rows, err := a.reads.QueryContext(r.Context(), `SELECT j.id,j.log,coalesce(CAST(m.value AS INTEGER),j.id),coalesce(c.value,''),
+ NOT EXISTS(SELECT 1 FROM jobs active WHERE active.dedup=j.dedup AND active.state IN ('pending','running')) FROM jobs j
  LEFT JOIN meta m ON m.key='task-member:'||j.id
  LEFT JOIN meta c ON c.key='task-control:'||coalesce(CAST(m.value AS INTEGER),j.id)
  WHERE j.state='failed' AND j.log<>'Stopped by administrator' ORDER BY j.id DESC`)
@@ -70,10 +71,11 @@ func (a *App) getMaintenanceFailures(w http.ResponseWriter, r *http.Request) {
 	for rows.Next() {
 		var id, root int64
 		var message, control string
-		if err = rows.Scan(&id, &message, &root, &control); err != nil { break }
+		var dedupFree bool
+		if err = rows.Scan(&id, &message, &root, &control, &dedupFree); err != nil { break }
 		g := group(message)
 		g.Jobs++
-		if control == "" && !busy[root] { g.RetryableJobs++ }
+		if control == "" && !busy[root] && dedupFree { g.RetryableJobs++ }
 		g.sample("jobs", id, "", message)
 	}
 	if err == nil { err = rows.Err() }

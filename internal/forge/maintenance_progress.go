@@ -26,13 +26,23 @@ func (a *App) getMaintenanceProgress(w http.ResponseWriter, r *http.Request) {
 		Provider string `json:"provider"`
 		RetryAt int64 `json:"retry_at"`
 	}
-	cooldowns := []cooldown{}
+	untilByProvider := map[string]time.Time{}
 	for _, provider := range lyricsProviders {
-		if until := a.lyricsRetries[provider]; until.After(time.Now().Add(2*time.Second)) {
-			cooldowns = append(cooldowns, cooldown{provider, until.Unix()})
+		untilByProvider[provider] = a.lyricsRetries[provider]
+	}
+	netease := a.netease
+	a.lyricsMu.Unlock()
+	// Never wait for an in-flight request or read a Cookie file to render status.
+	if netease != nil {
+		select {
+		case netease.gate <- struct{}{}:
+			if netease.retryAt.After(untilByProvider["netease"]) { untilByProvider["netease"] = netease.retryAt }
+			<-netease.gate
+		default:
 		}
 	}
-	a.lyricsMu.Unlock()
+	cooldowns := []cooldown{}
+	for _, provider := range lyricsProviders { if until := untilByProvider[provider]; until.After(time.Now().Add(2*time.Second)) { cooldowns = append(cooldowns, cooldown{provider, until.Unix()}) } }
 	gain, err := a.loudnessSnapshot(r.Context())
 	if err != nil { apiError(w, 500, err); return }
 	if gain.State != "idle" { reports = append(reports, maintenanceProgress{Kind: "loudness", loudnessReport: gain}) }

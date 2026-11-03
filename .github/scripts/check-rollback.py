@@ -224,9 +224,9 @@ def main():
         (ROOT / directory).mkdir(parents=True, exist_ok=True)
     (ROOT / "config/config.json").write_text(json.dumps({"public_url": ORIGIN, "allowed_origins": ["http://localhost:18788"], "source_timeout_seconds": 120}) + "\n")
     media = ("run", "--rm", "--user", f"{os.getuid()}:{os.getgid()}", "-v", f"{ROOT / 'source'}:/fixture", "--entrypoint", "ffmpeg", CANDIDATE, "-nostdin", "-v", "error", "-y")
-    docker(*media, "-f", "lavfi", "-i", "sine=duration=1", "-c:a", "flac", "-metadata", "artist=Rollback Artist", "-metadata", "album=Rollback Album", "-metadata", "title=Rollback Track", "/fixture/Album/01.flac")
+    docker(*media, "-f", "lavfi", "-i", "sine=duration=2", "-c:a", "flac", "-metadata", "artist=Rollback Artist", "-metadata", "album=Rollback Album", "-metadata", "title=Rollback Track", "/fixture/Album/01.flac")
     for rel, codec in (("02.mp3", "libmp3lame"), ("03.m4a", "aac")):
-        docker(*media, "-f", "lavfi", "-i", "sine=duration=1", "-c:a", codec, "-metadata", "artist=Rollback Artist", "-metadata", "album=Rollback Album", "-metadata", "title=" + rel, "/fixture/Album/" + rel)
+        docker(*media, "-f", "lavfi", "-i", "sine=duration=2", "-c:a", codec, "-metadata", "artist=Rollback Artist", "-metadata", "album=Rollback Album", "-metadata", "title=" + rel, "/fixture/Album/" + rel)
     # The release media tools omit the color filter; a standard-library PNG is sufficient.
     def chunk(kind, data):
         return struct.pack(">I", len(data)) + kind + data + struct.pack(">I", zlib.crc32(kind + data))
@@ -255,7 +255,7 @@ def main():
             old_rel, new_rel = "Album/" + old_name, "Album/" + new_name
             previous = next(row for row in tracks if row["path"] == old_rel)
             (ROOT / "source" / old_rel).unlink()
-            docker(*media, "-f", "lavfi", "-i", "sine=frequency=880:duration=1", "-c:a", codec, "-metadata", "title=Replaced source format", "/fixture/" + new_rel)
+            docker(*media, "-f", "lavfi", "-i", "sine=frequency=880:duration=2", "-c:a", codec, "-metadata", "title=Replaced source format", "/fixture/" + new_rel)
             os.utime(ROOT / "source" / new_rel, (stable, stable))
             retired_paths.add(old_rel)
             count = len(tracks) + 1

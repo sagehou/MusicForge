@@ -45,7 +45,7 @@ func TestOutputTagsPreserveAudioLyricsAndRebuildCorrections(t *testing.T) {
 			}
 			decode := func() []byte {
 				t.Helper()
-				raw, err := exec.Command(a.cfg.FFmpeg, "-nostdin", "-v", "error", "-i", filepath.Join(s.Output, source.Output), "-map", "0:a:0", "-c:a", "pcm_s16le", "-f", "wav", "pipe:1").Output()
+				raw, err := exec.Command(a.cfg.FFmpeg, "-nostdin", "-v", "error", "-i", filepath.Join(s.Output, source.Output), "-map", "0:a:0", "-map_metadata", "-1", "-c:a", "pcm_s16le", "-f", "wav", "pipe:1").Output()
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -53,7 +53,7 @@ func TestOutputTagsPreserveAudioLyricsAndRebuildCorrections(t *testing.T) {
 			}
 			before := decode()
 			request := lyricsSession(t, a)
-			w := request("POST", "/api/library/tags/preview", map[string]any{"ids": []int64{source.ID}, "tags": map[string]string{"title": "Corrected", "album_artist": "Album Artist", "track": "2/12", "disc": "1/2"}})
+			w := request("POST", "/api/library/tags/preview", map[string]any{"ids": []int64{source.ID}, "tags": map[string]string{"title": "Corrected", "artist": "Corrected Artist", "album": "", "album_artist": "Album Artist", "track": "2/12", "disc": "1/2"}})
 			var preview tagPreview
 			if w.Code != 200 || json.Unmarshal(w.Body.Bytes(), &preview) != nil || len(preview.Tracks) != 1 || preview.Tracks[0].Before["title"] != "Original" {
 				t.Fatal(w.Code, w.Body.String())
@@ -82,14 +82,14 @@ func TestOutputTagsPreserveAudioLyricsAndRebuildCorrections(t *testing.T) {
 			if err == nil {
 				err = a.annotateLyrics(context.Background(), list)
 			}
-			if err != nil || list[0].Title != "Original" || list[0].OutputTags["title"] != "Corrected" || list[0].Lyrics == nil || list[0].Lyrics.Checked != 77 {
+			if err != nil || list[0].Title != "Original" || list[0].OutputTags["title"] != "Corrected" || list[0].Lyrics == nil || list[0].Lyrics.Checked != 77 || list[0].OutputGain != nil {
 				t.Fatal(list, err)
 			}
 			if w = request("POST", "/api/maintenance/tags", map[string]any{"token": preview.Token}); w.Code != 409 {
 				t.Fatal("reused preview token", w.Code)
 			}
 			// A real encoding-profile rebuild must retain the optional correction.
-			s.Encoding.Bitrate = 128
+			s.Encoding.Mode, s.Encoding.Bitrate = "cbr", 128
 			if err = a.saveSettings(s); err != nil {
 				t.Fatal(err)
 			}
@@ -98,7 +98,7 @@ func TestOutputTagsPreserveAudioLyricsAndRebuildCorrections(t *testing.T) {
 			}
 			drain(t, a, true)
 			probe, err := a.probe(context.Background(), filepath.Join(s.Output, source.Output))
-			if err != nil || probe.tags()["title"] != "Corrected" || probe.tags()["album_artist"] != "Album Artist" || probe.tags()["track"] != "2/12" {
+			if err != nil || probe.tags()["title"] != "Corrected" || probe.tags()["artist"] != "Corrected Artist" || probe.tags()["album"] != "" || probe.tags()["album_artist"] != "Album Artist" || probe.tags()["track"] != "2/12" || probe.tags()["disc"] != "1/2" {
 				t.Fatal(probe.tags(), err)
 			}
 		})

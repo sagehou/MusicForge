@@ -1185,6 +1185,9 @@ func (a *App) buildStaged(ctx context.Context, j Job, r BuildRequest, staged *st
 	sort.SliceStable(keys, func(i, j int) bool { return outputTags[keys[i]] == "" && outputTags[keys[j]] != "" })
 	for _, key := range keys {
 		args = append(args, "-metadata", key+"="+outputTags[key])
+		if r.Profile.Codec == "opus" {
+			args = append(args, "-metadata:s:a:0", key+"="+outputTags[key])
+		}
 	}
 	args = append(args, r.Profile.Args()...)
 	args = append(args, temp)

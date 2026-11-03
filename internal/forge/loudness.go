@@ -206,7 +206,7 @@ func (a *App) annotateOutputGain(ctx context.Context, sources []Source) error {
 			return err
 		}
 		source := byID[id]
-		if source != nil && source.OutputPresent && json.Unmarshal([]byte(raw), &gain) == nil && gain.Version == 1 && gain.Path == source.Output && gain.Signature == signature {
+		if source != nil && source.OutputPresent && json.Unmarshal([]byte(raw), &gain) == nil && gain.Version == 1 && gain.Path == source.Output && gain.Signature == signature && gain.Track != "" && gain.Album != "" {
 			source.OutputGain = &gain
 		}
 	}
@@ -424,6 +424,9 @@ func (a *App) remuxOutputTags(ctx context.Context, track measuredOutput, tags ma
 		for key, alias := range map[string]string{"track": "tracknumber", "disc": "discnumber", "album_artist": "albumartist"} {
 			if _, ok := tags[key]; ok {
 				args = append(args, "-metadata", alias+"=")
+				if codec == "opus" {
+					args = append(args, "-metadata:s:a:0", alias+"=")
+				}
 			}
 		}
 	}
@@ -434,6 +437,9 @@ func (a *App) remuxOutputTags(ctx context.Context, track measuredOutput, tags ma
 	sort.Strings(keys)
 	for _, key := range keys {
 		args = append(args, "-metadata", key+"="+missing[key])
+		if codec == "opus" {
+			args = append(args, "-metadata:s:a:0", key+"="+missing[key])
+		}
 	}
 	args = append(args, "-f", codec, temp)
 	if _, err = a.mediaTool(ctx, a.cfg.FFmpeg, args...); err != nil {
@@ -449,7 +455,7 @@ func (a *App) remuxOutputTags(ctx context.Context, track measuredOutput, tags ma
 	actualTags := probe.tags()
 	for key, value := range missing {
 		if actualTags[key] != value {
-			return false, errors.New("Output loudness tags did not survive remuxing")
+			return false, fmt.Errorf("Output tag %s did not survive remuxing", key)
 		}
 	}
 	hash, err := fileHash(ctx, temp)

@@ -37,7 +37,7 @@ test("quality decisions require an ignore reason and can be reopened", async ({ 
   const quality = page.getByRole("region", { name: "Library quality report", exact: true });
   await quality.getByRole("button", { name: "Identical source file hashes 2", exact: true }).click();
   await quality.locator(".quality-decisions > summary").click();
-  await quality.getByLabel("Decision", { exact: true }).selectOption("ignored");
+  await quality.getByRole("combobox", { name: "Decision", exact: true }).selectOption("ignored");
   await expect(quality.getByRole("button", { name: "Save decision", exact: true })).toBeDisabled();
   await quality.getByLabel("Reason / note", { exact: true }).fill("Intentional duplicate edition");
   expect(writes).toBe(0);
@@ -45,7 +45,7 @@ test("quality decisions require an ignore reason and can be reopened", async ({ 
   await expect(quality.getByRole("button", { name: "Identical source file hashes 0", exact: true })).toBeDisabled();
   await quality.getByLabel("Show ignored issues (2)", { exact: true }).check();
   await expect(quality.locator(".review-issues")).toContainText("Intentional duplicate edition");
-  await quality.getByLabel("Decision", { exact: true }).selectOption("open");
+  await quality.getByRole("combobox", { name: "Decision", exact: true }).selectOption("open");
   await quality.getByRole("button", { name: "Save decision", exact: true }).click();
   await expect(quality.getByRole("button", { name: "Identical source file hashes 2", exact: true })).toBeEnabled();
   expect(writes).toBe(2);

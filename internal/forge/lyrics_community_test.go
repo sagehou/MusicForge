@@ -65,12 +65,22 @@ func TestCommunitySourcesCacheRestartPreviewAndSave(t *testing.T) {
 					if r.URL.Query().Get("pageSize") != "8" || !strings.Contains(r.URL.Query().Get("q"), source.Title) {
 						t.Error("AMLL lost bounded metadata search")
 					}
-					respond(w, 200, []any{map[string]any{"id": 123, "trackName": source.Title, "artistName": source.Artist, "albumName": source.Album, "duration": source.Duration, "syncedLyrics": "[00:01.250]夜の歌\n"}, map[string]any{"id": 124, "trackName": "Plain", "artistName": source.Artist, "syncedLyrics": "no timestamps"}})
+					records := []any{}
+					for id := 200; id < 209; id++ {
+						records = append(records, map[string]any{"id": id, "trackName": "Other", "artistName": source.Artist, "syncedLyrics": "[00:01.00]別の歌"})
+					}
+					records = append(records, map[string]any{"id": 123, "trackName": source.Title, "artistName": source.Artist, "albumName": source.Album, "duration": source.Duration, "syncedLyrics": "[00:01.250]夜の歌\n"}, map[string]any{"id": 124, "trackName": "Plain", "artistName": source.Artist, "syncedLyrics": "no timestamps"})
+					respond(w, 200, records)
 				case "unison.boidu.dev/lyrics/search":
 					if r.URL.Query().Get("limit") != "8" {
 						t.Error("unbounded Unison search")
 					}
-					respond(w, 200, map[string]any{"success": true, "data": []any{map[string]any{"id": 123, "song": source.Title, "artist": source.Artist, "album": source.Album, "duration": source.Duration, "format": "ttml", "syncType": "richsync"}, map[string]any{"id": 124, "song": "Plain", "artist": source.Artist, "format": "plain", "syncType": "plain"}}})
+					records := []any{}
+					for id := 200; id < 209; id++ {
+						records = append(records, map[string]any{"id": id, "song": "Other", "artist": source.Artist, "duration": source.Duration, "format": "lrc", "syncType": "linesync"})
+					}
+					records = append(records, map[string]any{"id": 123, "song": source.Title, "artist": source.Artist, "album": source.Album, "duration": source.Duration, "format": "ttml", "syncType": "richsync"}, map[string]any{"id": 124, "song": "Plain", "artist": source.Artist, "format": "plain", "syncType": "plain"})
+					respond(w, 200, map[string]any{"success": true, "data": records})
 				case "unison.boidu.dev/lyrics/123":
 					respond(w, 200, map[string]any{"success": true, "data": map[string]any{"id": 123, "song": source.Title, "artist": source.Artist, "album": source.Album, "format": "ttml", "syncType": "richsync", "lyrics": communityTTMLFixture}})
 				default:
@@ -83,7 +93,7 @@ func TestCommunitySourcesCacheRestartPreviewAndSave(t *testing.T) {
 				t.Fatal(err)
 			}
 			candidates, _, _, _, err := a.cachedLyricsCandidates(context.Background(), target, provider, "", false, false)
-			if err != nil || len(candidates) != 1 {
+			if err != nil || len(candidates) != 8 || candidates[0].Title != source.Title {
 				t.Fatal(candidates, err)
 			}
 			text, _, state, err := a.chooseLyrics(context.Background(), source, candidates, lyricsBatchOptions{MinScore: 0})

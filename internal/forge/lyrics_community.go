@@ -32,9 +32,6 @@ func (a *App) amllCandidates(ctx context.Context, query string) ([]lyricsCandida
 	}
 	var candidates []lyricsCandidate
 	for _, record := range records {
-		if len(candidates) == 8 {
-			break
-		}
 		text, err := providerLRC(record.Synced)
 		if !communityLyricsID(record.ID) || err != nil {
 			continue
@@ -77,9 +74,6 @@ func (a *App) unisonCandidates(ctx context.Context, query string) ([]lyricsCandi
 	}
 	var candidates []lyricsCandidate
 	for _, record := range response.Data {
-		if len(candidates) == 8 {
-			break
-		}
 		if communityLyricsID(record.ID) && record.synchronized() {
 			candidates = append(candidates, lyricsCandidate{Provider: "unison", remoteID: string(record.ID), Title: record.Title,
 				Artist: record.Artist, Album: record.Album, Duration: lyricsProviderSeconds(record.Duration)})

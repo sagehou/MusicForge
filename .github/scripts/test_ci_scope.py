@@ -5,6 +5,7 @@ import importlib.util
 import json
 import os
 from pathlib import Path
+import re
 import subprocess
 import tempfile
 import unittest
@@ -19,6 +20,34 @@ ENV = {"GITHUB_REPOSITORY": "sagehou/MusicForge", "ImageOS": "ubuntu24", "ImageV
 
 
 class CIScopeTests(unittest.TestCase):
+    def test_release_with_skipped_ancestors_requires_all_release_gates(self):
+        workflow = Path(__file__).parents[1].joinpath("workflows/ci.yml").read_text()
+        job = re.search(r"^  publish:\n(?P<body>(?:    .*\n|\n)+)", workflow, re.MULTILINE).group("body")
+        condition = re.search(r"^    if: (.+)$", job, re.MULTILINE).group(1)
+        needs = re.search(r"^    needs: \[(.+)\]$", job, re.MULTILINE).group(1)
+        self.assertEqual({name.strip() for name in needs.split(",")}, {"audit", "image", "ci"})
+        explicit_status = bool(re.search(r"\b(?:always|cancelled|failure|success)\s*\(", condition))
+        expression = condition.removeprefix("${{").removesuffix("}}").strip()
+        expression = expression.replace("github.ref", "ref").replace("&&", " and ").replace("||", " or ")
+        expression = re.sub(r"!(?!=)", "not ", expression)
+        expression = re.sub(r"needs\.(\w+)\.result", r'results["\1"]', expression)
+        success = {"audit": "success", "image": "success", "ci": "success"}
+        cases = [("refs/tags/v0.2.58", success, False, False, True),
+                 ("refs/tags/v0.2.58", success, False, True, True),
+                 ("refs/heads/main", success, False, True, False),
+                 ("refs/tags/v0.2.58", success, True, True, False)]
+        for gate in success:
+            for result in ("failure", "cancelled", "skipped"):
+                cases.append(("refs/tags/v0.2.58", {**success, gate: result}, False, False, False))
+        for ref, results, cancelled, ancestors_succeeded, expected in cases:
+            with self.subTest(ref=ref, results=results, cancelled=cancelled, ancestors_succeeded=ancestors_succeeded):
+                context = {"ref": ref, "results": results, "cancelled": lambda: cancelled,
+                           "startsWith": str.startswith, "success": lambda: ancestors_succeeded,
+                           "always": lambda: True, "failure": lambda: "failure" in results.values()}
+                # Actions implicitly adds success() unless a status function is present.
+                eligible = (explicit_status or ancestors_succeeded) and eval(expression, {"__builtins__": {}}, context)
+                self.assertEqual(eligible, expected)
+
     def test_scope_is_an_allowlist_and_tsx_requires_an_additional_ast_gate(self):
         for paths, expected in [([], "docs"), (["AGENTS.md", "docs/a.md"], "docs"),
                                 (["web/src/style.css", "README.md"], "ui"),

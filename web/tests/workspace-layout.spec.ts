@@ -14,7 +14,7 @@ const tracks: Source[] = Array.from({ length: 30 }, (_, index) => ({
   lyrics: { state: "needs_review", output: `Artist/Album/${index + 1}.opus`, signature: "audio", checked: 1 },
 }));
 async function setup(page: Page) {
-  await page.addInitScript(() => { localStorage.setItem("musicforge.language", "en"); localStorage.setItem("musicforge.theme", "light"); });
+  await page.addInitScript(() => { if (!localStorage.getItem("musicforge.language")) localStorage.setItem("musicforge.language", "en"); if (!localStorage.getItem("musicforge.theme")) localStorage.setItem("musicforge.theme", "light"); });
   await page.route("**/api/auth/me", route => route.fulfill({ json: { initialized: true, authenticated: true, username: "admin", method: "local", csrf: "test", oidc: false, version: "test" } }));
   await page.route("**/api/library", route => route.fulfill({ json: tracks }));
   await page.route("**/api/settings", route => route.fulfill({ json: { settings, configured: { webhook: false, nav_password: false, oidc_secret: false }, public_url: "", allowed_origins: [] } }));
@@ -212,11 +212,13 @@ test("phone pages retain real content, readable facts and inline song details in
     expect(await panel.evaluate(element => element.scrollWidth <= element.clientWidth + 1)).toBe(true);
     await page.screenshot({ path: `test-results/workspace-details-${width}-${theme}.png`, animations: "disabled" });
     await page.keyboard.press("Escape");
-    for (const path of ["/", "/jobs", "/settings"]) {
+    for (const [path, title] of [["/", "Overview"], ["/jobs", "Background jobs"], ["/settings", "Settings"]]) {
       await page.goto(path);
-      await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
-      const heading = await page.getByRole("heading", { level: 1 }).boundingBox();
-      expect(heading!.height).toBeLessThan(100);
+      const heading = page.getByRole("heading", { level: 1, name: title, exact: true });
+      await expect(heading).toBeVisible();
+      // Settings replaces its loading heading when the saved form arrives.
+      await expect.poll(async () => (await heading.boundingBox())?.height ?? Infinity).toBeLessThan(100);
+      await expect(page.locator("html")).toHaveAttribute("data-theme", theme);
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
       await page.screenshot({ path: `test-results/workspace-${path.replaceAll("/", "") || "overview"}-${width}.png`, animations: "disabled" });
     }

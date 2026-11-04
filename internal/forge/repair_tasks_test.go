@@ -25,7 +25,7 @@ func TestRepairTaskAPITracksAndStopsRealRepair(t *testing.T) {
 	if _, err := a.startRepair(source, s); err != nil {
 		t.Fatal(err)
 	}
-	history, total, err := a.repairTaskList(context.Background(), "running", 25, 0)
+	history, total, err := a.repairTaskListGroup(context.Background(), "running", 25, 0, "")
 	if err != nil || total != 1 || len(history) != 1 || history[0].Activity.Path != source.Rel {
 		t.Fatal("repair not listed immediately", history, total, err)
 	}
@@ -69,7 +69,7 @@ func TestRepairTaskAPITracksAndStopsRealRepair(t *testing.T) {
 	a.files.Unlock()
 	locked = false
 	a.repairWG.Wait()
-	history, total, err = a.repairTaskList(context.Background(), "stopped", 25, 0)
+	history, total, err = a.repairTaskListGroup(context.Background(), "stopped", 25, 0, "")
 	if err != nil || total != 1 || len(history) != 1 || history[0].Stopping || history[0].Log == "" {
 		t.Fatal(history, total, err)
 	}
@@ -95,7 +95,7 @@ func TestRepairHistoryProgressRestartAndStaleControl(t *testing.T) {
 		if state == "running" {
 			ctx := context.WithValue(context.Background(), repairTaskKey{}, task)
 			a.reportMediaProgress(ctx, 0, Activity{Phase: "read", Path: "Artist/Album/01.flac", ReadBytes: 50, ReadTotalBytes: 100}, .05)
-			history, _, err := a.repairTaskList(ctx, "running", 25, 0)
+			history, _, err := a.repairTaskListGroup(ctx, "running", 25, 0, "")
 			if err != nil || len(history) != 1 || history[0].Activity.ReadBytes != 50 || history[0].Progress != .05 {
 				t.Fatal(history, err)
 			}
@@ -119,16 +119,16 @@ func TestRepairHistoryProgressRestartAndStaleControl(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer reopened.Close()
-	history, total, err := reopened.repairTaskList(context.Background(), "all", 1, 0)
+	history, total, err := reopened.repairTaskListGroup(context.Background(), "all", 1, 0, "")
 	if err != nil || total != 3 || len(history) != 1 || history[0].State != "stopped" || history[0].Progress != .475 || !strings.Contains(history[0].Log, "interrupted by restart") {
 		t.Fatal(history, total, err)
 	}
-	history, total, err = reopened.repairTaskList(context.Background(), "all", 1, 1)
+	history, total, err = reopened.repairTaskListGroup(context.Background(), "all", 1, 1, "")
 	if err != nil || total != 3 || len(history) != 1 || history[0].State != "failed" || history[0].Log != "retained diagnostic" {
 		t.Fatal(history, total, err)
 	}
 	for _, state := range []string{"success", "failed"} {
-		history, total, err = reopened.repairTaskList(context.Background(), state, 25, 0)
+		history, total, err = reopened.repairTaskListGroup(context.Background(), state, 25, 0, "")
 		if err != nil || total != 1 || len(history) != 1 || history[0].Log != "retained diagnostic" {
 			t.Fatal(history, total, err)
 		}
@@ -200,7 +200,7 @@ func TestUnifiedTasksPaginateAndControlGroupedRepairHistory(t *testing.T) {
 	if count, err := a.changeRepairGroups(context.Background(), "delete", nil, true, "failed"); err != nil || count != 1 {
 		t.Fatal(count, err)
 	}
-	history, total, err := a.repairTaskList(context.Background(), "all", 25, 0)
+	history, total, err := a.repairTaskListGroup(context.Background(), "all", 25, 0, "")
 	if err != nil || total != 1 || len(history) != 1 || history[0].ID != strings.Repeat("c", 64) {
 		t.Fatal(history, total, err)
 	}
@@ -294,7 +294,7 @@ func TestRepairBatchAPIWaitsForCapacitySkipsUnsafeTracksAndStopsWholeQueue(t *te
 	if w := send("POST", "/api/jobs/control", `{"action":"delete","repair_ids":["`+group+`"]}`, true, true); w.Code != 202 || !strings.Contains(w.Body.String(), `"changed":1`) {
 		t.Fatal(w.Code, w.Body.String())
 	}
-	if _, total, err = a.repairTaskList(context.Background(), "all", 50, 0); err != nil || total != 0 {
+	if _, total, err = a.repairTaskListGroup(context.Background(), "all", 50, 0, ""); err != nil || total != 0 {
 		t.Fatal(total, err)
 	}
 }

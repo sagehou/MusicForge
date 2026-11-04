@@ -1,24 +1,95 @@
-# Production trial guide
+# Deployment and operations
 
-**English** · [Simplified Chinese](deployment.zh-CN.md)
+**English** · [简体中文](deployment.zh-CN.md)
 
-This guide targets v0.2.6. Installation, builds and automated validation run in GitHub Actions; the production host pulls published images. See the [acceptance report](acceptance.md) for verified behavior.
+Use the [README](../README.md#get-started-with-docker-compose) for first startup. This guide covers the parts that depend on your host, storage and other services. Choose a published stable version from [Releases](https://github.com/sagehou/MusicForge/releases); the host only needs to pull images, not build them.
 
-## Before deployment
+## Storage and permissions
 
-- Pin `MUSICFORGE_VERSION=v0.2.6` in `.env` so a trial does not change with `latest`.
-- Keep `/config` on local host storage, owned by `PUID`, with mode `0700`. It contains accounts, OIDC/Navidrome secrets, the index and jobs. Do not share it publicly. Startup enforces private directory permissions.
-- `FLAC_DIR` must exist and is mounted read-only; `OUTPUT_DIR` must exist, be writable and initially empty. Use a dedicated output directory. None of the three roots may contain another. Compose refuses missing host paths.
-- Verify source read access and output write access for the configured UID/GID. Give Navidrome read-only access to the same output. Reserve disk space for both output and temporary files.
-- Set `MUSICFORGE_PUBLIC_URL` to the primary HTTPS origin, without a subpath. List additional origins in `MUSICFORGE_ALLOWED_ORIGINS`. Proxy all site paths for every domain and preserve Host.
+- Keep `/config` on local storage suitable for SQLite WAL. Its owner must match `PUID`; startup enforces mode `0700`. It holds accounts, credentials, the library index, jobs and recovery records.
+- Mount the source read-only and a dedicated output read-write. The output must be empty on first setup. None of these roots may contain another, and Compose refuses missing host paths.
+- The configured UID/GID needs source read access and output/config write access. Navidrome should read the same physical output through a read-only mount. Its container path may differ.
+- Leave room for output and temporary files. Source staging shares a default 4 GiB limit under `/config/source-staging`; one source must fit within that limit, with at least 64 MiB left for configuration writes. Staging is removed after success, failure or cancellation and cleaned on startup.
+- Output storage must support hard links for safe LRC creation. Source-tree symlinks pause scanning; use real directories or mount paths.
 
-See the [README](../README.md) for directory creation and startup. Check `docker compose config --quiet`, then run `docker compose pull` and `docker compose up -d`. Container logs rotate across at most three 10 MB files. The first-start setup code creates the administrator; do not publish those logs.
+Once indexing begins, container root paths cannot be changed in Settings. Move storage by changing host mounts while keeping the container paths. The storage workbench can check mounts, verify selected output checksums and preview a migration checklist; it does not copy data or apply new paths.
 
-For multiple domains, follow the [runtime configuration example](../README.md#runtime-configuration). Test local login, saving Settings and logout on each origin; cookies remain separate. OIDC started on an additional origin redirects to the primary URL and stays there after login. Bind the identity while logged in locally at the primary URL. HTTPS-cookie behavior uses the configured origin, even when TLS terminates at the proxy. Changes to the allowlist require container recreation.
+## Reverse proxy and access origins
+
+The default Compose port is `127.0.0.1:8787`. A host-process Nginx/Caddy can use `http://127.0.0.1:8787` upstream. Set `MUSICFORGE_PUBLIC_URL` to the public origin, including its scheme and optional port, with no subpath. Preserve the request Host and proxy all site paths. MusicForge handles authentication; proxy identity headers do not grant access.
+
+A containerized proxy should share a Docker network and use `http://musicforge:8787`; `127.0.0.1` inside that container refers to the proxy itself. For an existing external network named `proxy`, add `compose.proxy.yml`:
+
+```yaml
+services:
+  musicforge:
+    networks:
+      - proxy
+networks:
+  proxy:
+    external: true
+```
+
+Join the proxy to that network too, then use both files: `docker compose -f docker-compose.yml -f compose.proxy.yml up -d`.
+
+For more than one domain, set these values in `.env`:
+
+```dotenv
+MUSICFORGE_PUBLIC_URL=https://musicforge.example.com
+MUSICFORGE_ALLOWED_ORIGINS=https://musicforge.home.example.com,https://musicforge-alt.example.com
+```
+
+The primary origin is automatically allowed. Configure DNS, proxying and HTTPS for each domain. Wildcards and paths are rejected; use only one scheme per hostname. Each domain has its own host-only login cookie. Browser writes must match both the allowed origin and Host and still require CSRF protection. Forwarded host/protocol headers cannot add origins.
+
+OIDC started on another domain redirects to the primary URL and stays there after login. Register only the primary callback and bind the identity while logged in locally on that primary origin. Recreate the container after editing startup settings. Test login, Settings save and logout on each configured origin.
+
+Set `MUSICFORGE_TRUSTED_PROXIES` to the proxy IP CIDRs **as seen by MusicForge**, separated by commas. A host proxy may appear as the Docker bridge gateway. Pin its address or use an isolated network; do not trust `0.0.0.0/0` or `::/0`. The proxy must overwrite `X-Forwarded-For` with the real client address or append the actual connecting address (Nginx: `proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;`). Never forward a client-supplied value unchanged.
+
+MusicForge walks that chain from the trusted connection peer to the first untrusted address. Without trusted proxies, clients behind the proxy share a rate-limit budget. Local login/setup allow ten credential failures in fifteen minutes and reset on success; OIDC starts have a separate budget. Confirm that one client's failed attempts do not block another through your proxy.
+
+## Connect Lidarr and Navidrome
+
+In **Settings → Integrations → Lidarr**, save a container-reachable URL and API key for file-list comparison. A blank key preserves it for the same URL; clearing the URL clears the connection. **Library → File counts · compare with Lidarr** compares indexed paths without downloading audio or changing Lidarr. Results are snapshots; “unindexed” does not prove a file is missing from disk. Re-scan selected difference directories after checking the path mapping.
+
+For automatic imports, create a native **Webhook** connection in Lidarr:
+
+| Field | Value |
+| --- | --- |
+| URL | `https://musicforge.example.com/api/webhook/lidarr` |
+| Username | `musicforge` |
+| Password | The independent webhook secret saved in MusicForge |
+| Events | Release import and upgrade |
+
+Set **Lidarr source path prefix** if Lidarr sees a different absolute source root. Mapped paths must stay inside the MusicForge source root. The connection test creates no work. Import tasks wait for the notified tracks to appear and finish conversion, including across restarts; a persistent wait shows the expected source path. Ordinary imports keep expired output. Only upgrade events authorize cleanup of their explicitly replaced files, after replacements validate.
+
+For Navidrome, save its URL, username, password and library ID. Its library root must correspond to this output directory. Refresh uses saved settings and coalesces changed directories; pending refreshes survive restart. Navidrome 0.59.0+ receives targeted scans, older versions regular scans. **Refresh Navidrome manually** is useful for checking the connection. URLs must be reachable from inside MusicForge; `localhost` means this container. Use HTTPS across untrusted networks. Authentication uses Subsonic salted tokens, not plaintext passwords in query parameters.
+
+## OIDC and password recovery
+
+The local administrator can optionally bind one OIDC identity:
+
+1. Set the primary HTTPS origin in `MUSICFORGE_PUBLIC_URL`.
+2. Save the provider's exact issuer URL, client ID and secret in Settings.
+3. Register `https://musicforge.example.com/api/auth/oidc/callback` with the provider.
+4. While signed in locally on that primary origin, choose **Bind your OIDC identity** and complete the provider flow.
+
+Only the bound `issuer + sub` can sign in. Keep the local password for recovery. Rebinding revokes previous OIDC sessions while retaining local access. Leaving a secret blank preserves it; use the explicit deletion option after clearing the relevant URL to erase a Navidrome password or OIDC secret. OIDC deletion requires local login and clears the binding and OIDC sessions.
+
+To reset a forgotten password, stop the app and pass the new password through stdin using the same image and `/config` volume. Run in Bash:
+
+```bash
+docker compose stop musicforge
+read -rs -p 'New password: ' new_password
+printf '%s\n' "$new_password" | docker compose run --rm -T musicforge -reset-password-stdin
+unset new_password
+docker compose up -d
+```
+
+Use any Compose overrides from your deployment in these commands too. Passwords require 12–72 bytes. Recovery needs exclusive access to `/config` and revokes all sessions.
 
 ## Optional NetEase lyrics login
 
-Lyrics matches are ranked by score; ties use QQ Music → Kugou → NetEase → PetitLyrics → LRCLIB. NetEase first uses an anonymous session, reused in memory for up to ten days and renewed after expiry; restart creates a new session. No account is required by default. Platform or regional restrictions can still block guest access.
+Enable NetEase and choose its priority in Settings → Lyrics. NetEase first uses an anonymous session, reused in memory for up to ten days and renewed after expiry; restart creates a new session. No account is required by default. Platform or regional restrictions can still block guest access.
 
 If NetEase requires an account, sign in and complete any phone/account verification on the official NetEase website or app. Obtain your own logged-in website request's `Cookie` header and save its value as one line in a private `netease.cookie` file, for example `MUSIC_U=<your login value>; __csrf=<your csrf value>`. The file must contain a nonempty `MUSIC_U`, stay within 16 KiB, and contain no `Cookie:` prefix, browser-export JSON or Netscape cookie-file format. MusicForge does not perform password/SMS login or bypass platform verification. The MusicForge administrator account is separate from this provider login.
 
@@ -41,85 +112,59 @@ Use both files for subsequent Compose commands. The override mounts that directo
 
 The application rereads the file for each NetEase operation and never writes it. Replace its contents privately, preserving owner/permissions; the directory mount also makes atomic replacement visible. A changed Cookie clears the credential cooldown on the next lookup without restarting; HTTP `Retry-After` limits still apply. An unreadable or invalid configured file pauses NetEase rather than silently using a different identity. Login expiry/rejection or account verification is reported for this provider, with a thirty-minute cooldown (one minute for rejected guest sessions); guest sessions renew on a later retry. These errors preserve existing lyrics and the other providers' results. Complete verification and refresh the file when prompted; re-run the track's lyrics search afterward. Guest credentials are memory-only, and login Cookies are never saved to the database or returned by APIs.
 
-## Reverse proxy networking
+## Runtime configuration
 
-A host-process Nginx/Caddy can use `http://127.0.0.1:8787` upstream. The default Compose file binds only the host loopback address.
+Optional `/config/config.json` follows [config.example.json](../config.example.json). Environment variables override it; library, encoding and integration settings are saved through the UI in SQLite.
 
-A containerized proxy should share a Docker network with MusicForge and use `http://musicforge:8787` upstream. Inside the proxy container, `127.0.0.1` refers to that proxy. For an existing external network named `proxy`, create `compose.proxy.yml`:
+| Variable | Default / purpose |
+| --- | --- |
+| `MUSICFORGE_CONFIG_DIR` | `/config` |
+| `MUSICFORGE_LISTEN` | `:8787` |
+| `MUSICFORGE_PUBLIC_URL` | Primary browser/OIDC origin |
+| `MUSICFORGE_ALLOWED_ORIGINS` | Additional origins, comma-separated |
+| `MUSICFORGE_TRUSTED_PROXIES` | Proxy IP CIDRs for client-IP rate limiting |
+| `MUSICFORGE_LOG_LEVEL` | `INFO`; structured JSON logs |
+| `MUSICFORGE_FFMPEG` / `MUSICFORGE_FFPROBE` | `ffmpeg` / `ffprobe` |
+| `MUSICFORGE_SOURCE_TIMEOUT_SECONDS` | `120`; source no-progress timeout, 1–3600 seconds |
+| `MUSICFORGE_STAGING_MAX_BYTES` | `4294967296`; shared source scratch limit in bytes |
+| `MUSICFORGE_NETEASE_COOKIE_FILE` | Optional absolute path to a read-only secret file |
 
-```yaml
-services:
-  musicforge:
-    networks:
-      - proxy
-networks:
-  proxy:
-    external: true
-```
+In `config.json`, additional origins use an `allowed_origins` array. An empty `MUSICFORGE_ALLOWED_ORIGINS` clears that array; remove the Compose environment entry to use the file value. Startup values are shown read-only in Settings. Recreate the container after changing them.
 
-Join the proxy to that network too, then run `docker compose -f docker-compose.yml -f compose.proxy.yml up -d`. Adjust the network name to your deployment. Retain MusicForge local/OIDC authentication; the proxy terminates HTTPS and forwards requests. Navidrome URLs must also be reachable from the container; `localhost` means MusicForge itself.
+## Remote mounts and troubleshooting
 
-Configure `MUSICFORGE_TRUSTED_PROXIES` with the proxy IP CIDR(s) as seen by MusicForge, for example `172.20.0.2/32`; separate multiple IPv4/IPv6 CIDRs with commas. A host-process proxy may appear as the Docker bridge gateway rather than `127.0.0.1`. Pin the proxy address or restrict the trusted range to its isolated network. The proxy must overwrite `X-Forwarded-For` with the actual client IP or append the actual connecting IP to the existing chain (Nginx: `proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;`). Never forward a client-supplied value unchanged or trust `0.0.0.0/0` / `::/0`. MusicForge walks the chain from the trusted connection peer to the first untrusted hop. Without this setting, headers are ignored and clients behind the same proxy share a failure budget. This setting identifies an IP for rate limiting; it does not enable Forward Auth or header-based identity.
+Establish rclone/FUSE mounts before starting MusicForge and grant its UID read access; `--allow-other` may be needed. Keep config and output local. MusicForge scans tags/attributes, then copies each selected source once into bounded local staging while calculating SHA-256. Encoding and embedded artwork reuse that seekable copy. Metadata probing may still read headers or seek to the tail. Unchanged scans skip audio reads; VFS full caching is optional.
 
-Local login/setup count credential failures only, reset on success and allow ten failures per fifteen-minute fixed window. Their budgets and the OIDC start budget are separate. OIDC callback success resets its start budget; existing callbacks and authenticated binding are not blocked by public start exhaustion. Verify that repeated successful logins work and one test client's failures do not block another client through your proxy.
+A named `fuse.rclone` source records a witness of the remote and effective directory. Reconnecting the same source can acknowledge changed device/inode IDs automatically, including across restart. Other filesystems, generic `--devname` labels, changed sources and unwitnessed mounts use strict identity checks. If a changed-mount notice remains, inspect the real directory **inside the container** before saving Settings to acknowledge it. Docker's private binds may require container recreation after a host remount. Never acknowledge an unmounted empty directory.
 
-## Initial acceptance
+Jobs show source-read bytes, encoding progress and capacity/schedule waits. A source read stalled for 120 seconds times out; for a slower remote, adjust `MUSICFORGE_SOURCE_TIMEOUT_SECONDS` and recreate the container. Individual failures retain existing output and allow healthy tracks to continue. Incomplete scans never expire unseen sources; whole-mount outages defer work without spending track retries. Each ordinary track gets an initial attempt and two automatic retries before waiting for manual retry. A new attempt may reread the source.
 
-For a small album trial, use a separate temporary `/config`, dedicated output and test source library. Root paths cannot change through the UI after indexing. Deploy the full library with its own configuration/output, without reusing a temporary instance's ownership marker.
+Pause stops active encoding and holds unfinished work across restarts; resume restarts the current track. Stop preserves completed audio and requires an explicit retry. Deleting finished/stopped history removes records, not audio, and may allow a later scan to retry a previously suppressed target. Best-effort repair and interrupted manual maintenance do not restart automatically.
 
-1. Confirm `docker compose ps` reports healthy. Complete setup over public HTTPS, log out and log in. Health checks cover the database; separately confirm source/output storage is online in Overview.
-2. Keep concurrency at 1 and default Opus VBR 192 kbps. Convert an album, check tags and the single `cover.jpg`, then scan again: no new conversion jobs should appear.
-3. Play a converted track in Navidrome. Save integration settings and manually refresh; confirm the job succeeds and tracks appear.
-4. Delete a source audio file only from the test source library. After scanning it should be expired, while output and Navidrome playback remain. Manually delete its expired artifact in MusicForge and refresh: only then should the playback entry disappear.
-5. Change an encoding parameter: the artifact should need rebuilding until manually started. Its validated replacement retires the old file. Restart the container and confirm successful tracks are skipped while pending work continues.
-6. For OIDC, retain the local recovery password, bind an identity and test login in another browser session. Rebinding revokes previous OIDC sessions while retaining local sessions. Test your Lidarr connection, one import and one upgrade.
+For a problem report, record the image version, task ID, path and time, then inspect `docker compose logs --since 10m musicforge`. Source reads, API failures and slow requests include stage/path diagnostics. Do not share credentials or setup codes. Logs rotate across three 10 MB files with the example Compose file.
 
-Automation exercises real ffmpeg, Navidrome, Chromium and both native image architectures. Lidarr tests use native payloads and OIDC tests use a signed test provider. Your deployed Lidarr, Authentik/other OIDC provider, reverse proxy and storage combination still needs the acceptance above. The library API currently returns the complete index and the UI polls every five seconds; large-library capacity has not been load-tested, so observe memory and response time during initial import. Symlinks within the source tree pause scanning; use real directories or mount paths.
+`/healthz` checks database liveness; Overview separately reports storage availability. A protected API returns 401 for an invalid/expired session and 503 with `Retry-After: 1` for temporary session-storage failures. Temporary errors retain loaded pages and drafts; only confirmed expiry opens reauthentication. The library keeps an in-memory snapshot, conditionally revalidates it and uses compressed responses. It still returns the complete index when changed; large-library capacity has not been load-tested.
 
-## Task controls and progress
+A permanently blocked kernel storage call may need host mount recovery. Do not remove `.musicforge`, the database or old playable files as a repair attempt.
 
-A scan and its track queue occupy one Jobs entry. New scans/rebuilds carry grouping annotations; pre-upgrade history remains individually controllable rather than guessing historical relationships. Open Details for scope, scan counts, profiles, individual results and diagnostics. The Library starts at artists, then albums, then tracks; search/status filters narrow these groups, and selecting a group selects its matching tracks. Output paths keep the source-relative hierarchy.
+## Try your deployment
 
-Pause stops active encoders and holds unfinished work across restarts. Resume starts unfinished tracks from the beginning. Stop leaves completed audio in place and requires explicit retry; retry-all skips deliberately stopped tasks. Delete history requires the queue to be finished or stopped and its workers to have exited. It removes task records only. Deleting failed/stopped history removes that target’s scan-retry suppression, so a later scan may create it again.
+Use one small album in a separate test source/config/output set before pointing at the full library:
 
-Use **Select this page** or **Select all matching tasks** for pause/resume/stop/retry/history cleanup across pages. Actions apply only to eligible tasks and show the actual changed count. The legacy **Retry all failed** action still skips deliberate stops; an explicit stopped-filter selection can retry them. Old accumulated histories keep their original grouping and can be cleaned in bulk. Numeric IDs include internal track operations, so compare the displayed task total as well.
+1. Complete setup, log out/in and check both container health and storage availability.
+2. Convert with concurrency 1 and the default profile. Check tags and `cover.jpg`, play in Navidrome, then scan again: unchanged tracks should be skipped.
+3. Delete a source **only in this test library**. The output should remain playable as expired. Delete its expired output explicitly and refresh Navidrome; only then should it disappear.
+4. Change a profile and start a rebuild. Restart during queued work and check that completed tracks are kept and pending ordinary jobs continue.
+5. Try your Lidarr import/upgrade, proxy client-IP handling and optional OIDC login. Automated fixtures cannot verify your credentials, mount behavior or service configuration.
 
-Timer scans do not enqueue or append work while library queues, including paused queues, remain active. Manual/Lidarr and source-change scans reuse the active scan root and survive restarts; after indexing has finished, that same root indexes new scopes before remaining tracks continue. API/auth reads use a separate bounded, read-only SQLite WAL pool on local `/config`; background writes stay serialized. Detail queries paginate before fetching tags. Read queries inherit request cancellation and a ten-second deadline for ordinary GET API requests; session lookups have a five-second deadline. Changing pages cancels the old page's requests. This keeps abandoned reads from continuing to occupy the pool, but does not increase remote mount bandwidth.
-
-Jobs refresh every two seconds and show the current path, artist/album/title, track encoding percentage and queue counts. Container logs emit `job progress` records with `task`, `job`, `phase`, `path`, `title`, `processed`, `total` and `percent`. Encoding reports at most once per second. Discovery has an unknown total until enumeration finishes; artwork/validation are separate phases. Retries may return a track’s percentage to zero.
-
-Schema 2 remains unchanged. Task grouping/control/progress use optional metadata keys, retaining the original executable jobs and arguments. Older images retain held `pending` jobs through their future `not_before` timestamp and show stopped work as `failed` with a cancellation message; their UI has individual jobs and lacks Resume. Resume through the current compatible 0.2.x release when reopening. Snapshot comparison includes task annotations and the held timestamp.
+Current automated coverage and its limits are recorded in [acceptance](acceptance.md).
 
 ## Upgrade and rollback
 
-Stop MusicForge and back up all of `/config`. For complete library-state rollback, also snapshot the corresponding output directory and record the previous image version while MusicForge remains stopped. Keep an independent source-library backup.
+Stop MusicForge, back up all of `/config` and record the previous image version. For complete library-state rollback, snapshot the matching output while still stopped. Keep an independent source backup. Change `MUSICFORGE_VERSION`, then run `docker compose pull` and `docker compose up -d` with your usual overrides.
 
-Schema 2 is the stable MVP baseline. The `0.2.x` series preserves the database structure and persisted Settings, jobs and recovery formats. v0.2.0/v0.2.1/v0.2.2/v0.2.3/v0.2.4/v0.2.5 → v0.2.6 does not migrate the schema. A same-series software rollback can reuse the current `/config`: pause background work, stop the application, pin the earlier image, then verify accounts, library and jobs before resuming. Do not change database version numbers to perform a rollback.
+The `0.2.x` series uses schema 2 and preserves published persistence formats and meanings. A same-series **software rollback** can reuse the current configuration: disable background work, stop the app, pin the earlier image, then check accounts, library and jobs. Older versions may not understand newer optional maintenance features; keep background work disabled until returning to a supporting release. Never lower SQLite `user_version` manually. Version 0.1 requires its matching pre-upgrade backup.
 
-The CI step `Same-schema rollback with published releases` uses digest-pinned v0.2.5/v0.2.4/v0.2.3/v0.2.2/v0.2.1/v0.2.0 images on AMD64 and ARM64. They read the candidate's FLAC/MP3/M4A records, real audio, cover, credentials and pending task, save settings, then return to the candidate; database and artifact state are compared. Successful runs produce `rollback-amd64` / `rollback-arm64` evidence artifacts. Equal schema numbers are only one condition; older readers and writers must also remain compatible.
+A software rollback keeps the current library state. Only restoring matching stopped config/output snapshots restores the pre-upgrade state; changing images cannot undo completed replacements, moves or deletions. Published version tags and images are never overwritten for rollback.
 
-Software rollback retains the current library state. Restoring the full pre-upgrade state requires matching `/config` and output snapshots. Switching images cannot undo completed replacements, moves or deletions.
-
-Version 0.1 cannot read schema 2 and requires its matching pre-upgrade backup. Future incompatible persistence changes require a clearly marked breaking release with upgrade backups and a CI-verified restore-and-rollback path. Do not manually lower `user_version`; this does not convert data structures or recover deleted data.
-
-If a problem occurs, disable background work in Settings and retain logs/mount state. Do not delete `.musicforge`, the database or old playable artifacts as a repair attempt. A changed-source-mount notice requires checking the real mount before acknowledging it by saving Settings. See the README for password recovery.
-
-## Mixed audio libraries
-
-Use the same read-only source mount for supported audio formats; the existing `FLAC_DIR` Compose variable may point to a mixed library. See the [supported source formats](../README.md#supported-source-audio). After upgrading, run a scan to discover files that older versions skipped. The UI reports audio-source counts and displays each track's extension.
-
-The schema-2 storage formats remain unchanged. Versions through v0.2.5 retain mixed-source records, artifacts and job arguments when reopening and saving settings with background work disabled. Their scanner still discovers only FLAC; if resumed, it can mark non-FLAC sources expired while retaining output. Some older media-tool builds also lack new input decoders. Keep background work disabled during a feature rollback, then use the newer release to resume mixed-source work. A downgrade does not add new format support to older versions.
-
-## Rclone mounts and stall diagnostics
-
-Follow the [README mount guidance](../README.md#mounted-remote-source-libraries) and establish the host mount before container startup. Tag scanning finishes first; workers copy selected sources into `/config/source-staging`, computing full SHA-256 while copying, and encode the local copies. Reserve local disk space for the default 4 GiB aggregate limit. VFS full caching is optional. Ordinary scans still use size/mtime for incremental checks. A witnessed named rclone source can reconnect automatically when only its device/inode changes; changed or unconfirmed sources still require checking the container's view before saving Settings. Do not acknowledge an unmounted empty directory. This does not repair Docker bind propagation or manage the rclone mount.
-
-Jobs show read/total MiB. Structured `job progress` adds optional `read_bytes`/`read_total_bytes` byte counters; existing `processed`/`total` remain file counts and `percent` remains 0–100. These fields are diagnostics, not recovery records. The default no-progress timeout is 120 seconds. Set `MUSICFORGE_SOURCE_TIMEOUT_SECONDS=300` in `.env` and recreate the container for a slower remote. Pause/stop cancel source-reading child processes; resume restarts the current track.
-
-Individual read failures appear in Library while other tracks continue through indexing and stay in the same task. The scan retries twice after a complete pass, then waits for manual retry. Whole-mount outages defer work. Incomplete scans never expire unseen sources. Overview reads background storage-check results and explicitly shows when checking is still underway.
-
-Record the task ID, source path, time and HTTP status when reporting an error. `docker compose logs --since 10m musicforge` includes `source read failed`, `API request failed` and `slow API request` with paths/stages/diagnostics. API failures retain the original error plus read-pool open/in-use connections and cumulative wait count/duration. Request bodies, passwords and OIDC callback query parameters are not logged. HTML/empty responses and generic internal errors show the HTTP status and request endpoint while existing task data remains visible.
-
-Protected APIs return 401 when the login cookie is missing, invalid or expired. Session lookup failures, database lock contention and request timeouts return 503 with `Retry-After: 1`; a lookup failure does not revoke the stored session or clear its cookie. The UI keeps the current page and unsaved input during a failed login-state check, returning to login only after `/api/auth/me` successfully confirms that the session is unauthenticated. Database failures during local password verification do not consume the incorrect-credential budget. If an intermittent 500 persists, include its corresponding `API request failed` log; the HTTP status alone does not identify its cause.
-
-Actions adds actual rclone WebDAV/FUSE acceptance with VFS caching disabled: mix FLAC/MP3/M4A, stall the 36th download in a 40-track library, check byte progress, API response time, pause/resume and whole-file hashes, then test a new-track timeout and recovery. A separate successful build transfers its 2,781,108-byte source plus only 65,536 bytes for metadata, and leaves no scratch files. Evidence is uploaded as `rclone-acceptance`. A permanently blocked kernel storage call may require host mount recovery; the application bounds unreaped source helper processes.
+When the persistence surface changes, CI exercises the latest published compatible schema-2 image on the candidate's same volumes, then reopens with the candidate, on both architectures. The optional `historical_rollback` dispatch also covers all pinned historical releases. `rollback-scope` records the baseline and decision; architecture artifacts record the round trip. Documentation/presentation-only changes can skip it when the complete persistence surface is unchanged. Version tags still require a current dependency audit and both final native image checks, while eligible successful application evidence can be reused. See [AGENTS.md](../AGENTS.md) for the exact gates.

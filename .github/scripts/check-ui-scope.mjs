@@ -88,7 +88,7 @@ function main() {
   });
   const scope = uncertain.length ? "full" : "ui";
   const specs = new Set(["appearance.spec.ts", "workspace-layout.spec.ts"]);
-  const global = paths.some(path => path.endsWith(".css") || path.includes("/locales/") || ["web/src/App.tsx", "web/src/i18n.tsx", "web/src/main.tsx"].includes(path) || path.includes("/ui/") || /\/(resource|page-heading|detail-panel|theme-selector)\.tsx$/.test(path));
+  const global = paths.some(path => path.endsWith(".css") || path.includes("/locales/") || ["web/src/App.tsx", "web/src/i18n.tsx", "web/src/main.tsx"].includes(path) || path.includes("/ui/") || /\/(resource|page-heading|inline-details|theme-selector)\.tsx$/.test(path));
   const affected = {
     "library": ["library-experience", "lyrics", "library-comparison", "maintenance", "maintenance-progress"], "lyrics": ["lyrics"],
     "repair": ["repair"], "maintenance": ["maintenance", "maintenance-progress"], "artwork-editor": ["maintenance"], "artifact-audition": ["artifact-audition", "maintenance"], "overview": ["cleanup-and-ui"],

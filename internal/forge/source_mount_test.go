@@ -108,7 +108,7 @@ func TestSourceMountReconnectPreservesSchemaTwoAcknowledgmentAndRestart(t *testi
 		t.Fatal("new acknowledged remote cannot reconnect", err)
 	}
 	assertRoot(root.Identity)
-	if err = a.initializeStorage(s); err != nil {
+	if err = a.initializeStorageContext(context.Background(), s); err != nil {
 		t.Fatal(err)
 	}
 	if _, err = a.meta("source_mount"); err != sql.ErrNoRows {

@@ -759,11 +759,6 @@ input:not([type="checkbox"], [type="radio"]):focus-visible, select:focus-visible
 .job-symbol.success { color: var(--success); background: var(--success-soft); }
 .job-symbol.failed { color: var(--danger); background: var(--danger-soft); }
 .recent-arrow { color: var(--muted); flex-shrink: 0; }
-.recent-meter { height: 3px; background: var(--subtle); border-radius: 3px; overflow: hidden; margin-top: 6px; max-width: 160px; }
-.recent-meter > span { height: 100%; display: block; border-radius: inherit; background: var(--info); }
-.job-row[data-state="success"] .recent-meter > span { background: var(--success); }
-.job-row[data-state="failed"] .recent-meter > span { background: var(--danger); }
-.job-row[data-state="paused"] .recent-meter > span { background: var(--warning); }
 
 .overview-side { display: grid; gap: 16px; min-width: 0; }
 .lyrics-summary, .storage-summary {

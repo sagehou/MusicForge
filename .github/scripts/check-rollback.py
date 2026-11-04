@@ -219,6 +219,22 @@ def verify(api, expected_tracks, pending, stopped):
     assert api("/api/settings")["configured"] == settings["configured"], "settings save erased credentials"
 
 
+def verify_lyrics_options(api, version, providers):
+    patch = int(version.removeprefix("v0.2."))
+    if patch < 31:
+        return
+    options = api("/api/lyrics")["options"]
+    if "providers" in options:
+        # v0.2.59 added community sources; saving only seven-source names there
+        # would explicitly disable the community choices we intend to preserve.
+        expected = providers if patch >= 59 else [provider for provider in providers if provider not in ("amll", "unison")]
+        assert options["providers"] == expected, "rollback reader changed the supported provider order"
+        written = api("/api/lyrics/options", "PUT", {"providers": expected})
+        assert written["providers"] == expected, "rollback writer changed the supported provider order"
+    api("/api/lyrics/options", "PUT", {"auto_search": False})
+    api("/api/lyrics/search", "DELETE")
+
+
 def main():
     for directory in ("config", "source/Album", "output"):
         (ROOT / directory).mkdir(parents=True, exist_ok=True)
@@ -431,14 +447,7 @@ def main():
                 api, running = start(actual_image)
                 if actual_image == image:
                     assert running == version, "wrong rollback release"
-                if actual_image == image and int(version.removeprefix("v0.2.")) >= 31:
-                    old_options = api("/api/lyrics")["options"]
-                    if "providers" in old_options:
-                        assert old_options["providers"] == published_lyric_providers, "old provider reader received community names"
-                        written = api("/api/lyrics/options", "PUT", {"providers": published_lyric_providers})
-                        assert written["providers"] == published_lyric_providers, "old provider writer rejected the compatible policy"
-                    api("/api/lyrics/options", "PUT", {"auto_search": False})
-                    api("/api/lyrics/search", "DELETE")
+                    verify_lyrics_options(api, version, lyric_providers)
                 verify(api, tracks, pending, stopped)
                 if actual_image == CANDIDATE:
                     corrected = next(row for row in api("/api/library") if row["id"] == lyrics_track["id"])

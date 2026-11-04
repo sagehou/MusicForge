@@ -40,7 +40,7 @@ func TestTagsPrecedeFullReadAndEncodingReusesOneStagedCopy(t *testing.T) {
 	if err != nil || source.Hash != "" || source.Title != "Visible before download" || source.Size < 1 || source.Mtime == 0 {
 		t.Fatal("tag-only index is not usable before full download", source, err)
 	}
-	items, _, err := a.taskItems(id, "pending", 50, 0)
+	items, _, err := a.taskItemsContext(context.Background(), id, "pending", 50, 0)
 	if err != nil {
 		t.Fatal(err)
 	}

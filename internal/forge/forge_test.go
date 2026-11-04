@@ -36,7 +36,7 @@ func testApp(t *testing.T) (*App, Settings) {
 			t.Fatal(err)
 		}
 	}
-	if err = a.initializeStorage(s); err != nil {
+	if err = a.initializeStorageContext(context.Background(), s); err != nil {
 		t.Fatal(err)
 	}
 	if err = a.saveSettings(s); err != nil {
@@ -185,7 +185,7 @@ func TestMoveRebuildAndExpiration(t *testing.T) {
 	if pending != 0 {
 		t.Fatal("profile change automatically queued rebuild")
 	}
-	if _, err := a.queueBuild(moved, s.Encoding, false, true); err != nil {
+	if _, err := a.queueBuildTask(moved, s.Encoding, false, true, 0); err != nil {
 		t.Fatal(err)
 	}
 	drain(t, a, true)
@@ -206,7 +206,7 @@ func TestMoveRebuildAndExpiration(t *testing.T) {
 	if expired.Present || !expired.OutputPresent {
 		t.Fatal("ordinary deletion did not preserve output")
 	}
-	if err := a.deleteExpired([]int64{source.ID}); err != nil {
+	if err := a.deleteExpiredContext(context.Background(), []int64{source.ID}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := os.Stat(filepath.Join(s.Output, rebuilt.Output)); !os.IsNotExist(err) {

@@ -34,20 +34,8 @@ The agreed MVP baseline is recorded in [docs/mvp-design.md](docs/mvp-design.md).
 - An incompatible persistence change belongs to a separately documented breaking release, with an upgrade backup procedure and a tested restore-and-rollback path. Preserve historical migration definitions and reject unsupported schemas rather than lowering their version number.
 - Complete state rollback requires a matching stopped `/config` backup and output snapshot; database compatibility does not undo completed artifact operations. Never overwrite a published version tag or its image to implement a rollback.
 
-## Keep the local environment clean
+## Local work and releases
 
-- Do not compile, build, or install dependencies locally.
-- Run dependency installation, backend/frontend compilation, tests that require compilation or dependencies, and Docker image builds only in GitHub Actions.
-- Do not run local package-manager operations that download or install dependencies, including Go module downloads or tidy operations.
-- Local work may inspect and edit source, documentation, and workflow files, and perform checks that do not compile code or download/install dependencies.
-- Do not create local dependency directories, compiler caches, or generated build outputs. Dependency lockfiles are source files; generate or update them through GitHub Actions.
-
-## Build and release through GitHub Actions
-
-- GitHub Actions is the sole environment for dependency installation, build, and executable validation.
-- Build the single-container MusicForge image for both linux/amd64 and linux/arm64.
-- Publish final container images to GitHub Container Registry (GHCR).
-- Pull requests and default-branch commits run CI validation without publishing container images.
-- Version tags such as `v0.1.0` trigger publication after successful CI validation.
-- Publish a corresponding versioned image tag; stable releases also update `latest`. Prereleases do not update `latest`.
-- Do not build or publish images from the local workspace.
+- Local work is source/document/workflow editing and static inspection only. Do not compile, build, install or download dependencies locally (including Go module downloads/tidy). Keep dependency directories, compiler caches and generated outputs out of the workspace; generate or update lockfiles through GitHub Actions.
+- GitHub Actions is the sole environment for dependency installation, compilation, executable tests/validation and Docker builds.
+- Pull requests and default-branch commits validate without publishing. Authorized version tags (`v*`) publish the checked single-container image for `linux/amd64` and `linux/arm64` to GHCR under the corresponding version. Stable releases also update `latest`; prereleases do not. Never build or publish images locally.

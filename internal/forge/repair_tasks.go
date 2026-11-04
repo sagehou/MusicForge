@@ -219,10 +219,6 @@ func (a *App) finishRepairTask(task *repairTask, source Source, result RepairSta
 	a.logger.Info("repair task finished", "repair_task", task.ID, "source_id", task.SourceID, "path", source.Rel, "state", task.State)
 }
 
-func (a *App) repairTaskList(ctx context.Context, state string, limit, offset int) ([]repairTask, int, error) {
-	return a.repairTaskListGroup(ctx, state, limit, offset, "")
-}
-
 func (a *App) repairTaskListGroup(ctx context.Context, state string, limit, offset int, group string) ([]repairTask, int, error) {
 	where := " WHERE r.key LIKE 'repair-task:%' AND json_valid(r.value)"
 	from := " FROM meta r LEFT JOIN meta m ON m.key='repair-member:'||substr(r.key,13)"

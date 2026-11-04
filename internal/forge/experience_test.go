@@ -1,6 +1,7 @@
 package forge
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"errors"
@@ -123,7 +124,7 @@ func TestRefreshAPIQueuesWithoutWaitingForNavidrome(t *testing.T) {
 	if _, err := a.db.Exec("UPDATE jobs SET log=?,not_before=? WHERE id=?", "Waiting for Navidrome scan completion", time.Now().Add(time.Minute).Unix(), job.ID); err != nil {
 		t.Fatal(err)
 	}
-	tasks, _, err := a.taskList("all", 100, 0)
+	tasks, _, err := a.taskListContext(context.Background(), "all", 100, 0)
 	if err != nil || len(tasks) != 1 || tasks[0].State != "pending" || tasks[0].WaitingReason == "" || tasks[0].RetryAt == 0 {
 		t.Fatal("waiting work lost its readable state", tasks, err)
 	}
@@ -145,14 +146,14 @@ func TestGroupedDeferredTaskReportsWaitingWithoutChangingState(t *testing.T) {
 	if _, err = a.db.Exec("UPDATE jobs SET log=?,not_before=? WHERE id=?", "Waiting for stable source", time.Now().Add(time.Minute).Unix(), child); err != nil {
 		t.Fatal(err)
 	}
-	tasks, _, err := a.taskList("all", 100, 0)
+	tasks, _, err := a.taskListContext(context.Background(), "all", 100, 0)
 	if err != nil || len(tasks) != 1 || tasks[0].State != "running" || tasks[0].WaitingReason != "Waiting for stable source" || tasks[0].RetryAt == 0 {
 		t.Fatal("grouped task omitted deferred reason", tasks, err)
 	}
 	if _, err = a.changeTasks("pause", selection{IDs: []int64{root}}); err != nil {
 		t.Fatal(err)
 	}
-	tasks, _, err = a.taskList("all", 100, 0)
+	tasks, _, err = a.taskListContext(context.Background(), "all", 100, 0)
 	if err != nil || len(tasks) != 1 || tasks[0].State != "paused" || tasks[0].WaitingReason != "" {
 		t.Fatal("administrative pause looked like a retry wait", tasks, err)
 	}
@@ -162,7 +163,7 @@ func TestGroupedDeferredTaskReportsWaitingWithoutChangingState(t *testing.T) {
 	if _, err = a.db.Exec("UPDATE jobs SET state='running',log=?,not_before=? WHERE id=?", "Waiting for stable source", time.Now().Add(time.Minute).Unix(), child); err != nil {
 		t.Fatal(err)
 	}
-	tasks, _, err = a.taskList("all", 100, 0)
+	tasks, _, err = a.taskListContext(context.Background(), "all", 100, 0)
 	if err != nil || len(tasks) != 1 || tasks[0].WaitingReason != "" {
 		t.Fatal("executing task looked like a retry wait", tasks, err)
 	}

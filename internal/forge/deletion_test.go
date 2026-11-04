@@ -121,7 +121,7 @@ func TestDeletingRootTrackPreservesSharedArtwork(t *testing.T) {
 	if err = a.scan(context.Background(), ScanRequest{}); err != nil {
 		t.Fatal(err)
 	}
-	if err = a.deleteExpired([]int64{source.ID}); err != nil {
+	if err = a.deleteExpiredContext(context.Background(), []int64{source.ID}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err = os.Stat(filepath.Join(s.Output, "cover.jpg")); err != nil {
@@ -143,7 +143,7 @@ func TestClaimsSerializeSameSourceAcrossBuildTargets(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err = a.queueBuild(source, Encoding{"mp3", "vbr", 192, 2}, false, true); err != nil {
+	if _, err = a.queueBuildTask(source, Encoding{"mp3", "vbr", 192, 2}, false, true, 0); err != nil {
 		t.Fatal(err)
 	}
 	first, err := a.claim(true)

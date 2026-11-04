@@ -37,7 +37,7 @@ func TestScanOwnsOneDurableConversionTask(t *testing.T) {
 	if err = a.completeJob(j, "success", 0, 1, "", 0); err != nil {
 		t.Fatal(err)
 	}
-	list, total, err := a.taskList("all", 1, 0)
+	list, total, err := a.taskListContext(context.Background(), "all", 1, 0)
 	if err != nil || total != 1 || len(list) != 1 || list[0].ID != id || list[0].Counts.Total != 3 || list[0].State != "running" {
 		t.Fatalf("scan did not create one queue: %+v %d %v", list, total, err)
 	}
@@ -57,7 +57,7 @@ func TestScanOwnsOneDurableConversionTask(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer a.Close()
-	list, total, err = a.taskList("paused", 1, 0)
+	list, total, err = a.taskListContext(context.Background(), "paused", 1, 0)
 	if err != nil || total != 1 || list[0].State != "paused" {
 		t.Fatal("pause/grouping lost after restart", list, err)
 	}
@@ -68,14 +68,14 @@ func TestScanOwnsOneDurableConversionTask(t *testing.T) {
 		t.Fatal(err)
 	}
 	drain(t, a, true)
-	list, total, err = a.taskList("success", 1, 0)
+	list, total, err = a.taskListContext(context.Background(), "success", 1, 0)
 	if err != nil || total != 1 || list[0].Counts.Done != 3 || list[0].Progress != 1 {
 		t.Fatal("queue completion missing", list, err)
 	}
 	if _, err = a.changeTasks("delete", selection{IDs: []int64{id}}); err != nil {
 		t.Fatal(err)
 	}
-	if _, total, err = a.taskList("all", 100, 0); err != nil || total != 0 {
+	if _, total, err = a.taskListContext(context.Background(), "all", 100, 0); err != nil || total != 0 {
 		t.Fatal("child history leaked", total, err)
 	}
 	for i := 1; i <= 3; i++ {
@@ -133,7 +133,7 @@ func TestRunningTaskPauseAndStopPreservePlayableAudio(t *testing.T) {
 	if err = a.saveSettings(s); err != nil {
 		t.Fatal(err)
 	}
-	id, err := a.queueBuild(source, s.Encoding, false, true)
+	id, err := a.queueBuildTask(source, s.Encoding, false, true, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -149,7 +149,7 @@ func TestRunningTaskPauseAndStopPreservePlayableAudio(t *testing.T) {
 	go func() { defer close(done); a.worker(ctx, true, 0) }()
 	defer func() { cancel(); <-done }()
 	waitTaskWorker(t, a, id, true)
-	items, _, err := a.taskItems(id, "running", 50, 0)
+	items, _, err := a.taskItemsContext(context.Background(), id, "running", 50, 0)
 	if err != nil || len(items) != 1 || items[0].Activity.Title != "Readable title" || items[0].Activity.Phase != "convert" {
 		t.Fatal("human progress missing", items, err)
 	}
@@ -185,7 +185,7 @@ func TestRunningTaskPauseAndStopPreservePlayableAudio(t *testing.T) {
 	if !strings.Contains(logs.String(), `"title":"Readable title"`) || !strings.Contains(logs.String(), `"phase":"convert"`) {
 		t.Fatal("Docker progress log missing", logs.String())
 	}
-	list, total, err := a.taskList("stopped", 50, 0)
+	list, total, err := a.taskListContext(context.Background(), "stopped", 50, 0)
 	if err != nil || total != 1 || list[0].State != "stopped" {
 		t.Fatal("stop missing", list, err)
 	}
@@ -229,18 +229,18 @@ func TestTaskFiltersAndPaginationCountQueues(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	list, total, err := a.taskList("failed", 1, 0)
+	list, total, err := a.taskListContext(context.Background(), "failed", 1, 0)
 	if err != nil || total != 1 || len(list) != 1 || list[0].Counts.Failed != 110 {
 		t.Fatal("queue aggregation/filtering broken", list, total, err)
 	}
-	items, total, err := a.taskItems(id, "failed", 50, 100)
+	items, total, err := a.taskItemsContext(context.Background(), id, "failed", 50, 100)
 	if err != nil || total != 110 || len(items) != 10 || items[0].Log != "bad source" {
 		t.Fatal("failed item pagination broken", total, len(items), err)
 	}
 	if _, err = a.changeTasks("retry", selection{IDs: []int64{id}}); err != nil {
 		t.Fatal(err)
 	}
-	list, total, err = a.taskList("running", 1, 0)
+	list, total, err = a.taskListContext(context.Background(), "running", 1, 0)
 	if err != nil || total != 1 || list[0].Counts.Pending != 110 || list[0].Counts.Failed != 0 {
 		t.Fatal("retry missed queue members", list, total, err)
 	}
@@ -276,7 +276,7 @@ func TestLegacyWriterCanRetryStoppedJobs(t *testing.T) {
 	if err = a.completeJob(j, "success", 0, 1, "", 0); err != nil {
 		t.Fatal(err)
 	}
-	list, total, err := a.taskList("success", 100, 0)
+	list, total, err := a.taskListContext(context.Background(), "success", 100, 0)
 	if err != nil || total != 1 || list[0].ID != id {
 		t.Fatal("stale annotation overrode legacy write", list, err)
 	}
@@ -313,7 +313,7 @@ func TestManualRebuildCreatesOneQueue(t *testing.T) {
 	if err := json.Unmarshal(w.Body.Bytes(), &result); err != nil || result.Queued != 2 || result.ID == 0 {
 		t.Fatal("rebuild response", result, err)
 	}
-	list, total, err := a.taskList("all", 100, 0)
+	list, total, err := a.taskListContext(context.Background(), "all", 100, 0)
 	if err != nil || total != 1 || list[0].Counts.Total != 2 || list[0].ID != result.ID {
 		t.Fatal("manual rebuild split into tracks", list, err)
 	}

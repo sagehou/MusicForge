@@ -103,7 +103,7 @@ func TestScanFailureLogIncludesUnreadableSourcePath(t *testing.T) {
 	if err = a.completeJob(j, "failed", 3, 0, cause.Error(), 0); err != nil {
 		t.Fatal(err)
 	}
-	items, _, err := a.taskItems(id, "failed", 50, 0)
+	items, _, err := a.taskItemsContext(context.Background(), id, "failed", 50, 0)
 	if err != nil || len(items) != 1 || items[0].Log != cause.Error() {
 		t.Fatal("task API lost the scan diagnostics", items, err)
 	}
@@ -180,7 +180,7 @@ func TestRemoteReadFailurePastThirtyTracksKeepsHealthyQueueAndStopsAfterThreeAtt
 		if j.State == "pending" && j.Attempts > 0 {
 			_, _ = a.db.Exec("UPDATE jobs SET not_before=0 WHERE id=?", j.ID)
 		}
-		if _, _, err = a.taskList("all", 100, 0); err != nil {
+		if _, _, err = a.taskListContext(context.Background(), "all", 100, 0); err != nil {
 			t.Fatal("queue API failed during indexing", err)
 		}
 		time.Sleep(20 * time.Millisecond)
@@ -258,7 +258,7 @@ func TestHungScanLeavesAPIResponsiveAndCanPause(t *testing.T) {
 	deadline := time.Now().Add(5 * time.Second)
 	var readingID int64
 	for {
-		items, _, _ := a.taskItems(id, "running", 50, 0)
+		items, _, _ := a.taskItemsContext(context.Background(), id, "running", 50, 0)
 		for _, item := range items {
 			if item.Activity.Phase == "read" {
 				readingID = item.ID
@@ -350,7 +350,7 @@ func TestStalledEncoderKeepsExistingArtifact(t *testing.T) {
 		t.Fatal(err)
 	}
 	a.cfg.FFmpeg = tool
-	if _, err := a.queueBuild(source, s.Encoding, false, true); err != nil {
+	if _, err := a.queueBuildTask(source, s.Encoding, false, true, 0); err != nil {
 		t.Fatal(err)
 	}
 	j, err := a.claim(true)

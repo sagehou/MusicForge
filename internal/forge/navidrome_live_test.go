@@ -52,7 +52,7 @@ func TestRealNavidromeLibraryLifecycle(t *testing.T) {
 	s.NavURL = bridge.URL
 	s.NavUser = "admin"
 	s.NavPassword = "ci-only-musicforge-password"
-	if err := a.initializeStorage(s); err != nil {
+	if err := a.initializeStorageContext(context.Background(), s); err != nil {
 		t.Fatal(err)
 	}
 	if err := a.saveSettings(s); err != nil {
@@ -125,7 +125,7 @@ func TestRealNavidromeLibraryLifecycle(t *testing.T) {
 	if count := songs(); count != 1 {
 		t.Fatal("ordinary source deletion removed playback", count)
 	}
-	if err = a.deleteExpired([]int64{source.ID}); err != nil {
+	if err = a.deleteExpiredContext(context.Background(), []int64{source.ID}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err = os.Stat(filepath.Join(s.Output, source.Output)); !os.IsNotExist(err) {
@@ -175,7 +175,7 @@ func TestRealNavidromeLibraryLifecycle(t *testing.T) {
 	if err = a.scan(context.Background(), ScanRequest{}); err != nil {
 		t.Fatal(err)
 	}
-	if err = a.deleteExpired([]int64{root.ID}); err != nil {
+	if err = a.deleteExpiredContext(context.Background(), []int64{root.ID}); err != nil {
 		t.Fatal(err)
 	}
 	refresh()

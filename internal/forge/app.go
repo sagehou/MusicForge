@@ -525,9 +525,6 @@ func (a *App) storageStatus(s Settings) (bool, string, bool) {
 	return true, "", false
 }
 
-func (a *App) initializeStorage(s Settings) error {
-	return a.initializeStorageContext(context.Background(), s)
-}
 func (a *App) initializeStorageContext(ctx context.Context, s Settings) error {
 	source, err := a.sourceStat(ctx, s.Source, ".")
 	if err != nil {

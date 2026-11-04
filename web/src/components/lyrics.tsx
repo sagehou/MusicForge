@@ -105,7 +105,7 @@ export function LyricsSettings({ notify, notification }: { notify: Notice; notif
     return () => window.removeEventListener("lyrics-options-changed", refresh);
   }, [resource.retry]);
   if (!resource.data) return <Loading error={resource.error} retry={resource.retry} />;
-  const saved = { ...resource.data.options, min_score: resource.data.options.min_score ?? 96, providers: resource.data.options.providers ?? [...onlineProviders] };
+  const saved = { ...resource.data.options, min_score: resource.data.options.min_score ?? 96, providers: resource.data.options.providers ?? [...defaultOnlineProviders] };
   const options = draft ?? saved;
   const dirty = options.auto_search !== saved.auto_search || options.min_score !== saved.min_score || JSON.stringify(options.providers) !== JSON.stringify(saved.providers);
   return <div className="lyrics-settings-page">
@@ -142,7 +142,7 @@ function LyricsProviderOptions({ providers, disabled, change }: { providers: Onl
       const index = providers.indexOf(provider), enabled = index >= 0, name = t(`lyrics.name.${provider}`);
       return <li key={provider} data-enabled={enabled}>
         <span className="lyrics-provider-rank" aria-hidden="true">{enabled ? index + 1 : "—"}</span>
-        <label className="check-field"><input type="checkbox" checked={enabled} aria-label={name} onChange={event => change(event.target.checked ? [...providers, provider] : providers.filter(item => item !== provider))} /><span>{name}{provider === "petitlyrics" && <small>{t("lyrics.japaneseSource")}</small>}</span></label>
+        <label className="check-field"><input type="checkbox" checked={enabled} aria-label={name} onChange={event => change(event.target.checked ? [...providers, provider] : providers.filter(item => item !== provider))} /><span>{name}{provider === "petitlyrics" && <small>{t("lyrics.japaneseSource")}</small>}{provider === "amll" && <small>{t("lyrics.amllSource")}</small>}{provider === "unison" && <small>{t("lyrics.unisonSource")}</small>}</span></label>
         <div className="actions"><Button type="button" variant="ghost" size="icon" aria-label={t("lyrics.sourceUp", { name })} disabled={disabled || !enabled || index === 0} onClick={() => move(index, -1)}><ArrowUp size={16} /></Button><Button type="button" variant="ghost" size="icon" aria-label={t("lyrics.sourceDown", { name })} disabled={disabled || !enabled || index === providers.length - 1} onClick={() => move(index, 1)}><ArrowDown size={16} /></Button></div>
       </li>;
     })}</ol>
@@ -154,8 +154,8 @@ export function LyricsTrack({ source, notify, onChoose, pickerHref, expanded = f
   const { t, errorMessage } = useI18n();
   if (!source.output_present || !source.output) return null;
   const state = lyricsMatchState(source) || "unchecked";
-  const provider = source.lyrics?.provider || source.lyrics?.additional_provider;
-  const attempts = [...(source.lyrics?.attempts || []), ...(source.lyrics?.additional_attempts || [])].sort((a, b) => onlineProviders.findIndex(provider => provider === a.provider) - onlineProviders.findIndex(provider => provider === b.provider));
+  const provider = source.lyrics?.provider || source.lyrics?.additional_provider || source.lyrics?.community_provider;
+  const attempts = [...(source.lyrics?.attempts || []), ...(source.lyrics?.additional_attempts || []), ...(source.lyrics?.community_attempts || [])].sort((a, b) => onlineProviders.findIndex(provider => provider === a.provider) - onlineProviders.findIndex(provider => provider === b.provider));
   return <div className="lyrics-track" data-state={state}>
     <span className="lyrics-state">{t(`lyrics.state.${state}`)}{source.lyrics_script && !source.lyrics?.instrumental && <small className="lyrics-script"> · {t(`lyrics.script.${source.lyrics_script}`)}</small>}</span>
     <div className="lyrics-actions">
@@ -172,7 +172,8 @@ export function LyricsTrack({ source, notify, onChoose, pickerHref, expanded = f
   </div>;
 }
 
-const onlineProviders = ["qq", "kugou", "netease", "petitlyrics", "lrclib", "kuwo", "migu"] as const;
+const defaultOnlineProviders = ["qq", "kugou", "netease", "petitlyrics", "lrclib", "kuwo", "migu"] as const;
+const onlineProviders = [...defaultOnlineProviders, "amll", "unison"] as const;
 type OnlineProvider = Exclude<LyricsProvider, "source">;
 type Candidate = { index: number; provider: OnlineProvider; title: string; artist: string; album: string; duration: number; high_confidence: boolean; identity_match?: boolean; match_score: number; duration_delta?: number; script: string; translation_script?: string };
 type CandidateGroup = { provider: OnlineProvider; token?: string; candidates: Candidate[]; cached?: boolean; searched?: number; loading: boolean; error?: string };
@@ -189,7 +190,7 @@ function candidateDuration(value: number) {
 export function LyricsPicker({ source, notify, close, saved, previous, next, onBusyChange, standalone = false }: { source: Source; notify: Notice; close: () => void; saved: () => void; previous?: () => void; next?: () => void; onBusyChange: (busy: boolean) => void; standalone?: boolean }) {
   const { t, errorMessage, locale } = useI18n();
   const options = useResource<LyricsResponse>("/lyrics");
-  const providers = useMemo(() => options.data?.options.providers ?? [...onlineProviders], [options.data?.options.providers]);
+  const providers = useMemo(() => options.data?.options.providers ?? [...defaultOnlineProviders], [options.data?.options.providers]);
   const searchController = useRef<AbortController | null>(null);
   const previewController = useRef<AbortController | null>(null);
   const autoSelect = useRef(true);

@@ -17,14 +17,18 @@ type lyricsStatusJSON LyricsStatus
 
 func (status LyricsStatus) MarshalJSON() ([]byte, error) {
 	value := lyricsStatusJSON(status)
-	var additionalProvider string
-	if !legacyLyricsProvider(value.Provider) {
+	var additionalProvider, communityProvider string
+	if communityLyricsProvider(value.Provider) {
+		communityProvider, value.Provider = value.Provider, ""
+	} else if !legacyLyricsProvider(value.Provider) {
 		additionalProvider, value.Provider = value.Provider, ""
 	}
-	var additionalAttempts []lyricsAttempt
+	var additionalAttempts, communityAttempts []lyricsAttempt
 	value.Attempts = nil
 	for _, attempt := range status.Attempts {
-		if legacyLyricsProvider(attempt.Provider) {
+		if communityLyricsProvider(attempt.Provider) {
+			communityAttempts = append(communityAttempts, attempt)
+		} else if legacyLyricsProvider(attempt.Provider) {
 			value.Attempts = append(value.Attempts, attempt)
 		} else {
 			additionalAttempts = append(additionalAttempts, attempt)
@@ -34,7 +38,9 @@ func (status LyricsStatus) MarshalJSON() ([]byte, error) {
 		lyricsStatusJSON
 		AdditionalProvider string          `json:"additional_provider,omitempty"`
 		AdditionalAttempts []lyricsAttempt `json:"additional_attempts,omitempty"`
-	}{value, additionalProvider, additionalAttempts})
+		CommunityProvider  string          `json:"community_provider,omitempty"`
+		CommunityAttempts  []lyricsAttempt `json:"community_attempts,omitempty"`
+	}{value, additionalProvider, additionalAttempts, communityProvider, communityAttempts})
 }
 
 func (status *LyricsStatus) UnmarshalJSON(raw []byte) error {
@@ -42,6 +48,8 @@ func (status *LyricsStatus) UnmarshalJSON(raw []byte) error {
 		lyricsStatusJSON
 		AdditionalProvider string          `json:"additional_provider"`
 		AdditionalAttempts []lyricsAttempt `json:"additional_attempts"`
+		CommunityProvider  string          `json:"community_provider"`
+		CommunityAttempts  []lyricsAttempt `json:"community_attempts"`
 	}
 	if err := json.Unmarshal(raw, &value); err != nil {
 		return err
@@ -50,7 +58,11 @@ func (status *LyricsStatus) UnmarshalJSON(raw []byte) error {
 	if status.Provider == "" {
 		status.Provider = value.AdditionalProvider
 	}
+	if status.Provider == "" {
+		status.Provider = value.CommunityProvider
+	}
 	status.Attempts = append(status.Attempts, value.AdditionalAttempts...)
+	status.Attempts = append(status.Attempts, value.CommunityAttempts...)
 	return nil
 }
 
@@ -58,20 +70,24 @@ type lyricsFileJSON lyricsFile
 
 func (file lyricsFile) MarshalJSON() ([]byte, error) {
 	value := lyricsFileJSON(file)
-	var additionalProvider string
-	if !legacyLyricsProvider(value.Provider) {
+	var additionalProvider, communityProvider string
+	if communityLyricsProvider(value.Provider) {
+		communityProvider, value.Provider = value.Provider, ""
+	} else if !legacyLyricsProvider(value.Provider) {
 		additionalProvider, value.Provider = value.Provider, ""
 	}
 	return json.Marshal(struct {
 		lyricsFileJSON
 		AdditionalProvider string `json:"additional_provider,omitempty"`
-	}{value, additionalProvider})
+		CommunityProvider  string `json:"community_provider,omitempty"`
+	}{value, additionalProvider, communityProvider})
 }
 
 func (file *lyricsFile) UnmarshalJSON(raw []byte) error {
 	var value struct {
 		lyricsFileJSON
 		AdditionalProvider string `json:"additional_provider"`
+		CommunityProvider  string `json:"community_provider"`
 	}
 	if err := json.Unmarshal(raw, &value); err != nil {
 		return err
@@ -79,6 +95,9 @@ func (file *lyricsFile) UnmarshalJSON(raw []byte) error {
 	*file = lyricsFile(value.lyricsFileJSON)
 	if file.Provider == "" {
 		file.Provider = value.AdditionalProvider
+	}
+	if file.Provider == "" {
+		file.Provider = value.CommunityProvider
 	}
 	return nil
 }

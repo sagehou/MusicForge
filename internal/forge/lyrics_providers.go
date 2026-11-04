@@ -22,7 +22,8 @@ import (
 	"unicode"
 )
 
-var lyricsProviders = []string{"qq", "kugou", "netease", "petitlyrics", "lrclib", "kuwo", "migu"}
+var defaultLyricsProviders = []string{"qq", "kugou", "netease", "petitlyrics", "lrclib", "kuwo", "migu"}
+var lyricsProviders = append(append([]string{}, defaultLyricsProviders...), "amll", "unison")
 
 func lyricsProviderPriority(provider string) int {
 	for i, name := range lyricsProviders {
@@ -390,6 +391,10 @@ func (a *App) providerCandidates(ctx context.Context, provider string, source So
 		candidates, err = a.kuwoCandidates(ctx, query)
 	case "migu":
 		candidates, err = a.miguCandidates(ctx, query)
+	case "amll":
+		candidates, err = a.amllCandidates(ctx, query)
+	case "unison":
+		candidates, err = a.unisonCandidates(ctx, query)
 	default:
 		return nil, false, errors.New("Unknown lyrics provider")
 	}
@@ -610,6 +615,8 @@ func (a *App) candidateLyrics(ctx context.Context, candidate lyricsCandidate) (l
 	switch candidate.Provider {
 	case "petitlyrics":
 		return a.petitLyricsText(ctx, candidate)
+	case "unison":
+		return a.unisonLyrics(ctx, candidate)
 	case "kuwo", "migu":
 		var err error
 		if candidate.Provider == "kuwo" {

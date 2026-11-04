@@ -12,11 +12,16 @@ import (
 )
 
 func TestReadyLyricsAreSkippedWithoutStorageReadsAfterRestart(t *testing.T) {
-	for _, kind := range []string{"source", "instrumental", "petitlyrics", "kuwo", "migu"} {
+	for _, kind := range []string{"source", "instrumental", "petitlyrics", "kuwo", "migu", "amll", "unison"} {
 		t.Run(kind, func(t *testing.T) {
 			a, settings := testApp(t)
 			seedLyricsArtifact(t, a, settings)
 			request := lyricsSession(t, a)
+			if communityLyricsProvider(kind) {
+				if w := request("PUT", "/api/lyrics/options", map[string]any{"providers": []string{kind}}); w.Code != 200 {
+					t.Fatal(w.Code, w.Body.String())
+				}
+			}
 			if kind == "instrumental" {
 				token, index := previewInstrumentalLyrics(t, a, request)
 				if w := request("PUT", "/api/library/1/lyrics", map[string]any{"token": token, "index": index}); w.Code != 200 {
@@ -33,7 +38,11 @@ func TestReadyLyricsAreSkippedWithoutStorageReadsAfterRestart(t *testing.T) {
 				if w := request("POST", "/api/library/1/lyrics/preview", choice); w.Code != 200 {
 					t.Fatal(w.Code, w.Body.String())
 				}
-				if w := request("PUT", "/api/library/1/lyrics", choice); w.Code != 200 || !strings.Contains(w.Body.String(), `"additional_provider":"`+kind+`"`) {
+				field := "additional_provider"
+				if communityLyricsProvider(kind) {
+					field = "community_provider"
+				}
+				if w := request("PUT", "/api/library/1/lyrics", choice); w.Code != 200 || !strings.Contains(w.Body.String(), `"`+field+`":"`+kind+`"`) {
 					t.Fatal(w.Code, w.Body.String())
 				}
 			} else {

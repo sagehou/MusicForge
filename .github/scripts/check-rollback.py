@@ -270,7 +270,8 @@ def main():
             assert successor["hash"] == hashlib.sha256((ROOT / "source" / new_rel).read_bytes()).hexdigest(), "format replacement lost complete source identity"
             wait_for(lambda: api("/api/jobs")["jobs"], lambda rows: all(row["state"] == "success" for row in rows), "completed source format replacement jobs")
         lyrics_track = next(row for row in tracks if row["path"] == "Album/01.flac")
-        lyric_providers = ["petitlyrics", "lrclib", "migu"]
+        lyric_providers = ["amll", "petitlyrics", "unison", "lrclib", "migu"]
+        published_lyric_providers = ["petitlyrics", "lrclib", "migu"]
         api("/api/lyrics/options", "PUT", {"auto_search": False, "min_score": 98, "providers": lyric_providers})
         api("/api/lyrics/search", "POST", {"ids": [lyrics_track["id"]]})
         wait_for(lambda: api("/api/lyrics")["report"], lambda row: row["state"] == "complete" and row["found"] == 1, "candidate source LRC publication")
@@ -346,21 +347,22 @@ def main():
         # Optional read counters must survive older readers and Settings writers too.
         with sqlite3.connect(ROOT / "config/musicforge.db") as db:
             # New provider labels must not reach the closed label catalogs in
-            # published frontends. Seed an owned, ready Migu artifact
+            # published frontends. Seed an owned, ready Unison artifact
             # with the unchanged schema-2 identity/signature contract.
             online_track = next(track for track in tracks if track["path"] == "Album/03.wv")
             online_path = str(Path(online_track["output"]).with_suffix(".lrc"))
-            online_text = "[00:00.00]Rollback Migu fixture\n"
+            online_text = "[00:00.00]Rollback Unison fixture\n"
             (ROOT / "output" / online_path).write_text(online_text, encoding="utf-8")
             online_signature = hashlib.sha256(online_text.encode()).hexdigest()
             audio_signature = db.execute("SELECT signature FROM managed WHERE kind='audio' AND source_id=? AND path=?",
                                          (online_track["id"], online_track["output"])).fetchone()[0]
             online_status = {"state": "ready", "output": online_track["output"], "signature": audio_signature,
-                             "path": online_path, "checked": int(time.time()), "additional_provider": "migu",
+                             "path": online_path, "checked": int(time.time()), "community_provider": "unison",
                              "attempts": [{"provider": "qq", "state": "not_found"}],
-                             "additional_attempts": [{"provider": "petitlyrics", "state": "not_found"}, {"provider": "kuwo", "state": "failed"}, {"provider": "migu", "state": "ready"}]}
+                             "additional_attempts": [{"provider": "petitlyrics", "state": "not_found"}, {"provider": "kuwo", "state": "failed"}, {"provider": "migu", "state": "not_found"}],
+                             "community_attempts": [{"provider": "amll", "state": "needs_review"}, {"provider": "unison", "state": "ready"}]}
             online_file = {"path": online_path, "source_id": online_track["id"], "source_hash": online_track["built_hash"],
-                           "signature": online_signature, "provider": "", "additional_provider": "migu"}
+                           "signature": online_signature, "provider": "", "community_provider": "unison"}
             db.execute("INSERT INTO meta(key,value) VALUES(?,?)", ("lyrics-status:" + str(online_track["id"]), json.dumps(online_status)))
             db.execute("INSERT INTO meta(key,value) VALUES(?,?)",
                        ("lyrics-file:" + hashlib.sha256(online_path.encode()).hexdigest(), json.dumps(online_file)))
@@ -409,6 +411,13 @@ def main():
                     **search["candidates"][0]["candidate"], "provider": "migu"}}]}
             db.execute("INSERT INTO meta(key,value) VALUES(?,?)",
                        ("lyrics-search:" + str(online_track["id"]) + ":" + "1" * 64, json.dumps(additional_search)))
+            for provider, suffix in (("amll", "2"), ("unison", "3")):
+                community_search = {**search, "provider": provider, "candidates": [
+                    {**search["candidates"][0], "remote_id": "123", "candidate": {
+                        **search["candidates"][0]["candidate"], "provider": provider,
+                        "duration": 0 if provider == "amll" else 2}}]}
+                db.execute("INSERT INTO meta(key,value) VALUES(?,?)",
+                           ("lyrics-search:" + str(online_track["id"]) + ":" + suffix * 64, json.dumps(community_search)))
         expected = snapshot()
         held = next(row for row in expected["jobs"] if row[0] == pending)
         assert held[4] == "pending" and held[8] == 253402300799, "paused task changed schema-2 job semantics"
@@ -423,6 +432,11 @@ def main():
                 if actual_image == image:
                     assert running == version, "wrong rollback release"
                 if actual_image == image and int(version.removeprefix("v0.2.")) >= 31:
+                    old_options = api("/api/lyrics")["options"]
+                    if "providers" in old_options:
+                        assert old_options["providers"] == published_lyric_providers, "old provider reader received community names"
+                        written = api("/api/lyrics/options", "PUT", {"providers": published_lyric_providers})
+                        assert written["providers"] == published_lyric_providers, "old provider writer rejected the compatible policy"
                     api("/api/lyrics/options", "PUT", {"auto_search": False})
                     api("/api/lyrics/search", "DELETE")
                 verify(api, tracks, pending, stopped)
@@ -439,6 +453,8 @@ def main():
                 if online_lyrics:
                     assert online_lyrics["state"] == "ready" and not online_lyrics.get("provider"), "additional provider changed legacy ready fields"
                     assert all(item["provider"] in ("lrclib", "qq", "kugou", "netease") for item in online_lyrics.get("attempts", [])), "old frontend received an unknown provider label"
+                    assert not online_lyrics.get("additional_provider"), "community identity reached published additional-provider labels"
+                    assert all(item["provider"] in published_lyric_providers + ["kuwo"] for item in online_lyrics.get("additional_attempts", [])), "community diagnosis reached published additional-provider labels"
                 if actual_image == CANDIDATE:
                     assert api("/api/lyrics")["options"] == {"auto_search": False, "min_score": 98, "providers": lyric_providers}, "older option/Stop writer lost lyrics settings"
                     restored_track = next(row for row in api("/api/library") if row["path"] == "Album/01.flac")
@@ -447,8 +463,9 @@ def main():
                     assert restored_lyrics and restored_lyrics["state"] == "ready" and restored_lyrics["provider"] == "source", "older writer lost optional lyrics annotation"
                     restored_instrumental = next(row for row in api("/api/library") if row["id"] == instrumental_track["id"]).get("lyrics")
                     assert restored_instrumental and restored_instrumental["state"] == "ready" and restored_instrumental.get("instrumental"), "older reader/writer lost the manually confirmed placeholder"
-                    assert online_lyrics and online_lyrics.get("additional_provider") == "migu", "older reader/writer lost the additional provider identity"
+                    assert online_lyrics and online_lyrics.get("community_provider") == "unison", "older reader/writer lost the community provider identity"
                     assert online_lyrics.get("additional_attempts") == online_status["additional_attempts"], "older reader/writer lost the additional provider diagnosis"
+                    assert online_lyrics.get("community_attempts") == online_status["community_attempts"], "older reader/writer lost the community provider diagnosis"
                 stop()
                 actual = snapshot()
                 changed = [key for key in expected if actual[key] != expected[key]]
@@ -492,7 +509,7 @@ def main():
             assert library_record(restored) == library_record(row), "candidate cannot reopen older worker's completed artifact"
             stop()
             pending_checks.append({"release": version, "pending_verify_then_old_worker_build": "passed", "source_hash": expected_hash})
-        Path(".ci/rollback-evidence.json").write_text(json.dumps({"architecture": os.environ["ARCH"], "schema": 2, "source_format_replacement": "passed", "instrumental_placeholder": "passed", "additional_lyrics_provider": "passed", "output_maintenance": "passed", "maintenance_review_and_undo": "passed", "checks": evidence, "pending_verification_checks": pending_checks}, indent=2) + "\n")
+        Path(".ci/rollback-evidence.json").write_text(json.dumps({"architecture": os.environ["ARCH"], "schema": 2, "source_format_replacement": "passed", "instrumental_placeholder": "passed", "additional_lyrics_provider": "passed", "community_lyrics_provider": "passed", "output_maintenance": "passed", "maintenance_review_and_undo": "passed", "checks": evidence, "pending_verification_checks": pending_checks}, indent=2) + "\n")
     finally:
         subprocess.run(["docker", "rm", "-f", NAME], capture_output=True)
 

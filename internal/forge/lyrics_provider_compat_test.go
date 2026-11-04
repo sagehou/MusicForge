@@ -6,7 +6,7 @@ import (
 )
 
 func TestAdditionalLyricsProvidersKeepPublishedJSONReadable(t *testing.T) {
-	for _, provider := range []string{"petitlyrics", "kuwo", "migu"} {
+	for _, provider := range []string{"petitlyrics", "kuwo", "migu", "amll", "unison"} {
 		t.Run(provider, func(t *testing.T) {
 			status := LyricsStatus{State: "ready", Output: "Album/01.opus", Signature: "audio", Path: "Album/01.lrc", Provider: provider, Checked: 123,
 				Attempts: []lyricsAttempt{{Provider: "qq", State: "not_found"}, {Provider: provider, State: "ready"}, {Provider: "lrclib", State: "not_found"}}}
@@ -23,6 +23,16 @@ func TestAdditionalLyricsProvidersKeepPublishedJSONReadable(t *testing.T) {
 			for _, attempt := range legacy.Attempts {
 				if !legacyLyricsProvider(attempt.Provider) {
 					t.Fatal("old frontend cannot label attempt", attempt)
+				}
+			}
+			if communityLyricsProvider(provider) {
+				var published struct {
+					Provider           string          `json:"provider"`
+					AdditionalProvider string          `json:"additional_provider"`
+					AdditionalAttempts []lyricsAttempt `json:"additional_attempts"`
+				}
+				if json.Unmarshal(raw, &published) != nil || published.Provider != "" || published.AdditionalProvider != "" || len(published.AdditionalAttempts) != 0 {
+					t.Fatal("community names reached published frontend fields", string(raw))
 				}
 			}
 			var restored LyricsStatus

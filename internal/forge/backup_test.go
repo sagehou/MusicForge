@@ -21,7 +21,11 @@ func TestStoppedBackupCheckAndRestore(t *testing.T) {
 	}
 	instance, _ := a.meta("instance")
 	a.Close()
-	info, err := CreateBackup(a.cfg.ConfigDir, path, "v0.3.0")
+	alias := filepath.Join(t.TempDir(), "config-alias")
+	if err := os.Symlink(a.cfg.ConfigDir, alias); err != nil {
+		t.Fatal(err)
+	}
+	info, err := CreateBackup(alias, path, "v0.3.0")
 	if err != nil || info.Instance != instance || info.Schema != 2 || info.Output != settings.Output {
 		t.Fatal(info, err)
 	}

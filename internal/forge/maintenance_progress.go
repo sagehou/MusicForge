@@ -8,8 +8,8 @@ import (
 type maintenanceProgress struct {
 	Kind string `json:"kind"`
 	loudnessReport
-	Stopping bool `json:"stopping,omitempty"`
-	Remaining int `json:"remaining,omitempty"`
+	Stopping  bool `json:"stopping,omitempty"`
+	Remaining int  `json:"remaining,omitempty"`
 	Resumable bool `json:"resumable,omitempty"`
 }
 

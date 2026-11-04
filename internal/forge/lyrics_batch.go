@@ -10,7 +10,7 @@ import (
 const lyricsBatchKey = "lyrics:batch"
 
 type lyricsBatchTrack struct {
-	ID int64 `json:"id"`
+	ID   int64  `json:"id"`
 	Path string `json:"path"`
 }
 
@@ -20,7 +20,7 @@ type lyricsBatch struct {
 	Source    string             `json:"source"`
 	Output    string             `json:"output"`
 	Options   lyricsBatchOptions `json:"options"`
-	Remaining []lyricsBatchTrack            `json:"remaining"`
+	Remaining []lyricsBatchTrack `json:"remaining"`
 	Report    lyricsReport       `json:"report"`
 }
 

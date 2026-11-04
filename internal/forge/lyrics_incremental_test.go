@@ -250,7 +250,10 @@ func TestLyricsBatchContinuesOnlyRemainingTracksAfterRestart(t *testing.T) {
 	}
 	entered := make(chan struct{}, 1)
 	a.lyricsHTTP = &http.Client{Transport: lyricsTransport(func(r *http.Request) (*http.Response, error) {
-		select { case entered <- struct{}{}: default: }
+		select {
+		case entered <- struct{}{}:
+		default:
+		}
 		<-r.Context().Done()
 		return nil, r.Context().Err()
 	})}

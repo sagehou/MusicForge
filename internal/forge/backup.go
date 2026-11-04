@@ -117,15 +117,15 @@ func CreateBackup(dir, destination, version string) (BackupInfo, error) {
 		_, err = entry.Write(manifest)
 	}
 	if err == nil {
-		err = filepath.WalkDir(dir, func(path string, item fs.DirEntry, walkErr error) error {
+		err = filepath.WalkDir(root, func(path string, item fs.DirEntry, walkErr error) error {
 			if walkErr != nil {
 				return walkErr
 			}
-			rel, err := filepath.Rel(dir, path)
+			rel, err := filepath.Rel(root, path)
 			if err != nil || rel == "." {
 				return err
 			}
-			if rel == "source-staging" {
+			if rel == "source-staging" && item.IsDir() {
 				return filepath.SkipDir
 			}
 			if rel == "instance.lock" || rel == "musicforge.db-shm" || item.IsDir() {

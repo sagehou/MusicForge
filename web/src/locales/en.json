@@ -196,7 +196,10 @@
   "kind.refresh": "Refresh Navidrome",
   "overview.outputLibrary": "Target format: {codec}",
   "overview.attentionCounts": "{rebuild} need rebuild · {expired} expired · {failed} failed",
-  "library.description": "{count} indexed tracks · browse your collection and check its progress",
+  "library.description": {
+    "one": "{count} indexed track · browse your collection and check its progress",
+    "other": "{count} indexed tracks · browse your collection and check its progress"
+  },
   "library.expiredCount": {
     "one": "{count} expired artifact remains in the playback library",
     "other": "{count} expired artifacts remain in the playback library"

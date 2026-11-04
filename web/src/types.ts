@@ -6,10 +6,10 @@ export type Settings = {
   bound_username?: string; bound_email?: string;
 };
 export type RepairStatus = { state: "running" | "imported" | "failed"; decoded_samples?: number; declared_samples?: number; pcm_verified: boolean; duration?: number; diagnostics?: string };
-export type LyricsProvider = "source" | "lrclib" | "qq" | "kugou" | "netease" | "petitlyrics";
+export type LyricsProvider = "source" | "lrclib" | "qq" | "kugou" | "netease" | "petitlyrics" | "kuwo" | "migu";
 export type LyricsAttempt = { provider: LyricsProvider; state: "ready" | "not_found" | "instrumental" | "failed" | "needs_review"; error?: string };
 export type LyricsStatus = { state: "ready" | "not_found" | "instrumental" | "failed" | "needs_review"; instrumental?: boolean; output: string; signature: string; path?: string; provider?: LyricsProvider; additional_provider?: LyricsProvider; error?: string; checked: number; attempts?: LyricsAttempt[]; additional_attempts?: LyricsAttempt[] };
-export type Source = { id: number; path: string; hash?: string; artist: string; album: string; title: string; track: number; disc: number; duration?: number; artwork_url?: string; present: boolean; output: string; output_present: boolean; status: string; error: string; size: number; source_bitrate?: number; source_audio?: { codec?: string; sample_rate?: number; bit_depth?: number; channels?: number }; output_size?: number; metadata: Record<string, string>; can_repair?: boolean; repair?: RepairStatus; possibly_damaged?: boolean; lyrics?: LyricsStatus; lyrics_script?: "simplified" | "traditional" | "unknown" };
+export type Source = { id: number; path: string; hash?: string; artist: string; album: string; title: string; track: number; disc: number; duration?: number; artwork_url?: string; present: boolean; output: string; output_present: boolean; status: string; error: string; size: number; source_bitrate?: number; source_audio?: { codec?: string; sample_rate?: number; bit_depth?: number; channels?: number }; output_size?: number; metadata: Record<string, string>; can_repair?: boolean; repair?: RepairStatus; possibly_damaged?: boolean; lyrics?: LyricsStatus; output_gain?: { version: number; path: string; signature: string; track: string; album: string; checked: number }; output_tags?: Record<string, string>; lyrics_script?: "simplified" | "traditional" | "unknown" };
 export type Activity = { phase: string; path: string; artist: string; album: string; title: string; processed: number; total: number; percent: number; read_bytes?: number; read_total_bytes?: number };
 export type Job = { id: number; kind: string; state: string; attempts: number; progress: number; log?: string; waiting_reason?: string; retry_at?: number; created: number; updated: number; args: { id?: number; dirs?: string[]; verify?: boolean }; counts: { total: number; done: number; failed: number; pending: number; running: number; cancelled: number }; scan?: Activity; current: Activity[]; scope: string[]; profile?: Encoding; can_delete: boolean; repair_id?: string; stopping?: boolean };
 export type TaskItem = Pick<Job, "id" | "kind" | "state" | "attempts" | "progress" | "log" | "updated" | "profile"> & { activity: Activity; output: string; failure?: "read" | "decode" | "encode" | "validate"; repair_target?: { id: number; hash: string; can_repair: boolean } };
@@ -17,3 +17,9 @@ export type Dashboard = { source_count: number; output_count: number; ready_coun
 export type Me = { initialized: boolean; authenticated: boolean; username?: string; method?: string; csrf?: string; oidc: boolean; version: string };
 
 export type RepairTask = { id: string; source_id: number; source_hash: string; state: "running" | "success" | "failed" | "stopped"; activity: Activity; profile: Encoding; progress: number; created: number; updated: number; output: string; log: string; stopping: boolean };
+
+export type MaintenanceOptions = {
+  version: number; schedule_enabled: boolean; start: string; end: string; timezone: string; day_concurrency: number;
+  prioritize_new: boolean; notify_url: string; notify_mode: "webhook" | "ntfy"; notify_token?: string; notify_completion: boolean;
+};
+export type LoudnessReport = { state: "idle" | "running" | "complete" | "stopped"; total: number; processed: number; updated: number; skipped: number; failed: number; current?: string; error?: string };

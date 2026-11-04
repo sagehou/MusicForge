@@ -149,14 +149,20 @@ func (a *App) runningConversions() (int, error) {
 // jobsMu protects the capacity check together with the subsequent queue claim.
 func (a *App) claimWithRepairCapacity(conversion bool, concurrency int) (Job, error) {
 	a.repairMu.Lock()
-	reserved := a.repairRunning
+	reserved := 0
+	if a.repairRunning {
+		reserved++
+	}
 	a.repairMu.Unlock()
-	if conversion && reserved {
+	if a.loudnessBusy.Load() || a.toolBusy.Load() {
+		reserved++
+	}
+	if conversion {
 		running, err := a.runningConversions()
 		if err != nil {
 			return Job{}, err
 		}
-		if running >= concurrency-1 {
+		if running >= concurrency-reserved {
 			return Job{}, sql.ErrNoRows
 		}
 	}
@@ -182,6 +188,9 @@ func (a *App) startRepairs(sources []Source, settings Settings, waitCapacity boo
 	}
 	if a.repairRunning {
 		return "", errors.New("A best-effort repair is already running")
+	}
+	if a.loudnessBusy.Load() || a.toolBusy.Load() {
+		return "", errors.New("Another output maintenance operation is running")
 	}
 	if len(sources) == 0 {
 		return "", errors.New("Only failed native FLAC tracks without an existing output can be repaired")
@@ -249,7 +258,7 @@ func (a *App) startRepairs(sources []Source, settings Settings, waitCapacity boo
 		for i, source := range sources {
 			ctx, entry := contexts[i], entries[i]
 			var result RepairStatus
-			err := a.waitRepairCapacity(ctx, settings.Concurrency)
+			err := a.waitOutputMaintenanceCapacity(ctx, "")
 			if err == nil {
 				a.reportMediaProgress(ctx, 0, Activity{Phase: "storage", Path: source.Rel, Artist: source.Artist, Album: source.Album, Title: source.Title}, 0)
 				result, err = a.makeRepair(ctx, source, settings)
@@ -287,26 +296,6 @@ func (a *App) startRepairs(sources []Source, settings Settings, waitCapacity boo
 		}
 	}()
 	return group, nil
-}
-
-func (a *App) waitRepairCapacity(ctx context.Context, concurrency int) error {
-	for {
-		if err := ctx.Err(); err != nil {
-			return err
-		}
-		a.jobsMu.Lock()
-		running, err := a.runningConversions()
-		a.jobsMu.Unlock()
-		if err != nil {
-			return err
-		}
-		if running < concurrency {
-			return nil
-		}
-		if !pause(ctx, 100*time.Millisecond) {
-			return ctx.Err()
-		}
-	}
 }
 
 func (a *App) removeRepair(id int64) error {
@@ -412,13 +401,19 @@ func (a *App) makeRepair(ctx context.Context, source Source, settings Settings) 
 	}
 	args := append([]string{"-nostdin", "-hide_banner", "-loglevel", "error", "-n", "-xerror"}, pcm.inputArgs()...)
 	args = append(args, "-i", "pipe:0", "-map", "0:a:0", "-vn", "-sn", "-dn")
-	keys := make([]string, 0, len(source.Metadata))
-	for key := range source.Metadata {
+	outputTags, err := a.buildOutputMetadata(ctx, settings, source)
+	if err != nil {
+		return fail(err)
+	}
+	keys := make([]string, 0, len(outputTags))
+	for key := range outputTags {
 		keys = append(keys, key)
 	}
 	sort.Strings(keys)
+	// Clear aliases before assigning canonical Vorbis/ID3 fields.
+	sort.SliceStable(keys, func(i, j int) bool { return outputTags[keys[i]] == "" && outputTags[keys[j]] != "" })
 	for _, key := range keys {
-		args = append(args, "-metadata", key+"="+source.Metadata[key])
+		args = append(args, "-metadata", key+"="+outputTags[key])
 	}
 	args = append(args, settings.Encoding.Args()...)
 	args = append(args, path)

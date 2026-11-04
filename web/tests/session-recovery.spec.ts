@@ -1,6 +1,10 @@
 import { setPreference } from "./preferences";
 import { test, expect } from "@playwright/test";
 
+test.beforeEach(async ({ page }) => {
+  await page.route("**/api/maintenance/progress", route => route.fulfill({ json: { reports: [], cooldowns: [] } }));
+});
+
 test("temporary auth failures preserve unsaved settings; confirmed expiry returns to login", async ({ page }) => {
   await page.addInitScript(() => localStorage.setItem("musicforge.language", "en"));
   const me = { initialized: true, authenticated: true, username: "admin", method: "local", csrf: "test", oidc: false, version: "test" };

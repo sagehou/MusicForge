@@ -1,5 +1,18 @@
 export type LyricCue = { time: number; text: string };
 
+export function shiftLyrics(text: string, delay: number): string {
+  const offset = Number(text.match(/^\[offset:\s*([+-]?\d+)\s*\]/im)?.[1] || 0);
+  if (!delay && !/^\[offset:/im.test(text)) return text;
+  return text.replace(/^\[offset:\s*[+-]?\d+\s*\]\s*/gim, "").split(/\r?\n/).map(line => {
+    const stamps = line.match(/^(?:\[\d{1,4}:[0-5]\d(?:[.:]\d{1,3})?\])+/)?.[0];
+    if (!stamps) return line;
+    return stamps.replace(/\[(\d+):([0-5]\d)(?:[.:](\d{1,3}))?\]/g, (_stamp, minutes: string, seconds: string, fraction: string | undefined) => {
+      const millis = Math.max(0, Number(minutes) * 60000 + Number(seconds) * 1000 + Number((fraction || "").padEnd(3, "0")) - offset + delay);
+      return `[${String(Math.floor(millis / 60000)).padStart(2, "0")}:${String(Math.floor(millis / 1000) % 60).padStart(2, "0")}.${String(millis % 1000).padStart(3, "0")}]`;
+    }) + line.slice(stamps.length);
+  }).join("\n");
+}
+
 // Output LRC may repeat timestamps or put translations on the same timestamp.
 // A positive LRC offset advances the lyric relative to the audio (milliseconds).
 export function lyricsTimeline(lrc: string): LyricCue[] {

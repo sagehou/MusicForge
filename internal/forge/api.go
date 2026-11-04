@@ -62,8 +62,12 @@ func (w *apiResponse) Write(p []byte) (int, error) {
 	}
 	return w.ResponseWriter.Write(p)
 }
-func decode(w http.ResponseWriter, r *http.Request, value any) bool {
-	r.Body = http.MaxBytesReader(w, r.Body, 1024*1024)
+func decode(w http.ResponseWriter, r *http.Request, value any, limit ...int64) bool {
+	maxBytes := int64(1024 * 1024)
+	if len(limit) > 0 {
+		maxBytes = limit[0]
+	}
+	r.Body = http.MaxBytesReader(w, r.Body, maxBytes)
 	decoder := json.NewDecoder(r.Body)
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(value); err != nil {
@@ -105,11 +109,44 @@ func (a *App) Handler() http.Handler {
 	mux.HandleFunc("POST /api/auth/password", a.auth(a.changePassword))
 	mux.HandleFunc("GET /api/dashboard", a.auth(a.dashboard))
 	mux.HandleFunc("GET /api/library", a.auth(a.library))
+	mux.HandleFunc("GET /api/maintenance", a.auth(a.getMaintenance))
+	mux.HandleFunc("POST /api/maintenance/notify-test", a.auth(a.testNotification))
+	mux.HandleFunc("POST /api/library/plan", a.auth(a.planBuild))
+	mux.HandleFunc("GET /api/maintenance/issues", a.auth(a.getQualityDecisions))
+	mux.HandleFunc("PUT /api/maintenance/issues", a.auth(a.saveQualityDecisions))
+	mux.HandleFunc("GET /api/maintenance/storage/health", a.auth(a.getStorageHealth))
+	mux.HandleFunc("POST /api/maintenance/storage/check", a.auth(a.checkStorageHealth))
+	mux.HandleFunc("POST /api/maintenance/storage/verify", a.auth(a.startStorageVerification))
+	mux.HandleFunc("POST /api/maintenance/migration/preview", a.auth(a.previewMigration))
+	mux.HandleFunc("GET /api/maintenance/operations", a.auth(a.getOperations))
+	mux.HandleFunc("GET /api/maintenance/operations/{operation}/snapshot", a.auth(a.getOperationSnapshot))
+	mux.HandleFunc("POST /api/maintenance/operations/{operation}/undo", a.auth(a.startUndoOperation))
+	mux.HandleFunc("GET /api/maintenance/{tool}", a.auth(a.getLibraryTool))
+	mux.HandleFunc("DELETE /api/maintenance/{tool}", a.auth(a.stopLibraryTool))
+	mux.HandleFunc("POST /api/library/tags/preview", a.auth(a.previewOutputTags))
+	mux.HandleFunc("POST /api/library/playlists/preview", a.auth(a.previewPlaylist))
+	mux.HandleFunc("POST /api/playlists", a.auth(a.previewPlaylist))
+	mux.HandleFunc("GET /api/playlists", a.auth(a.listPlaylists))
+	mux.HandleFunc("GET /api/playlists/{playlist}", a.auth(a.exportPlaylist))
+	mux.HandleFunc("DELETE /api/playlists/{playlist}", a.auth(a.exportPlaylist))
+	mux.HandleFunc("POST /api/maintenance/tags", a.auth(a.startOutputTags))
+	mux.HandleFunc("POST /api/maintenance/fingerprints", a.auth(a.startFingerprints))
+	mux.HandleFunc("GET /api/maintenance/loudness", a.auth(a.getLoudness))
+	mux.HandleFunc("GET /api/maintenance/progress", a.auth(a.getMaintenanceProgress))
+	mux.HandleFunc("GET /api/maintenance/failures", a.auth(a.getMaintenanceFailures))
+	mux.HandleFunc("POST /api/maintenance/loudness", a.auth(a.startLoudness))
+	mux.HandleFunc("DELETE /api/maintenance/loudness", a.auth(a.stopLoudness))
 	mux.HandleFunc("GET /api/lidarr/connection", a.auth(a.getLidarrConnection))
 	mux.HandleFunc("PUT /api/lidarr/connection", a.auth(a.putLidarrConnection))
 	mux.HandleFunc("GET /api/lidarr/check", a.auth(a.getLidarrCheck))
 	mux.HandleFunc("POST /api/lidarr/check", a.auth(a.startLidarrCheck))
 	mux.HandleFunc("GET /api/library/{id}/artwork", a.auth(a.libraryArtwork))
+	mux.HandleFunc("GET /api/library/{id}/history", a.auth(a.getEditHistory))
+	mux.HandleFunc("POST /api/library/{id}/artwork/search", a.auth(a.searchArtwork))
+	mux.HandleFunc("GET /api/library/{id}/artwork/preview", a.auth(a.previewArtwork))
+	mux.HandleFunc("GET /api/library/{id}/artwork/edit", a.auth(a.getArtworkEdit))
+	mux.HandleFunc("PUT /api/library/{id}/artwork/edit", a.auth(a.saveArtworkEdit))
+	mux.HandleFunc("DELETE /api/library/{id}/artwork/edit", a.auth(a.saveArtworkEdit))
 	mux.HandleFunc("GET /api/library/{id}/audition", a.auth(a.libraryAudition))
 	mux.HandleFunc("GET /api/library/{id}/audition/audio", a.auth(a.libraryAuditionAudio))
 	mux.HandleFunc("GET /api/lyrics", a.auth(a.getLyrics))
@@ -120,6 +157,8 @@ func (a *App) Handler() http.Handler {
 	mux.HandleFunc("GET /api/library/{id}/lyrics/candidates", a.auth(a.getLyricsCandidates))
 	mux.HandleFunc("POST /api/library/{id}/lyrics/preview", a.auth(a.previewLyricsCandidate))
 	mux.HandleFunc("PUT /api/library/{id}/lyrics", a.auth(a.applyLyricsCandidate))
+	mux.HandleFunc("GET /api/library/{id}/lyrics/edit", a.auth(a.getLyricsEdit))
+	mux.HandleFunc("PUT /api/library/{id}/lyrics/edit", a.auth(a.saveLyricsEdit))
 	mux.HandleFunc("POST /api/library/{id}/repair", a.auth(a.requestRepair))
 	mux.HandleFunc("POST /api/library/repair", a.auth(a.requestRepairBatch))
 	mux.HandleFunc("DELETE /api/library/{id}/repair", a.auth(a.deleteRepair))
@@ -237,6 +276,12 @@ func (a *App) sourcesWithStatusContext(ctx context.Context) ([]Source, error) {
 		source.Repair = a.repairSnapshot(*source)
 	}
 	if err = a.annotateRepairs(ctx, list); err != nil {
+		return nil, err
+	}
+	if err = a.annotateOutputGain(ctx, list); err != nil {
+		return nil, err
+	}
+	if err = a.annotateOutputTags(ctx, s, list); err != nil {
 		return nil, err
 	}
 	for i := range list {
@@ -388,20 +433,29 @@ func (a *App) getSettings(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	configured := map[string]bool{"webhook": s.WebhookHash != "", "nav_password": s.NavPassword != "", "oidc_secret": s.OIDCSecret != ""}
+	maintenance, err := a.maintenanceOptions(r.Context())
+	if err != nil {
+		apiError(w, 500, err)
+		return
+	}
+	configured["notification_token"] = maintenance.NotifyToken != ""
+	maintenance.NotifyToken = ""
 	s.WebhookHash = ""
 	s.NavPassword = ""
 	s.OIDCSecret = ""
-	respond(w, 200, map[string]any{"settings": s, "configured": configured, "lidarr": map[string]any{"url": connection.URL, "key_configured": connection.APIKey != ""}, "public_url": a.cfg.PublicURL, "allowed_origins": a.cfg.origins()})
+	respond(w, 200, map[string]any{"settings": s, "configured": configured, "maintenance": maintenance, "lidarr": map[string]any{"url": connection.URL, "key_configured": connection.APIKey != ""}, "public_url": a.cfg.PublicURL, "allowed_origins": a.cfg.origins()})
 }
 func (a *App) putSettings(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		Settings
-		WebhookSecret    string            `json:"webhook_secret"`
-		ClearWebhook     bool              `json:"clear_webhook"`
-		ClearNavPassword bool              `json:"clear_nav_password"`
-		ClearOIDCSecret  bool              `json:"clear_oidc_secret"`
-		UnbindOIDC       bool              `json:"unbind_oidc"`
-		LidarrConnection *lidarrConnection `json:"lidarr_connection"`
+		WebhookSecret          string              `json:"webhook_secret"`
+		ClearWebhook           bool                `json:"clear_webhook"`
+		ClearNavPassword       bool                `json:"clear_nav_password"`
+		ClearOIDCSecret        bool                `json:"clear_oidc_secret"`
+		UnbindOIDC             bool                `json:"unbind_oidc"`
+		LidarrConnection       *lidarrConnection   `json:"lidarr_connection"`
+		Maintenance            *maintenanceOptions `json:"maintenance"`
+		ClearNotificationToken bool                `json:"clear_notification_token"`
 	}
 	if !decode(w, r, &body) {
 		return
@@ -474,6 +528,23 @@ func (a *App) putSettings(w http.ResponseWriter, r *http.Request) {
 		apiError(w, 400, err)
 		return
 	}
+	if body.Maintenance != nil {
+		previous, readErr := a.maintenanceOptions(r.Context())
+		if readErr != nil {
+			apiError(w, 500, readErr)
+			return
+		}
+		body.Maintenance.NotifyURL = strings.TrimSpace(body.Maintenance.NotifyURL)
+		if body.ClearNotificationToken || body.Maintenance.NotifyURL == "" {
+			body.Maintenance.NotifyToken = ""
+		} else if body.Maintenance.NotifyToken == "" && body.Maintenance.NotifyURL == previous.NotifyURL {
+			body.Maintenance.NotifyToken = previous.NotifyToken
+		}
+		if err = body.Maintenance.validate(); err != nil {
+			apiError(w, 400, err)
+			return
+		}
+	}
 	if s.OIDCIssuer != "" && a.cfg.PublicURL == "" {
 		apiError(w, 400, errors.New("set MUSICFORGE_PUBLIC_URL before enabling OIDC"))
 		return
@@ -507,7 +578,7 @@ func (a *App) putSettings(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	err = a.saveSettingsUpdate(s, oidcChanged, body.LidarrConnection)
+	err = a.saveSettingsUpdate(s, oidcChanged, body.LidarrConnection, body.Maintenance)
 	if err != nil {
 		apiError(w, 500, err)
 		return
@@ -576,10 +647,10 @@ func (a *App) rebuild(w http.ResponseWriter, r *http.Request) {
 	a.jobsMu.Lock()
 	defer a.jobsMu.Unlock()
 	for _, source := range list {
-		if !source.Present || source.Hash == "" || (!body.All && !selected[source.ID]) {
+		if !body.All && !selected[source.ID] {
 			continue
 		}
-		if !source.PossiblyDamaged && source.BuiltHash == source.Hash && source.BuiltProfile == s.Encoding.Fingerprint() && source.OutputPresent && source.Output == outputRel(source.Rel, s.Encoding.Codec) {
+		if buildReason(source, s.Encoding) == "" {
 			continue
 		}
 		var id int64

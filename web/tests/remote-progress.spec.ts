@@ -1,6 +1,10 @@
 import { setPreference } from "./preferences";
 import { test, expect } from "@playwright/test";
 
+test.beforeEach(async ({ page }) => {
+  await page.route("**/api/maintenance/progress", route => route.fulfill({ json: { reports: [], cooldowns: [] } }));
+});
+
 test("remote read progress is bilingual and proxy errors retain a usable task page", async ({ page }) => {
   await page.addInitScript(() => localStorage.setItem("musicforge.language", "en"));
   await page.route("**/api/auth/me", route => route.fulfill({ json: { initialized: true, authenticated: true, username: "admin", method: "local", version: "test", csrf: "test" } }));

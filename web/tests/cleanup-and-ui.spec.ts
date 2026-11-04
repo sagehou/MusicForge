@@ -2,6 +2,10 @@ import { selectLibraryPage, setPreference } from "./preferences";
 import { test, expect, type Page } from "@playwright/test";
 import type { Dashboard, Job, Source } from "../src/types";
 
+test.beforeEach(async ({ page }) => {
+  await page.route("**/api/maintenance/progress", route => route.fulfill({ json: { reports: [], cooldowns: [] } }));
+});
+
 const me = { initialized: true, authenticated: true, username: "admin", method: "local", csrf: "test", oidc: false, version: "test" };
 const settings = { enabled: true, source: "/music/source", output: "/music/output", encoding: { codec: "opus", mode: "vbr", bitrate: 192, quality: 2 }, concurrency: 1, scan_minutes: 60, lidarr_prefix: "", nav_url: "", nav_user: "", nav_library: 1, oidc_issuer: "", oidc_client_id: "" };
 const dashboard: Dashboard = { source_count: 1215, output_count: 1149, ready_count: 1103, expired_count: 4, rebuild_count: 46, failed_count: 12, online: true, storage_message: "", codec: "opus", enabled: true, version: "test" };

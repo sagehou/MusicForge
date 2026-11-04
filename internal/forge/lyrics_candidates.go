@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"os"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -23,9 +24,12 @@ type lyricsTarget struct {
 	FilePresent              bool
 	FileScript               string
 	Instrumental             bool
+	OutputOnly               bool
+	RecordHistory            bool
+	OperationBatch           string
 }
 
-func (a *App) captureLyricsTarget(ctx context.Context, id int64) (target lyricsTarget, err error) {
+func (a *App) captureLyricsTarget(ctx context.Context, id int64, outputOnly ...bool) (target lyricsTarget, err error) {
 	if err = a.lockFiles(ctx); err != nil {
 		return
 	}
@@ -38,10 +42,16 @@ func (a *App) captureLyricsTarget(ctx context.Context, id int64) (target lyricsT
 		err = errors.New("Enable the library before searching for lyrics")
 		return
 	}
-	if err = a.storageContext(ctx, target.Settings); err != nil {
-		return
+	target.OutputOnly = len(outputOnly) > 0 && outputOnly[0]
+	if target.OutputOnly {
+		err = a.verifyOutputStorage(ctx, target.Settings)
+	} else {
+		err = a.storageContext(ctx, target.Settings)
+		if err == nil {
+			err = a.ensureRecovery(ctx, target.Settings)
+		}
 	}
-	if err = a.ensureRecovery(ctx, target.Settings); err != nil {
+	if err != nil {
 		return
 	}
 	target.Source, err = a.source(id)
@@ -49,7 +59,7 @@ func (a *App) captureLyricsTarget(ctx context.Context, id int64) (target lyricsT
 		return
 	}
 	source := target.Source
-	if source.Output == "" || !source.OutputPresent || source.Hash != source.BuiltHash {
+	if source.Output == "" || !source.OutputPresent || !target.OutputOnly && source.Hash != source.BuiltHash {
 		err = errors.New("Artifact missing or waiting for rebuild; search again after conversion")
 		return
 	}
@@ -76,7 +86,7 @@ func (a *App) captureLyricsTarget(ctx context.Context, id int64) (target lyricsT
 	return
 }
 
-func (a *App) publishLyricsTarget(ctx context.Context, target lyricsTarget, text, provider string) error {
+func (a *App) publishLyricsTarget(ctx context.Context, target lyricsTarget, text, provider string, saved ...func() error) (err error) {
 	if err := a.lockFiles(ctx); err != nil {
 		return err
 	}
@@ -97,7 +107,12 @@ func (a *App) publishLyricsTarget(ctx context.Context, target lyricsTarget, text
 	if !settings.Enabled || settings.Source != target.Settings.Source || settings.Output != target.Settings.Output || current.Output != target.Source.Output || current.Rel != target.Source.Rel || current.Hash != target.Source.Hash || current.BuiltHash != target.Source.BuiltHash || !current.OutputPresent || signature != target.Signature {
 		return errors.New("Artifact or library settings changed during lyrics search; result discarded")
 	}
-	if err = a.storageContext(ctx, settings); err != nil {
+	if target.OutputOnly {
+		err = a.verifyOutputStorage(ctx, settings)
+	} else {
+		err = a.storageContext(ctx, settings)
+	}
+	if err != nil {
 		return err
 	}
 	path, err := safePath(settings.Output, current.Output)
@@ -114,7 +129,48 @@ func (a *App) publishLyricsTarget(ctx context.Context, target lyricsTarget, text
 	if present != target.FilePresent || present && digest(existing) != target.FileSignature {
 		return errors.New("LRC changed during publication; file preserved")
 	}
-	return a.writeLyricsFile(ctx, settings, current, text, provider)
+	if target.RecordHistory && present && existing != text {
+		if err = a.rememberEdit(ctx, settings, "lyrics", current.Rel, []byte(existing)); err != nil {
+			return err
+		}
+	}
+	if target.RecordHistory && existing != text {
+		item := operationTrack(current, signature)
+		item.PriorProvider = target.File.Provider
+		item.AfterProvider = provider
+		item.AfterHash = digest(text)
+		if present {
+			item.BeforeHash = digest(existing)
+		}
+		if err = a.saveEditBlob(ctx, "lyrics", []byte(text)); err != nil {
+			return err
+		}
+		item.PriorLyrics, err = a.optionalMeta(ctx, "lyrics-status:"+strconv.FormatInt(current.ID, 10))
+		if err != nil {
+			return err
+		}
+		item.PriorScript, err = a.optionalMeta(ctx, lyricsScriptPrefix+strconv.FormatInt(current.ID, 10))
+		if err != nil {
+			return err
+		}
+		operation, index, prepareErr := a.prepareOperation(ctx, settings, "lyrics", target.OperationBatch, item)
+		if prepareErr != nil {
+			return prepareErr
+		}
+		defer func() { a.finishOperation(operation, index, "", err) }()
+	}
+	if err = a.writeLyricsFile(ctx, settings, current, text, provider); err != nil {
+		return err
+	}
+	if target.RecordHistory {
+		if err = a.rememberEdit(ctx, settings, "lyrics", current.Rel, []byte(text)); err != nil {
+			return err
+		}
+	}
+	if len(saved) > 0 {
+		return saved[0]()
+	}
+	return nil
 }
 
 // Live selection tokens are short-lived memory only. Search records are
@@ -181,6 +237,15 @@ func (a *App) requestLyricsCandidates(w http.ResponseWriter, r *http.Request) {
 		apiError(w, 400, errors.New("Invalid lyrics provider or search query"))
 		return
 	}
+	providers, err := a.lyricsProviderOrder(r.Context())
+	if err != nil {
+		apiError(w, 500, err)
+		return
+	}
+	if !slices.Contains(providers, body.Provider) {
+		apiError(w, 409, errors.New("Lyrics provider is disabled in settings"))
+		return
+	}
 	ctx, cancel := context.WithTimeout(r.Context(), 12*time.Second)
 	defer cancel()
 	stop := context.AfterFunc(a.ioContext, cancel)
@@ -211,6 +276,7 @@ type lyricsCandidateGroup struct {
 }
 
 func (a *App) newLyricsChoices(target lyricsTarget, provider, query string, candidates []lyricsCandidate, cached bool, searched int64) lyricsCandidateGroup {
+	target.RecordHistory = true
 	// JSON must encode an empty result as [], so each provider can finish alone.
 	if candidates == nil {
 		candidates = []lyricsCandidate{}
@@ -233,6 +299,11 @@ func (a *App) getLyricsCandidates(w http.ResponseWriter, r *http.Request) {
 		apiError(w, 400, errors.New("invalid source ID"))
 		return
 	}
+	providers, err := a.lyricsProviderOrder(r.Context())
+	if err != nil {
+		apiError(w, 500, err)
+		return
+	}
 	target, err := a.captureLyricsTarget(r.Context(), id)
 	if err != nil {
 		apiError(w, 409, err)
@@ -244,11 +315,14 @@ func (a *App) getLyricsCandidates(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	query := lyricsSearchQuery(target.Source, "")
-	if len(records) > 0 {
-		query = records[0].Query
+	for _, record := range records {
+		if slices.Contains(providers, record.Provider) {
+			query = record.Query
+			break
+		}
 	}
 	groups := []lyricsCandidateGroup{}
-	for _, provider := range lyricsProviders {
+	for _, provider := range providers {
 		for _, record := range records {
 			if record.Query == query && record.Provider == provider {
 				groups = append(groups, a.newLyricsChoices(target, provider, query, record.candidates(target.Source), true, record.Searched))
@@ -296,6 +370,17 @@ func (a *App) previewLyricsCandidate(w http.ResponseWriter, r *http.Request) {
 	body, set, ok := a.lyricsChoice(w, r)
 	if !ok {
 		return
+	}
+	if set.Provider != "source" {
+		providers, err := a.lyricsProviderOrder(r.Context())
+		if err != nil {
+			apiError(w, 500, err)
+			return
+		}
+		if !slices.Contains(providers, set.Provider) {
+			apiError(w, 409, errors.New("Lyrics provider is disabled in settings"))
+			return
+		}
 	}
 	a.lyricsMu.Lock()
 	current := a.lyricsChoices[body.Token]
@@ -378,18 +463,16 @@ func (a *App) applyLyricsCandidate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	candidate := set.Candidates[body.Index]
-	if err = a.publishLyricsTarget(r.Context(), set.Target, text, candidate.Provider); err != nil {
+	status := LyricsStatus{State: "ready", Output: set.Target.Source.Output, Signature: set.Target.Signature,
+		Path: lyricsRel(set.Target.Source.Output), Provider: candidate.Provider, Checked: time.Now().Unix(), Instrumental: text == instrumentalLRC}
+	if err = a.publishLyricsTarget(r.Context(), set.Target, text, candidate.Provider, func() error {
+		raw, _ := json.Marshal(status)
+		return a.setMeta("lyrics-status:"+strconv.FormatInt(set.Target.Source.ID, 10), string(raw))
+	}); err != nil {
 		apiError(w, 409, err)
 		return
 	}
 	a.discardLyricsSearches(set.Target.Source.ID)
-	status := LyricsStatus{State: "ready", Output: set.Target.Source.Output, Signature: set.Target.Signature,
-		Path: lyricsRel(set.Target.Source.Output), Provider: candidate.Provider, Checked: time.Now().Unix(), Instrumental: text == instrumentalLRC}
-	raw, _ := json.Marshal(status)
-	if err = a.setMeta("lyrics-status:"+strconv.FormatInt(set.Target.Source.ID, 10), string(raw)); err != nil {
-		apiError(w, 500, err)
-		return
-	}
 	a.lyricsMu.Lock()
 	delete(a.lyricsChoices, body.Token)
 	a.lyricsMu.Unlock()

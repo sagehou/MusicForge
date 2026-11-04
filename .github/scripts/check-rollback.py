@@ -1,10 +1,12 @@
 """Run only in Actions: exercise older releases on the candidate's real volumes."""
 
+import base64
 import hashlib
 import http.cookiejar
 import json
 import os
 from pathlib import Path
+import re
 import sqlite3
 import struct
 import subprocess
@@ -59,6 +61,32 @@ LEGACY = {
     "v0.2.1": "sha256:39a12fbd9db368d4dc688cb929ae74b731ba10ae863b03aec915be3a77d35240",
     "v0.2.0": "sha256:3a176c2fa79dd3e2a47c53803e3d5ac055e9c406061ec69402b63fe4523a2e7c",
 }
+
+
+def selected_releases(baseline, extended=False, current_tag=""):
+    if not isinstance(baseline, str) or not re.fullmatch(r"v0\.2\.\d+", baseline) or baseline == current_tag:
+        raise ValueError("A previous published schema-2 stable release is required for rollback")
+    # Daily acceptance checks the actual published predecessor. Historical
+    # compatibility remains an explicit maintenance run, not a growing tax.
+    selected = dict(LEGACY) if extended else {}
+    selected.pop(current_tag, None)
+    selected[baseline] = LEGACY.get(baseline)
+    return selected
+
+
+def rollback_images():
+    plan = json.loads(Path(".ci/rollback-scope.json").read_text())
+    selected = selected_releases(plan.get("baseline"), os.environ.get("MUSICFORGE_EXTENDED_ROLLBACK") == "true",
+                                 os.environ.get("GITHUB_REF_NAME", ""))
+    for version, manifest in selected.items():
+        if manifest is None:
+            inspected = docker("buildx", "imagetools", "inspect", "ghcr.io/sagehou/musicforge:" + version)
+            match = re.search(r"^Digest:\s+(sha256:[a-f0-9]{64})\s*$", inspected, re.M)
+            if not match:
+                raise ValueError("Cannot resolve the published rollback manifest: " + version)
+            selected[version] = match[1]
+    print("Rollback releases: " + ", ".join(selected), flush=True)
+    return selected
 
 
 def docker(*args):
@@ -143,6 +171,10 @@ def snapshot():
         tables = ("meta", "settings", "admin", "sources", "managed", "jobs", "migrations", "dirty_dirs", "oidc_flows")
         result = {table: db.execute(f"SELECT * FROM {table} ORDER BY 1").fetchall() for table in tables}
         result["schema"] = db.execute("SELECT type,name,sql FROM sqlite_master WHERE name NOT LIKE 'sqlite_%' ORDER BY type,name").fetchall()
+    result["artwork_overrides"] = {path.name: hashlib.sha256(path.read_bytes()).hexdigest()
+                                   for path in sorted((ROOT / "config/artwork-overrides").glob("*.jpg"))}
+    result["edit_history"] = {path.name: hashlib.sha256(path.read_bytes()).hexdigest()
+                              for path in sorted((ROOT / "config/edit-history").glob("*")) if path.is_file()}
     result["runtime_config"] = (ROOT / "config/config.json").read_text()
     for directory in ("source", "output"):
         result[directory] = {str(path.relative_to(ROOT / directory)): hashlib.sha256(path.read_bytes()).hexdigest()
@@ -158,7 +190,7 @@ def verification_queued(rel):
 
 def library_record(track):
     # Optional display annotations are absent in older API responses.
-    return {key: value for key, value in track.items() if key not in ("artwork_url", "lyrics", "source_bitrate", "source_audio", "output_size", "lyrics_script")}
+    return {key: value for key, value in track.items() if key not in ("artwork_url", "lyrics", "source_bitrate", "source_audio", "output_size", "lyrics_script", "output_gain", "output_tags")}
 
 
 def seed_refresh():
@@ -173,7 +205,7 @@ def verify(api, expected_tracks, pending, stopped):
     tracks = [library_record(track) for track in api("/api/library")]
     assert sorted(tracks, key=lambda track: track["id"]) == expected_tracks, "library/artifact records changed"
     settings = api("/api/settings")
-    assert settings["configured"] == {"webhook": True, "nav_password": True, "oidc_secret": True}, "saved credentials lost"
+    assert all(settings["configured"].get(key) for key in ("webhook", "nav_password", "oidc_secret")), "saved credentials lost"
     assert not settings["settings"]["enabled"], "rollback must keep background work paused"
     jobs = api("/api/jobs?state=all")["jobs"]
     assert any(job["id"] == pending and job["args"] == {"manual": True} and job["state"] in ("paused", "pending") for job in jobs), "paused task lost"
@@ -192,9 +224,9 @@ def main():
         (ROOT / directory).mkdir(parents=True, exist_ok=True)
     (ROOT / "config/config.json").write_text(json.dumps({"public_url": ORIGIN, "allowed_origins": ["http://localhost:18788"], "source_timeout_seconds": 120}) + "\n")
     media = ("run", "--rm", "--user", f"{os.getuid()}:{os.getgid()}", "-v", f"{ROOT / 'source'}:/fixture", "--entrypoint", "ffmpeg", CANDIDATE, "-nostdin", "-v", "error", "-y")
-    docker(*media, "-f", "lavfi", "-i", "sine=duration=1", "-c:a", "flac", "-metadata", "artist=Rollback Artist", "-metadata", "album=Rollback Album", "-metadata", "title=Rollback Track", "/fixture/Album/01.flac")
+    docker(*media, "-f", "lavfi", "-i", "sine=duration=2", "-c:a", "flac", "-metadata", "artist=Rollback Artist", "-metadata", "album=Rollback Album", "-metadata", "title=Rollback Track", "/fixture/Album/01.flac")
     for rel, codec in (("02.mp3", "libmp3lame"), ("03.m4a", "aac")):
-        docker(*media, "-f", "lavfi", "-i", "sine=duration=1", "-c:a", codec, "-metadata", "artist=Rollback Artist", "-metadata", "album=Rollback Album", "-metadata", "title=" + rel, "/fixture/Album/" + rel)
+        docker(*media, "-f", "lavfi", "-i", "sine=duration=2", "-c:a", codec, "-metadata", "artist=Rollback Artist", "-metadata", "album=Rollback Album", "-metadata", "title=" + rel, "/fixture/Album/" + rel)
     # The release media tools omit the color filter; a standard-library PNG is sufficient.
     def chunk(kind, data):
         return struct.pack(">I", len(data)) + kind + data + struct.pack(">I", zlib.crc32(kind + data))
@@ -223,7 +255,7 @@ def main():
             old_rel, new_rel = "Album/" + old_name, "Album/" + new_name
             previous = next(row for row in tracks if row["path"] == old_rel)
             (ROOT / "source" / old_rel).unlink()
-            docker(*media, "-f", "lavfi", "-i", "sine=frequency=880:duration=1", "-c:a", codec, "-metadata", "title=Replaced source format", "/fixture/" + new_rel)
+            docker(*media, "-f", "lavfi", "-i", "sine=frequency=880:duration=2", "-c:a", codec, "-metadata", "title=Replaced source format", "/fixture/" + new_rel)
             os.utime(ROOT / "source" / new_rel, (stable, stable))
             retired_paths.add(old_rel)
             count = len(tracks) + 1
@@ -238,7 +270,8 @@ def main():
             assert successor["hash"] == hashlib.sha256((ROOT / "source" / new_rel).read_bytes()).hexdigest(), "format replacement lost complete source identity"
             wait_for(lambda: api("/api/jobs")["jobs"], lambda rows: all(row["state"] == "success" for row in rows), "completed source format replacement jobs")
         lyrics_track = next(row for row in tracks if row["path"] == "Album/01.flac")
-        api("/api/lyrics/options", "PUT", {"auto_search": False, "min_score": 98})
+        lyric_providers = ["petitlyrics", "lrclib", "migu"]
+        api("/api/lyrics/options", "PUT", {"auto_search": False, "min_score": 98, "providers": lyric_providers})
         api("/api/lyrics/search", "POST", {"ids": [lyrics_track["id"]]})
         wait_for(lambda: api("/api/lyrics")["report"], lambda row: row["state"] == "complete" and row["found"] == 1, "candidate source LRC publication")
         instrumental_track = next(row for row in tracks if row["path"] == "Album/02.opus")
@@ -249,6 +282,51 @@ def main():
         assert preview["original"] == "[00:00.00]纯音乐，请欣赏\n", "instrumental preview differs from the local placeholder"
         confirmed = api(instrumental_base, "PUT", choice)
         assert confirmed["state"] == "ready" and confirmed["instrumental"] and confirmed["provider"] == "source", "manual instrumental result is not backward-compatible ready state"
+        # Exercise real optional maintenance state before older readers/writers.
+        edit_path = f"/api/library/{lyrics_track['id']}/lyrics/edit"
+        edit = api(edit_path)
+        shifted = api(edit_path, "PUT", {"token": edit["token"], "text": edit["text"], "delay_ms": 250})
+        assert "[00:00.250]" in shifted["text"]
+        cover_path = f"/api/library/{lyrics_track['id']}/artwork/edit"
+        cover_choice = api(cover_path)
+        api(cover_path, "PUT", {"token": cover_choice["token"], "image": base64.b64encode(cover).decode()})
+        api("/api/maintenance/loudness", "POST", {"all": True})
+        gain_report = wait_for(lambda: api("/api/maintenance/loudness"), lambda report: report["state"] == "complete", "output loudness completion")
+        assert gain_report["failed"] == 0 and gain_report["updated"] == 3, gain_report
+        gains = [row.get("output_gain") for row in api("/api/library") if row["output_present"]]
+        assert all(gain and gain["track"] and gain["album"] for gain in gains), "loudness tags missing"
+        tag_preview = api("/api/library/tags/preview", "POST", {"ids": [lyrics_track["id"]], "tags": {"title": "Output-only correction", "album_artist": "Rollback artist"}})
+        api("/api/maintenance/tags", "POST", {"token": tag_preview["token"]})
+        tag_report = wait_for(lambda: api("/api/maintenance/tags"), lambda report: report["state"] == "complete", "output tag correction")
+        assert tag_report["failed"] == 0 and tag_report["updated"] == 1, tag_report
+        # Undo a second correction through the same durable publication path,
+        # retaining both active and undone operation records for old writers.
+        temporary = api("/api/library/tags/preview", "POST", {"ids": [lyrics_track["id"]], "tags": {"title": "Temporary undo exercise"}})
+        api("/api/maintenance/tags", "POST", {"token": temporary["token"]})
+        temporary_report = wait_for(lambda: api("/api/maintenance/tags"), lambda report: report["state"] == "complete", "temporary tag correction")
+        assert temporary_report["failed"] == 0 and temporary_report["updated"] == 1, temporary_report
+        api(f"/api/maintenance/operations/{temporary['token']}/undo", "POST", {"items": [0]})
+        undo_report = wait_for(lambda: api("/api/maintenance/undo"), lambda report: report["state"] == "complete", "tag batch undo")
+        assert undo_report["failed"] == 0 and undo_report["updated"] == 1, undo_report
+        operation_records = api("/api/maintenance/operations")
+        assert any(item["state"] == "applied" for operation in operation_records for item in operation["items"]), "active operation record missing"
+        assert any(item["state"] == "undone" for operation in operation_records for item in operation["items"]), "undone record missing"
+        api("/api/maintenance/issues", "PUT", {"ids": [lyrics_track["id"]], "kind": "duration", "state": "ignored", "reason": "Intentional short rollback fixture"})
+        issue_decisions = api("/api/maintenance/issues")
+        assert len(issue_decisions) == 1 and issue_decisions[0]["state"] == "ignored", issue_decisions
+        api("/api/maintenance/storage/verify", "POST", {"ids": [row["id"] for row in api("/api/library") if row["output_present"]]})
+        storage_report = wait_for(lambda: api("/api/maintenance/storage"), lambda report: report["state"] == "complete", "output checksum verification")
+        assert storage_report["failed"] == 0 and storage_report["updated"] == 3, storage_report
+        history = api(f"/api/library/{lyrics_track['id']}/history?kind=lyrics")
+        assert len(history["entries"]) >= 2, "lyric edit history missing"
+        playlist = api("/api/playlists", "POST", {"name": "Rollback playlist", "text": "Album/01.flac\nAlbum/02.opus\nAlbum/missing.flac", "base": ""})
+        assert playlist["ready"] == 2 and len(playlist["missing"]) == 1, playlist
+        api("/api/maintenance/fingerprints", "POST", {"ids": [row["id"] for row in tracks]})
+        fingerprints = wait_for(lambda: api("/api/maintenance/fingerprints"), lambda report: report["state"] == "complete", "acoustic fingerprint analysis")
+        assert fingerprints["failed"] == 0 and fingerprints["updated"] == 3, fingerprints
+        maintained = api("/api/settings")
+        maintained["maintenance"]["prioritize_new"] = True
+        save_settings(api, {**maintained["settings"], "maintenance": maintained["maintenance"]})
         tracks = sorted((library_record(track) for track in api("/api/library")), key=lambda track: track["id"])
         values = api("/api/settings")["settings"]
         api("/api/lidarr/connection", "PUT", {"url": "http://lidarr.example.test:8686", "api_key": "ci-only-lidarr-key"})
@@ -268,21 +346,21 @@ def main():
         # Optional read counters must survive older readers and Settings writers too.
         with sqlite3.connect(ROOT / "config/musicforge.db") as db:
             # New provider labels must not reach the closed label catalogs in
-            # published frontends. Seed an owned, ready PetitLyrics artifact
+            # published frontends. Seed an owned, ready Migu artifact
             # with the unchanged schema-2 identity/signature contract.
             online_track = next(track for track in tracks if track["path"] == "Album/03.wv")
             online_path = str(Path(online_track["output"]).with_suffix(".lrc"))
-            online_text = "[00:00.00]Rollback PetitLyrics fixture\n"
+            online_text = "[00:00.00]Rollback Migu fixture\n"
             (ROOT / "output" / online_path).write_text(online_text, encoding="utf-8")
             online_signature = hashlib.sha256(online_text.encode()).hexdigest()
             audio_signature = db.execute("SELECT signature FROM managed WHERE kind='audio' AND source_id=? AND path=?",
                                          (online_track["id"], online_track["output"])).fetchone()[0]
             online_status = {"state": "ready", "output": online_track["output"], "signature": audio_signature,
-                             "path": online_path, "checked": int(time.time()), "additional_provider": "petitlyrics",
+                             "path": online_path, "checked": int(time.time()), "additional_provider": "migu",
                              "attempts": [{"provider": "qq", "state": "not_found"}],
-                             "additional_attempts": [{"provider": "petitlyrics", "state": "ready"}]}
+                             "additional_attempts": [{"provider": "petitlyrics", "state": "not_found"}, {"provider": "kuwo", "state": "failed"}, {"provider": "migu", "state": "ready"}]}
             online_file = {"path": online_path, "source_id": online_track["id"], "source_hash": online_track["built_hash"],
-                           "signature": online_signature, "provider": "", "additional_provider": "petitlyrics"}
+                           "signature": online_signature, "provider": "", "additional_provider": "migu"}
             db.execute("INSERT INTO meta(key,value) VALUES(?,?)", ("lyrics-status:" + str(online_track["id"]), json.dumps(online_status)))
             db.execute("INSERT INTO meta(key,value) VALUES(?,?)",
                        ("lyrics-file:" + hashlib.sha256(online_path.encode()).hexdigest(), json.dumps(online_file)))
@@ -322,9 +400,13 @@ def main():
                                       "text": {"original": "[00:01.000]爱这风云\\n"}}]}
             db.execute("INSERT INTO meta(key,value) VALUES(?,?)",
                        ("lyrics-search:" + str(tracks[0]["id"]) + ":" + "0" * 64, json.dumps(search)))
-            additional_search = {**search, "provider": "petitlyrics", "candidates": [
-                {**search["candidates"][0], "remote_id": "123", "candidate": {
-                    **search["candidates"][0]["candidate"], "provider": "petitlyrics"}}]}
+            gain_raw = db.execute("SELECT value FROM meta WHERE key='maintenance:loudness'").fetchone()[0]
+            gain_snapshot = json.loads(gain_raw)
+            gain_snapshot["waiting_reason"] = ""
+            db.execute("UPDATE meta SET value=? WHERE key='maintenance:loudness'", (json.dumps(gain_snapshot),))
+            additional_search = {**search, "provider": "migu", "candidates": [
+                {**search["candidates"][0], "remote_id": "123", "lyrics_url": "https://d.musicapp.migu.cn/data/oss/resource/fixture/original.lrc", "candidate": {
+                    **search["candidates"][0]["candidate"], "provider": "migu"}}]}
             db.execute("INSERT INTO meta(key,value) VALUES(?,?)",
                        ("lyrics-search:" + str(online_track["id"]) + ":" + "1" * 64, json.dumps(additional_search)))
         expected = snapshot()
@@ -332,30 +414,40 @@ def main():
         assert held[4] == "pending" and held[8] == 253402300799, "paused task changed schema-2 job semantics"
         assert all(path in expected["output"] for path in ("Album/01.opus", "Album/02.opus", "Album/03.opus", "Album/cover.jpg", "Album/01.lrc", "Album/02.lrc", online_path)), "mixed audio/cover/LRC fixture missing"
         evidence = []
-        for version, digest in LEGACY.items():
+        releases = rollback_images()
+        for version, digest in releases.items():
             image = "ghcr.io/sagehou/musicforge@" + digest
             docker("pull", image)
             for actual_image in (image, CANDIDATE):
                 api, running = start(actual_image)
                 if actual_image == image:
                     assert running == version, "wrong rollback release"
-                if actual_image == image and version in ("v0.2.31", "v0.2.32"):
+                if actual_image == image and int(version.removeprefix("v0.2.")) >= 31:
                     api("/api/lyrics/options", "PUT", {"auto_search": False})
                     api("/api/lyrics/search", "DELETE")
                 verify(api, tracks, pending, stopped)
+                if actual_image == CANDIDATE:
+                    corrected = next(row for row in api("/api/library") if row["id"] == lyrics_track["id"])
+                    assert corrected["output_tags"]["title"] == "Output-only correction", "output tag correction lost"
+                    assert len(api(f"/api/library/{lyrics_track['id']}/history?kind=lyrics")["entries"]) >= 2, "history lost through rollback"
+                    assert api("/api/playlists/" + playlist["id"])["ready"] == 2, "playlist mapping lost through rollback"
+                    assert api("/api/maintenance/fingerprints")["state"] == "complete", "fingerprint report lost through rollback"
+                    assert api("/api/maintenance/operations") == operation_records, "operation records changed through rollback"
+                    assert api("/api/maintenance/issues") == issue_decisions, "issue decisions changed through rollback"
+                    assert api("/api/maintenance/storage")["state"] == "complete", "checksum report lost through rollback"
                 online_lyrics = next(row for row in api("/api/library") if row["id"] == online_track["id"]).get("lyrics")
                 if online_lyrics:
                     assert online_lyrics["state"] == "ready" and not online_lyrics.get("provider"), "additional provider changed legacy ready fields"
                     assert all(item["provider"] in ("lrclib", "qq", "kugou", "netease") for item in online_lyrics.get("attempts", [])), "old frontend received an unknown provider label"
                 if actual_image == CANDIDATE:
-                    assert api("/api/lyrics")["options"] == {"auto_search": False, "min_score": 98}, "older option/Stop writer lost lyrics settings"
+                    assert api("/api/lyrics")["options"] == {"auto_search": False, "min_score": 98, "providers": lyric_providers}, "older option/Stop writer lost lyrics settings"
                     restored_track = next(row for row in api("/api/library") if row["path"] == "Album/01.flac")
                     assert restored_track.get("lyrics_script") == "traditional", "older writer lost script classification"
                     restored_lyrics = next(row for row in api("/api/library") if row["path"] == "Album/01.flac").get("lyrics")
                     assert restored_lyrics and restored_lyrics["state"] == "ready" and restored_lyrics["provider"] == "source", "older writer lost optional lyrics annotation"
                     restored_instrumental = next(row for row in api("/api/library") if row["id"] == instrumental_track["id"]).get("lyrics")
                     assert restored_instrumental and restored_instrumental["state"] == "ready" and restored_instrumental.get("instrumental"), "older reader/writer lost the manually confirmed placeholder"
-                    assert online_lyrics and online_lyrics.get("additional_provider") == "petitlyrics", "older reader/writer lost the additional provider identity"
+                    assert online_lyrics and online_lyrics.get("additional_provider") == "migu", "older reader/writer lost the additional provider identity"
                     assert online_lyrics.get("additional_attempts") == online_status["additional_attempts"], "older reader/writer lost the additional provider diagnosis"
                 stop()
                 actual = snapshot()
@@ -364,7 +456,7 @@ def main():
             evidence.append({"release": version, "manifest": digest, "image_id": docker("image", "inspect", "--format", "{{.Id}}", image).strip(), "round_trip": "passed"})
             print("Passed: candidate -> " + version + " -> candidate on the same config/source/output", flush=True)
         pending_checks = []
-        for version, digest in LEGACY.items():
+        for version, digest in releases.items():
             rel = "Pending/" + version + ".flac"
             (ROOT / "source/Pending").mkdir(exist_ok=True)
             docker(*media, "-f", "lavfi", "-i", "sine=duration=1", "-c:a", "flac", "-metadata", "title=Metadata indexed before content verification", "/fixture/" + rel)
@@ -400,7 +492,7 @@ def main():
             assert library_record(restored) == library_record(row), "candidate cannot reopen older worker's completed artifact"
             stop()
             pending_checks.append({"release": version, "pending_verify_then_old_worker_build": "passed", "source_hash": expected_hash})
-        Path(".ci/rollback-evidence.json").write_text(json.dumps({"architecture": os.environ["ARCH"], "schema": 2, "source_format_replacement": "passed", "instrumental_placeholder": "passed", "additional_lyrics_provider": "passed", "checks": evidence, "pending_verification_checks": pending_checks}, indent=2) + "\n")
+        Path(".ci/rollback-evidence.json").write_text(json.dumps({"architecture": os.environ["ARCH"], "schema": 2, "source_format_replacement": "passed", "instrumental_placeholder": "passed", "additional_lyrics_provider": "passed", "output_maintenance": "passed", "maintenance_review_and_undo": "passed", "checks": evidence, "pending_verification_checks": pending_checks}, indent=2) + "\n")
     finally:
         subprocess.run(["docker", "rm", "-f", NAME], capture_output=True)
 

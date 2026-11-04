@@ -16,15 +16,18 @@ const lyricsMatchingKey = "lyrics:matching"
 const defaultLyricsMinScore = 96
 
 type lyricsOptions struct {
-	AutoSearch bool `json:"auto_search"`
-	MinScore   int  `json:"min_score"`
+	AutoSearch bool     `json:"auto_search"`
+	MinScore   int      `json:"min_score"`
+	Providers  []string `json:"providers"`
 }
 
 type lyricsBatchOptions struct {
-	Refresh            bool `json:"refresh"`
-	ReplaceTraditional bool `json:"replace_traditional,omitempty"`
-	InspectOnly        bool `json:"inspect_only,omitempty"`
-	MinScore           int  `json:"-"`
+	Refresh            bool     `json:"refresh"`
+	ReplaceTraditional bool     `json:"replace_traditional,omitempty"`
+	InspectOnly        bool     `json:"inspect_only,omitempty"`
+	MinScore           int      `json:"-"`
+	Providers          []string `json:"-"`
+	OperationBatch     string   `json:"-"`
 }
 
 type LyricsStatus struct {
@@ -76,7 +79,11 @@ type lyricsState struct {
 }
 
 func (a *App) lyricsOptions(ctx context.Context) (lyricsOptions, error) {
-	options := lyricsOptions{MinScore: defaultLyricsMinScore}
+	providers, err := a.lyricsProviderOrder(ctx)
+	options := lyricsOptions{MinScore: defaultLyricsMinScore, Providers: providers}
+	if err != nil {
+		return options, err
+	}
 	raw, err := a.metaContext(ctx, lyricsOptionsKey)
 	if err == nil {
 		var legacy struct {
@@ -126,14 +133,19 @@ func (a *App) getLyrics(w http.ResponseWriter, r *http.Request) {
 
 func (a *App) putLyricsOptions(w http.ResponseWriter, r *http.Request) {
 	var body struct {
-		AutoSearch bool `json:"auto_search"`
-		MinScore   *int `json:"min_score"`
+		AutoSearch bool      `json:"auto_search"`
+		MinScore   *int      `json:"min_score"`
+		Providers  *[]string `json:"providers"`
 	}
 	if !decode(w, r, &body) {
 		return
 	}
 	if body.MinScore != nil && (*body.MinScore < 0 || *body.MinScore > 100) {
 		apiError(w, 400, errors.New("Lyrics minimum match score must be an integer between 0 and 100"))
+		return
+	}
+	if body.Providers != nil && !validLyricsProviderOrder(*body.Providers) {
+		apiError(w, 400, errors.New("Invalid lyrics provider settings"))
 		return
 	}
 	a.lyricsMu.Lock()
@@ -146,6 +158,9 @@ func (a *App) putLyricsOptions(w http.ResponseWriter, r *http.Request) {
 	options.AutoSearch = body.AutoSearch
 	if body.MinScore != nil {
 		options.MinScore = *body.MinScore
+	}
+	if body.Providers != nil {
+		options.Providers = append([]string{}, (*body.Providers)...)
 	}
 	tx, err := a.db.BeginTx(r.Context(), nil)
 	if err != nil {
@@ -160,6 +175,10 @@ func (a *App) putLyricsOptions(w http.ResponseWriter, r *http.Request) {
 	if err == nil && body.MinScore != nil {
 		raw, _ = json.Marshal(map[string]int{"version": 1, "min_score": options.MinScore})
 		_, err = tx.ExecContext(r.Context(), "INSERT INTO meta(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", lyricsMatchingKey, string(raw))
+	}
+	if err == nil && body.Providers != nil {
+		raw, _ = json.Marshal(lyricsProviderPolicy{Version: 1, Providers: options.Providers})
+		_, err = tx.ExecContext(r.Context(), "INSERT INTO meta(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", lyricsProvidersKey, string(raw))
 	}
 	if err == nil {
 		err = tx.Commit()
@@ -341,6 +360,7 @@ func (a *App) startLyrics(s Settings, sources []Source, batch lyricsBatchOptions
 		return 0, false
 	}
 	batch.MinScore = options.MinScore
+	batch.Providers = append([]string{}, options.Providers...)
 	if automatic {
 		// Stop/options writes share this lock: a previously selected automatic
 		// batch must not start after the administrator disables filling.
@@ -387,7 +407,10 @@ func (a *App) startLyrics(s Settings, sources []Source, batch lyricsBatchOptions
 	go func() {
 		defer a.lyricsWG.Done()
 		defer cancel()
-		for _, source := range sources {
+		for index, source := range sources {
+			if (batch.Refresh || batch.ReplaceTraditional) && index%1000 == 0 {
+				batch.OperationBatch = randomToken()
+			}
 			if ctx.Err() != nil {
 				break
 			}
@@ -410,10 +433,12 @@ func (a *App) startLyrics(s Settings, sources []Source, batch lyricsBatchOptions
 			if ctx.Err() != nil {
 				break
 			}
-			status.Checked = time.Now().Unix()
-			raw, _ := json.Marshal(status)
-			if !batch.InspectOnly {
-				if err := a.setMeta("lyrics-status:"+strconv.FormatInt(source.ID, 10), string(raw)); err != nil {
+			published := status.Checked != 0
+			if !published {
+				status.Checked = time.Now().Unix()
+			}
+			if !batch.InspectOnly && !published {
+				if err := a.saveUnpublishedLyricsStatus(ctx, source.ID, status); err != nil {
 					status.State, status.Error = "failed", err.Error()
 				}
 			}
@@ -451,9 +476,40 @@ func (a *App) startLyrics(s Settings, sources []Source, batch lyricsBatchOptions
 	return len(sources), true
 }
 
+// A batch may finish after a manual choice or a lossless gain remux. Keep the
+// newer ready record, and never save a status bound to a retired audio version.
+func (a *App) saveUnpublishedLyricsStatus(ctx context.Context, id int64, status LyricsStatus) error {
+	if err := a.lockFiles(ctx); err != nil {
+		return err
+	}
+	defer a.files.Unlock()
+	var output, signature string
+	err := a.reads.QueryRowContext(ctx, `SELECT s.output,m.signature FROM sources s JOIN managed m
+	 ON m.source_id=s.id AND m.path=s.output AND m.kind='audio' WHERE s.id=? AND s.output_present=1`, id).Scan(&output, &signature)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return err
+	}
+	if status.Signature != "" && (output != status.Output || signature != status.Signature) {
+		return errors.New("Artifact changed before lyrics status was saved; result discarded")
+	}
+	key := "lyrics-status:" + strconv.FormatInt(id, 10)
+	previous, err := a.metaContext(ctx, key)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return err
+	}
+	var ready LyricsStatus
+	if err == nil && signature != "" && json.Unmarshal([]byte(previous), &ready) == nil && ready.State == "ready" && ready.Output == output && ready.Signature == signature {
+		return nil
+	}
+	raw, _ := json.Marshal(status)
+	return a.setMeta(key, string(raw))
+}
+
 func (a *App) maintainLyrics(ctx context.Context, s Settings, id int64, batch lyricsBatchOptions) (status LyricsStatus) {
 	status.State = "failed"
 	target, err := a.captureLyricsTarget(ctx, id)
+	target.RecordHistory = batch.Refresh || batch.ReplaceTraditional
+	target.OperationBatch = batch.OperationBatch
 	status.Output, status.Signature = target.Source.Output, target.Signature
 	if target.FilePresent {
 		status.Path, status.Provider = target.File.Path, target.File.Provider
@@ -494,7 +550,17 @@ func (a *App) maintainLyrics(ctx context.Context, s Settings, id int64, batch ly
 			}
 		}
 		if err == nil {
-			err = a.publishLyricsTarget(ctx, target, text, provider)
+			err = a.publishLyricsTarget(ctx, target, text, provider, func() error {
+				status.State, status.Path, status.Provider = "ready", lyricsRel(target.Source.Output), provider
+				status.Instrumental = text == instrumentalLRC
+				status.Checked = time.Now().Unix()
+				raw, _ := json.Marshal(status)
+				err := a.setMeta("lyrics-status:"+strconv.FormatInt(id, 10), string(raw))
+				if err != nil {
+					status.Checked = 0
+				}
+				return err
+			})
 		}
 		if err == nil {
 			status.State, status.Path, status.Provider = "ready", lyricsRel(target.Source.Output), provider

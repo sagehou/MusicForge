@@ -71,7 +71,9 @@ class CIScopeTests(unittest.TestCase):
                 git("tag", "v0.2.35")
                 Path("backend.go").write_text("package main\n")
                 sha = commit("unreleased backend")
-                run = {"id": 10, "html_url": "https://example.test/10", "head_sha": sha}
+                run = {"id": 10, "html_url": "https://example.test/10", "head_sha": sha,
+                       "conclusion": "success", "event": "push", "path": ".github/workflows/ci.yml",
+                       "head_repository": {"full_name": ENV["GITHUB_REPOSITORY"]}}
                 proof = {"sha": sha, "scope": "full", "baseline": "v0.2.35", "created_at": datetime.now(timezone.utc).isoformat()}
                 Path("docs/design.md").write_text("Updated design\n")
                 commit("documentation")

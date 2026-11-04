@@ -22,7 +22,7 @@ import (
 	"unicode"
 )
 
-var lyricsProviders = []string{"qq", "kugou", "netease", "petitlyrics", "lrclib"}
+var lyricsProviders = []string{"qq", "kugou", "netease", "petitlyrics", "lrclib", "kuwo", "migu"}
 
 func lyricsProviderPriority(provider string) int {
 	for i, name := range lyricsProviders {
@@ -60,6 +60,7 @@ type lyricsCandidate struct {
 	Script                      string   `json:"script"`
 	TranslationScript           string   `json:"translation_script,omitempty"`
 	remoteID, mid, hash         string
+	lyricsURL, translationURL   string
 	titleAliases, artistAliases []string
 	text                        *lyricsText
 }
@@ -244,13 +245,22 @@ func validLyricsSearch(source Source) error {
 
 func (a *App) searchOnlineLyrics(ctx context.Context, target lyricsTarget, batch lyricsBatchOptions) (text, provider, state string, attempts []lyricsAttempt, err error) {
 	source := target.Source
+	providers := batch.Providers
+	if providers == nil {
+		if providers, err = a.lyricsProviderOrder(ctx); err != nil {
+			return
+		}
+	}
+	if len(providers) == 0 {
+		return "", "", "not_found", nil, nil
+	}
 	if err = validLyricsSearch(source); err != nil {
 		return
 	}
 	review, instrumental, failed := false, false, false
 	var bestText, bestProvider string
 	bestScore := -1
-	for _, name := range lyricsProviders {
+	for _, name := range providers {
 		candidates, noVocals, _, searched, searchErr := a.cachedLyricsCandidates(ctx, target, name, "", false, batch.Refresh)
 		instrumental = instrumental || noVocals
 		result, resultState := "", "not_found"
@@ -376,6 +386,10 @@ func (a *App) providerCandidates(ctx context.Context, provider string, source So
 		candidates, err = a.neteaseCandidates(ctx, query)
 	case "petitlyrics":
 		candidates, err = a.petitLyricsCandidates(ctx, source, query)
+	case "kuwo":
+		candidates, err = a.kuwoCandidates(ctx, query)
+	case "migu":
+		candidates, err = a.miguCandidates(ctx, query)
 	default:
 		return nil, false, errors.New("Unknown lyrics provider")
 	}
@@ -596,6 +610,20 @@ func (a *App) candidateLyrics(ctx context.Context, candidate lyricsCandidate) (l
 	switch candidate.Provider {
 	case "petitlyrics":
 		return a.petitLyricsText(ctx, candidate)
+	case "kuwo", "migu":
+		var err error
+		if candidate.Provider == "kuwo" {
+			text, err = a.kuwoLyrics(ctx, candidate)
+		} else {
+			text, err = a.miguLyrics(ctx, candidate)
+		}
+		if err != nil {
+			return text, err
+		}
+		diagnostic.add("lyric", text.Original)
+		if text.Translation != "" {
+			diagnostic.add("translation", text.Translation)
+		}
 	case "qq":
 		params := url.Values{"songmid": {candidate.mid}, "format": {"json"}, "nobase64": {"1"}, "g_tk": {"5381"}}
 		var response struct {
@@ -739,6 +767,9 @@ func (a *App) lyricsRequest(ctx context.Context, provider, method, endpoint stri
 	if provider == "qq" {
 		request.Header.Set("Referer", "https://y.qq.com/")
 		request.Header.Set("Cookie", "tmeLoginType=-1;")
+	}
+	if provider == "kuwo" {
+		request.Header.Set("Referer", "https://www.kuwo.cn/")
 	}
 	response, raw, err := a.lyricsHTTPResponse(provider, request)
 	if response == nil {

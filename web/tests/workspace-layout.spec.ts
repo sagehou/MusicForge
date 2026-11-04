@@ -2,6 +2,10 @@ import { test, expect, type Locator, type Page } from "@playwright/test";
 import { setPreference } from "./preferences";
 import type { Source } from "../src/types";
 
+test.beforeEach(async ({ page }) => {
+  await page.route("**/api/maintenance/progress", route => route.fulfill({ json: { reports: [], cooldowns: [] } }));
+});
+
 const settings = { enabled: true, source: "/music/source", output: "/music/output", encoding: { codec: "opus", mode: "vbr", bitrate: 192, quality: 2 }, concurrency: 1, scan_minutes: 60, lidarr_prefix: "", nav_url: "", nav_user: "", nav_library: 1, oidc_issuer: "", oidc_client_id: "" };
 const tracks: Source[] = Array.from({ length: 30 }, (_, index) => ({
   id: index + 1, path: `Artist/Album/${index + 1}.flac`, title: `Song ${String(index + 1).padStart(2, "0")}`, artist: "River Ensemble", album: "Night Studies", track: index + 1, disc: 1, duration: 201,

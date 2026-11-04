@@ -18,7 +18,7 @@ import zipfile
 spec = importlib.util.spec_from_file_location("rollback_scope", Path(__file__).with_name("check-rollback-scope.py"))
 rollback = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(rollback)
-POLICY = 1
+POLICY = 2
 
 
 def git(*args):
@@ -108,13 +108,22 @@ def plan(result, runs):
                   reuse_run="", covered_by="", covered_at="")
     if "changed_files" not in result:
         return result
+    head = git("rev-parse", "HEAD")
     for run in runs:
         try:
+            # Reject unusable runs before fetching and downloading artifacts.
+            if (run.get("conclusion") != "success" or run.get("event") not in ("push", "workflow_dispatch")
+                    or run.get("path") != ".github/workflows/ci.yml"
+                    or run.get("head_repository", {}).get("full_name") != os.environ.get("GITHUB_REPOSITORY")):
+                continue
+            sha = run.get("head_sha", "")
+            if not sha or subprocess.run(["git", "merge-base", "--is-ancestor", sha, "HEAD"], capture_output=True).returncode:
+                continue
             proof = evidence(run)
             if not trusted(run, proof):
                 continue
             sha = proof["sha"]
-            if sha == git("rev-parse", "HEAD") and proof.get("baseline") == result["baseline"]:
+            if sha == head and proof.get("baseline") == result["baseline"]:
                 result.update(scope=proof["scope"], reuse_run=str(run["id"]), covered_by=run["html_url"],
                               covered_at=proof.get("covered_at", proof["created_at"]))
                 return result
@@ -173,6 +182,8 @@ def main():
     except (OSError, ValueError, KeyError, TypeError):
         runs = []
     result = plan(result, runs)
+    if os.environ.get("MUSICFORGE_EXTENDED_ROLLBACK") == "true":
+        result.update(required=True, reason="manual historical rollback requested")
     Path(".ci").mkdir(exist_ok=True)
     Path(".ci/rollback-scope.json").write_text(json.dumps(result, indent=2) + "\n")
     Path(".ci/ci-scope.json").write_text(json.dumps(result, indent=2) + "\n")

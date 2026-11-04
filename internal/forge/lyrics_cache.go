@@ -17,13 +17,15 @@ const lyricsSearchTTL = 7 * 24 * time.Hour
 // Optional schema-2 metadata. Store public recording identifiers and lyrics,
 // never account credentials, download access keys, or live selection tokens.
 type cachedLyricsCandidate struct {
-	Candidate     lyricsCandidate `json:"candidate"`
-	RemoteID      string          `json:"remote_id,omitempty"`
-	MID           string          `json:"mid,omitempty"`
-	Hash          string          `json:"hash,omitempty"`
-	TitleAliases  []string        `json:"title_aliases,omitempty"`
-	ArtistAliases []string        `json:"artist_aliases,omitempty"`
-	Text          *lyricsText     `json:"text,omitempty"`
+	Candidate      lyricsCandidate `json:"candidate"`
+	RemoteID       string          `json:"remote_id,omitempty"`
+	MID            string          `json:"mid,omitempty"`
+	Hash           string          `json:"hash,omitempty"`
+	LyricsURL      string          `json:"lyrics_url,omitempty"`
+	TranslationURL string          `json:"translation_url,omitempty"`
+	TitleAliases   []string        `json:"title_aliases,omitempty"`
+	ArtistAliases  []string        `json:"artist_aliases,omitempty"`
+	Text           *lyricsText     `json:"text,omitempty"`
 }
 
 type lyricsSearchRecord struct {
@@ -74,6 +76,7 @@ func (record lyricsSearchRecord) candidates(source Source) []lyricsCandidate {
 	for _, cached := range record.Candidates {
 		c := cached.Candidate
 		c.Provider, c.remoteID, c.mid, c.hash = record.Provider, cached.RemoteID, cached.MID, cached.Hash
+		c.lyricsURL, c.translationURL = cached.LyricsURL, cached.TranslationURL
 		c.titleAliases, c.artistAliases, c.text = cached.TitleAliases, cached.ArtistAliases, cached.Text
 		candidates = append(candidates, c)
 	}
@@ -116,7 +119,7 @@ func (a *App) storeLyricsSearch(ctx context.Context, target lyricsTarget, provid
 		Candidates: make([]cachedLyricsCandidate, 0, len(candidates))}
 	for _, c := range candidates {
 		record.Candidates = append(record.Candidates, cachedLyricsCandidate{Candidate: c, RemoteID: c.remoteID, MID: c.mid,
-			Hash: c.hash, TitleAliases: c.titleAliases, ArtistAliases: c.artistAliases, Text: c.text})
+			Hash: c.hash, LyricsURL: c.lyricsURL, TranslationURL: c.translationURL, TitleAliases: c.titleAliases, ArtistAliases: c.artistAliases, Text: c.text})
 	}
 	raw, err := json.Marshal(record)
 	if err != nil || len(raw) > maxLyricsBytes {

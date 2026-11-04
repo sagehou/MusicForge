@@ -5,6 +5,11 @@ import zh from "../src/locales/zh-CN.json" with { type: "json" };
 
 test.use({ locale: "en-US" });
 
+// Language checks also run against the static frontend, without an auth server.
+test.beforeEach(async ({ page }) => {
+  await page.route("**/api/auth/me", route => route.fulfill({ json: { initialized: true, authenticated: false, oidc: false, version: "test" } }));
+});
+
 test("translation catalogs keep keys and placeholders aligned", () => {
   expect(Object.keys(zh).sort()).toEqual(Object.keys(en).sort());
   const placeholders = (text: string) => [...text.matchAll(/\{(\w+)\}/g)].map(match => match[1]).sort();
@@ -23,6 +28,7 @@ for (const [browserLocale, expected] of [["en-US", "en"], ["zh-CN", "zh-CN"], ["
     const context = await browser.newContext({ locale: browserLocale, baseURL });
     try {
       const page = await context.newPage();
+      await page.route("**/api/auth/me", route => route.fulfill({ json: { initialized: true, authenticated: false, oidc: false, version: "test" } }));
       await page.goto("/");
       await expect(page.locator("html")).toHaveAttribute("lang", expected);
       await expect(page).toHaveTitle(expected === "en" ? "MusicForge · Streaming music library" : "MusicForge · 流媒体音乐库");

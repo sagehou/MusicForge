@@ -3,6 +3,7 @@ package forge
 import (
 	"context"
 	"net/http"
+	"slices"
 	"testing"
 	"time"
 )
@@ -11,16 +12,27 @@ func TestAutomaticLyricsUsesScoreThenProviderPriority(t *testing.T) {
 	for _, tc := range []struct {
 		name, winner string
 		durations    map[string]float64
+		providers    []string
 	}{
-		{"equal scores", "qq", map[string]float64{}},
-		{"Kugou beats a lower QQ score", "kugou", map[string]float64{"qq": 183.5}},
-		{"NetEase beats lower QQ and Kugou scores", "netease", map[string]float64{"qq": 183.5, "kugou": 183.5}},
-		{"PetitLyrics beats lower domestic scores", "petitlyrics", map[string]float64{"qq": 183.5, "kugou": 183.5, "netease": 183.5}},
-		{"LRCLIB higher score beats every source", "lrclib", map[string]float64{"qq": 183.5, "kugou": 183.5, "netease": 183.5, "petitlyrics": 183.5}},
+		{"equal scores", "qq", map[string]float64{}, nil},
+		{"Kugou beats a lower QQ score", "kugou", map[string]float64{"qq": 183.5}, nil},
+		{"NetEase beats lower QQ and Kugou scores", "netease", map[string]float64{"qq": 183.5, "kugou": 183.5}, nil},
+		{"PetitLyrics beats lower domestic scores", "petitlyrics", map[string]float64{"qq": 183.5, "kugou": 183.5, "netease": 183.5}, nil},
+		{"LRCLIB higher score beats every source", "lrclib", map[string]float64{"qq": 183.5, "kugou": 183.5, "netease": 183.5, "petitlyrics": 183.5}, nil},
+		{"configured Japanese priority", "petitlyrics", nil, []string{"petitlyrics", "lrclib"}},
+		{"better score still beats configured priority", "lrclib", map[string]float64{"petitlyrics": 183.5}, []string{"petitlyrics", "lrclib"}},
+		{"disabled cached providers cannot win", "migu", map[string]float64{"migu": 183.5}, []string{"migu"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			a, s := testApp(t)
 			seedLyricsArtifact(t, a, s)
+			order := lyricsProviders
+			if tc.providers != nil {
+				order = tc.providers
+				if w := lyricsSession(t, a)("PUT", "/api/lyrics/options", map[string]any{"providers": order}); w.Code != 200 {
+					t.Fatal(w.Code, w.Body.String())
+				}
+			}
 			target, err := a.captureLyricsTarget(context.Background(), 1)
 			if err != nil {
 				t.Fatal(err)
@@ -46,8 +58,13 @@ func TestAutomaticLyricsUsesScoreThenProviderPriority(t *testing.T) {
 				w.WriteHeader(500)
 			})
 			text, provider, state, attempts, err := a.searchOnlineLyrics(context.Background(), target, lyricsBatchOptions{MinScore: 96})
-			if err != nil || text == "" || state != "ready" || provider != tc.winner || len(attempts) != lyricsProviderPriority(tc.winner)+1 {
+			if err != nil || text == "" || state != "ready" || provider != tc.winner || len(attempts) != slices.Index(order, tc.winner)+1 {
 				t.Fatal(text, provider, state, attempts, err)
+			}
+			for i, attempt := range attempts {
+				if attempt.Provider != order[i] {
+					t.Fatal("lookup order ignored settings", attempts)
+				}
 			}
 		})
 	}

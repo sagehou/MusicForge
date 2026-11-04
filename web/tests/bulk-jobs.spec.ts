@@ -1,6 +1,10 @@
 import { setPreference } from "./preferences";
 import { test, expect } from "@playwright/test";
 
+test.beforeEach(async ({ page }) => {
+  await page.route("**/api/maintenance/progress", route => route.fulfill({ json: { reports: [], cooldowns: [] } }));
+});
+
 test("task details expand in the page with keyboard access, result filters and pagination", async ({ page }) => {
   await page.addInitScript(() => { localStorage.setItem("musicforge.language", "en"); localStorage.setItem("musicforge.theme", "light"); });
   await page.route("**/api/auth/me", route => route.fulfill({ json: { initialized: true, authenticated: true, username: "admin", method: "local", csrf: "test" } }));

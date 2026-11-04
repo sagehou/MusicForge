@@ -104,7 +104,7 @@ test("bilingual setup, real incremental build, state preservation and login", as
   await expect(page.getByLabel("Select CI Track", { exact: true })).toBeChecked();
   await expect(page.getByText("Selected: 1", { exact: true })).toBeVisible();
   await expect(page.getByRole("table").getByText("Ready", { exact: true })).toBeVisible();
-  await expect(page.locator(".page-heading")).toContainText(/\b1 indexed track\b/);
+  await expect(page.locator(".library-description")).toHaveText(/^1 indexed track\b/);
   await expect(page.getByRole("button", { name: "Delete selected expired artifacts", exact: true })).toBeDisabled();
   const sourcePath = join(root, "source/Artist/Album/01.flac");
   const sourceBytes = readFileSync(sourcePath);

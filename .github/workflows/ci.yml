@@ -235,6 +235,33 @@ jobs:
           go test -mod=readonly -race -count=1 -timeout=10m ./...
           go vet -mod=readonly ./...
           go build -mod=readonly -trimpath -o .ci/musicforge ./cmd/musicforge
+      - name: Package the tested application and media tools
+        run: tar -czf .ci/validation-runtime.tar.gz -C .ci musicforge media
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: validation-runtime
+          path: .ci/validation-runtime.tar.gz
+          if-no-files-found: error
+          retention-days: 7
+      - name: Stop the Navidrome validation service
+        if: always()
+        run: docker rm -f musicforge-nav-validation || true
+
+  rclone:
+    needs: [plan, backend]
+    if: needs.plan.outputs.scope == 'full' && needs.plan.outputs.reuse_run == ''
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: validation-runtime
+          path: .ci
+      - name: Restore this run's tested application and media tools
+        run: |
+          tar -xzf .ci/validation-runtime.tar.gz -C .ci
+          echo "$PWD/.ci/media/bin" >> "$GITHUB_PATH"
       - name: Real rclone mount, stalled reads and responsive queue controls
         run: |
           sudo apt-get update
@@ -249,6 +276,22 @@ jobs:
             .ci/rclone/evidence.json
             .ci/rclone/*.log
           retention-days: 14
+
+  app_browser:
+    needs: [plan, backend]
+    if: needs.plan.outputs.scope == 'full' && needs.plan.outputs.reuse_run == ''
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: validation-runtime
+          path: .ci
+      - name: Restore this run's tested application and media tools
+        run: |
+          tar -xzf .ci/validation-runtime.tar.gz -C .ci
+          echo "$PWD/.ci/media/bin" >> "$GITHUB_PATH"
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version-file: .node-version
@@ -271,9 +314,6 @@ jobs:
           cd web
           npx playwright install --with-deps chromium
           MUSICFORGE_TEST_ROOT="$(dirname "$PWD")/.ci" npm test -- workflow.spec.ts --project=chromium
-      - name: Stop the Navidrome validation service
-        if: always()
-        run: docker rm -f musicforge-nav-validation || true
       - name: Browser reports
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -285,7 +325,7 @@ jobs:
           retention-days: 14
 
   validate:
-    needs: [plan, frontend, browser, backend]
+    needs: [plan, frontend, browser, backend, rclone, app_browser]
     if: ${{ !cancelled() && needs.plan.result == 'success' && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 5
@@ -307,6 +347,8 @@ jobs:
           FRONTEND: ${{ needs.frontend.result }}
           BROWSER: ${{ needs.browser.result }}
           BACKEND: ${{ needs.backend.result }}
+          RCLONE: ${{ needs.rclone.result }}
+          APP_BROWSER: ${{ needs.app_browser.result }}
         run: |
           if [[ "$SCOPE" != docs && -z "$REUSED" ]]; then
             test "$FRONTEND" = success
@@ -317,8 +359,12 @@ jobs:
           fi
           if [[ "$SCOPE" == full && -z "$REUSED" ]]; then
             test "$BACKEND" = success
+            test "$RCLONE" = success
+            test "$APP_BROWSER" = success
           else
             test "$BACKEND" = skipped
+            test "$RCLONE" = skipped
+            test "$APP_BROWSER" = skipped
           fi
       - name: Record successful application validation
         if: needs.plan.outputs.reuse_run == ''

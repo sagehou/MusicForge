@@ -1,3 +1,4 @@
+import { routeLibrary } from "./library-fixture";
 import { selectLibraryPage, openLibraryOptions, setPreference } from "./preferences";
 import { test, expect, type Page } from "@playwright/test";
 import { readFile } from "node:fs/promises";
@@ -27,7 +28,7 @@ const collection: Source[] = [...sources, ...Array.from({ length: 64 }, (_, inde
 async function mockLibrary(page: Page, library = sources) {
   await page.addInitScript(() => { localStorage.setItem("musicforge.language", "en"); if (!localStorage.getItem("musicforge.theme")) localStorage.setItem("musicforge.theme", "light"); });
   await page.route("**/api/auth/me", route => route.fulfill({ json: me }));
-  await page.route("**/api/library", route => route.fulfill({ json: library }));
+  await routeLibrary(page, route => route.fulfill({ json: library }));
   await page.route("**/api/library/*/artwork?*", async route => {
     const id = Number(new URL(route.request().url()).pathname.split("/")[3]);
     const body = await readFile(resolve(process.env.MUSICFORGE_TEST_ROOT || "../.ci", "artwork", `${id % 4}.png`));
@@ -141,7 +142,7 @@ test("album and artist lyrics actions use all playable tracks in their scope, in
   await page.locator(".lyrics-settings > summary").click();
   await page.getByRole("button", { name: "Fill artist lyrics", exact: true }).click();
   await expect.poll(() => searches.length).toBe(3);
-  expect(searches[2]).toEqual({ ids: [...album.slice(0, 63).map(source => source.id), otherAlbum.id], refresh: false });
+  expect(searches[2]).toEqual({ ids: [otherAlbum.id, ...album.slice(0, 63).map(source => source.id)], refresh: false });
   await page.goto("/library?view=albums&artist=River+Ensemble&album=missing");
   await page.locator(".lyrics-settings > summary").click();
   await expect(page.getByRole("button", { name: "Fill album lyrics", exact: true })).toBeDisabled();
@@ -400,7 +401,7 @@ test("cover density and list preferences persist, pagination and polling retain 
   await mockLibrary(page, collection);
   await page.setViewportSize({ width: 1440, height: 1000 });
   let reads = 0;
-  await page.route("**/api/library", route => { reads++; return route.fulfill({ json: collection }); });
+  await routeLibrary(page, route => { reads++; return route.fulfill({ json: collection }); });
   await page.goto("/library?view=albums");
   await expect(page.locator(".library-group")).toHaveCount(50);
   const columns = () => page.locator(".library-groups").evaluate(node => getComputedStyle(node).gridTemplateColumns.split(" ").length);

@@ -1,3 +1,4 @@
+import { routeLibrary } from "./library-fixture";
 import { selectLibraryPage, setPreference } from "./preferences";
 import { test, expect, type Page } from "@playwright/test";
 import type { Dashboard, Job, Source } from "../src/types";
@@ -23,7 +24,7 @@ async function setup(page: Page) {
   });
   await page.route("**/api/auth/me", route => route.fulfill({ json: me }));
   await page.route("**/api/settings", route => route.fulfill({ json: { settings, configured: { webhook: false, nav_password: false, oidc_secret: false }, public_url: "", allowed_origins: [] } }));
-  await page.route("**/api/library", route => route.fulfill({ json: [] }));
+  await routeLibrary(page, route => route.fulfill({ json: [] }));
   await page.route("**/api/dashboard", route => route.fulfill({ json: dashboard }));
   await page.route("**/api/jobs?*", route => {
     const params = new URL(route.request().url()).searchParams;
@@ -47,7 +48,7 @@ test("missing records have confirmed individual, selected and all cleanup with p
   const dialogs: string[] = [];
   let accept = false;
   page.on("dialog", dialog => { dialogs.push(dialog.message()); void (accept ? dialog.accept() : dialog.dismiss()); });
-  await page.route("**/api/library", route => route.fulfill({ json: sources }));
+  await routeLibrary(page, route => route.fulfill({ json: sources }));
   await page.route("**/api/library/forget", route => {
     const body = route.request().postDataJSON(); requests.push(body);
     const selected = sources.filter(source => !source.present && !source.output && (body.all || body.ids.includes(source.id)));

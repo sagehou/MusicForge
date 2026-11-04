@@ -22,7 +22,7 @@ These runs establish the published reference, not automatic approval of later ch
 | Incremental work | Unchanged scans, full hashes, moves versus copies, filename conflicts, source deletion retention and explicit cleanup |
 | Jobs and recovery | Coalesced scans, retry budgets, pause/resume/stop, restart recovery, concurrent controls and publication/deletion journals |
 | Mounted sources | Real rclone WebDAV/FUSE reads without VFS caching, stalls, byte progress, pause/resume, timeout/recovery and mount identity |
-| Lyrics | Provider response fixtures, identity/duration matching, real LRC/TTML timing, priorities, caching, explicit selection and ownership conflicts; ready results skip I/O across repeated filling and restart |
+| Lyrics | Provider response fixtures, identity/duration matching, real LRC/TTML timing, priorities, caching, passive provider status/manual checks, mismatch explanations, explicit selection and ownership conflicts; ready results skip I/O across repeated filling and restart |
 | Maintenance | Output-only editing, signature/conflict checks, loudness, history/undo, playlist mapping, duplicate clues and storage reports |
 | Authentication | Setup, local login/recovery, CSRF, trusted proxies, multiple origins and signed test-provider OIDC/PKCE/replay/revocation |
 | Integrations | Native Lidarr HTTP payloads and path mapping; real Navidrome discovery, refresh, playback retention and explicit removal |
@@ -34,12 +34,14 @@ These runs establish the published reference, not automatic approval of later ch
 
 Documentation gets link/consistency/whitespace checks. Presentation changes get frontend typecheck/build, affected existing browser checks and representative screenshots. Functional, backend, dependency, deployment, workflow, test-configuration or uncertain changes use full applicable validation. The comparison includes all unreleased work, not just the last commit.
 
+Go race/integration/vet, real-application browser workflows and rclone acceptance run in separate jobs. The latter two reuse the tested binary and media tools from the same run; retrying either job does not replay successful Go tests. Both remain required for full validation.
+
 Trusted same-repository push/dispatch evidence can cover identical tested inputs or unchanged inherited work within the policy's seven-day/environment limits. PR/fork evidence cannot. `rollback-scope` records the baseline, selected checks and reused run; `validation-evidence` records successful application evidence; browser artifacts retain screenshots. A new version label does not by itself require replaying identical application checks. Every release still needs a current audit and both final native image checks, plus any required rollback. Never manually bypass failed gates.
 
 ## Limits to verify on your host
 
 CI uses Lidarr payload fixtures and a signed OIDC test provider, not a full Lidarr or production Authentik deployment. Online lyric services and artwork searches are mocked for deterministic coverage; upstream availability, regional restrictions, credentials and a particular recording's match need real use. Navidrome and rclone are exercised as actual services.
 
-Chromium covers the application; WebKit coverage is limited to phone audition. Other browser/platform combinations are not comprehensively certified. A 5,000-track API fixture and remote-stall tests are regression checks, not a large-library capacity guarantee. Changed library responses still contain the complete index.
+Chromium covers the application; WebKit coverage is limited to phone audition. Other browser/platform combinations are not comprehensively certified. A 5,000-track API fixture and remote-stall tests are regression checks, not a large-library capacity guarantee. Browsing returns 50 entries with conditional/delta refresh; a database change still rebuilds the server index, and an opened maintenance workbench loads its full scope.
 
 Storage must meet the [deployment requirements](deployment.md). Ordinary scans trust size/mtime; use full verification for content edits that preserve both. Same-schema compatibility does not restore files already moved, replaced or deleted: complete rollback needs matching stopped config/output snapshots. Follow the [small deployment trial](deployment.md#try-your-deployment) before a full import.

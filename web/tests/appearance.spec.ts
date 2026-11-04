@@ -1,3 +1,4 @@
+import { routeLibrary } from "./library-fixture";
 import { test, expect, type Page } from "@playwright/test";
 import { openAccount, openLibraryOptions, setPreference } from "./preferences";
 
@@ -5,7 +6,7 @@ const settings = { enabled: true, source: "/music/source", output: "/music/outpu
 async function setup(page: Page) {
   await page.addInitScript(() => { if (!localStorage.getItem("musicforge.language")) localStorage.setItem("musicforge.language", "en"); if (!localStorage.getItem("musicforge.theme")) localStorage.setItem("musicforge.theme", "light"); });
   await page.route("**/api/auth/me", route => route.fulfill({ json: { initialized: true, authenticated: true, username: "admin", method: "local", csrf: "test", oidc: false, version: "test" } }));
-  await page.route("**/api/library", route => route.fulfill({ json: [1, 2].map(id => ({ id, path: `Artist/Album/${id}.flac`, title: `Song ${id}`, artist: "Artist", album: "Album", track: id, disc: 1, duration: 201, present: true, output: `Artist/Album/${id}.opus`, output_present: true, status: "ready", error: "", size: 26214400, metadata: {}, source_bitrate: 894000, source_audio: { codec: "flac", bit_depth: 24, sample_rate: 96000, channels: 2 }, output_size: 5242880 })) }));
+  await routeLibrary(page, route => route.fulfill({ json: [1, 2].map(id => ({ id, path: `Artist/Album/${id}.flac`, title: `Song ${id}`, artist: "Artist", album: "Album", track: id, disc: 1, duration: 201, present: true, output: `Artist/Album/${id}.opus`, output_present: true, status: "ready", error: "", size: 26214400, metadata: {}, source_bitrate: 894000, source_audio: { codec: "flac", bit_depth: 24, sample_rate: 96000, channels: 2 }, output_size: 5242880 })) }));
   await page.route("**/api/settings", route => route.fulfill({ json: { settings, configured: { webhook: false, nav_password: false, oidc_secret: false }, public_url: "", allowed_origins: [] } }));
   await page.route("**/api/lyrics", route => route.fulfill({ json: { options: { auto_search: false }, report: { state: "idle", total: 0, processed: 0, found: 0, not_found: 0, failed: 0, stopping: false } } }));
 }

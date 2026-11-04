@@ -64,18 +64,20 @@ type lyricsReport struct {
 }
 
 type lyricsState struct {
-	lyricsMu      sync.Mutex
-	lyricsWG      sync.WaitGroup
-	lyricsReport  *lyricsReport
-	lyricsCancel  context.CancelFunc
-	lyricsNext    time.Time
-	lyricsRetryAt time.Time
-	lyricsHTTP    *http.Client
-	lyricsGates   map[string]chan struct{}
-	lyricsRetries map[string]time.Time
-	lyricsChoices map[string]*lyricsChoiceSet
-	lyricsCacheMu sync.Mutex
-	netease       *neteaseSessionState
+	lyricsMu            sync.Mutex
+	lyricsWG            sync.WaitGroup
+	lyricsReport        *lyricsReport
+	lyricsCancel        context.CancelFunc
+	lyricsNext          time.Time
+	lyricsRetryAt       time.Time
+	lyricsHTTP          *http.Client
+	lyricsGates         map[string]chan struct{}
+	lyricsRetries       map[string]time.Time
+	lyricsChoices       map[string]*lyricsChoiceSet
+	lyricsCacheMu       sync.Mutex
+	providerDiagnostics map[string]lyricsProviderDiagnostic
+	providerChecking    map[string]int
+	netease             *neteaseSessionState
 }
 
 func (a *App) lyricsOptions(ctx context.Context) (lyricsOptions, error) {

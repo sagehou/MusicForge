@@ -11,8 +11,7 @@ import (
 	"time"
 )
 
-// Conditional reads still use a fresh database snapshot, including job/repair
-// status. The browser can reuse unchanged data without transferring or parsing it.
+// Callers supply a current index snapshot; unchanged responses need no transfer.
 func respondLibrary(w http.ResponseWriter, r *http.Request, list []Source) {
 	data, err := json.Marshal(list)
 	if err != nil {
@@ -20,6 +19,10 @@ func respondLibrary(w http.ResponseWriter, r *http.Request, list []Source) {
 		return
 	}
 	etag := `W/"` + digest(string(data)) + `"`
+	serveLibraryJSON(w, r, data, etag)
+}
+
+func serveLibraryJSON(w http.ResponseWriter, r *http.Request, data []byte, etag string) {
 	w.Header().Set("ETag", etag)
 	w.Header().Set("Cache-Control", "private, no-cache")
 	w.Header().Add("Vary", "Accept-Encoding")

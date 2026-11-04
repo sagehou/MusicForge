@@ -1,3 +1,4 @@
+import { routeLibrary } from "./library-fixture";
 import { test, expect, type Page } from "@playwright/test";
 import { openLibraryOptions, selectLibraryPage, setPreference } from "./preferences";
 import type { Source } from "../src/types";
@@ -6,14 +7,14 @@ const source: Source = { id: 1, path: "Artist/Album/01.flac", title: "Track one"
 async function mock(page: Page) {
   await page.addInitScript(() => { localStorage.setItem("musicforge.language", "en"); localStorage.setItem("musicforge.theme", "light"); });
   await page.route("**/api/auth/me", route => route.fulfill({ json: { initialized: true, authenticated: true, username: "admin", method: "local", csrf: "test" } }));
-  await page.route("**/api/library", route => route.fulfill({ json: [source] }));
+  await routeLibrary(page, route => route.fulfill({ json: [source] }));
   await page.route("**/api/lyrics", route => route.fulfill({ json: { options: { auto_search: false }, report: { state: "idle", total: 0, processed: 0 } } }));
 }
 
 test("saved library views preserve filters, update results and clear selections", async ({ page }) => {
   await mock(page);
   let sources = [source];
-  await page.route("**/api/library", route => route.fulfill({ json: sources }));
+  await routeLibrary(page, route => route.fulfill({ json: sources }));
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.goto("/library?view=tracks&artist=Artist&status=ready&lyrics=failed&sort=attention&q=Track");
   const views = page.locator(".saved-library-views");

@@ -1,11 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { ClipboardList, Loader2, Play, RefreshCw, Square, X } from "lucide-react";
 import { api } from "../api";
 import { useI18n } from "../i18n";
-import { libraryQuality, qualityKinds } from "../library-quality";
 import type { Encoding, LoudnessReport, Source } from "../types";
 import { Button } from "./ui/button";
-import { ResourceWarning, useResource, type Notice } from "./resource";
+import { Loading, ResourceWarning, useResource, type Notice } from "./resource";
 import { LibraryTools } from "./library-tools";
 import { MaintenanceReview, QualityReview } from "./maintenance-review";
 
@@ -52,27 +51,34 @@ export function BuildPreview({ selection, notify, currentScope = false }: { sele
   </div>;
 }
 
-export function MaintenanceWorkbench({ sources, selected, select, notify, comparisonAvailable }: { sources: Source[]; selected: Source[]; select: (ids: number[]) => void; notify: Notice; comparisonAvailable: boolean }) {
+export function MaintenanceWorkbench({ scopeQuery, attention, selected, select, notify, comparisonAvailable }: { scopeQuery: string; attention: number; selected: Source[]; select: (ids: number[]) => void; notify: Notice; comparisonAvailable: boolean }) {
   const { t, number } = useI18n();
   const [open, setOpen] = useState(() => location.hash === "#maintenance-workbench");
-  const quality = useMemo(() => libraryQuality(sources), [sources]);
-  const attention = new Set(qualityKinds.flatMap(kind => quality[kind].map(source => source.id))).size;
+  return <details className="maintenance-workbench" id="maintenance-workbench" open={open} onToggle={event => setOpen(event.currentTarget.open)}>
+    <summary><ClipboardList size={18} /><span>{t("maintenance.title")}</span><small className="quality-count">{number(attention)}</small></summary>
+    {open && <WorkbenchContent scopeQuery={scopeQuery} selected={selected} select={select} notify={notify} comparisonAvailable={comparisonAvailable} />}
+  </details>;
+}
+
+function WorkbenchContent({ scopeQuery, selected, select, notify, comparisonAvailable }: { scopeQuery: string; selected: Source[]; select: (ids: number[]) => void; notify: Notice; comparisonAvailable: boolean }) {
+  const { t } = useI18n();
+  const resource = useResource<Source[]>(`/library/scope?${scopeQuery}`, true);
   function reveal(selector: string) {
     const element = document.querySelector<HTMLDetailsElement>(selector);
     if (element) { element.open = true; element.scrollIntoView({ block: "nearest", behavior: "smooth" }); element.querySelector("summary")?.focus(); }
   }
-  return <details className="maintenance-workbench" id="maintenance-workbench" open={open} onToggle={event => setOpen(event.currentTarget.open)}>
-    <summary><ClipboardList size={18} /><span>{t("maintenance.title")}</span><small className="quality-count">{number(attention)}</small></summary>
-    {open && <div className="comparison-body">
-      <p>{t("maintenance.hint")}</p>
-      <p><a href="/jobs#maintenance-progress">{t("progress.open")}</a></p>
-      <div className="maintenance-actions"><BuildPreview selection={{ ids: sources.map(source => source.id) }} currentScope notify={notify} />{selected.length > 0 && <BuildPreview selection={{ ids: selected.map(source => source.id) }} notify={notify} />}<Button size="sm" variant="ghost" onClick={() => reveal(".lyrics-panel > details")}>{t("lyrics.title")}</Button>{comparisonAvailable && <Button size="sm" variant="ghost" onClick={() => reveal("#library-comparison")}>{t("compare.heading")}</Button>}<a href="/settings?section=encoding">{t("maintenance.scheduleLink")}</a></div>
-      <QualityReview sources={sources} selected={selected} select={select} notify={notify} />
-      <LoudnessMaintenance selected={selected} sources={sources} notify={notify} />
-      <LibraryTools sources={sources} selected={selected} select={select} notify={notify} />
-      <MaintenanceReview sources={sources} selected={selected} select={select} notify={notify} />
-    </div>}
-  </details>;
+  if (!resource.data) return <Loading error={resource.error} retry={resource.retry} />;
+  const sources = resource.data;
+  return <div className="comparison-body">
+    <ResourceWarning error={resource.error} retry={resource.retry} />
+    <p>{t("maintenance.hint")}</p>
+    <p><a href="/jobs#maintenance-progress">{t("progress.open")}</a></p>
+    <div className="maintenance-actions"><BuildPreview selection={{ ids: sources.map(source => source.id) }} currentScope notify={notify} />{selected.length > 0 && <BuildPreview selection={{ ids: selected.map(source => source.id) }} notify={notify} />}<Button size="sm" variant="ghost" onClick={() => reveal(".lyrics-panel > details")}>{t("lyrics.title")}</Button>{comparisonAvailable && <Button size="sm" variant="ghost" onClick={() => reveal("#library-comparison")}>{t("compare.heading")}</Button>}<a href="/settings?section=encoding">{t("maintenance.scheduleLink")}</a></div>
+    <QualityReview sources={sources} selected={selected} select={select} notify={notify} />
+    <LoudnessMaintenance selected={selected} sources={sources} notify={notify} />
+    <LibraryTools sources={sources} selected={selected} select={select} notify={notify} />
+    <MaintenanceReview sources={sources} selected={selected} select={select} notify={notify} />
+  </div>;
 }
 
 function LoudnessMaintenance({ selected, sources, notify }: { selected: Source[]; sources: Source[]; notify: Notice }) {

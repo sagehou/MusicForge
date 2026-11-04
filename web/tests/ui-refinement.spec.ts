@@ -1,3 +1,5 @@
+import type { LibraryPage } from "../src/library-data";
+import { routeLibrary, libraryFixture } from "./library-fixture";
 import { setPreference, openAccount } from "./preferences";
 import { test, expect, type Page } from "@playwright/test";
 
@@ -122,24 +124,30 @@ test("settings layouts in both themes and narrow viewports", async ({ page }) =>
 test("large library returns instantly from memory, revalidates with 304 and clears on logout", async ({ page }) => {
   await setup(page);
   const sources = Array.from({ length: 5000 }, (_, index) => ({ id: index + 1, path: `Artist ${Math.floor(index / 100)}/Album ${Math.floor(index / 10)}/${index}.flac`, artist: `Artist ${Math.floor(index / 100)}`, album: `Album ${Math.floor(index / 10)}`, title: `Track ${index}`, track: index % 10 + 1, disc: 1, duration: 200, present: true, output: "", output_present: false, status: "missing", error: "", size: 100, metadata: {} }));
-  let reads = 0, authenticated = true, fail = false, hold = true;
+  let reads = 0, authenticated = true, fail = false, hold = true, version = 1;
   let release: (() => void) | undefined;
   const conditionals: (string | undefined)[] = [];
   await page.route("**/api/auth/me", route => route.fulfill({ json: { ...me, authenticated } }));
   await page.route("**/api/auth/logout", route => { authenticated = false; return route.fulfill({ json: {} }); });
   await page.route("**/api/auth/login", route => { authenticated = true; return route.fulfill({ json: {} }); });
   await page.route("**/api/library/scan", route => {
-    sources[0].status = "failed"; sources[0].error = "Synthetic changed status";
+    version++; sources[0].status = "failed"; sources[0].error = "Synthetic changed status";
     return route.fulfill({ status: 202, json: { job_id: 1 } });
   });
-  await page.route("**/api/library", async route => {
+  await routeLibrary(page, async route => {
     reads++;
     const etag = route.request().headers()["if-none-match"];
     conditionals.push(etag);
     if (hold) await new Promise<void>(resolve => { release = resolve; });
     if (fail) await route.fulfill({ status: 503, json: { error: "Database is busy; please retry" } });
-    else if (etag) await route.fulfill({ status: 304, headers: { ETag: 'W/"library-test"' } });
-    else await route.fulfill({ json: sources, headers: { ETag: 'W/"library-test"' } });
+    else if (etag === `W/"library-test-${version}"`) await route.fulfill({ status: 304, headers: { ETag: etag } });
+    else if (version === 2 && etag === 'W/"library-test-1"') {
+      expect(route.request().headers()["x-library-delta"]).toBe("1");
+      const current = libraryFixture(sources, route.request()) as LibraryPage;
+      const changed = current.groups.filter(group => group.artist === "Artist 0");
+      expect(changed).toHaveLength(1);
+      await route.fulfill({ json: { ...current, base: etag, groups: changed, row_order: [], group_order: current.groups.map(group => group.key) }, headers: { ETag: `W/"library-test-${version}"` } });
+    } else await route.fulfill({ json: sources, headers: { ETag: `W/"library-test-${version}"` } });
   });
   await page.goto("/library?view=artists");
   await expect(page.getByRole("status", { name: "Loading" })).toBeVisible();
@@ -151,13 +159,12 @@ test("large library returns instantly from memory, revalidates with 304 and clea
   await page.getByRole("link", { name: "Settings", exact: true }).click();
   await expect(page.getByLabel("Source audio directory", { exact: true })).toBeVisible();
   hold = true;
-  await page.getByRole("link", { name: "Library", exact: true }).click();
+  await page.goBack();
   await expect.poll(() => reads).toBe(2);
-  // Data is visible while the network response is still deliberately blocked.
-  await page.getByRole("button", { name: /^All artists/ }).click();
+  // The same query is visible while revalidation is deliberately blocked.
   await expect(page.locator(".library-group")).toHaveCount(50);
   await expect(page.getByRole("status", { name: "Loading" })).toHaveCount(0);
-  expect(conditionals[1]).toBe('W/"library-test"');
+  expect(conditionals[1]).toBe('W/"library-test-1"');
   fail = true; hold = false; release!();
   await expect(page.getByRole("alert")).toBeVisible();
   await expect(page.locator(".library-group")).toHaveCount(50);
@@ -165,13 +172,13 @@ test("large library returns instantly from memory, revalidates with 304 and clea
   await page.getByRole("button", { name: "Try again", exact: true }).click();
   await expect(page.getByRole("alert")).toHaveCount(0);
   await expect(page.locator(".library-group")).toHaveCount(50);
-  expect(conditionals.at(-1)).toBe('W/"library-test"');
+  expect(conditionals.at(-1)).toBe('W/"library-test-1"');
   await page.getByRole("button", { name: "Scan library", exact: true }).click();
   const changedBadge = page.locator(".library-group").filter({ has: page.getByRole("button", { name: "Browse artist Artist 0", exact: true }) }).locator(".badge");
   await expect(changedBadge.locator(".badge-label-full")).toHaveText("Failed");
   await expect(changedBadge.locator(".badge-label-short")).toBeVisible();
   await expect(changedBadge.locator(".badge-label-short")).toHaveText("Failed");
-  expect(conditionals.at(-1)).toBeUndefined();
+  expect(conditionals.at(-1)).toBe('W/"library-test-1"');
   await openAccount(page);
   await page.getByRole("button", { name: "Log out", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Welcome back", exact: true })).toBeVisible();

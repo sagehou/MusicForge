@@ -1,3 +1,4 @@
+import { routeLibrary } from "./library-fixture";
 import { setPreference } from "./preferences";
 import { test, expect } from "@playwright/test";
 
@@ -8,7 +9,7 @@ test.beforeEach(async ({ page }) => {
 test("file comparison explains count differences and queues only selected directories", async ({ page }) => {
   await page.addInitScript(() => localStorage.setItem("musicforge.language", "en"));
   await page.route("**/api/auth/me", route => route.fulfill({ json: { initialized: true, authenticated: true, username: "admin", method: "local", csrf: "test" } }));
-  await page.route("**/api/library", route => route.fulfill({ json: [{
+  await routeLibrary(page, route => route.fulfill({ json: [{
     id: 1, path: "Artist/Album/01.flac", artist: "Artist", album: "Album", title: "Track", track: 1, disc: 1, duration: 120,
     present: true, output: "", output_present: false, status: "failed", error: "Synthetic decoder failure", size: 100, metadata: {},
   }] }));

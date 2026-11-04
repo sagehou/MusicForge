@@ -174,7 +174,7 @@ func TestReferenceFLACRejectsLateIntegrityFailureAndRereadsOnRetry(t *testing.T)
 	if !bytes.Equal(before, after) {
 		t.Fatal("late decoder failure replaced the playable artifact")
 	}
-	items, _, err := a.taskItems(a.taskID(id), "failed", 50, 0)
+	items, _, err := a.taskItemsContext(context.Background(), a.taskID(id), "failed", 50, 0)
 	if err != nil || len(items) != 1 || items[0].Failure != "decode" || items[0].Attempts != 3 {
 		t.Fatal("failed task summary is not actionable", items, err)
 	}
@@ -341,7 +341,7 @@ func TestReferenceFLACDoesNotTolerateErrorsWithoutIntegrityMetadata(t *testing.T
 				t.Fatal(err)
 			}
 			failNativeFLAC(t, a)
-			if _, err = a.queueBuild(source, s.Encoding, false, true); err != nil {
+			if _, err = a.queueBuildTask(source, s.Encoding, false, true, 0); err != nil {
 				t.Fatal(err)
 			}
 			j, err := a.claim(true)
@@ -383,7 +383,7 @@ func TestReferenceFLACPipelineCancellationAndStall(t *testing.T) {
 			}
 			t.Setenv("PATH", toolsDir+":"+os.Getenv("PATH"))
 			a.cfg.SourceTimeoutSeconds = 1
-			if _, err := a.queueBuild(source, s.Encoding, false, true); err != nil {
+			if _, err := a.queueBuildTask(source, s.Encoding, false, true, 0); err != nil {
 				t.Fatal(err)
 			}
 			j, err := a.claim(true)

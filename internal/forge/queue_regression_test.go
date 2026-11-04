@@ -70,7 +70,7 @@ func TestScanEntryPointsCoalesceConcurrentRequests(t *testing.T) {
 	if err = json.Unmarshal(j.Args, &request); err != nil || !reflect.DeepEqual(request.Dirs, []string{"Changed/Album"}) {
 		t.Fatal("follow-up scope lost", request, err)
 	}
-	if _, total, err := a.taskList("all", 100, 0); err != nil || total != 1 {
+	if _, total, err := a.taskListContext(context.Background(), "all", 100, 0); err != nil || total != 1 {
 		t.Fatal("UI shows more than one task", total, err)
 	}
 }
@@ -239,7 +239,7 @@ func TestScanFollowupDuringConversionSurvivesRestartAndControl(t *testing.T) {
 			if err = a.completeJob(j, "success", 0, 1, "", 0); err != nil {
 				t.Fatal(err)
 			}
-			if _, total, err := a.taskList("success", 100, 0); err != nil || total != 1 {
+			if _, total, err := a.taskListContext(context.Background(), "success", 100, 0); err != nil || total != 1 {
 				t.Fatal("reindex split the queue", total, err)
 			}
 		})
@@ -279,7 +279,7 @@ func TestFilteredBulkControlsAcrossPages(t *testing.T) {
 	if n, err := a.changeTasksFiltered("delete", selection{All: true}, "all"); err != nil || n != 0 {
 		t.Fatal("bulk history deletion removed active worker", n, err)
 	}
-	list, total, err := a.taskList("all", 100, 0)
+	list, total, err := a.taskListContext(context.Background(), "all", 100, 0)
 	if err != nil || total != 1 || list[0].ID != 1000 || list[0].CanDelete {
 		t.Fatal("active history protection lost", list, total, err)
 	}
@@ -388,11 +388,11 @@ func TestWALReadAPIsStayResponsiveDuringLargeQueueWrite(t *testing.T) {
 	if fresh, err := a.settings(); err != nil || fresh.ScanMinutes != 999 {
 		t.Fatal("reader did not observe subsequent commit", fresh, err)
 	}
-	items, total, err := a.taskItems(1, "all", 50, 4950)
+	items, total, err := a.taskItemsContext(context.Background(), 1, "all", 50, 4950)
 	if err != nil || total != 5001 || len(items) != 50 || items[0].Activity.Title == "" {
 		t.Fatal("large detail page lost tags or pagination", len(items), total, err)
 	}
-	list, total, err := a.taskList("running", 100, 0)
+	list, total, err := a.taskListContext(context.Background(), "running", 100, 0)
 	if err != nil || total != 1 || len(list) != 1 || len(list[0].Current) != 1 || list[0].Current[0].Title != "Uncommitted title" || list[0].Profile == nil {
 		t.Fatal("large queue lost active track or profile", list, total, err)
 	}
@@ -500,7 +500,7 @@ func TestSourceChangeReindexesSameTaskBeforePendingTracks(t *testing.T) {
 	if err != nil || source.Title != "Changed before queued preparation" || !source.OutputPresent || source.Hash == "" || source.BuiltHash != source.Hash {
 		t.Fatal("source repair did not complete", source, err)
 	}
-	if _, total, err := a.taskList("all", 100, 0); err != nil || total != 1 {
+	if _, total, err := a.taskListContext(context.Background(), "all", 100, 0); err != nil || total != 1 {
 		t.Fatal("source repair split the task", total, err)
 	}
 }

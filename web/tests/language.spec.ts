@@ -58,7 +58,7 @@ test("language selection works when browser storage is unavailable", async ({ pa
   await page.goto("/");
   await setPreference(page, "language", "zh-CN");
   await expect(page.locator("html")).toHaveAttribute("lang", "zh-CN");
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText(/创建你的音乐工作空间|欢迎回来/);
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText(zh["auth.loginTitle"]);
 });
 
 test("technical diagnostics remain available when switching language", async ({ page }) => {

@@ -57,11 +57,11 @@ func TestNewTrackPriorityAndReducedCapacity(t *testing.T) {
 	if _, err := a.db.Exec(`INSERT INTO sources(id,rel,hash,output_present) VALUES(1,'Album/old.flac','old',1),(2,'Album/new.flac','new',0)`); err != nil {
 		t.Fatal(err)
 	}
-	oldID, err := a.queueBuild(Source{ID: 1, Hash: "old"}, s.Encoding, false, true)
+	oldID, err := a.queueBuildTask(Source{ID: 1, Hash: "old"}, s.Encoding, false, true, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
-	newID, err := a.queueBuild(Source{ID: 2, Hash: "new"}, s.Encoding, false, true)
+	newID, err := a.queueBuildTask(Source{ID: 2, Hash: "new"}, s.Encoding, false, true, 0)
 	if err != nil {
 		t.Fatal(err)
 	}

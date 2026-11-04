@@ -2,6 +2,7 @@ package forge
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -72,7 +73,7 @@ func TestResolvedConfigurationOverlapAndURLBoundaries(t *testing.T) {
 	if err := os.MkdirAll(s.Output, 0755); err != nil {
 		t.Fatal(err)
 	}
-	if err := a.initializeStorage(s); err == nil {
+	if err := a.initializeStorageContext(context.Background(), s); err == nil {
 		t.Fatal("accepted resolved config overlap")
 	}
 	for _, value := range []string{"https://user:secret@example.test", "https://example.test/?token=secret", "https://example.test/#fragment"} {

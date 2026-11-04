@@ -602,21 +602,6 @@ func matchingLyrics(record lrclibRecord, source Source) bool {
 	return candidateMatches(lyricsCandidate{Title: record.Title, Artist: record.Artist, Album: record.Album, Duration: record.Duration}, source)
 }
 
-func (a *App) searchLRCLIB(ctx context.Context, source Source) (string, string, error) {
-	if err := validLyricsSearch(source); err != nil {
-		return "", "", err
-	}
-	candidates, instrumental, err := a.providerCandidates(ctx, "lrclib", source, "", false)
-	if err != nil {
-		return "", "", err
-	}
-	if instrumental {
-		return "", "instrumental", nil
-	}
-	text, _, state, err := a.chooseLyrics(ctx, source, candidates, lyricsBatchOptions{MinScore: defaultLyricsMinScore})
-	return text, state, err
-}
-
 func (a *App) lyricsGET(ctx context.Context, endpoint string, target any) (int, error) {
 	return a.lyricsRequest(ctx, "lrclib", "GET", "https://lrclib.net"+endpoint, nil, target)
 }

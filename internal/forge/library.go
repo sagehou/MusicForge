@@ -725,10 +725,6 @@ func (a *App) indexSourceReadError(rel string, info fs.FileInfo, cause error) er
 	return err
 }
 
-func (a *App) queueBuild(source Source, profile Encoding, move, manual bool) (int64, error) {
-	return a.queueBuildTask(source, profile, move, manual, 0)
-}
-
 func (a *App) queueBuildTask(source Source, profile Encoding, move, manual bool, task int64) (int64, error) {
 	kind := "convert"
 	if move {
@@ -1662,9 +1658,6 @@ func (a *App) cleanAlbum(s Settings, dir string) {
 		}
 		dir = filepath.Dir(dir)
 	}
-}
-func (a *App) deleteExpired(ids []int64) error {
-	return a.deleteExpiredContext(context.Background(), ids)
 }
 func (a *App) deleteExpiredContext(ctx context.Context, ids []int64) error {
 	if err := a.lockFiles(ctx); err != nil {

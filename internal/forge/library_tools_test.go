@@ -78,7 +78,7 @@ func TestOutputTagsPreserveAudioLyricsAndRebuildCorrections(t *testing.T) {
 			if hash, err := fileHash(context.Background(), input); err != nil || hash != source.Hash {
 				t.Fatal("source changed", err)
 			}
-			list, err := a.sourcesWithStatus()
+			list, err := a.sourcesWithStatusContext(context.Background())
 			if err == nil {
 				err = a.annotateLyrics(context.Background(), list)
 			}

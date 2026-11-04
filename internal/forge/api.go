@@ -255,9 +255,6 @@ func (a *App) jobResult(w http.ResponseWriter, id int64, err error) {
 	respond(w, 202, map[string]int64{"job_id": id})
 }
 
-func (a *App) sourcesWithStatus() ([]Source, error) {
-	return a.sourcesWithStatusContext(context.Background())
-}
 func (a *App) sourcesWithStatusContext(ctx context.Context) ([]Source, error) {
 	s, err := a.settingsContext(ctx)
 	if err != nil {

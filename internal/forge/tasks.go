@@ -119,9 +119,6 @@ const taskGroups = `WITH members AS (
  LEFT JOIN meta c ON c.key='task-control:'||g.task_id
 ) `
 
-func (a *App) taskList(state string, limit, offset int) ([]Task, int, error) {
-	return a.taskListContext(context.Background(), state, limit, offset)
-}
 func (a *App) taskListContext(ctx context.Context, state string, limit, offset int) ([]Task, int, error) {
 	return a.taskListSelected(ctx, state, limit, offset, nil)
 }
@@ -355,9 +352,6 @@ type repairTarget struct {
 	CanRepair bool   `json:"can_repair"`
 }
 
-func (a *App) taskItems(id int64, state string, limit, offset int) ([]TaskItem, int, error) {
-	return a.taskItemsContext(context.Background(), id, state, limit, offset)
-}
 func (a *App) taskItemsContext(ctx context.Context, id int64, state string, limit, offset int) ([]TaskItem, int, error) {
 	where := " WHERE coalesce(CAST(m.value AS INTEGER),j.id)=?"
 	args := []any{id}

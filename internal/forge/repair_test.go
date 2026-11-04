@@ -142,7 +142,7 @@ func awaitRepair(t *testing.T, a *App, source Source) *RepairStatus {
 		if state := a.repairSnapshot(source); state != nil && state.State != "running" {
 			return state
 		}
-		list, err := a.sourcesWithStatus()
+		list, err := a.sourcesWithStatusContext(context.Background())
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -190,7 +190,7 @@ func TestRepairImportsNormalOutputWithPersistentDamageAnnotation(t *testing.T) {
 			if state.State != "imported" || state.DecodedSamples <= 0 || state.PCMVerified || !strings.Contains(state.Diagnostics, source.Error) {
 				t.Fatal("invalid imported recovery report", state)
 			}
-			history, total, err := a.repairTaskList(context.Background(), "success", 25, 0)
+			history, total, err := a.repairTaskListGroup(context.Background(), "success", 25, 0, "")
 			if err != nil || total != 1 || len(history) != 1 || history[0].SourceID != source.ID || history[0].Progress != 1 || history[0].Log != state.Diagnostics {
 				t.Fatal("successful repair missing from task history", history, total, err)
 			}
@@ -221,14 +221,14 @@ func TestRepairImportsNormalOutputWithPersistentDamageAnnotation(t *testing.T) {
 			if jobs != afterJobs || version != 2 || dirty != 1 {
 				t.Fatal("repair changed schema/job semantics or missed Navidrome scan notification", jobs, afterJobs, version, dirty)
 			}
-			list, err := a.sourcesWithStatus()
+			list, err := a.sourcesWithStatusContext(context.Background())
 			if err != nil || len(list) != 1 || list[0].Status != "possibly_damaged" || !list[0].PossiblyDamaged || list[0].CanRepair {
 				t.Fatal("library lost the damage warning", list, err)
 			}
 			if err = a.scan(context.Background(), ScanRequest{}); err != nil {
 				t.Fatal(err)
 			}
-			list, _ = a.sourcesWithStatus()
+			list, _ = a.sourcesWithStatusContext(context.Background())
 			if !list[0].PossiblyDamaged {
 				t.Fatal("scan erased imported damage annotation")
 			}
@@ -319,7 +319,7 @@ func TestRepairDamagedFrameKeepsStrictConversionStrict(t *testing.T) {
 		t.Fatal("strict rebuild skipped validation of possibly damaged audio")
 	}
 	current, _ := os.ReadFile(filepath.Join(s.Output, imported.Output))
-	list, _ := a.sourcesWithStatus()
+	list, _ := a.sourcesWithStatusContext(context.Background())
 	if !bytes.Equal(output, current) || !list[0].PossiblyDamaged {
 		t.Fatal("failed strict rebuild removed the imported artifact or warning")
 	}
@@ -331,7 +331,7 @@ func TestRepairDamagedFrameKeepsStrictConversionStrict(t *testing.T) {
 		t.Fatal(err)
 	}
 	drain(t, a, true)
-	list, _ = a.sourcesWithStatus()
+	list, _ = a.sourcesWithStatusContext(context.Background())
 	if list[0].Status != "ready" || list[0].PossiblyDamaged || list[0].Repair != nil {
 		t.Fatal("strict conversion of the restored source did not clear the warning", list)
 	}
@@ -371,7 +371,7 @@ func TestRepairAnnotationSurvivesRestartMoveAndPromotionRecovery(t *testing.T) {
 			if err = reopened.ensureRecovery(context.Background(), s); err != nil {
 				t.Fatal(err)
 			}
-			list, err := reopened.sourcesWithStatus()
+			list, err := reopened.sourcesWithStatusContext(context.Background())
 			current, _ := os.ReadFile(artifactPath)
 			if err != nil || len(list) != 1 || list[0].Status != "possibly_damaged" || !list[0].PossiblyDamaged || !bytes.Equal(output, current) {
 				t.Fatal("restart/recovery lost imported audio or damage annotation", list, err)
@@ -386,7 +386,7 @@ func TestRepairAnnotationSurvivesRestartMoveAndPromotionRecovery(t *testing.T) {
 			if err = reopened.build(context.Background(), Job{Kind: "move"}, BuildRequest{ID: source.ID, Hash: source.Hash, Profile: s.Encoding, Move: true}); err != nil {
 				t.Fatal(err)
 			}
-			list, _ = reopened.sourcesWithStatus()
+			list, _ = reopened.sourcesWithStatusContext(context.Background())
 			if list[0].Output != outputRel(next, s.Encoding.Codec) || !list[0].PossiblyDamaged {
 				t.Fatal("normal audio move lost damage annotation", list)
 			}
@@ -437,7 +437,7 @@ func TestRepairAPIRequiresAuthenticationCSRFAndConsentHash(t *testing.T) {
 	if w := send("DELETE", "", true, true); w.Code != 200 {
 		t.Fatal(w.Code, w.Body.String())
 	}
-	list, _ := a.sourcesWithStatus()
+	list, _ := a.sourcesWithStatusContext(context.Background())
 	if !list[0].PossiblyDamaged || !list[0].OutputPresent {
 		t.Fatal("cancel removed an already published output or warning")
 	}
@@ -474,7 +474,7 @@ func TestRepairCancellationAndInvalidPCMDoNotPublish(t *testing.T) {
 				t.Fatal("invalid PCM was imported", state)
 			}
 			a.repairWG.Wait()
-			history, total, err := a.repairTaskList(context.Background(), "all", 25, 0)
+			history, total, err := a.repairTaskListGroup(context.Background(), "all", 25, 0, "")
 			want := "failed"
 			if behavior == "hang" {
 				want = "stopped"

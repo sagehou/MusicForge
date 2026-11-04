@@ -19,7 +19,7 @@ func TestLibraryMediaBackfillsWithoutRebuildingAndRejectsStaleSnapshots(t *testi
 	drain(t, a, true)
 	read := func() Source {
 		t.Helper()
-		list, err := a.sourcesWithStatus()
+		list, err := a.sourcesWithStatusContext(context.Background())
 		if err != nil || len(list) != 1 {
 			t.Fatal("library media snapshot", list, err)
 		}

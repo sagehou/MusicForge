@@ -49,6 +49,22 @@ func mockLRCLIB(t *testing.T, a *App, handler http.HandlerFunc) {
 	})
 }
 
+// Limit this provider fixture to LRCLIB while using the shared matching logic.
+func searchLRCLIB(ctx context.Context, a *App, source Source) (string, string, error) {
+	if err := validLyricsSearch(source); err != nil {
+		return "", "", err
+	}
+	candidates, instrumental, err := a.providerCandidates(ctx, "lrclib", source, "", false)
+	if err != nil {
+		return "", "", err
+	}
+	if instrumental {
+		return "", "instrumental", nil
+	}
+	text, _, state, err := a.chooseLyrics(ctx, source, candidates, lyricsBatchOptions{MinScore: defaultLyricsMinScore})
+	return text, state, err
+}
+
 func TestLRCLIBMatching(t *testing.T) {
 	track := Source{Title: "歌曲", Artist: "Artist & Friend", Album: "Album", Duration: 183.25}
 	good := lrclibRecord{Title: track.Title, Artist: track.Artist, Album: track.Album, Duration: 183, Synced: "[00:01.00]Lyrics"}
@@ -101,7 +117,7 @@ func TestLRCLIBMatching(t *testing.T) {
 					respond(w, 200, test.search)
 				}
 			})
-			text, state, err := a.searchLRCLIB(context.Background(), track)
+			text, state, err := searchLRCLIB(context.Background(), a, track)
 			if err != nil || state != test.state || calls != test.calls || (text != "") != (state == "ready") {
 				t.Fatal("unexpected matching result", state, text, calls, err)
 			}
@@ -112,7 +128,7 @@ func TestLRCLIBMatching(t *testing.T) {
 		instrumental := good
 		instrumental.Instrumental, instrumental.Synced = true, ""
 		mockLRCLIB(t, a, func(w http.ResponseWriter, r *http.Request) { respond(w, 200, instrumental) })
-		if text, state, err := a.searchLRCLIB(context.Background(), track); err != nil || text != "" || state != "instrumental" {
+		if text, state, err := searchLRCLIB(context.Background(), a, track); err != nil || text != "" || state != "instrumental" {
 			t.Fatal("instrumental generated fake lyrics", state, text, err)
 		}
 		a.lyricsRetryAt = time.Time{}
@@ -122,12 +138,12 @@ func TestLRCLIBMatching(t *testing.T) {
 			w.Header().Set("Retry-After", "60")
 			w.WriteHeader(429)
 		})
-		if _, _, err := a.searchLRCLIB(context.Background(), track); err == nil || time.Until(a.lyricsRetryAt) < 59*time.Second {
+		if _, _, err := searchLRCLIB(context.Background(), a, track); err == nil || time.Until(a.lyricsRetryAt) < 59*time.Second {
 			t.Fatal("rate limit or Retry-After ignored", err)
 		}
 		ctx, cancel := context.WithCancel(context.Background())
 		cancel()
-		if _, _, err := a.searchLRCLIB(ctx, track); !errors.Is(err, context.Canceled) || calls != 1 {
+		if _, _, err := searchLRCLIB(ctx, a, track); !errors.Is(err, context.Canceled) || calls != 1 {
 			t.Fatal("cancel did not interrupt throttling", calls, err)
 		}
 	})
@@ -138,10 +154,10 @@ func TestLRCLIBMatching(t *testing.T) {
 			calls++
 			_, _ = io.WriteString(w, "<html>unavailable</html>")
 		})
-		if _, _, err := a.searchLRCLIB(context.Background(), Source{Title: "No artist"}); err == nil || calls != 0 {
+		if _, _, err := searchLRCLIB(context.Background(), a, Source{Title: "No artist"}); err == nil || calls != 0 {
 			t.Fatal("guessed lyrics without tags", err)
 		}
-		if _, _, err := a.searchLRCLIB(context.Background(), track); err == nil {
+		if _, _, err := searchLRCLIB(context.Background(), a, track); err == nil {
 			t.Fatal("accepted a non-JSON service error")
 		}
 	})
@@ -280,7 +296,7 @@ func TestLyricsSourceUpdatesAndArtifactLifecycle(t *testing.T) {
 	if err = a.saveSettings(s); err != nil {
 		t.Fatal(err)
 	}
-	if _, err = a.queueBuild(moved, s.Encoding, false, true); err != nil {
+	if _, err = a.queueBuildTask(moved, s.Encoding, false, true, 0); err != nil {
 		t.Fatal(err)
 	}
 	drain(t, a, true)
@@ -296,7 +312,7 @@ func TestLyricsSourceUpdatesAndArtifactLifecycle(t *testing.T) {
 	if _, err = os.Stat(filepath.Join(s.Output, "Moved/Album/02.lrc")); err != nil {
 		t.Fatal("ordinary source deletion removed lyrics", err)
 	}
-	if err = a.deleteExpired([]int64{moved.ID}); err != nil {
+	if err = a.deleteExpiredContext(context.Background(), []int64{moved.ID}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err = os.Stat(filepath.Join(s.Output, "Moved/Album/02.lrc")); !os.IsNotExist(err) {

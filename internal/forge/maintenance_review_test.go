@@ -247,7 +247,7 @@ func TestBatchTagUndoKeepsConflictsAndRestoresCorrectionPolicy(t *testing.T) {
 	if err != nil || probe.tags()["title"] != "Batch correction" {
 		t.Fatal("conflicting output changed", probe.tags(), err)
 	}
-	sources, err := a.sourcesWithStatus()
+	sources, err := a.sourcesWithStatusContext(context.Background())
 	if err == nil {
 		err = a.annotateLyrics(ctx, sources)
 	}

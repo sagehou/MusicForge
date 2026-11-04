@@ -84,7 +84,7 @@ func TestMixedAudioSourcesBuildAndRemainIncremental(t *testing.T) {
 				t.Fatal(err)
 			}
 			drain(t, a, true)
-			tracks, err := a.sourcesWithStatus()
+			tracks, err := a.sourcesWithStatusContext(context.Background())
 			if err != nil || len(tracks) != len(fixtures) {
 				t.Fatal("mixed sources were skipped", len(tracks), err)
 			}
@@ -267,7 +267,7 @@ func TestSourceFormatReplacementPreservesOutputAndRetries(t *testing.T) {
 					if readErr != nil {
 						t.Fatal(readErr)
 					}
-					if _, err = a.queueBuild(source, s.Encoding, false, true); err != nil {
+					if _, err = a.queueBuildTask(source, s.Encoding, false, true, 0); err != nil {
 						t.Fatal(err)
 					}
 				}
@@ -328,7 +328,7 @@ func TestSourceFormatReplacementPreservesOutputAndRetries(t *testing.T) {
 				t.Fatal("strict rebuild retained the inherited damage warning", list, err)
 			}
 			// Old delete/upgrade work must not remove the successor's artifact.
-			if err = a.deleteExpired([]int64{original.ID}); err != nil {
+			if err = a.deleteExpiredContext(context.Background(), []int64{original.ID}); err != nil {
 				t.Fatal(err)
 			}
 			if err = a.finishUpgrade(ctx, UpgradeRequest{New: []string{newRel}, Old: []string{oldRel}}); err != nil {

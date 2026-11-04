@@ -86,7 +86,7 @@ func TestLoudnessRemuxPreservesAudioAndReadyLyrics(t *testing.T) {
 			if codec == "opus" && (tags["r128_track_gain"] == "" || tags["r128_album_gain"] == "") {
 				t.Fatal("missing Opus R128", tags)
 			}
-			list, err := a.sourcesWithStatus()
+			list, err := a.sourcesWithStatusContext(context.Background())
 			if err == nil {
 				err = a.annotateLyrics(context.Background(), list)
 			}

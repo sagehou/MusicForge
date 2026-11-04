@@ -62,7 +62,7 @@ func TestPromotionAndRestartRecovery(t *testing.T) {
 	_ = os.WriteFile(filepath.Join(s.Output, "Album/.musicforge-owned.part"), []byte("owned"), 0600)
 	foreign := filepath.Join(s.Output, "Album/foreign.part")
 	_ = os.WriteFile(foreign, []byte("foreign"), 0600)
-	jobID, err := a.queueBuild(source, profile, false, true)
+	jobID, err := a.queueBuildTask(source, profile, false, true, 0)
 	if err != nil {
 		t.Fatal(err)
 	}

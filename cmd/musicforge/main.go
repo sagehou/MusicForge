@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
@@ -27,9 +28,43 @@ func main() {
 	configDir := flag.String("config-dir", "/config", "local application data directory")
 	health := flag.Bool("healthcheck", false, "check the running server")
 	reset := flag.Bool("reset-password-stdin", false, "reset the administrator password from stdin; stop the server first")
+	backup := flag.String("backup", "", "back up stopped configuration to a new ZIP outside /config")
+	checkBackup := flag.String("check-backup", "", "verify a backup ZIP without changing the current configuration")
+	restoreBackup := flag.String("restore-backup", "", "restore a backup ZIP into an empty configuration directory; stop the server first")
 	flag.Parse()
 	if value := os.Getenv("MUSICFORGE_CONFIG_DIR"); value != "" {
 		*configDir = value
+	}
+	modes := 0
+	for _, enabled := range []bool{*health, *reset, *backup != "", *checkBackup != "", *restoreBackup != ""} {
+		if enabled {
+			modes++
+		}
+	}
+	if modes > 1 {
+		fmt.Fprintln(os.Stderr, "choose one operation at a time")
+		os.Exit(1)
+	}
+	if *backup != "" || *checkBackup != "" || *restoreBackup != "" {
+		var info forge.BackupInfo
+		var err error
+		switch {
+		case *backup != "":
+			info, err = forge.CreateBackup(*configDir, *backup, version)
+		case *checkBackup != "":
+			info, err = forge.CheckBackup(*checkBackup)
+		default:
+			info, err = forge.RestoreBackup(*restoreBackup, *configDir)
+		}
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		if err = json.NewEncoder(os.Stdout).Encode(info); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		return
 	}
 	cfg, err := forge.LoadRuntime(*configDir)
 	if err != nil {

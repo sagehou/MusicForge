@@ -1132,5 +1132,18 @@
   "error.librarySelectionLimit": "每次最多选择 10000 首歌曲",
   "error.libraryIDs": "音乐库记录编号必须为正数",
   "error.libraryRefresh": "刷新时音乐库发生了变化，请重试",
-  "error.libraryTrackGone": "这首歌已不在音乐库中"
+  "error.libraryTrackGone": "这首歌已不在音乐库中",
+  "lyrics.resume": "继续剩余 {count} 首",
+  "lyrics.resumeHint": "每处理一首都会保存进度。继续时使用当前歌词设置，只处理保存的剩余曲目；开始新批次会替换此记录。",
+  "lyricsEdit.lines": "逐行编辑",
+  "lyricsEdit.shortcuts": "时间单位为秒。在行内按 Alt + ←／→ 微调 100 毫秒，Alt + Enter 对齐播放位置。重复时间戳共用该行文字，译文可单独调整。",
+  "lyricsEdit.lineTime": "第 {line} 行时间（秒）",
+  "lyricsEdit.lineText": "第 {line} 行文字",
+  "lyricsEdit.earlier": "第 {line} 行提前 100 毫秒",
+  "lyricsEdit.later": "第 {line} 行延后 100 毫秒",
+  "lyricsEdit.auditionLine": "试听第 {line} 行",
+  "lyricsEdit.lineAlign": "对齐播放位置",
+  "error.lyricsResumeEmpty": "没有可继续的歌词批次",
+  "error.lyricsResumePaths": "请先恢复此批次的音乐库路径并启用音乐库，再继续处理",
+  "error.lyricsResumeFailed": "暂时无法继续歌词批次，请检查设置和配置目录是否可写"
 }

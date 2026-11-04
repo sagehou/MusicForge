@@ -159,11 +159,34 @@ docker compose -f docker-compose.yml -f docker-compose.netease.yml up -d
 
 自动化覆盖范围与限制见[验收说明](acceptance.zh-CN.md)。
 
+## 备份与恢复
+
+v0.3.0 起提供以下命令。先停止应用，准备一个由容器 UID／GID 可写、位于配置目录外的备份目录，例如 `./backups`：
+
+```sh
+docker compose stop musicforge
+mkdir -p backups
+# 按 .env 中的 PUID／PGID 设置 backups 的所有者。
+docker compose run --rm --no-deps -v "$PWD/backups:/backups" musicforge -backup /backups/config.zip
+docker compose run --rm --no-deps -v "$PWD/backups:/backups:ro" musicforge -check-backup /backups/config.zip
+```
+
+命令输出版本、schema、备份时间、实例 ID 和库路径。备份包括 `/config` 中的数据库、凭据和编辑历史，跳过暂存文件；不会覆盖已有 ZIP。检查会完整读取归档并检查数据库，不改动当前配置。备份按账号凭据保管。源音乐、输出音乐、`.env` 和单独挂载的密钥不在此归档内；趁应用仍停止时保存配套输出快照，完成后再启动。
+
+恢复前，准备一个**新的空配置目录**并赋予相同 UID／GID。把下面的宿主机路径换成该目录：
+
+```sh
+CONFIG_DIR=/srv/musicforge/restored-config docker compose run --rm --no-deps \
+  -v "$PWD/backups:/backups:ro" musicforge -restore-backup /backups/config.zip
+```
+
+恢复会先验证归档和数据库，拒绝非空目录；原配置仍保留，可以先用新目录演练。核对命令输出的版本和库路径，完整恢复时还原同一停机时点的输出快照，再把 `.env` 的 `CONFIG_DIR` 指向恢复目录并启动应用。只恢复配置不会撤销已完成的文件替换或删除。备份命令也能读取兼容的 v0.2.x schema-2 配置，应用必须先停止。
+
 ## 升级与回滚
 
 先停止 MusicForge，备份整个 `/config`，记录旧镜像版本。需要完整恢复库状态时，在仍停止的情况下保存配套输出快照，并独立备份源音乐。修改 `MUSICFORGE_VERSION`，再使用平时的覆盖文件运行 `docker compose pull` 和 `docker compose up -d`。
 
-`0.2.x` 使用 schema 2，保持已发布的持久化格式和含义。同系列**软件回滚**可以复用当前配置：禁用后台工作、停止应用、固定到旧镜像，再检查账号、音乐库和任务。旧版可能不理解较新的可选维护功能，返回支持该功能的版本前请保持后台工作关闭。不要手动降低 SQLite `user_version`；0.1 版需要恢复与其匹配的升级前备份。
+`0.2.x` 与 `0.3.x` 使用 schema 2，保持已发布的持久化格式和含义。同系列**软件回滚**可以复用当前配置：禁用后台工作、停止应用、固定到旧镜像，再检查账号、音乐库和任务。旧版可能不理解较新的可选维护功能，返回支持该功能的版本前请保持后台工作关闭。不要手动降低 SQLite `user_version`；0.1 版需要恢复与其匹配的升级前备份。
 
 软件回滚保留的是当前库状态。只有恢复同一停机时点的配置／输出快照，才能回到升级前；切换镜像不会撤销已完成的替换、搬迁或删除。已发布版本标签和镜像不会通过覆盖来实现回滚。
 

@@ -231,3 +231,68 @@ func TestLyricsFillRetryPolicy(t *testing.T) {
 		}
 	}
 }
+
+func TestLyricsBatchContinuesOnlyRemainingTracksAfterRestart(t *testing.T) {
+	a, settings := testApp(t)
+	seedLyricsArtifact(t, a, settings)
+	if _, err := a.db.Exec(`INSERT INTO sources(id,rel,hash,built_hash,artist,album,title,duration,output,output_present)
+	 VALUES(2,'Album/02.flac','second','second','Artist','Album','Second',183,'Album/02.opus',1)`); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(settings.Output, "Album/02.opus"), []byte("second audio"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := a.db.Exec("INSERT INTO managed(path,source_id,kind,signature) VALUES('Album/02.opus',2,'audio',?)", digest("second audio")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(settings.Source, "Album/01.lrc"), []byte("[00:01.00]First"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	entered := make(chan struct{}, 1)
+	a.lyricsHTTP = &http.Client{Transport: lyricsTransport(func(r *http.Request) (*http.Response, error) {
+		select { case entered <- struct{}{}: default: }
+		<-r.Context().Done()
+		return nil, r.Context().Err()
+	})}
+	request := lyricsSession(t, a)
+	if w := request("PUT", "/api/lyrics/options", map[string]any{"auto_search": true, "providers": []string{"lrclib"}}); w.Code != 200 {
+		t.Fatal(w.Code, w.Body.String())
+	}
+	if w := request("POST", "/api/lyrics/search", map[string]any{"all": true}); w.Code != 202 {
+		t.Fatal(w.Code, w.Body.String())
+	}
+	select {
+	case <-entered:
+	case <-time.After(5 * time.Second):
+		t.Fatal("second track did not start")
+	}
+	before, _ := a.meta("lyrics-status:1")
+	cfg, logger, assets := a.cfg, a.logger, a.assets
+	a.Close()
+	reopened, err := New(cfg, logger, "test", assets)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer reopened.Close()
+	if report := reopened.lyricsReport; report.State != "stopped" || report.Processed != 1 || report.Found != 1 || !report.Resumable || report.Remaining != 1 {
+		t.Fatal("batch progress was not restored", report)
+	}
+	// The scheduler must leave an interrupted batch waiting for explicit continuation.
+	reopened.scheduleLyrics(settings)
+	if reopened.lyricsCancel != nil {
+		t.Fatal("interrupted batch started automatically")
+	}
+	if err = os.WriteFile(filepath.Join(settings.Source, "Album/02.lrc"), []byte("[00:02.00]Second"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	request = lyricsSession(t, reopened)
+	if w := request("POST", "/api/lyrics/resume", nil); w.Code != 202 {
+		t.Fatal(w.Code, w.Body.String())
+	}
+	if report := waitLyrics(t, reopened); report.Processed != 2 || report.Total != 2 || report.Found != 2 || report.Resumable || report.Remaining != 0 {
+		t.Fatal("continuation lost counts or repeated completed tracks", report)
+	}
+	if after, err := reopened.meta("lyrics-status:1"); err != nil || after != before {
+		t.Fatal("continuation rewrote the completed track", after, err)
+	}
+}

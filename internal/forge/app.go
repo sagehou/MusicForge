@@ -15,7 +15,6 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
 )
 
@@ -92,13 +91,9 @@ func New(cfg Runtime, logger *slog.Logger, version string, assets fs.FS) (*App, 
 	if err := os.Chmod(cfg.ConfigDir, 0700); err != nil {
 		return nil, fmt.Errorf("secure configuration directory: %w", err)
 	}
-	lock, err := os.OpenFile(filepath.Join(cfg.ConfigDir, "instance.lock"), os.O_CREATE|os.O_RDWR, 0600)
+	lock, err := lockConfiguration(cfg.ConfigDir)
 	if err != nil {
 		return nil, err
-	}
-	if err = syscall.Flock(int(lock.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil {
-		lock.Close()
-		return nil, errors.New("another MusicForge process owns /config")
 	}
 	db, err := openDB(filepath.Join(cfg.ConfigDir, "musicforge.db"))
 	if err != nil {
@@ -119,6 +114,9 @@ func New(cfg Runtime, logger *slog.Logger, version string, assets fs.FS) (*App, 
 		return fail(err)
 	}
 	if err = a.recoverOperations(); err != nil {
+		return fail(err)
+	}
+	if err = a.restoreLyricsBatch(); err != nil {
 		return fail(err)
 	}
 	if _, err = a.settings(); err == sql.ErrNoRows {

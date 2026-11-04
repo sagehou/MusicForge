@@ -14,6 +14,7 @@ class RollbackSelectionTests(unittest.TestCase):
     def test_daily_run_uses_only_the_published_predecessor(self):
         self.assertEqual(rollback.selected_releases("v0.2.49"), {"v0.2.49": rollback.LEGACY["v0.2.49"]})
         self.assertEqual(rollback.selected_releases("v0.2.99"), {"v0.2.99": None})
+        self.assertEqual(rollback.selected_releases("v0.3.0"), {"v0.3.0": None})
 
     def test_historical_run_retains_pins_and_excludes_the_candidate(self):
         selected = rollback.selected_releases("v0.2.48", True, "v0.2.49")
@@ -22,7 +23,7 @@ class RollbackSelectionTests(unittest.TestCase):
         self.assertEqual(selected["v0.2.48"], rollback.LEGACY["v0.2.48"])
 
     def test_missing_or_unrelated_baselines_fail_closed(self):
-        for baseline in (None, "", "v0.1.0", "v0.3.0", "v0.2.50-rc1"):
+        for baseline in (None, "", "v0.1.0", "v0.4.0", "v0.2.50-rc1"):
             with self.assertRaises(ValueError):
                 rollback.selected_releases(baseline)
         with self.assertRaises(ValueError):
@@ -31,7 +32,7 @@ class RollbackSelectionTests(unittest.TestCase):
     def test_lyrics_option_writes_preserve_the_release_supported_order(self):
         providers = ["amll", "petitlyrics", "unison", "lrclib", "migu"]
         for version, expected in (("v0.2.58", ["petitlyrics", "lrclib", "migu"]),
-                                  ("v0.2.59", providers), ("v0.2.99", providers)):
+                                  ("v0.2.59", providers), ("v0.2.99", providers), ("v0.3.0", providers)):
             with self.subTest(version=version):
                 api = Mock(side_effect=[{"options": {"providers": expected}}, {"providers": expected}, {}, {}])
                 rollback.verify_lyrics_options(api, version, providers)

@@ -79,13 +79,14 @@ test("maintenance progress and grouped recovery reuse exact existing actions", a
   await mock(page);
   await page.route("**/api/jobs?*", route => route.fulfill({ json: { jobs: [], total: 0 } }));
   const base = { total: 2, processed: 1, updated: 1, failed: 0, skipped: 0, state: "running", current: "Artist/Album/01.opus" };
-  let stopped = false;
-  await page.route("**/api/maintenance/progress", route => route.fulfill({ json: { reports: [{ ...base, kind: "lyrics", skipped: 18 }, { ...base, kind: "loudness", waiting_reason: stopped ? undefined : "schedule", state: stopped ? "stopped" : "running" }, { ...base, kind: "storage", state: "stopped" }], cooldowns: [{ provider: "migu", retry_at: 1800000000 }] } }));
+  let stopped = false, resumed = false;
+  await page.route("**/api/maintenance/progress", route => route.fulfill({ json: { reports: [{ ...base, kind: "lyrics", skipped: 18, state: resumed ? "running" : "stopped", remaining: 1, resumable: !resumed }, { ...base, kind: "loudness", waiting_reason: stopped ? undefined : "schedule", state: stopped ? "stopped" : "running" }, { ...base, kind: "storage", state: "stopped" }], cooldowns: [{ provider: "migu", retry_at: 1800000000 }] } }));
   await page.route("**/api/maintenance/failures", route => route.fulfill({ json: [
     { reason: "decode", jobs: 4, retryable_jobs: 2, lyrics: 0, lyric_ids: [], samples: [{ kind: "jobs", id: 9, error: "Audio decoding failed" }] },
     { reason: "rate_limit", jobs: 0, retryable_jobs: 0, lyrics: 1, lyric_ids: [7], samples: [{ kind: "lyrics", id: 7, path: "Artist/Album/07.flac", error: "migu lyrics service is cooling down; retry later" }] },
   ] }));
   const writes: { path: string; body?: unknown }[] = [];
+  await page.route("**/api/lyrics/resume", route => { expect(route.request().method()).toBe("POST"); resumed = true; writes.push({ path: "/lyrics/resume" }); return route.fulfill({ status: 202, json: { selected: 1 } }); });
   let fail = true;
   await page.route("**/api/jobs/control", route => {
     writes.push({ path: "/jobs/control", body: route.request().postDataJSON() });
@@ -98,8 +99,12 @@ test("maintenance progress and grouped recovery reuse exact existing actions", a
   await expect(progress).toHaveAccessibleName("Maintenance progress");
   await expect(progress).toContainText("Waiting for the configured maintenance window");
   await expect(progress).toContainText("skipped 18");
-  await expect(progress.getByRole("progressbar", { name: "LRC lyrics", exact: true })).toBeVisible();
+  await expect(progress.getByRole("button", { name: "Continue 1 remaining tracks", exact: true })).toBeVisible();
   expect(writes).toHaveLength(0);
+  await progress.getByRole("button", { name: "Continue 1 remaining tracks", exact: true }).click();
+  await expect(progress.getByRole("progressbar", { name: "LRC lyrics", exact: true })).toBeVisible();
+  expect(writes).toEqual([{ path: "/lyrics/resume" }]);
+  writes.length = 0;
   await page.locator(".maintenance-failures > summary").click();
   const decode = page.getByRole("region", { name: "Audio decoding", exact: true });
   await expect(decode).toContainText("Paused, stopped or still active queues are preserved");

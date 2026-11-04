@@ -9,6 +9,8 @@ type maintenanceProgress struct {
 	Kind string `json:"kind"`
 	loudnessReport
 	Stopping bool `json:"stopping,omitempty"`
+	Remaining int `json:"remaining,omitempty"`
+	Resumable bool `json:"resumable,omitempty"`
 }
 
 // Snapshots use existing in-memory reports and schema-2 metadata only. Polling
@@ -20,7 +22,7 @@ func (a *App) getMaintenanceProgress(w http.ResponseWriter, r *http.Request) {
 		reports = append(reports, maintenanceProgress{Kind: "lyrics", loudnessReport: loudnessReport{
 			State: report.State, Total: report.Total, Processed: report.Processed, Updated: report.Found,
 			Skipped: report.Skipped, Failed: report.Failed, Current: report.Current, Error: report.Error,
-		}, Stopping: report.Stopping})
+		}, Stopping: report.Stopping, Remaining: report.Remaining, Resumable: report.Resumable})
 	}
 	type cooldown struct {
 		Provider string `json:"provider"`

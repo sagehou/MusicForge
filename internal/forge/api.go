@@ -158,6 +158,7 @@ func (a *App) Handler() http.Handler {
 	mux.HandleFunc("PUT /api/lyrics/options", a.auth(a.putLyricsOptions))
 	mux.HandleFunc("POST /api/lyrics/search", a.auth(a.requestLyrics))
 	mux.HandleFunc("DELETE /api/lyrics/search", a.auth(a.stopLyrics))
+	mux.HandleFunc("POST /api/lyrics/resume", a.auth(a.resumeLyrics))
 	mux.HandleFunc("POST /api/library/{id}/lyrics/candidates", a.auth(a.requestLyricsCandidates))
 	mux.HandleFunc("GET /api/library/{id}/lyrics/candidates", a.auth(a.getLyricsCandidates))
 	mux.HandleFunc("POST /api/library/{id}/lyrics/preview", a.auth(a.previewLyricsCandidate))

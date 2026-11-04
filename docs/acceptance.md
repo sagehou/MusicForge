@@ -20,7 +20,8 @@ These runs establish the published reference, not automatic approval of later ch
 | --- | --- |
 | Audio lifecycle | Real mixed-format inputs to Opus/MP3, VBR/CBR, tags, ReplayGain, artwork, decoding validation and failed-replacement retention |
 | Incremental work | Unchanged scans, full hashes, moves versus copies, filename conflicts, source deletion retention and explicit cleanup |
-| Jobs and recovery | Coalesced scans, retry budgets, pause/resume/stop, restart recovery, concurrent controls and publication/deletion journals |
+| Backup | Stopped config ZIP, integrity checking, empty-directory restore/reopen and native commands on both architectures |
+| Jobs and recovery | Coalesced scans, retry budgets, pause/resume/stop, restart recovery, explicit lyric-batch continuation, concurrent controls and publication/deletion journals |
 | Mounted sources | Real rclone WebDAV/FUSE reads without VFS caching, stalls, byte progress, pause/resume, timeout/recovery and mount identity |
 | Lyrics | Provider response fixtures, identity/duration matching, real LRC/TTML timing, priorities, caching, passive provider status/manual checks, mismatch explanations, explicit selection and ownership conflicts; ready results skip I/O across repeated filling and restart |
 | Maintenance | Output-only editing, signature/conflict checks, loudness, history/undo, playlist mapping, duplicate clues and storage reports |

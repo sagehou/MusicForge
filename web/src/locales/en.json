@@ -1174,5 +1174,18 @@
   "error.librarySelectionLimit": "Select at most 10000 tracks at a time",
   "error.libraryIDs": "Library record IDs must be positive",
   "error.libraryRefresh": "Library changed while refreshing; please retry",
-  "error.libraryTrackGone": "Library track is no longer available"
+  "error.libraryTrackGone": "Library track is no longer available",
+  "lyrics.resume": "Continue {count} remaining tracks",
+  "lyrics.resumeHint": "Progress is saved after each track. Continue processes only the saved remaining tracks using the current lyric settings. Starting a new batch replaces this saved batch.",
+  "lyricsEdit.lines": "Edit individual lines",
+  "lyricsEdit.shortcuts": "Times are in seconds. Within a row: Alt + ← / → adjusts by 100 ms; Alt + Enter uses the playhead. Repeated timestamps share their line text; translations remain separate.",
+  "lyricsEdit.lineTime": "Line {line} time (seconds)",
+  "lyricsEdit.lineText": "Line {line} text",
+  "lyricsEdit.earlier": "Line {line} 100 ms earlier",
+  "lyricsEdit.later": "Line {line} 100 ms later",
+  "lyricsEdit.auditionLine": "Audition line {line}",
+  "lyricsEdit.lineAlign": "Use playhead",
+  "error.lyricsResumeEmpty": "No stopped lyrics batch to continue",
+  "error.lyricsResumePaths": "Restore the batch's library paths and enable the library before continuing",
+  "error.lyricsResumeFailed": "Could not continue lyrics batch; check settings and configuration storage"
 }

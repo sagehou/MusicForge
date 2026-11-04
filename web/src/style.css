@@ -2247,6 +2247,13 @@ input[role="switch"]:checked::after { transform: translateX(20px); background: v
 .lyrics-editor textarea { width: 100%; font-family: var(--font-mono); resize: vertical; }
 .lyrics-editor input[type="number"] { width: 110px; min-width: 0; }
 .lyrics-editor select { min-width: 0; width: 100%; }
+.lyric-line-editor { min-width: 0; }
+.lyric-line-editor > p { margin-block: 8px; color: var(--muted); font-size: var(--font-size-small); }
+.lyric-edit-rows { max-height: 340px; overflow-y: auto; padding: 3px; }
+.lyric-edit-row { display: grid; gap: 6px; padding-block: 10px; border-bottom: 1px solid var(--line); }
+.lyric-edit-row .actions { flex-wrap: wrap; }
+.lyric-edit-row input[type="text"] { width: 100%; min-width: 0; }
+.lyric-edit-number { min-width: 2ch; color: var(--muted); font-variant-numeric: tabular-nums; }
 .artwork-editor-preview img { width: 180px; max-width: 100%; max-height: 240px; object-fit: contain; margin-bottom: 12px; border-radius: var(--radius-artwork); }
 
 .library-tools { display: grid; gap: 8px; min-width: 0; }

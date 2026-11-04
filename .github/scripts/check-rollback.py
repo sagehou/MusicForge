@@ -64,7 +64,7 @@ LEGACY = {
 
 
 def selected_releases(baseline, extended=False, current_tag=""):
-    if not isinstance(baseline, str) or not re.fullmatch(r"v0\.2\.\d+", baseline) or baseline == current_tag:
+    if not isinstance(baseline, str) or not re.fullmatch(r"v0\.[23]\.\d+", baseline) or baseline == current_tag:
         raise ValueError("A previous published schema-2 stable release is required for rollback")
     # Daily acceptance checks the actual published predecessor. Historical
     # compatibility remains an explicit maintenance run, not a growing tax.
@@ -166,7 +166,7 @@ def stop():
 def snapshot():
     # Stop first so WAL and files represent the same completed application state.
     with sqlite3.connect(f"file:{ROOT / 'config/musicforge.db'}?mode=ro", uri=True) as db:
-        assert db.execute("PRAGMA user_version").fetchone()[0] == 2, "0.2.x schema contract changed"
+        assert db.execute("PRAGMA user_version").fetchone()[0] == 2, "schema-2 compatibility contract changed"
         assert db.execute("PRAGMA integrity_check").fetchone()[0] == "ok", "database integrity failure"
         tables = ("meta", "settings", "admin", "sources", "managed", "jobs", "migrations", "dirty_dirs", "oidc_flows")
         result = {table: db.execute(f"SELECT * FROM {table} ORDER BY 1").fetchall() for table in tables}
@@ -220,14 +220,14 @@ def verify(api, expected_tracks, pending, stopped):
 
 
 def verify_lyrics_options(api, version, providers):
-    patch = int(version.removeprefix("v0.2."))
-    if patch < 31:
+    release = tuple(map(int, version.removeprefix("v").split(".")))
+    if release < (0, 2, 31):
         return
     options = api("/api/lyrics")["options"]
     if "providers" in options:
         # v0.2.59 added community sources; saving only seven-source names there
         # would explicitly disable the community choices we intend to preserve.
-        expected = providers if patch >= 59 else [provider for provider in providers if provider not in ("amll", "unison")]
+        expected = providers if release >= (0, 2, 59) else [provider for provider in providers if provider not in ("amll", "unison")]
         assert options["providers"] == expected, "rollback reader changed the supported provider order"
         written = api("/api/lyrics/options", "PUT", {"providers": expected})
         assert written["providers"] == expected, "rollback writer changed the supported provider order"
@@ -434,6 +434,11 @@ def main():
                         "duration": 0 if provider == "amll" else 2}}]}
                 db.execute("INSERT INTO meta(key,value) VALUES(?,?)",
                            ("lyrics-search:" + str(online_track["id"]) + ":" + suffix * 64, json.dumps(community_search)))
+            batch = {"version": 1, "source": "/music/source", "output": "/music/output", "options": {"refresh": False},
+                     "remaining": [{"id": lyrics_track["id"], "path": lyrics_track["path"]}], "report": {"state": "stopped", "mode": "fill", "total": 2,
+                     "processed": 1, "found": 1, "not_found": 0, "failed": 0}}
+            db.execute("INSERT INTO meta(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+                       ("lyrics:batch", json.dumps(batch)))
         expected = snapshot()
         held = next(row for row in expected["jobs"] if row[0] == pending)
         assert held[4] == "pending" and held[8] == 253402300799, "paused task changed schema-2 job semantics"
@@ -466,6 +471,8 @@ def main():
                     assert all(item["provider"] in published_lyric_providers + ["kuwo"] for item in online_lyrics.get("additional_attempts", [])), "community diagnosis reached published additional-provider labels"
                 if actual_image == CANDIDATE:
                     assert api("/api/lyrics")["options"] == {"auto_search": False, "min_score": 98, "providers": lyric_providers}, "older option/Stop writer lost lyrics settings"
+                    report = api("/api/lyrics")["report"]
+                    assert report["state"] == "stopped" and report["resumable"] and report["remaining"] == 1 and report["processed"] == 1, "lyric batch continuation lost through rollback"
                     restored_track = next(row for row in api("/api/library") if row["path"] == "Album/01.flac")
                     assert restored_track.get("lyrics_script") == "traditional", "older writer lost script classification"
                     restored_lyrics = next(row for row in api("/api/library") if row["path"] == "Album/01.flac").get("lyrics")
@@ -481,6 +488,17 @@ def main():
                 assert not changed, "rollback changed persisted state: " + ", ".join(changed)
             evidence.append({"release": version, "manifest": digest, "image_id": docker("image", "inspect", "--format", "{{.Id}}", image).strip(), "round_trip": "passed"})
             print("Passed: candidate -> " + version + " -> candidate on the same config/source/output", flush=True)
+        # Exercise the shipped backup commands on this architecture, while stopped.
+        for name in ("backups", "restored-config"):
+            (ROOT / name).mkdir(exist_ok=True)
+        backup_args = ("run", "--rm", "--user", f"{os.getuid()}:{os.getgid()}",
+                       "-v", f"{ROOT / 'config'}:/config", "-v", f"{ROOT / 'backups'}:/backups", CANDIDATE)
+        saved = json.loads(docker(*backup_args, "-backup", "/backups/config.zip"))
+        assert json.loads(docker(*backup_args, "-check-backup", "/backups/config.zip")) == saved
+        restored = docker("run", "--rm", "--user", f"{os.getuid()}:{os.getgid()}",
+                          "-v", f"{ROOT / 'restored-config'}:/config", "-v", f"{ROOT / 'backups'}:/backups:ro",
+                          CANDIDATE, "-restore-backup", "/backups/config.zip")
+        assert json.loads(restored) == saved and saved["schema"] == 2, "native backup/restore failed"
         pending_checks = []
         for version, digest in releases.items():
             rel = "Pending/" + version + ".flac"
@@ -518,7 +536,7 @@ def main():
             assert library_record(restored) == library_record(row), "candidate cannot reopen older worker's completed artifact"
             stop()
             pending_checks.append({"release": version, "pending_verify_then_old_worker_build": "passed", "source_hash": expected_hash})
-        Path(".ci/rollback-evidence.json").write_text(json.dumps({"architecture": os.environ["ARCH"], "schema": 2, "source_format_replacement": "passed", "instrumental_placeholder": "passed", "additional_lyrics_provider": "passed", "community_lyrics_provider": "passed", "output_maintenance": "passed", "maintenance_review_and_undo": "passed", "checks": evidence, "pending_verification_checks": pending_checks}, indent=2) + "\n")
+        Path(".ci/rollback-evidence.json").write_text(json.dumps({"architecture": os.environ["ARCH"], "schema": 2, "source_format_replacement": "passed", "instrumental_placeholder": "passed", "additional_lyrics_provider": "passed", "community_lyrics_provider": "passed", "output_maintenance": "passed", "maintenance_review_and_undo": "passed", "lyrics_batch_continuation": "passed", "stopped_backup_restore": "passed", "checks": evidence, "pending_verification_checks": pending_checks}, indent=2) + "\n")
     finally:
         subprocess.run(["docker", "rm", "-f", NAME], capture_output=True)
 

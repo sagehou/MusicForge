@@ -33,6 +33,32 @@ export function lyricsTimeline(lrc: string): LyricCue[] {
   return [...groups].sort(([a], [b]) => a - b).map(([time, lines]) => ({ time, text: lines.join("\n") }));
 }
 
+export type LyricRow = { line: number; stamp: number; time: number; text: string };
+
+export function lyricRows(text: string): LyricRow[] {
+  const rows: LyricRow[] = [];
+  text.split(/\r?\n/).forEach((line, index) => {
+    const stamps = line.match(/^(?:\[\d{1,4}:[0-5]\d(?:[.:]\d{1,3})?\])+/)?.[0];
+    if (!stamps) return;
+    [...stamps.matchAll(/\[(\d+):([0-5]\d)(?:[.:](\d{1,3}))?\]/g)].forEach((match, stamp) => {
+      rows.push({ line: index, stamp, time: Number(match[1]) * 60 + Number(match[2]) + Number(`0.${match[3] || 0}`), text: line.slice(stamps.length) });
+    });
+  });
+  return rows;
+}
+
+// Edit one occurrence, retaining metadata, repeated stamps and separate translations.
+// The editor bakes offsets into text with shiftLyrics before constructing these rows.
+export function editLyricRow(text: string, row: LyricRow, time: number, content: string): string {
+  const lines = text.split(/\r?\n/);
+  const millis = Math.round(Math.max(0, Math.min(599999.999, time)) * 1000);
+  const stamp = `[${String(Math.floor(millis / 60000)).padStart(2, "0")}:${String(Math.floor(millis / 1000) % 60).padStart(2, "0")}.${String(millis % 1000).padStart(3, "0")}]`;
+  const stamps = lines[row.line].match(/^(?:\[\d{1,4}:[0-5]\d(?:[.:]\d{1,3})?\])+/)![0];
+  let index = 0;
+  lines[row.line] = stamps.replace(/\[[^\]]+\]/g, value => index++ === row.stamp ? stamp : value) + content;
+  return lines.join("\n");
+}
+
 export function activeLyric(cues: LyricCue[], time: number): number {
   let low = 0, high = cues.length;
   while (low < high) {

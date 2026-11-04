@@ -20,7 +20,8 @@ class RollbackScopeTests(unittest.TestCase):
                     for tag, draft, prerelease in (("v0.2.9", False, False), ("v0.2.22", False, False),
                                                    ("v0.2.23", False, False), ("v0.2.24", True, False),
                                                    ("v0.2.25-rc.1", False, True), ("v0.3.0", False, False))]
-        self.assertEqual(scope.baseline_release(releases, "v0.2.23"), "v0.2.22")
+        self.assertEqual(scope.baseline_release(releases, "v0.2.23"), "v0.3.0")
+        self.assertEqual(scope.baseline_release(releases, "v0.3.0"), "v0.2.23")
         self.assertIsNone(scope.baseline_release([], ""))
 
     def test_only_known_paths_can_skip(self):

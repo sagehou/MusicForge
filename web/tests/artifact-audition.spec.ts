@@ -142,6 +142,49 @@ test("lyric clicks and keyboard seeking update the audio, slider and follow stat
   await expectCurrentVisible(panel);
 });
 
+test("individual lyric lines keep repeats and translations while editing and auditioning", async ({ page }) => {
+  await mockAudition(page);
+  const draft = "[ti:Nightfall]\n[offset:500]\n[00:01.000][00:03.000]Original\n[00:01.000]译文\n";
+  const writes: unknown[] = [];
+  await page.route("**/api/library/91/lyrics/edit", route => {
+    if (route.request().method() === "GET") return route.fulfill({ json: { token: "edit", text: draft } });
+    const body = route.request().postDataJSON(); writes.push(body);
+    return route.fulfill({ json: { text: body.text } });
+  });
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.goto("/library?view=tracks");
+  await page.getByRole("button", { name: "Audition Nightfall", exact: true }).click();
+  await page.getByRole("button", { name: "Edit lyrics / timing", exact: true }).click();
+  const editor = page.locator(".lyrics-editor"), audio = page.locator(".artifact-audition audio");
+  await editor.locator(".lyric-line-editor > summary").click();
+  await editor.getByRole("button", { name: "Line 1 100 ms later", exact: true }).click();
+  const time = editor.getByLabel("Line 1 time (seconds)", { exact: true });
+  await time.focus(); await time.press("Alt+ArrowRight");
+  await expect(time).toHaveValue("0.7");
+  await editor.getByLabel("Line 1 text", { exact: true }).fill("Edited");
+  await expect(editor.getByLabel("Line 2 text", { exact: true })).toHaveValue("Edited");
+  await expect(editor.getByLabel("Line 3 text", { exact: true })).toHaveValue("译文");
+  await expect(editor.getByLabel("Line 2 time (seconds)", { exact: true })).toHaveValue("2.5");
+  await editor.getByRole("button", { name: "Audition line 2", exact: true }).click();
+  await expect.poll(() => audio.evaluate(node => (node as HTMLAudioElement).currentTime)).toBeGreaterThanOrEqual(2.5);
+  await page.getByRole("button", { name: "Pause audition", exact: true }).click();
+  await audio.evaluate(node => { (node as HTMLAudioElement).currentTime = 12.345; node.dispatchEvent(new Event("timeupdate")); });
+  const translationTime = editor.getByLabel("Line 3 time (seconds)", { exact: true });
+  await translationTime.focus(); await translationTime.press("Alt+Enter");
+  await expect(translationTime).toHaveValue("12.345");
+  const expected = "[ti:Nightfall]\n[00:00.700][00:02.500]Edited\n[00:12.345]译文\n";
+  await expect(editor.getByLabel("LRC text", { exact: true })).toHaveValue(expected);
+  expect(writes).toEqual([]);
+  await editor.screenshot({ path: "test-results/lyric-lines-desktop-light-en.png", animations: "disabled" });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await setPreference(page, "theme", "dark"); await setPreference(page, "language", "zh-CN");
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
+  await editor.screenshot({ path: "test-results/lyric-lines-phone-dark-zh.png", animations: "disabled" });
+  await editor.getByRole("button", { name: "保存输出歌词", exact: true }).click();
+  await expect.poll(() => writes.length).toBe(1);
+  expect(writes[0]).toEqual({ token: "edit", text: expected, delay_ms: 0 });
+});
+
 test("switching, collapsing, other details and navigation release the previous audio", async ({ page }) => {
   await mockAudition(page);
   await page.goto("/library?view=tracks");

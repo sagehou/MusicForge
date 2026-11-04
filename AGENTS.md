@@ -2,6 +2,11 @@
 
 The agreed MVP baseline is recorded in [docs/mvp-design.md](docs/mvp-design.md).
 
+## Keep implementation small
+
+- Reuse existing mechanisms and implement the requested behavior directly. Do not add abstractions, configuration, fallback paths or repeated internal validation for hypothetical cases. Keep validation at external boundaries and safeguards that prevent data loss, unauthorized access or incompatible persistence.
+- Tests should cover observable behavior and relevant failure paths. Extend an existing check when it already covers the flow; avoid duplicating the same guarantee across layers or writing tests just to exercise defensive branches. Remove redundant checks when useful coverage remains. Select acceptance by the rules below and expand it only for changed inputs, failures, concrete unresolved concerns or required gates.
+
 ## Change-scoped acceptance
 
 - Choose acceptance by the complete change from the latest published stable release, including earlier unreleased commits. A trusted successful full CI run on an ancestor may cover inherited work; record that run and inspect its entire remaining diff. Persistence rollback always retains the published-release baseline. Pure UI means styling, layout, icons or display copy with unchanged event handling, API calls, authentication, settings, browser persistence and state semantics. A frontend file path alone does not establish this. Mixed, dependency, deployment, workflow or uncertain changes use the full applicable validation.
@@ -26,7 +31,7 @@ The agreed MVP baseline is recorded in [docs/mvp-design.md](docs/mvp-design.md).
 
 ## Persistence compatibility and rollback
 
-- Schema 2 is the stable MVP persistence baseline. The `0.2.x` series must keep this schema and preserve the published table/column definitions and meanings.
+- Schema 2 is the stable MVP persistence baseline. The `0.2.x` and `0.3.x` series must keep this schema and preserve the published table/column definitions and meanings.
 - Compatibility includes SQLite data, Settings JSON, job kinds/arguments, metadata and recovery journals, ownership markers, and artifact paths/signatures. Do not silently change formats or units while keeping the same schema number.
 - Same-series releases must allow the previous compatible application to read and write their data. An unchanged schema number alone does not justify skipping rollback validation.
 - Full rollback validation may be skipped only when the entire persistence compatibility surface above is unchanged from the most recent published stable release (excluding the version under test). CI records the baseline and decision, and automatically skips only changes limited to documentation, frontend presentation, and tests. Backend, dependency, deployment, workflow, or unclassified changes require validation; a missing or unrelated baseline also requires it. Other tests follow change-scoped acceptance; released images still require both architecture checks.

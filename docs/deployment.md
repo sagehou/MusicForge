@@ -159,11 +159,34 @@ Use one small album in a separate test source/config/output set before pointing 
 
 Current automated coverage and its limits are recorded in [acceptance](acceptance.md).
 
+## Backup and restore
+
+These commands are available from v0.3.0. Stop the app and prepare a backup directory outside config, writable by your container UID/GID, such as `./backups`:
+
+```sh
+docker compose stop musicforge
+mkdir -p backups
+# Set the owner of backups to the PUID/PGID from .env.
+docker compose run --rm --no-deps -v "$PWD/backups:/backups" musicforge -backup /backups/config.zip
+docker compose run --rm --no-deps -v "$PWD/backups:/backups:ro" musicforge -check-backup /backups/config.zip
+```
+
+Commands print the application version, schema, backup time, instance ID and library paths. The archive includes the database, stored credentials and edit history from `/config`, excluding staging files. Existing ZIPs are never overwritten. Checking reads the entire archive and validates SQLite without changing the current config. Treat backups as credentials. Source/output music, `.env` and separately mounted secrets need their own backups. Capture the matching output snapshot while the app is still stopped, then start it again.
+
+For recovery, prepare a **new empty config directory** with the same UID/GID. Replace the host path below with that directory:
+
+```sh
+CONFIG_DIR=/srv/musicforge/restored-config docker compose run --rm --no-deps \
+  -v "$PWD/backups:/backups:ro" musicforge -restore-backup /backups/config.zip
+```
+
+Restore validates the archive and database first and refuses nonempty destinations. Your original config stays available, so you can rehearse in the new directory. Check the reported version and library paths; restore the matching stopped output snapshot for complete state recovery, then set `CONFIG_DIR` in `.env` to the restored directory and start the app. Restoring config alone does not undo file replacements or deletions. The backup command also reads compatible v0.2.x schema-2 configs while the old application is stopped.
+
 ## Upgrade and rollback
 
 Stop MusicForge, back up all of `/config` and record the previous image version. For complete library-state rollback, snapshot the matching output while still stopped. Keep an independent source backup. Change `MUSICFORGE_VERSION`, then run `docker compose pull` and `docker compose up -d` with your usual overrides.
 
-The `0.2.x` series uses schema 2 and preserves published persistence formats and meanings. A same-series **software rollback** can reuse the current configuration: disable background work, stop the app, pin the earlier image, then check accounts, library and jobs. Older versions may not understand newer optional maintenance features; keep background work disabled until returning to a supporting release. Never lower SQLite `user_version` manually. Version 0.1 requires its matching pre-upgrade backup.
+The `0.2.x` and `0.3.x` series use schema 2 and preserve published persistence formats and meanings. A same-series **software rollback** can reuse the current configuration: disable background work, stop the app, pin the earlier image, then check accounts, library and jobs. Older versions may not understand newer optional maintenance features; keep background work disabled until returning to a supporting release. Never lower SQLite `user_version` manually. Version 0.1 requires its matching pre-upgrade backup.
 
 A software rollback keeps the current library state. Only restoring matching stopped config/output snapshots restores the pre-upgrade state; changing images cannot undo completed replacements, moves or deletions. Published version tags and images are never overwritten for rollback.
 

@@ -102,6 +102,8 @@ The two community sources and automatic filling are off by default. Automatic ma
 
 **Fill lyrics** skips tracks that already have suitable lyrics, even after a restart or a settings change. Use a track's **Search again** to update changed source lyrics or restore a manually removed output LRC. **Choose lyrics** lets you preview another version; the editor can correct timing. Failed searches keep existing files, and lyrics you edited outside MusicForge are protected from replacement.
 
+Lyric batches retain progress across restarts; choose **Continue** in Jobs or lyric settings. Audition supports individual text/timing edits, playhead alignment and line preview before saving.
+
 **Settings → Lyrics → Lyric source checks** shows recent searches and cooldowns. Choose a song to check one source without saving lyrics. Candidate explanations point out differences in title, artist, version, album or duration.
 
 Online services can be unavailable or rate-limited. NetEase works anonymously where allowed and supports an [optional private Cookie file](docs/deployment.md#optional-netease-lyrics-login). See the [lyrics behavior reference](docs/mvp-design.en.md#lrc-lyrics-maintenance) for matching, retries and file ownership.
@@ -119,6 +121,8 @@ An existing rclone/FUSE mount can be the read-only source. MusicForge reads each
 Before upgrading, stop MusicForge and back up `/config`. To restore the complete library state, take a matching output snapshot too. Then change the image version in `.env`, pull and recreate the container. Switching back to an older image cannot undo completed file changes. The [upgrade guide](docs/deployment.md#upgrade-and-rollback) explains schema-2 compatibility and rollback.
 
 For startup variables, multiple domains, OIDC and a forgotten password, use the [deployment guide](docs/deployment.md). When reporting a problem, include the image version, affected task/path and relevant logs with credentials removed. Please say what you expected and what happened.
+
+Stop the app before making a backup. v0.3.0 includes configuration backup, integrity checking and restore into an empty directory; see [backup and restore](docs/deployment.md#backup-and-restore). Keep a matching stopped output snapshot to restore the complete library state.
 
 ## Development
 

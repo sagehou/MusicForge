@@ -120,7 +120,7 @@ function AudioPreview({ data, source, reload }: { data: Audition; source: Source
       <div className="audition-lyrics" ref={lyrics} role="region" aria-label={t("audition.outputLyrics")} tabIndex={0}>
         {cues.length ? cues.map((cue, index) => <button type="button" key={cue.time} className="audition-line" aria-current={current === index ? "true" : undefined} disabled={!duration || failed || cue.time > duration} aria-label={t("audition.seekLyric", { time: audioTime(cue.time), text: cue.text || "♪" })} onClick={() => seekTo(cue.time)}><time>{audioTime(cue.time)}</time><span dir="auto">{cue.text || "♪"}</span></button>) : <p className="audition-empty">{t(data.lyrics_state === "unavailable" ? "audition.lyricsUnavailable" : "audition.noLyrics")}</p>}
       </div>
-      {editing && <LyricsEditor id={source.id} position={position} preview={setPreviewLyrics} saved={text => { setSavedLyrics(text); setEditing(false);  }} close={() => setEditing(false)} />}
+      {editing && <LyricsEditor id={source.id} position={position} canAudition={duration > 0 && !failed} audition={time => { seekTo(time); if (audio.current?.paused) void toggle(); }} preview={setPreviewLyrics} saved={text => { setSavedLyrics(text); setEditing(false);  }} close={() => setEditing(false)} />}
     </div>
   </div>;
 }

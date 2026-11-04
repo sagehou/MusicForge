@@ -61,12 +61,15 @@ type lyricsReport struct {
 	Replaced  int    `json:"replaced"`
 	Unchanged int    `json:"unchanged"`
 	Skipped   int    `json:"skipped"`
+	Remaining int    `json:"remaining"`
+	Resumable bool   `json:"resumable"`
 }
 
 type lyricsState struct {
 	lyricsMu            sync.Mutex
 	lyricsWG            sync.WaitGroup
 	lyricsReport        *lyricsReport
+	lyricsBatch         *lyricsBatch
 	lyricsCancel        context.CancelFunc
 	lyricsNext          time.Time
 	lyricsRetryAt       time.Time
@@ -317,7 +320,7 @@ func (a *App) annotateLyricsStatuses(ctx context.Context, sources []Source) erro
 
 func (a *App) scheduleLyrics(s Settings) {
 	a.lyricsMu.Lock()
-	if a.lyricsCancel != nil || time.Now().Before(a.lyricsNext) {
+	if a.lyricsCancel != nil || a.lyricsBatch != nil && len(a.lyricsBatch.Remaining) > 0 || time.Now().Before(a.lyricsNext) {
 		a.lyricsMu.Unlock()
 		return
 	}
@@ -364,7 +367,11 @@ func lyricsNeedsFilling(source Source, automatic bool, now time.Time) bool {
 func (a *App) startLyrics(s Settings, sources []Source, batch lyricsBatchOptions, automatic bool) (int, bool) {
 	a.lyricsMu.Lock()
 	defer a.lyricsMu.Unlock()
-	if a.lyricsCancel != nil || a.ioContext.Err() != nil {
+	return a.startLyricsLocked(s, sources, batch, automatic, nil)
+}
+
+func (a *App) startLyricsLocked(s Settings, sources []Source, batch lyricsBatchOptions, automatic bool, resumed *lyricsBatch) (int, bool) {
+	if a.lyricsCancel != nil || a.ioContext.Err() != nil || automatic && a.lyricsBatch != nil && len(a.lyricsBatch.Remaining) > 0 {
 		return 0, false
 	}
 	options, err := a.lyricsOptions(a.ioContext)
@@ -399,7 +406,6 @@ func (a *App) startLyrics(s Settings, sources []Source, batch lyricsBatchOptions
 	if automatic && len(sources) == 0 {
 		return 0, true // Keep the last useful batch report when nothing is due.
 	}
-	ctx, cancel := context.WithCancel(a.ioContext)
 	mode := "fill"
 	if batch.ReplaceTraditional {
 		mode = "replace"
@@ -407,14 +413,34 @@ func (a *App) startLyrics(s Settings, sources []Source, batch lyricsBatchOptions
 	if batch.InspectOnly {
 		mode = "inspect"
 	}
-	report := &lyricsReport{State: "running", Total: len(sources), Mode: mode, Skipped: skipped}
-	a.lyricsReport, a.lyricsCancel = report, cancel
+	record := &lyricsBatch{Version: 1, Source: s.Source, Output: s.Output, Options: batch,
+		Report: lyricsReport{State: "running", Total: len(sources), Mode: mode, Skipped: skipped}}
+	if resumed != nil {
+		record.Report = resumed.Report
+		record.Report.State, record.Report.Stopping, record.Report.Current = "running", false, ""
+		record.Report.Skipped += len(resumed.Remaining) - len(sources)
+		record.Report.Total = record.Report.Processed + len(sources)
+	}
+	for _, source := range sources {
+		record.Remaining = append(record.Remaining, lyricsBatchTrack{ID: source.ID, Path: source.Rel})
+	}
+	report := &record.Report
 	if len(sources) == 0 {
 		report.State = "complete"
-		a.lyricsCancel = nil
-		cancel()
+	}
+	previous := a.lyricsBatch
+	a.lyricsBatch = record
+	if err = a.saveLyricsBatch(); err != nil {
+		a.lyricsBatch = previous
+		a.logger.Error("lyrics batch checkpoint failed", "error", err)
+		return 0, false
+	}
+	a.lyricsReport = report
+	if len(sources) == 0 {
 		return 0, true
 	}
+	ctx, cancel := context.WithCancel(a.ioContext)
+	a.lyricsCancel = cancel
 	a.lyricsWG.Add(1)
 	go func() {
 		defer a.lyricsWG.Done()
@@ -474,7 +500,16 @@ func (a *App) startLyrics(s Settings, sources []Source, batch lyricsBatchOptions
 				report.Failed++
 				report.Error = status.Error
 			}
+			record.Remaining = record.Remaining[1:]
+			checkpointErr := a.saveLyricsBatch()
+			if checkpointErr != nil {
+				report.Error = checkpointErr.Error()
+				cancel()
+			}
 			a.lyricsMu.Unlock()
+			if checkpointErr != nil {
+				break
+			}
 			a.logger.Info("lyrics checked", "source", source.Rel, "state", status.State, "provider", status.Provider, "error", status.Error)
 		}
 		a.lyricsMu.Lock()
@@ -482,6 +517,11 @@ func (a *App) startLyrics(s Settings, sources []Source, batch lyricsBatchOptions
 		report.State, report.Current = "complete", ""
 		if ctx.Err() != nil {
 			report.State = "stopped"
+		}
+		report.Stopping = false
+		if err := a.saveLyricsBatch(); err != nil {
+			report.Error = err.Error()
+			a.logger.Error("lyrics batch checkpoint failed", "error", err)
 		}
 		a.lyricsCancel = nil
 	}()

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Clock3, RefreshCw, Square } from "lucide-react";
+import { Clock3, RefreshCw, Square, Play } from "lucide-react";
 import { api } from "../api";
 import { useI18n, type MessageKey } from "../i18n";
 import type { LoudnessReport, LyricsProvider } from "../types";
@@ -8,7 +8,7 @@ import { Button } from "./ui/button";
 
 const labels = { lyrics: "lyrics.title", loudness: "gain.title", tags: "tags.title", fingerprints: "fingerprint.title", storage: "progress.storage", undo: "operations.title" } as const;
 type MaintenanceKind = keyof typeof labels;
-type Report = LoudnessReport & { kind: MaintenanceKind; stopping?: boolean; waiting_reason?: "schedule" | "capacity" | "disabled" };
+type Report = LoudnessReport & { kind: MaintenanceKind; stopping?: boolean; remaining?: number; resumable?: boolean; waiting_reason?: "schedule" | "capacity" | "disabled" };
 type Progress = { reports: Report[]; cooldowns: { provider: Exclude<LyricsProvider, "source">; retry_at: number }[] };
 
 export function MaintenanceProgress({ notify }: { notify: Notice }) {
@@ -18,6 +18,12 @@ export function MaintenanceProgress({ notify }: { notify: Notice }) {
   async function stop(kind: MaintenanceKind) {
     setBusy(kind);
     try { await api(kind === "lyrics" ? "/lyrics/search" : `/maintenance/${kind}`, "DELETE"); resource.retry(); }
+    catch (err) { notify(err as Error, true); }
+    finally { setBusy(undefined); }
+  }
+  async function resume() {
+    setBusy("lyrics");
+    try { await api("/lyrics/resume", "POST"); resource.retry(); }
     catch (err) { notify(err as Error, true); }
     finally { setBusy(undefined); }
   }
@@ -37,6 +43,7 @@ export function MaintenanceProgress({ notify }: { notify: Notice }) {
           {report.state === "running" && <div className="task-meter" role="progressbar" aria-label={label} aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent}><span style={{ width: `${percent}%` }} /></div>}
           {report.waiting_reason && report.state === "running" && <p className="task-waiting" role="status"><Clock3 size={15} />{t(`progress.wait.${report.waiting_reason}`)}</p>}
           {report.error && <details><summary>{t("jobs.diagnostics")}</summary><p>{errorMessage(report.error)}</p></details>}
+          {report.kind === "lyrics" && report.resumable && <div className="actions"><Button size="sm" variant="outline" disabled={busy !== undefined} onClick={() => void resume()}><Play size={13} />{t("lyrics.resume", { count: report.remaining ?? 0 })}</Button><small>{t("lyrics.resumeHint")}</small></div>}
           {report.state === "running" && <div className="actions"><Button size="sm" variant="outline" disabled={busy !== undefined || report.stopping} onClick={() => void stop(report.kind)}><Square size={13} />{t(report.kind === "lyrics" ? "lyrics.stop" : "tools.stop")}</Button>{report.kind === "lyrics" && <small>{t("lyrics.stopHint")}</small>}</div>}
         </div>;
       })}</div>

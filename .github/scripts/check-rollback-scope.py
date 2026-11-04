@@ -11,9 +11,9 @@ import urllib.request
 def baseline_release(releases, current_tag):
     tags = [release["tag_name"] for release in releases
             if not release["draft"] and not release["prerelease"]
-            and re.fullmatch(r"v0\.2\.\d+", release["tag_name"])
+            and re.fullmatch(r"v0\.[23]\.\d+", release["tag_name"])
             and release["tag_name"] != current_tag]
-    return max(tags, key=lambda tag: int(tag.rsplit(".", 1)[1]), default=None)
+    return max(tags, key=lambda tag: tuple(map(int, tag[1:].split("."))), default=None)
 
 
 def presentation_or_test(path):

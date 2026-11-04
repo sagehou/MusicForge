@@ -60,6 +60,7 @@ type lyricsCandidate struct {
 	DurationDelta               *float64 `json:"duration_delta,omitempty"`
 	Script                      string   `json:"script"`
 	TranslationScript           string   `json:"translation_script,omitempty"`
+	MatchReasons                []string `json:"match_reasons,omitempty"`
 	remoteID, mid, hash         string
 	lyricsURL, translationURL   string
 	titleAliases, artistAliases []string
@@ -369,13 +370,18 @@ func (a *App) chooseLyrics(ctx context.Context, source Source, candidates []lyri
 	return "", -1, "not_found", nil
 }
 
-func (a *App) providerCandidates(ctx context.Context, provider string, source Source, query string, manual bool) ([]lyricsCandidate, bool, error) {
+func (a *App) providerCandidates(ctx context.Context, provider string, source Source, query string, manual bool) (result []lyricsCandidate, instrumental bool, err error) {
+	started := time.Now()
+	cooling := a.lyricsProviderCooldowns()[provider].After(started.Add(2 * time.Second))
+	a.lyricsMu.Lock()
+	if a.providerChecking == nil { a.providerChecking = map[string]int{} }
+	a.providerChecking[provider]++
+	a.lyricsMu.Unlock()
+	defer func() { a.recordProviderDiagnostic(ctx, provider, source, started, len(result), err, cooling) }()
 	if query == "" {
 		query = strings.TrimSpace(source.Title + " " + source.Artist)
 	}
 	var candidates []lyricsCandidate
-	var instrumental bool
-	var err error
 	switch provider {
 	case "lrclib":
 		candidates, instrumental, err = a.lrclibCandidates(ctx, source, query, manual)
@@ -399,7 +405,6 @@ func (a *App) providerCandidates(ctx context.Context, provider string, source So
 		return nil, false, errors.New("Unknown lyrics provider")
 	}
 	rankLyricsCandidates(candidates, source)
-	var result []lyricsCandidate
 	seen := map[string]bool{}
 	for _, candidate := range candidates {
 		if strings.TrimSpace(candidate.Title) == "" || strings.TrimSpace(candidate.Artist) == "" || len(candidate.Title) > 2000 || len(candidate.Artist) > 4000 || len(candidate.Album) > 2000 || math.IsNaN(candidate.Duration) || math.IsInf(candidate.Duration, 0) {

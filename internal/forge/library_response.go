@@ -20,6 +20,10 @@ func respondLibrary(w http.ResponseWriter, r *http.Request, list []Source) {
 		return
 	}
 	etag := `W/"` + digest(string(data)) + `"`
+	serveLibraryJSON(w, r, data, etag)
+}
+
+func serveLibraryJSON(w http.ResponseWriter, r *http.Request, data []byte, etag string) {
 	w.Header().Set("ETag", etag)
 	w.Header().Set("Cache-Control", "private, no-cache")
 	w.Header().Add("Vary", "Accept-Encoding")

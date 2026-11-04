@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { ListChecks, ChevronLeft, ChevronRight, RefreshCw } from "lucide-react";
 import { api } from "../api";
 import { useI18n } from "../i18n";
-import type { Source } from "../types";
+import type { LibraryCounts } from "../library-data";
 import { Button } from "./ui/button";
 import { Loading, ResourceWarning, useResource, type Notice } from "./resource";
 
@@ -14,10 +14,9 @@ type Report = {
   unmapped: number; outside_scope: number; differences: Difference[];
 };
 
-export function LibraryComparison({ sources, notify }: { sources: Source[]; notify: Notice }) {
+export function LibraryComparison({ counts, notify }: { counts: LibraryCounts; notify: Notice }) {
   const { t, number } = useI18n();
   const [open, setOpen] = useState(false);
-  const present = sources.filter(source => source.present);
   return <details id="library-comparison" className="library-comparison" onToggle={event => {
     setOpen(event.currentTarget.open);
     if (event.currentTarget.open) document.querySelector<HTMLButtonElement>(".comparison-close")?.focus();
@@ -30,8 +29,8 @@ export function LibraryComparison({ sources, notify }: { sources: Source[]; noti
 
     {open && <LidarrComparison notify={notify} />}
     <div className="comparison-local-notes"><p className="comparison-counts">{t("compare.localCounts", {
-      sources: number(present.length), expired: number(sources.length - present.length),
-      outputs: number(sources.filter(source => source.output_present).length), failed: number(present.filter(source => source.error).length),
+      sources: number(counts.present), expired: number(counts.deleted),
+      outputs: number(counts.outputs), failed: number(counts.failed),
     })}</p>
     <p>{t("compare.countHint")}</p></div>
   </details>;

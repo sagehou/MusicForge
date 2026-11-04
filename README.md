@@ -81,6 +81,8 @@ Give Navidrome a read-only mount of the same output folder. Try one small album 
 
 Ordinary scans use size and modification time. Use **Full verification** when a tool may have changed content without changing either. Unregistered output files are never silently overwritten. Two sources such as `01.flac` and `01.mp3` share an output name; rename one to resolve the conflict.
 
+Library searches, filters and sorts run on the server and load 50 entries at a time. Cross-page selection stays with you; unchanged pages reuse their cache. Detailed maintenance data loads when you open the workbench.
+
 Open **Library → Maintenance workbench** for tag, cover, loudness, playlist and quality tools. Saved views remember your usual filters in this browser. **Jobs** collects queue progress, maintenance batches and failures grouped by cause. Best-effort repair is an explicit option for eligible failed native FLAC tracks; its output stays marked **Possibly damaged**, so listen before keeping it.
 
 ## Lyrics, including Japanese songs
@@ -100,6 +102,8 @@ The two community sources and automatic filling are off by default. Automatic ma
 
 **Fill lyrics** skips tracks that already have suitable lyrics, even after a restart or a settings change. Use a track's **Search again** to update changed source lyrics or restore a manually removed output LRC. **Choose lyrics** lets you preview another version; the editor can correct timing. Failed searches keep existing files, and lyrics you edited outside MusicForge are protected from replacement.
 
+**Settings → Lyrics → Lyric source checks** shows recent searches and cooldowns. Choose a song to check one source without saving lyrics. Candidate explanations point out differences in title, artist, version, album or duration.
+
 Online services can be unavailable or rate-limited. NetEase works anonymously where allowed and supports an [optional private Cookie file](docs/deployment.md#optional-netease-lyrics-login). See the [lyrics behavior reference](docs/mvp-design.en.md#lrc-lyrics-maintenance) for matching, retries and file ownership.
 
 ## Supported source audio
@@ -118,7 +122,7 @@ For startup variables, multiple domains, OIDC and a forgotten password, use the 
 
 ## Development
 
-[AGENTS.md](AGENTS.md) describes the development and release rules. Install dependencies, build and run executable tests **only in GitHub Actions**; local work is source editing and static review. CI selects documentation, presentation or full validation from the complete change. Version tags publish checked AMD64/ARM64 images; ordinary branches and PRs do not publish.
+[AGENTS.md](AGENTS.md) describes the development and release rules. Install dependencies, build and run executable tests **only in GitHub Actions**; local work is source editing and static review. CI selects documentation, presentation or full validation from the complete change. Backend checks, real-application browser checks and rclone checks have separate jobs, so a browser retry keeps successful Go results. Version tags publish checked AMD64/ARM64 images; ordinary branches and PRs do not publish.
 
 - [Behavior and compatibility reference](docs/mvp-design.en.md)
 - [Design guidance](DESIGN.md)

@@ -1,3 +1,4 @@
+import { routeLibrary } from "./library-fixture";
 import { selectLibraryPage, openLibraryOptions, setPreference } from "./preferences";
 import { test, expect } from "@playwright/test";
 
@@ -23,7 +24,7 @@ test("best-effort repair requires consent and imports normal audio with a persis
   let removes = 0;
   let imported = false;
   let strictRebuildFailed = false;
-  await page.route("**/api/library", route => route.fulfill({ json: [{ ...source, repair, ...(imported ? {
+  await routeLibrary(page, route => route.fulfill({ json: [{ ...source, repair, ...(imported ? {
     output: "Artist/Album/01.opus", output_present: true, status: strictRebuildFailed ? "failed" : "possibly_damaged", possibly_damaged: true,
     error: strictRebuildFailed ? "Audio decoding failed after strict rebuild" : "", can_repair: false,
   } : {}) }] }));
@@ -116,7 +117,7 @@ test("best-effort repair requires consent and imports normal audio with a persis
 test("an existing playable artifact is preserved without offering best-effort replacement", async ({ page }) => {
   await page.addInitScript(() => localStorage.setItem("musicforge.language", "en"));
   await page.route("**/api/auth/me", route => route.fulfill({ json: { initialized: true, authenticated: true, username: "admin", method: "local", csrf: "test" } }));
-  await page.route("**/api/library", route => route.fulfill({ json: [{
+  await routeLibrary(page, route => route.fulfill({ json: [{
     id: 78, hash: "b".repeat(64), path: "Artist/Album/02.flac", artist: "Artist", album: "Album", title: "Existing track",
     track: 2, disc: 1, duration: 120, size: 1000, metadata: {}, present: true,
     output: "Artist/Album/02.opus", output_present: true, status: "failed", error: "Audio decoding failed", can_repair: false,
@@ -203,7 +204,7 @@ test("filtered failed tracks can be selected across pages and repaired with one 
   await page.addInitScript(() => localStorage.setItem("musicforge.language", "en"));
   await page.route("**/api/auth/me", route => route.fulfill({ json: { initialized: true, authenticated: true, username: "admin", method: "local", csrf: "test" } }));
   const sources = Array.from({ length: 70 }, (_, i) => ({ id: i + 1, hash: "a".repeat(64), path: `Artist/Album/${i}.${i < 60 ? "flac" : "mp3"}`, artist: "Artist", album: "Album", title: `Track ${i}`, track: i + 1, disc: 1, duration: 120, size: 100, metadata: {}, present: true, output: "", output_present: false, status: i < 65 ? "failed" : "ready", error: i < 65 ? "Audio decoding failed" : "", can_repair: i < 60 }));
-  await page.route("**/api/library", route => route.fulfill({ json: sources }));
+  await routeLibrary(page, route => route.fulfill({ json: sources }));
   let starts = 0;
   await page.route("**/api/library/repair", route => {
     starts++;

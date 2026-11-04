@@ -1,3 +1,4 @@
+import { routeLibrary } from "./library-fixture";
 import { selectLibraryPage, openLibraryOptions, setPreference } from "./preferences";
 import { test, expect } from "@playwright/test";
 import type { Source } from "../src/types";
@@ -16,7 +17,7 @@ test("incremental filling shows pending and skipped counts and succeeds when no 
   let pending = 0;
   const searches: unknown[] = [];
   await page.route("**/api/auth/me", route => route.fulfill({ json: { initialized: true, authenticated: true, username: "admin", method: "local", csrf: "test", oidc: false, version: "test" } }));
-  await page.route("**/api/library", route => route.fulfill({ json: [source] }));
+  await routeLibrary(page, route => route.fulfill({ json: [source] }));
   await page.route("**/api/lyrics", route => route.fulfill({ json: { options: { auto_search: false, min_score: 96 }, report } }));
   await page.route("**/api/lyrics/search", route => {
     searches.push(route.request().postDataJSON());
@@ -120,7 +121,7 @@ test("lyrics settings save thresholds, retain drafts and offer output-only inspe
   await page.getByRole("button", { name: "保存设置", exact: true }).click();
   await expect.poll(() => saves.length).toBe(2);
   expect(options.providers).toEqual([]);
-  await page.route("**/api/library", route => route.fulfill({ json: [] }));
+  await routeLibrary(page, route => route.fulfill({ json: [] }));
   await page.getByRole("link", { name: "查看繁体歌词并批量替换", exact: true }).click();
   await expect(page).toHaveURL(/view=tracks&lyrics_script=traditional/);
 });
@@ -134,7 +135,7 @@ for (const providers of [["petitlyrics", "lrclib"], ["amll", "unison"], []]) {
     const searches: string[] = [], previews: unknown[] = [];
     let saves = 0;
     await page.route("**/api/auth/me", route => route.fulfill({ json: { initialized: true, authenticated: true, username: "admin", method: "local", csrf: "test", oidc: false, version: "test" } }));
-    await page.route("**/api/library", route => route.fulfill({ json: [source] }));
+    await routeLibrary(page, route => route.fulfill({ json: [source] }));
     await page.route("**/api/lyrics", route => route.fulfill({ json: { options: { auto_search: false, min_score: 96, providers }, report: { state: "idle" } } }));
     await page.route("**/api/library/1/lyrics/candidates", route => {
       if (route.request().method() === "GET") return route.fulfill({ json: { query: "Track Artist", groups: [{ provider: "qq", token: "disabled-cache", candidates: [candidate("qq")] }], instrumental: { token: "local", candidates: [{ index: 0 }] } } });
@@ -190,7 +191,7 @@ test("traditional script filter supports cross-page batch replacement and shared
   const tracks: Source[] = Array.from({ length: 64 }, (_, index) => ({ id: index + 1, path: `Artist/Album/${index + 1}.flac`, artist: "Artist", album: "Album", title: `Song ${String(index + 1).padStart(2, "0")}`, track: index + 1, disc: 1, present: true, output: `Artist/Album/${index + 1}.opus`, output_present: true, status: "ready", error: "", size: 123, metadata: {}, lyrics_script: index < 60 ? "traditional" : "simplified", lyrics: { state: "ready", output: `Artist/Album/${index + 1}.opus`, signature: "audio", checked: 1 } }));
   const batches: unknown[] = [];
   await page.route("**/api/auth/me", route => route.fulfill({ json: { initialized: true, authenticated: true, username: "admin", method: "local", csrf: "test", oidc: false, version: "test" } }));
-  await page.route("**/api/library", route => route.fulfill({ json: tracks }));
+  await routeLibrary(page, route => route.fulfill({ json: tracks }));
   await page.route("**/api/lyrics/search", route => { batches.push(route.request().postDataJSON()); return route.fulfill({ status: 202, json: { selected: 60 } }); });
   await page.goto("/library?view=tracks&lyrics_script=traditional");
   const filter = page.getByLabel("Lyric script", { exact: true });
@@ -218,7 +219,7 @@ for (const { threshold, score, selected } of [{ threshold: 96, score: 90, select
     await page.addInitScript(() => localStorage.setItem("musicforge.language", "en"));
     const source: Source = { id: 1, path: "Album/01.flac", artist: "Artist", album: "Album", title: "Track", track: 1, disc: 1, present: true, output: "Album/01.opus", output_present: true, status: "ready", error: "", size: 123, metadata: {} };
     await page.route("**/api/auth/me", route => route.fulfill({ json: { initialized: true, authenticated: true, username: "admin", method: "local", csrf: "test", oidc: false, version: "test" } }));
-    await page.route("**/api/library", route => route.fulfill({ json: [source] }));
+    await routeLibrary(page, route => route.fulfill({ json: [source] }));
     await page.route("**/api/lyrics", route => route.fulfill({ json: { options: { auto_search: false, min_score: threshold }, report: { state: "idle" } } }));
     await page.route("**/api/library/1/lyrics/candidates", route => { expect(route.request().method()).toBe("GET"); return route.fulfill({ json: { query: "Track Artist", groups: [{ token: "cached", provider: "lrclib", cached: true, candidates: [{ index: 0, provider: "lrclib", title: "Track", artist: "Artist", album: score === 90 ? "Other" : "Album", duration: 183, high_confidence: score >= 96, identity_match: true, match_score: score, duration_delta: 0, script: "simplified" }] }] } }); });
     let previews = 0;
@@ -247,12 +248,12 @@ test("lyrics filters compose with audio status and library coverage survives new
   let report = { state: "idle", total: 0, processed: 0, found: 0, not_found: 0, failed: 0, stopping: false };
   const searches: unknown[] = [];
   await page.route("**/api/auth/me", route => route.fulfill({ json: { initialized: true, authenticated: true, username: "admin", method: "local", csrf: "test", oidc: false, version: "test" } }));
-  await page.route("**/api/library", route => route.fulfill({ json: sources }));
+  await routeLibrary(page, route => route.fulfill({ json: sources }));
   await page.route("**/api/lyrics", route => route.fulfill({ json: { options: { auto_search: true }, report } }));
   await page.route("**/api/lyrics/search", route => { searches.push(route.request().postDataJSON()); return route.fulfill({ status: 202, json: { selected: 1 } }); });
   async function refresh() {
     await Promise.all([
-      page.waitForResponse(response => new URL(response.url()).pathname === "/api/library"),
+      page.waitForResponse(response => new URL(response.url()).pathname === "/api/library/browse"),
       page.evaluate(() => document.dispatchEvent(new Event("visibilitychange"))),
     ]);
   }
@@ -346,7 +347,7 @@ test("lyrics selection, background progress, stop and bilingual mobile UI", asyn
   await page.addInitScript(() => localStorage.setItem("musicforge.language", "en"));
   const source: Source = { id: 1, path: "Artist/Album/01.flac", artist: "Artist", album: "Album", title: "Track", track: 1, disc: 1, present: true, output: "Artist/Album/01.opus", output_present: true, status: "ready", error: "", size: 123, metadata: {}, lyrics: { state: "not_found", output: "Artist/Album/01.opus", signature: "audio", checked: 1 } };
   await page.route("**/api/auth/me", route => route.fulfill({ json: { initialized: true, authenticated: true, username: "admin", method: "local", csrf: "test", oidc: false, version: "test" } }));
-  await page.route("**/api/library", route => route.fulfill({ json: [source, { ...source, id: 2, title: "Pending track", path: "Artist/Album/02.flac", output: "", output_present: false, status: "unverified", lyrics: undefined }] }));
+  await routeLibrary(page, route => route.fulfill({ json: [source, { ...source, id: 2, title: "Pending track", path: "Artist/Album/02.flac", output: "", output_present: false, status: "unverified", lyrics: undefined }] }));
   await page.route("**/api/settings", route => route.fulfill({ json: { settings, configured: { webhook: false, nav_password: false, oidc_secret: false }, public_url: "", allowed_origins: [] } }));
   let autoSearch = false;
   let running = false;
@@ -402,7 +403,7 @@ test("lyrics candidates keep partial results, preview languages and save an expl
   await page.addInitScript(() => { if (!localStorage.getItem("musicforge.language")) localStorage.setItem("musicforge.language", "en"); });
   const source: Source = { id: 1, path: "Artist/Album/01.flac", artist: "Artist", album: "Album", title: "Track", track: 1, disc: 1, present: true, output: "Artist/Album/01.opus", output_present: true, status: "ready", error: "", size: 123, metadata: {}, lyrics: { state: "needs_review", output: "Artist/Album/01.opus", signature: "audio", checked: 1 } };
   await page.route("**/api/auth/me", route => route.fulfill({ json: { initialized: true, authenticated: true, username: "admin", method: "local", csrf: "test", oidc: false, version: "test" } }));
-  await page.route("**/api/library", route => route.fulfill({ json: [source] }));
+  await routeLibrary(page, route => route.fulfill({ json: [source] }));
   const searches: { provider: string; query: string }[] = [];
   await page.route("**/api/library/1/lyrics/candidates", route => {
     if (route.request().method() === "GET") return route.fulfill({ json: { query: "Track Artist", groups: [] } });
@@ -475,7 +476,7 @@ for (const higherLRCLIBScore of [false, true]) {
     const errors: string[] = []; page.on("pageerror", error => errors.push(error.message));
     const source: Source = { id: 1, path: "Artist/Album/01.flac", artist: "YOASOBI", album: "THE BOOK", title: "夜に駆ける", track: 1, disc: 1, duration: 258.899, present: true, output: "Artist/Album/01.opus", output_present: true, status: "ready", error: "", size: 123, metadata: {}, lyrics: { state: "ready", output: "Artist/Album/01.opus", signature: "audio", checked: 1, additional_provider: "petitlyrics", attempts: [{ provider: "qq", state: "failed", error: "qq lyrics service returned HTTP 403; retry later" }], additional_attempts: [{ provider: "petitlyrics", state: "ready" }] } };
     await page.route("**/api/auth/me", route => route.fulfill({ json: { initialized: true, authenticated: true, username: "admin", method: "local", csrf: "test", oidc: false, version: "test" } }));
-    await page.route("**/api/library", route => route.fulfill({ json: [source] }));
+    await routeLibrary(page, route => route.fulfill({ json: [source] }));
     const providers = ["netease", "lrclib", "petitlyrics", "kugou", "qq"];
     await page.route("**/api/library/1/lyrics/candidates", route => route.fulfill({ json: { query: "夜に駆ける YOASOBI", groups: providers.map(provider => ({ provider, token: `${provider}-saved`, cached: true, candidates: [{ index: 0, provider, title: source.title, artist: source.artist, album: source.album, duration: source.duration, duration_delta: 0, high_confidence: true, identity_match: true, match_score: provider === "lrclib" && higherLRCLIBScore ? 100 : 99, script: provider === "qq" ? "traditional" : "simplified" }] })) } }));
     const previews: { token: string; index: number }[] = [];
@@ -524,7 +525,7 @@ test("failed lyric parsing displays raw content safely and keeps saving disabled
   await page.setViewportSize({ width: 1440, height: 1000 });
   const source: Source = { id: 1, path: "Artist/Album/01.flac", artist: "亜咲花", album: "So Precious", title: "Victory Road (off vocal)", track: 1, disc: 1, duration: 266.813, present: true, output: "Artist/Album/01.opus", output_present: true, status: "ready", error: "", size: 123, metadata: {} };
   await page.route("**/api/auth/me", route => route.fulfill({ json: { initialized: true, authenticated: true, username: "admin", method: "local", csrf: "test", oidc: false, version: "test" } }));
-  await page.route("**/api/library", route => route.fulfill({ json: [source] }));
+  await routeLibrary(page, route => route.fulfill({ json: [source] }));
   const candidates = ["Plain", "Valid", "Empty", "Unavailable"].map((title, index) => ({ index, provider: "netease", title, artist: source.artist, album: source.album, duration: source.duration, high_confidence: true, match_score: index === 0 ? 100 : 99, script: "unknown" }));
   await page.route("**/api/library/1/lyrics/candidates", route => route.fulfill({ json: { query: "Victory Road 亜咲花", groups: [{ provider: "netease", token: "netease-choices", candidates, cached: true, searched: 1 }] } }));
   const rawText = "<script>window.__rawLyricsExecuted = true</script>\n" + Array.from({ length: 100 }, (_, index) => `Unparsed line ${index + 1}: 未解析歌词`).join("\n");
@@ -592,7 +593,7 @@ test("automatic lyric previews wait for all providers, preserve manual choices a
   await page.addInitScript(() => localStorage.setItem("musicforge.language", "en"));
   const source: Source = { id: 1, path: "Artist/Album/01.flac", artist: "Artist", album: "Album", title: "Track", track: 1, disc: 1, duration: 183, present: true, output: "Artist/Album/01.opus", output_present: true, status: "ready", error: "", size: 123, metadata: {} };
   await page.route("**/api/auth/me", route => route.fulfill({ json: { initialized: true, authenticated: true, username: "admin", method: "local", csrf: "test", oidc: false, version: "test" } }));
-  await page.route("**/api/library", route => route.fulfill({ json: [source] }));
+  await routeLibrary(page, route => route.fulfill({ json: [source] }));
   let delayed: Promise<void>, release: () => void;
   await page.route("**/api/library/1/lyrics/candidates", async route => {
     if (route.request().method() === "GET") return route.fulfill({ json: { query: "Track Artist", groups: [] } });
@@ -647,7 +648,7 @@ test("song details and automatic saved recommendations survive reopening and pag
   await page.addInitScript(() => { if (!localStorage.getItem("musicforge.language")) localStorage.setItem("musicforge.language", "en"); });
   const source: Source = { id: 1, path: "Artist/Album/01.flac", hash: "0123456789abcdef".repeat(4), artist: "Artist", album: "Album", title: "Track", track: 1, disc: 2, duration: 183.5, present: true, output: "Artist/Album/01.opus", output_present: true, status: "ready", error: "", size: 2621440, metadata: { genre: "Pop", date: "2026" }, lyrics: { state: "needs_review", output: "Artist/Album/01.opus", signature: "audio", checked: 1 } };
   await page.route("**/api/auth/me", route => route.fulfill({ json: { initialized: true, authenticated: true, username: "admin", method: "local", csrf: "test", oidc: false, version: "test" } }));
-  await page.route("**/api/library", route => route.fulfill({ json: [source] }));
+  await routeLibrary(page, route => route.fulfill({ json: [source] }));
   const candidate = { index: 0, title: "Track", artist: "Artist", album: "Album", duration: 183.5, duration_delta: 0, match_score: 100, high_confidence: true, script: "traditional" };
   const groups = [
     { provider: "lrclib", token: "lrclib-saved", searched: 1800000000, cached: true, candidates: [{ ...candidate, provider: "lrclib" }] },
@@ -726,4 +727,49 @@ test("song details and automatic saved recommendations survive reopening and pag
   await expect(picker.getByText("推荐", { exact: true })).toBeVisible();
   expect(await picker.evaluate(element => element.scrollWidth <= element.clientWidth + 1)).toBe(true);
   await page.screenshot({ path: "test-results/lyrics-recommendations-mobile-zh-CN.png", fullPage: true });
+});
+
+
+test("provider diagnostics are passive until a track and source are explicitly checked", async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem("musicforge.language", "en"));
+  await page.route("**/api/auth/me", route => route.fulfill({ json: { initialized: true, authenticated: true, username: "admin", method: "local", csrf: "test", oidc: false, version: "test" } }));
+  await page.route("**/api/settings", route => route.fulfill({ json: { settings, configured: { webhook: false, nav_password: false, oidc_secret: false }, public_url: "", allowed_origins: [] } }));
+  await routeLibrary(page, route => route.fulfill({ json: [{ id: 7, path: "Artist/Album/Song.flac", title: "Song", artist: "Artist", album: "Album", track: 1, disc: 1, duration: 180, present: true, output: "", output_present: false, size: 100, metadata: {}, status: "unverified", error: "" }] }));
+  let checks = 0, reads = 0;
+  let statuses = [
+    { provider: "lrclib", enabled: true, state: "unknown", checked: 0, latency_ms: 0, candidates: 0 },
+    { provider: "netease", enabled: false, state: "cooldown", checked: 0, latency_ms: 0, candidates: 0, retry_at: 1893456000 },
+  ];
+  await page.route("**/api/lyrics/providers/status", route => { reads++; return route.fulfill({ json: statuses }); });
+  await page.route("**/api/lyrics/providers/lrclib/check", route => {
+    checks++;
+    expect(route.request().method()).toBe("POST");
+    expect(route.request().postDataJSON()).toEqual({ source_id: 7 });
+    statuses = statuses.map(item => item.provider === "lrclib" ? { ...item, state: "ok", checked: 1800000000, latency_ms: 230, candidates: 3 } : item);
+    return route.fulfill({ json: statuses });
+  });
+  await page.goto("/settings?section=lyrics");
+  const panel = page.locator(".settings-panel").filter({ has: page.getByRole("heading", { name: "Lyric source checks", exact: true }) });
+  await expect(panel).toBeVisible();
+  expect(reads).toBe(0);
+  await panel.locator("summary").click();
+  await expect(panel.getByRole("button", { name: "Check LRCLIB", exact: true })).toBeDisabled();
+  await expect.poll(() => reads).toBeGreaterThan(0);
+  expect(checks).toBe(0);
+  await page.getByLabel("Sample track", { exact: true }).selectOption("7");
+  await panel.getByRole("button", { name: "Check LRCLIB", exact: true }).click();
+  await expect(panel).toContainText("Last search succeeded");
+  await expect(panel).toContainText("230 ms · 3 candidates");
+  await expect(panel).toContainText("Disabled in saved settings");
+  expect(checks).toBe(1);
+  await expect(page.getByRole("button", { name: "Save settings", exact: true })).toBeDisabled();
+  await panel.screenshot({ path: "test-results/lyrics-diagnostics-desktop-en.png" });
+  await setPreference(page, "language", "zh-CN");
+  await setPreference(page, "theme", "dark");
+  await page.setViewportSize({ width: 390, height: 844 });
+  const mobile = page.locator(".settings-panel").filter({ has: page.getByRole("heading", { name: "歌词源诊断", exact: true }) });
+  await expect(mobile).toContainText("最近一次搜索成功");
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
+  await mobile.screenshot({ path: "test-results/lyrics-diagnostics-390-dark-zh.png" });
+  expect(checks).toBe(1);
 });

@@ -20,6 +20,7 @@ import (
 )
 
 type App struct {
+	libraryIndexState
 	repairState
 	lidarrCheckState
 	lyricsState
@@ -173,6 +174,11 @@ func (a *App) Close() {
 	a.lidarrMu.Unlock()
 	a.lidarrWG.Wait()
 	if a.db != nil {
+		a.libraryMu.Lock()
+		if a.libraryWatch != nil {
+			a.libraryWatch.Close()
+		}
+		a.libraryMu.Unlock()
 		if a.reads != nil {
 			a.reads.Close()
 		}

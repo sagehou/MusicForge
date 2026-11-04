@@ -20,6 +20,20 @@ ENV = {"GITHUB_REPOSITORY": "sagehou/MusicForge", "ImageOS": "ubuntu24", "ImageV
 
 
 class CIScopeTests(unittest.TestCase):
+    def test_split_integrations_reuse_this_runs_binary_and_remain_required(self):
+        workflow = Path(__file__).parents[1].joinpath("workflows/ci.yml").read_text()
+        jobs = dict(re.findall(r"^  (\w+):\n((?:    .*\n|\n)+)", workflow, re.MULTILINE))
+        self.assertNotIn("npm test", jobs["backend"])
+        self.assertNotIn("check-rclone.py", jobs["backend"])
+        for name, variable in (("rclone", "RCLONE"), ("app_browser", "APP_BROWSER")):
+            self.assertIn("needs: [plan, backend]", jobs[name])
+            self.assertIn("name: validation-runtime", jobs[name])
+            self.assertNotIn("run-id:", jobs[name])
+            self.assertNotIn("go test", jobs[name])
+            self.assertRegex(jobs["validate"], r"needs: \[[^\]]*\b" + name + r"\b")
+            self.assertIn(f"test \"${variable}\" = success", jobs["validate"])
+            self.assertIn(f"test \"${variable}\" = skipped", jobs["validate"])
+
     def test_release_with_skipped_ancestors_requires_all_release_gates(self):
         workflow = Path(__file__).parents[1].joinpath("workflows/ci.yml").read_text()
         job = re.search(r"^  publish:\n(?P<body>(?:    .*\n|\n)+)", workflow, re.MULTILINE).group("body")

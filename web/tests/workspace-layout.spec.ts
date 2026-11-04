@@ -1,3 +1,4 @@
+import { routeLibrary } from "./library-fixture";
 import { test, expect, type Locator, type Page } from "@playwright/test";
 import { setPreference } from "./preferences";
 import type { Source } from "../src/types";
@@ -16,7 +17,7 @@ const tracks: Source[] = Array.from({ length: 30 }, (_, index) => ({
 async function setup(page: Page) {
   await page.addInitScript(() => { if (!localStorage.getItem("musicforge.language")) localStorage.setItem("musicforge.language", "en"); if (!localStorage.getItem("musicforge.theme")) localStorage.setItem("musicforge.theme", "light"); });
   await page.route("**/api/auth/me", route => route.fulfill({ json: { initialized: true, authenticated: true, username: "admin", method: "local", csrf: "test", oidc: false, version: "test" } }));
-  await page.route("**/api/library", route => route.fulfill({ json: tracks }));
+  await routeLibrary(page, route => route.fulfill({ json: tracks }));
   await page.route("**/api/settings", route => route.fulfill({ json: { settings, configured: { webhook: false, nav_password: false, oidc_secret: false }, public_url: "", allowed_origins: [] } }));
   await page.route("**/api/lyrics", route => route.fulfill({ json: { options: { auto_search: false }, report: { state: "idle", total: 0, processed: 0, found: 0, not_found: 0, failed: 0, stopping: false } } }));
   await page.route("**/api/jobs?*", route => route.fulfill({ json: { jobs: [], total: 0 } }));
@@ -118,7 +119,7 @@ test("inline song details keep the filtered list and restore keyboard focus with
 test("cached lyric review saves and advances in the same inline region without repeating provider searches", async ({ page }) => {
   await setup(page);
   let searches = 0, saves = 0;
-  await page.route("**/api/library", route => route.fulfill({ json: tracks.map(source => saves && source.id === 1 ? { ...source, lyrics: { ...source.lyrics, state: "ready" } } : source) }));
+  await routeLibrary(page, route => route.fulfill({ json: tracks.map(source => saves && source.id === 1 ? { ...source, lyrics: { ...source.lyrics, state: "ready" } } : source) }));
   await page.route("**/api/library/*/lyrics/candidates", route => {
     if (route.request().method() !== "GET") searches++;
     const id = Number(new URL(route.request().url()).pathname.split("/")[3]);
@@ -228,7 +229,7 @@ test("phone pages retain real content, readable facts and inline song details in
 test("album rows expose useful audio facts and toggle song and lyric details directly below the row", async ({ page }) => {
   await setup(page);
   const longTitle = "Song 03 · 海岸与夜晚的音乐记录 · Complete Sessions and Alternative Recording";
-  await page.route("**/api/library", route => route.fulfill({ json: tracks.slice(0, 3).map((source, index) => index === 2 ? { ...source, title: longTitle, artist: "Guest Vocalist", metadata: { ...source.metadata, albumartist: "River Ensemble" } } : source) }));
+  await routeLibrary(page, route => route.fulfill({ json: tracks.slice(0, 3).map((source, index) => index === 2 ? { ...source, title: longTitle, artist: "Guest Vocalist", metadata: { ...source.metadata, albumartist: "River Ensemble" } } : source) }));
   await page.route("**/api/library/*/lyrics/candidates", route => route.fulfill({ json: { query: "Song 01", groups: [] } }));
   await page.goto("/library?view=albums&artist=Artist&album=Artist%2FAlbum");
   const row = page.locator(".track-row").first();
@@ -312,7 +313,7 @@ test("album rows expose useful audio facts and toggle song and lyric details dir
 test("inline track navigation crosses pages and explicit filters dismiss the expanded row", async ({ page }) => {
   await setup(page);
   const library = Array.from({ length: 65 }, (_, index) => ({ ...tracks[0], id: index + 1, track: index + 1, title: `Song ${String(index + 1).padStart(2, "0")}` }));
-  await page.route("**/api/library", route => route.fulfill({ json: library }));
+  await routeLibrary(page, route => route.fulfill({ json: library }));
   await page.goto("/library?view=tracks");
   await page.getByRole("button", { name: "View details for Song 50", exact: true }).click();
   const details = page.getByRole("region", { name: "Song details", exact: true });
@@ -333,7 +334,7 @@ test("saving inline lyrics protects the editor and preserves its review order ac
   await setup(page);
   const ready = new Set<number>();
   const library = Array.from({ length: 52 }, (_, index) => ({ ...tracks[0], id: index + 1, track: index + 1, title: `Song ${String(index + 1).padStart(2, "0")}`, path: `Artist/Album/${index + 1}.flac`, output: `Artist/Album/${index + 1}.opus` }));
-  await page.route("**/api/library", route => route.fulfill({ json: library.map(source => ready.has(source.id) ? { ...source, lyrics: { ...source.lyrics, state: "ready" } } : source) }));
+  await routeLibrary(page, route => route.fulfill({ json: library.map(source => ready.has(source.id) ? { ...source, lyrics: { ...source.lyrics, state: "ready" } } : source) }));
   let searches = 0;
   await page.route("**/api/library/*/lyrics/candidates", route => {
     if (route.request().method() !== "GET") searches++;

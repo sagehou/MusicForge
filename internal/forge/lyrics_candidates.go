@@ -290,7 +290,11 @@ func (a *App) newLyricsChoices(target lyricsTarget, provider, query string, cand
 		Searched: searched, Candidates: candidates, PreviewIndex: -1}
 	a.trimLyricsChoices()
 	a.lyricsMu.Unlock()
-	return lyricsCandidateGroup{Provider: provider, Token: token, Candidates: candidates, Cached: cached, Searched: searched}
+	display := append([]lyricsCandidate{}, candidates...)
+	for i := range display {
+		if provider != "source" { display[i].MatchReasons = lyricsMatchReasons(display[i], target.Source) }
+	}
+	return lyricsCandidateGroup{Provider: provider, Token: token, Candidates: display, Cached: cached, Searched: searched}
 }
 
 func (a *App) getLyricsCandidates(w http.ResponseWriter, r *http.Request) {

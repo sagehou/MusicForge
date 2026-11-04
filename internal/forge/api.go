@@ -109,6 +109,11 @@ func (a *App) Handler() http.Handler {
 	mux.HandleFunc("POST /api/auth/password", a.auth(a.changePassword))
 	mux.HandleFunc("GET /api/dashboard", a.auth(a.dashboard))
 	mux.HandleFunc("GET /api/library", a.auth(a.library))
+	mux.HandleFunc("GET /api/library/browse", a.auth(a.browseLibrary))
+	mux.HandleFunc("GET /api/library/scope", a.auth(a.libraryScope))
+	mux.HandleFunc("POST /api/library/selection", a.auth(a.librarySelection))
+	mux.HandleFunc("GET /api/lyrics/providers/status", a.auth(a.getLyricsProviderStatus))
+	mux.HandleFunc("POST /api/lyrics/providers/{provider}/check", a.auth(a.checkLyricsProvider))
 	mux.HandleFunc("GET /api/maintenance", a.auth(a.getMaintenance))
 	mux.HandleFunc("POST /api/maintenance/notify-test", a.auth(a.testNotification))
 	mux.HandleFunc("POST /api/library/plan", a.auth(a.planBuild))
@@ -305,20 +310,12 @@ func (a *App) sourcesWithStatusContext(ctx context.Context) ([]Source, error) {
 	return list, nil
 }
 func (a *App) library(w http.ResponseWriter, r *http.Request) {
-	list, err := a.sourcesWithStatusContext(r.Context())
+	index, err := a.cachedLibraryIndex(r.Context())
 	if err != nil {
 		apiError(w, 500, err)
 		return
 	}
-	if err = a.libraryArtworkURLs(r.Context(), list); err != nil {
-		apiError(w, 500, err)
-		return
-	}
-	if err = a.annotateLyrics(r.Context(), list); err != nil {
-		apiError(w, 500, err)
-		return
-	}
-	respondLibrary(w, r, list)
+	respondLibrary(w, r, index.sources)
 }
 func (a *App) dashboard(w http.ResponseWriter, r *http.Request) {
 	list, err := a.sourcesWithStatusContext(r.Context())

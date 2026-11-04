@@ -64,6 +64,14 @@ Support Opus and MP3, each with VBR or CBR. Choose one format for the single out
 - Profile changes mark mismatched artifacts **Needs rebuild** and wait for manual initiation.
 - Distinguish artifacts needing rebuild from expired artifacts whose sources were deleted.
 
+## Library browsing and source diagnostics
+
+- `GET /api/library/browse` filters and sorts indexed tracks into pages of 50 tracks or groups. Counts and maintenance coverage use the full scope. Album order uses disc/track; other names use case-insensitive natural numeric order, independent of browser locale collation.
+- ETags allow 304 responses; `X-Library-Delta: 1` with a known old ETag can return changed entries and full order arrays. Unknown or evicted bases return a full page. Memory-only index/page caches observe SQLite writes, including compatible older writers; database changes rebuild the index. Browsing does not read music files.
+- Opening the workbench loads its full indexed scope through `GET /api/library/scope`. Read-only `POST /api/library/selection` resolves cross-page selections (at most 10,000 source objects) or freezes ordered playable IDs for lyric review. The legacy full-index endpoint remains available.
+- `GET /api/lyrics/providers/status` reports recent searches and cooldowns without provider requests or credential reads. Explicit `POST /api/lyrics/providers/{provider}/check` uses a selected indexed track, a 10-second limit and existing cooldowns. It changes neither lyrics nor settings. Search success does not guarantee timed lyrics; diagnostic history resets on restart.
+- Candidate explanations use the existing alias-aware identity, version, album, duration and score rules. Explanations are display-only; stored choices, automatic matching, ownership guards and schema 2 remain unchanged.
+
 ## Output maintenance and scheduling
 
 - The Library maintenance workbench summarizes the current library, artist or album scope. Quality categories select tracks with missing tags, unusual duration, numbering gaps/conflicts, identical source hashes, build errors, damage warnings, unfinished lyrics or missing indexed covers. Use saved index data only, never automatically delete or edit sources. Durations below 10 seconds or above 60 minutes are review hints.

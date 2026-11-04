@@ -1,3 +1,4 @@
+import { routeLibrary } from "./library-fixture";
 import { test, expect, type Page } from "@playwright/test";
 import type { MaintenanceOptions, Source } from "../src/types";
 import { libraryQuality } from "../src/library-quality";
@@ -14,7 +15,7 @@ const sources: Source[] = [
 async function mock(page: Page) {
   await page.addInitScript(() => { localStorage.setItem("musicforge.language", "en"); localStorage.setItem("musicforge.theme", "light"); });
   await page.route("**/api/auth/me", route => route.fulfill({ json: { initialized: true, authenticated: true, username: "admin", method: "local", csrf: "test", version: "test" } }));
-  await page.route("**/api/library", route => route.fulfill({ json: sources }));
+  await routeLibrary(page, route => route.fulfill({ json: sources }));
   await page.route("**/api/lyrics", route => route.fulfill({ json: { options: { auto_search: false }, report: { state: "idle", total: 0, processed: 0 } } }));
   await page.route("**/api/maintenance/loudness", route => route.fulfill({ json: { state: "idle", total: 0, processed: 0, updated: 0, skipped: 0, failed: 0 } }));
   await page.route("**/api/maintenance/issues", route => route.fulfill({ json: [] }));
@@ -54,7 +55,7 @@ test("quality decisions require an ignore reason and can be reopened", async ({ 
 test("maintenance suggestions preview exact groups and retain failed selections", async ({ page }) => {
   await mock(page);
   const third: Source = { ...sources[0], id: 3, path: "Artist/Album/04.flac", title: "Fourth track", track: 4, output: "Artist/Album/04.opus", lyrics: { state: "ready", output: "Artist/Album/04.opus", signature: "fourth", checked: 77 } };
-  await page.route("**/api/library", route => route.fulfill({ json: [...sources, third] }));
+  await routeLibrary(page, route => route.fulfill({ json: [...sources, third] }));
   const writes: { path: string; ids: number[] }[] = [];
   for (const path of ["/library/rebuild", "/lyrics/search", "/maintenance/loudness"]) await page.route(`**/api${path}`, route => {
     if (route.request().method() === "GET") return route.fulfill({ json: { state: "idle" } });

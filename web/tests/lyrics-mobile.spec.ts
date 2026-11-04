@@ -1,3 +1,4 @@
+import { routeLibrary } from "./library-fixture";
 import { test, expect, type Page, type Locator } from "@playwright/test";
 import type { Source } from "../src/types";
 import { setPreference } from "./preferences";
@@ -21,7 +22,7 @@ test("phone lyric selection opens a separate tab with visible preview and confir
     lyrics: { state: "needs_review", output: `${index === 2 ? "Other/Elsewhere" : "Artist/Album"}/${index + 1}.opus`, signature: "audio", checked: 1 },
   }));
   await context.route("**/api/auth/me", route => route.fulfill({ json: { initialized: true, authenticated: true, username: "admin", method: "local", csrf: "test", oidc: false, version: "test" } }));
-  await context.route("**/api/library", route => route.fulfill({ json: sources }));
+  await routeLibrary(context, route => route.fulfill({ json: sources }));
   await context.route("**/api/lyrics", route => route.fulfill({ json: { options: { auto_search: false, min_score: 96 }, report: { state: "idle" } } }));
   let searches = 0;
   await context.route("**/api/library/*/lyrics/candidates", route => {
@@ -160,7 +161,7 @@ test("instrumental choices renew expired and consumed targets when replacing lyr
   await page.addInitScript(() => { localStorage.setItem("musicforge.language", "en"); });
   const source: Source = { id: 1, path: "Artist/Album/01.flac", artist: "Artist", album: "Album", title: "Track", track: 1, disc: 1, duration: 183, present: true, output: "Artist/Album/01.opus", output_present: true, status: "ready", error: "", size: 123, metadata: {} };
   await page.route("**/api/auth/me", route => route.fulfill({ json: { initialized: true, authenticated: true, username: "admin", method: "local", csrf: "test", oidc: false, version: "test" } }));
-  await page.route("**/api/library", route => route.fulfill({ json: [source] }));
+  await routeLibrary(page, route => route.fulfill({ json: [source] }));
   await page.route("**/api/lyrics", route => route.fulfill({ json: { options: { auto_search: false, min_score: 96 }, report: { state: "idle" } } }));
   let version = 0, sequence = 0;
   const tokens = new Map<string, number>();

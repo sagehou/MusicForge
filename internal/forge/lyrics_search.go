@@ -75,6 +75,8 @@ type lyricsState struct {
 	lyricsRetries map[string]time.Time
 	lyricsChoices map[string]*lyricsChoiceSet
 	lyricsCacheMu sync.Mutex
+	providerDiagnostics map[string]lyricsProviderDiagnostic
+	providerChecking map[string]int
 	netease       *neteaseSessionState
 }
 

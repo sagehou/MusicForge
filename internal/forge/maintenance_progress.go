@@ -26,23 +26,8 @@ func (a *App) getMaintenanceProgress(w http.ResponseWriter, r *http.Request) {
 		Provider string `json:"provider"`
 		RetryAt  int64  `json:"retry_at"`
 	}
-	untilByProvider := map[string]time.Time{}
-	for _, provider := range lyricsProviders {
-		untilByProvider[provider] = a.lyricsRetries[provider]
-	}
-	netease := a.netease
 	a.lyricsMu.Unlock()
-	// Never wait for an in-flight request or read a Cookie file to render status.
-	if netease != nil {
-		select {
-		case netease.gate <- struct{}{}:
-			if netease.retryAt.After(untilByProvider["netease"]) {
-				untilByProvider["netease"] = netease.retryAt
-			}
-			<-netease.gate
-		default:
-		}
-	}
+	untilByProvider := a.lyricsProviderCooldowns()
 	cooldowns := []cooldown{}
 	for _, provider := range lyricsProviders {
 		if until := untilByProvider[provider]; until.After(time.Now().Add(2 * time.Second)) {

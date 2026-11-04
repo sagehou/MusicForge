@@ -3,9 +3,11 @@ import { ArrowDown, ArrowUp, Check, ChevronLeft, ChevronRight, ExternalLink, Fil
 import { api } from "../api";
 import { useI18n, type MessageKey } from "../i18n";
 import type { LyricsProvider, Source } from "../types";
+import type { LyricsInventory } from "../library-data";
 import { Loading, ResourceWarning, useResource, type Notice } from "./resource";
 import { Button } from "./ui/button";
 import { InlineDetails } from "./inline-details";
+import { LyricsProviderDiagnostics } from "./lyrics-provider-diagnostics";
 
 type LyricsResponse = {
   options: { auto_search: boolean; min_score: number; providers?: OnlineProvider[] };
@@ -21,36 +23,27 @@ export function lyricsMatchState(source: Source): LyricsMatchState | undefined {
   return source.lyrics?.state || "unchecked";
 }
 
-export function LyricsSearchButton({ ids, all = false, refresh = false, replaceTraditional = false, inspectOnly = false, disabled = false, compact = false, iconOnly = false, label, notify, onStarted }: {
-  ids?: number[]; all?: boolean; refresh?: boolean; replaceTraditional?: boolean; inspectOnly?: boolean; disabled?: boolean; compact?: boolean; iconOnly?: boolean; label: MessageKey; notify: Notice; onStarted?: () => void;
+export function LyricsSearchButton({ ids, getIDs, all = false, refresh = false, replaceTraditional = false, inspectOnly = false, disabled = false, compact = false, iconOnly = false, label, notify, onStarted }: {
+  ids?: number[]; getIDs?: () => Promise<number[]>; all?: boolean; refresh?: boolean; replaceTraditional?: boolean; inspectOnly?: boolean; disabled?: boolean; compact?: boolean; iconOnly?: boolean; label: MessageKey; notify: Notice; onStarted?: () => void;
 }) {
   const { t } = useI18n();
   const [busy, setBusy] = useState(false);
   async function search() {
     setBusy(true);
     try {
-      const result = await api<{ selected: number; skipped?: number }>("/lyrics/search", "POST", { ...(all ? { all: true } : { ids }), refresh, ...(replaceTraditional ? { replace_traditional: true } : {}), ...(inspectOnly ? { inspect_only: true } : {}) });
+      const selectedIDs = getIDs ? await getIDs() : ids;
+      const result = await api<{ selected: number; skipped?: number }>("/lyrics/search", "POST", { ...(all ? { all: true } : { ids: selectedIDs }), refresh, ...(replaceTraditional ? { replace_traditional: true } : {}), ...(inspectOnly ? { inspect_only: true } : {}) });
       notify(result.selected === 0 ? "lyrics.nothingPending" : "lyrics.started"); onStarted?.();
     } catch (err) { notify(err as Error, true); }
     finally { setBusy(false); }
   }
-  return <Button type="button" variant="outline" size="sm" className={compact ? "lyrics-action" : undefined} aria-label={t(label)} title={t(label)} disabled={disabled || busy || !all && !ids?.length} onClick={() => void search()}><Search size={13} />{!iconOnly && t(compact ? "lyrics.searchShort" : label)}</Button>;
+  return <Button type="button" variant="outline" size="sm" className={compact ? "lyrics-action" : undefined} aria-label={t(label)} title={t(label)} disabled={disabled || busy || !all && !getIDs && !ids?.length} onClick={() => void search()}><Search size={13} />{!iconOnly && t(compact ? "lyrics.searchShort" : label)}</Button>;
 }
 
-export function LyricsMaintenance({ sources, scope, notify }: { sources: Source[]; scope?: "album" | "artist"; notify: Notice }) {
+export function LyricsMaintenance({ inventory, scopeQuery, scope, notify }: { inventory: LyricsInventory; scopeQuery: string; scope?: "album" | "artist"; notify: Notice }) {
   const { t } = useI18n();
   const coverage = scope === "album" ? "lyrics.albumCoverage" : scope === "artist" ? "lyrics.artistCoverage" : "lyrics.coverage";
-  const inventory = useMemo(() => {
-    const counts: Record<LyricsMatchState, number> = { ready: 0, unchecked: 0, not_found: 0, instrumental: 0, needs_review: 0, failed: 0 };
-    let total = 0;
-    for (const source of sources) {
-      const state = lyricsMatchState(source);
-      if (!state) continue;
-      counts[state]++;
-      total++;
-    }
-    return { counts, total, checked: total - counts.unchecked };
-  }, [sources]);
+  const getIDs = scope ? async () => (await api<{ ids: number[] }>("/library/selection", "POST", { query: scopeQuery, ids_only: true, playable: true })).ids : undefined;
   return <section className="library-comparison lyrics-panel">
     <details className="lyrics-settings"><summary><FileMusic size={18} /><span>{t("lyrics.title")}</span><small className="maintenance-count" aria-label={t(coverage, { done: inventory.checked, total: inventory.total })}>{inventory.checked} / {inventory.total}</small><ChevronRight size={16} /></summary>
       <section className="lyrics-library-summary" aria-label={t(scope === "album" ? "lyrics.albumStatus" : scope === "artist" ? "lyrics.artistStatus" : "lyrics.libraryStatus")}>
@@ -59,11 +52,11 @@ export function LyricsMaintenance({ sources, scope, notify }: { sources: Source[
         <small>{t("lyrics.inventoryHint")}</small>
       </section>
     </details>
-    <LyricsControls notify={notify} ids={scope ? sources.filter(source => lyricsMatchState(source)).map(source => source.id) : undefined} label={scope === "album" ? "lyrics.searchAlbum" : scope === "artist" ? "lyrics.searchArtist" : "lyrics.searchAll"} />
+    <LyricsControls notify={notify} getIDs={getIDs} label={scope === "album" ? "lyrics.searchAlbum" : scope === "artist" ? "lyrics.searchArtist" : "lyrics.searchAll"} />
   </section>;
 }
 
-function LyricsControls({ notify, settings = false, ids, label = "lyrics.searchAll" }: { notify: Notice; settings?: boolean; ids?: number[]; label?: MessageKey }) {
+function LyricsControls({ notify, settings = false, getIDs, label = "lyrics.searchAll" }: { notify: Notice; settings?: boolean; getIDs?: () => Promise<number[]>; label?: MessageKey }) {
   const { t, errorMessage } = useI18n();
   const resource = useResource<LyricsResponse>("/lyrics", 2000);
   const [busy, setBusy] = useState(false);
@@ -77,14 +70,14 @@ function LyricsControls({ notify, settings = false, ids, label = "lyrics.searchA
   }
   return <div className="lyrics-body" data-running={running}>
     <div className="actions lyrics-quick-actions">
-      <LyricsSearchButton all={ids === undefined} ids={ids} compact={!settings && ids === undefined} iconOnly={!settings && ids === undefined} label={label} notify={notify} disabled={busy || running} onStarted={resource.retry} />
+      <LyricsSearchButton all={!getIDs} getIDs={getIDs} compact={!settings && !getIDs} iconOnly={!settings && !getIDs} label={label} notify={notify} disabled={busy || running} onStarted={resource.retry} />
       {settings && <LyricsSearchButton all inspectOnly label="lyrics.inspect" notify={notify} disabled={busy || running} onStarted={resource.retry} />}
-      {running && ids === undefined && <Button className="lyrics-action" variant="outline" size="sm" aria-label={t(report.stopping ? "lyrics.stopping" : "lyrics.stop")} disabled={busy || report.stopping} onClick={() => void stop()}><Square size={13} /></Button>}
+      {running && !getIDs && <Button className="lyrics-action" variant="outline" size="sm" aria-label={t(report.stopping ? "lyrics.stopping" : "lyrics.stop")} disabled={busy || report.stopping} onClick={() => void stop()}><Square size={13} /></Button>}
       {!settings && <a className="lyrics-settings-link" href="/settings?section=lyrics" aria-label={t("lyrics.settings")} title={t("lyrics.settings")}><Settings2 size={14} /></a>}
     </div>
     <ResourceWarning error={resource.error} retry={resource.retry} />
-    {running && ids !== undefined && <a className="lyrics-global-progress" href="/settings?section=lyrics">{t("lyrics.globalProgress")}</a>}
-    {ids === undefined && report.state !== "idle" && <div role="status" aria-label={t("lyrics.batchProgress")} aria-live="polite">
+    {running && !!getIDs && <a className="lyrics-global-progress" href="/settings?section=lyrics">{t("lyrics.globalProgress")}</a>}
+    {!getIDs && report.state !== "idle" && <div role="status" aria-label={t("lyrics.batchProgress")} aria-live="polite">
       <strong>{t(report.total === 0 && report.skipped ? "lyrics.nothingPending" : report.mode === "inspect" ? `lyrics.inspectReport.${report.state}` : report.mode === "replace" ? `lyrics.replaceReport.${report.state}` : `lyrics.report.${report.state}`)}</strong>
       {report.total > 0 && <p>{report.mode === "replace" ? t("lyrics.replaceProgress", { done: report.processed, total: report.total, replaced: report.replaced ?? 0, unchanged: report.unchanged ?? 0, failed: report.failed }) : report.mode === "inspect" ? t("lyrics.inspectProgress", { done: report.processed, total: report.total, found: report.found, failed: report.failed }) : t("lyrics.progress", { done: report.processed, total: report.total, found: report.found, missing: report.not_found, failed: report.failed, review: report.needs_review ?? 0 })}</p>}
       {(report.skipped ?? 0) > 0 && <small>{t("lyrics.skipped", { count: report.skipped ?? 0 })}</small>}
@@ -124,7 +117,7 @@ export function LyricsSettings({ notify, notification }: { notify: Notice; notif
       <div className="settings-save" data-dirty={dirty}>{notification}<span>{t(dirty ? "settings.unsaved" : "settings.savedIn")}</span><Button type="button" variant="ghost" disabled={busy || !dirty} onClick={() => setDraft(undefined)}>{t("settings.discard")}</Button><Button type="submit" form="lyrics-options-form" disabled={busy || !dirty}><Check size={16} />{t("settings.save")}</Button></div>
     </form>
     <section className="panel settings-panel lyrics-batch-settings"><div className="settings-title"><Search /><div><h2>{t("lyrics.batchTitle")}</h2><p>{t("lyrics.batchHint")}</p></div></div><LyricsControls notify={notify} settings /><small>{t("lyrics.inspectHint")}</small><div className="actions"><Button asChild variant="outline" size="sm"><a href="/library?view=tracks&lyrics_script=traditional">{t("lyrics.filterTraditional")}</a></Button></div><small>{t("lyrics.replaceHint")}</small></section>
-
+    <LyricsProviderDiagnostics notify={notify} />
   </div>;
 }
 
@@ -175,7 +168,7 @@ export function LyricsTrack({ source, notify, onChoose, pickerHref, expanded = f
 const defaultOnlineProviders = ["qq", "kugou", "netease", "petitlyrics", "lrclib", "kuwo", "migu"] as const;
 const onlineProviders = [...defaultOnlineProviders, "amll", "unison"] as const;
 type OnlineProvider = Exclude<LyricsProvider, "source">;
-type Candidate = { index: number; provider: OnlineProvider; title: string; artist: string; album: string; duration: number; high_confidence: boolean; identity_match?: boolean; match_score: number; duration_delta?: number; script: string; translation_script?: string };
+type Candidate = { index: number; provider: OnlineProvider; title: string; artist: string; album: string; duration: number; high_confidence: boolean; identity_match?: boolean; match_score: number; duration_delta?: number; match_reasons?: ("version" | "title" | "artist" | "duration_unknown" | "duration" | "album")[]; script: string; translation_script?: string };
 type CandidateGroup = { provider: OnlineProvider; token?: string; candidates: Candidate[]; cached?: boolean; searched?: number; loading: boolean; error?: string };
 type CandidateText = { original: string; translation?: string; romanization?: string; script?: string; translation_script?: string };
 type CandidateDiagnostic = { error: string; fields: { name: string; text: string; truncated?: boolean }[]; instrumental?: boolean; uncollected?: boolean };
@@ -328,7 +321,7 @@ export function LyricsPicker({ source, notify, close, saved, previous, next, onB
     </label>}
     <label className="candidate-source-filter"><span>{t("lyrics.sourceFilter")}</span><select value={providerFilter} disabled={saving} onChange={event => setProviderFilter(event.target.value)}><option value="all">{t("lyrics.allCandidates")}</option>{providers.map(provider => <option key={provider} value={provider}>{t(`lyrics.name.${provider}`)}</option>)}</select></label>{choices.filter(choice => providerFilter === "all" || choice.candidate.provider === providerFilter).map(({ token, candidate }) => <label className="lyrics-candidate" key={`${token}:${candidate.index}`} data-recommended={recommended?.token === token && recommended?.candidate.index === candidate.index} data-selected={selected?.token === token && selected?.candidate.index === candidate.index}>
       <input type="radio" name={`lyrics-candidate-${source.id}`} aria-label={t("lyrics.previewCandidate", { title: candidate.title, artist: candidate.artist, provider: t(`lyrics.name.${candidate.provider}`) })} disabled={saving || !token} checked={!!selected && selected.token === token && selected.candidate.index === candidate.index} onChange={() => token && void choose({ token, candidate })} />
-      <span><strong dir="auto">{candidate.title}{recommended?.token === token && recommended?.candidate.index === candidate.index && <em className="lyrics-recommended">{t("lyrics.recommended")}</em>}</strong><span dir="auto">{candidate.artist} · {candidate.album || "—"} · {candidateDuration(candidate.duration)}</span><span className="candidate-source">{t(`lyrics.name.${candidate.provider}`)}</span><small className="candidate-confidence" data-high={candidate.high_confidence}>{t(candidate.high_confidence ? "lyrics.matchHigh" : "lyrics.matchReview")}{candidate.match_score !== undefined && <> · {t("lyrics.matchScore", { score: candidate.match_score })}</>}{candidate.duration_delta !== undefined && <> · {t("lyrics.durationDelta", { seconds: Math.round(candidate.duration_delta * 100) / 100 })}</>}</small>{candidate.script === "simplified" && <small className="script-chip">{t("lyrics.simplified")}</small>}{candidate.script === "traditional" && <small className="script-chip">{t("lyrics.traditional")}</small>}{candidate.translation_script === "simplified" && <small className="script-chip">{t("lyrics.simplifiedTranslation")}</small>}</span>
+      <span><strong dir="auto">{candidate.title}{recommended?.token === token && recommended?.candidate.index === candidate.index && <em className="lyrics-recommended">{t("lyrics.recommended")}</em>}</strong><span dir="auto">{candidate.artist} · {candidate.album || "—"} · {candidateDuration(candidate.duration)}</span><span className="candidate-source">{t(`lyrics.name.${candidate.provider}`)}</span><small className="candidate-confidence" data-high={candidate.high_confidence}>{t(candidate.high_confidence ? "lyrics.matchHigh" : "lyrics.matchReview")}{candidate.match_score !== undefined && <> · {t("lyrics.matchScore", { score: candidate.match_score })}</>}{candidate.duration_delta !== undefined && <> · {t("lyrics.durationDelta", { seconds: Math.round(candidate.duration_delta * 100) / 100 })}</>}</small>{candidate.match_reasons?.map(reason => <small key={reason}>{t(`lyrics.reason.${reason}`)}</small>)}{candidate.match_score < minScore && <small>{t("lyrics.reason.threshold", { score: minScore })}</small>}{candidate.script === "simplified" && <small className="script-chip">{t("lyrics.simplified")}</small>}{candidate.script === "traditional" && <small className="script-chip">{t("lyrics.traditional")}</small>}{candidate.translation_script === "simplified" && <small className="script-chip">{t("lyrics.simplifiedTranslation")}</small>}</span>
     </label>)}</div>
     <div className="lyrics-preview-pane">
     {previewing && <p role="status">{t("lyrics.loadingPreview")}</p>}

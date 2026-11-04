@@ -1,13 +1,14 @@
 import type { Me } from "./types";
+import { mergeLibraryPage, type LibraryPage } from "./library-data";
 
 let csrf = "";
 let sessionRequest: Promise<Me> | undefined;
 let signedOut = false;
 // Keep only the library snapshot in memory; never persist private API data.
-let libraryCache: { data: unknown; etag: string } | undefined;
+const libraryCache = new Map<string, { data: unknown; etag: string }>();
 let cacheGeneration = 0;
 export function cachedResource<T>(path: string): T | undefined {
-  return path === "/library" ? libraryCache?.data as T | undefined : undefined;
+  return libraryCache.get(path)?.data as T | undefined;
 }
 export function setCSRF(value: string) { csrf = value; signedOut = false; }
 
@@ -16,7 +17,7 @@ export function loadSession(): Promise<Me> {
     sessionRequest = api<Me>("/auth/me").then(me => {
       csrf = me.csrf || "";
       signedOut = !me.authenticated;
-      if (signedOut) { libraryCache = undefined; cacheGeneration++; }
+      if (signedOut) { libraryCache.clear(); cacheGeneration++; }
       window.dispatchEvent(new CustomEvent("session-updated", { detail: me }));
       return me;
     }).finally(() => { sessionRequest = undefined; });
@@ -28,12 +29,14 @@ export async function api<T>(path: string, method = "GET", body?: unknown, signa
   const publicAuth = ["/auth/me", "/auth/setup", "/auth/login"].includes(path);
   if (!publicAuth && sessionRequest) await sessionRequest;
   if (!publicAuth && signedOut) throw new Error("login required");
-  const cacheable = path === "/library" && method === "GET";
+  const page = path.startsWith("/library/browse?");
+  const cacheable = method === "GET" && (path === "/library" || page || path.startsWith("/library/scope?"));
+  const readOnly = method === "GET" || path === "/library/selection" && method === "POST";
   const generation = cacheGeneration;
-  const cached = cacheable ? libraryCache : undefined;
+  const cached = cacheable ? libraryCache.get(path) : undefined;
   const send = () => fetch(`/api${path}`, {
     method, credentials: "same-origin", cache: cacheable ? "no-store" : "default",
-    headers: { "Content-Type": "application/json", "X-CSRF-Token": csrf, ...(cached?.etag ? { "If-None-Match": cached.etag } : {}) },
+    headers: { "Content-Type": "application/json", "X-CSRF-Token": csrf, ...(cached?.etag ? { "If-None-Match": cached.etag, ...(page ? { "X-Library-Delta": "1" } : {}) } : {}) },
     body: body === undefined ? undefined : JSON.stringify(body),
     signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(15000)]) : AbortSignal.timeout(15000),
   }).catch((err: unknown) => {
@@ -47,6 +50,10 @@ export async function api<T>(path: string, method = "GET", body?: unknown, signa
     if (response.status === 304 && cached) { value = cached.data; return; }
     try { value = await response.json(); }
     catch { throw new Error(`Server returned an unreadable response (HTTP ${response.status}); please retry\nRequest: ${method} /api${path}`); }
+    if (page && value && typeof value === "object" && "base" in value) {
+      if (!cached || value.base !== cached.etag) throw new Error("Library changed while refreshing; please retry");
+      value = mergeLibraryPage(cached.data as LibraryPage, value as LibraryPage & { base: string; row_order: number[]; group_order: string[] });
+    }
   };
   await read();
   const message = () => value !== null && typeof value === "object" && "error" in value && typeof value.error === "string" ? value.error : `Server returned HTTP ${response.status}; please retry`;
@@ -54,7 +61,7 @@ export async function api<T>(path: string, method = "GET", body?: unknown, signa
     response.status === 403 && message() === "invalid request origin or CSRF token")) {
     const me = await loadSession();
     // Only reads may be replayed. A rejected write must be explicitly retried.
-    if (me.authenticated && method === "GET" && response.status === 401) {
+    if (me.authenticated && readOnly && response.status === 401) {
       response = await send();
       await read();
     } else if (me.authenticated) {
@@ -69,11 +76,13 @@ export async function api<T>(path: string, method = "GET", body?: unknown, signa
     if (response.status >= 500) throw new Error(raw + detail);
     throw new Error(raw);
   }
-  if (cacheable && generation === cacheGeneration) libraryCache = { data: value, etag: response.headers.get("ETag") || (response.status === 304 ? cached?.etag : "") || "" };
-  if (method !== "GET") {
+  if (cacheable && generation === cacheGeneration) {
+    if (!libraryCache.has(path) && libraryCache.size >= 32) libraryCache.delete(libraryCache.keys().next().value!);
+    libraryCache.set(path, { data: value, etag: response.headers.get("ETag") || (response.status === 304 ? cached?.etag : "") || "" });
+  }
+  if (!readOnly) {
     cacheGeneration++;
-    if (path === "/auth/logout") libraryCache = undefined;
-    else if (libraryCache) libraryCache = { ...libraryCache, etag: "" };
+    if (path === "/auth/logout") libraryCache.clear();
   }
   return value as T;
 }

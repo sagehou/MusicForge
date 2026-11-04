@@ -42,7 +42,7 @@ function ProviderChecks({ notify }: { notify: Notice }) {
     <p>{t("lyrics.diagnostics.checkHint")}</p>
     <label className="field"><span className="field-label">{t("lyrics.diagnostics.search")}</span><input type="search" value={query} maxLength={250} disabled={!!busy} onChange={event => { setQuery(event.target.value); setSourceID(0); }} /></label>
     <ResourceWarning error={tracks.error} retry={tracks.retry} />
-    <label className="field"><span className="field-label">{t("lyrics.diagnostics.track")}</span><select value={sourceID} disabled={!!busy || !tracks.data} onChange={event => setSourceID(Number(event.target.value))}>
+    <label className="field"><span className="field-label">{t("lyrics.diagnostics.track")}</span><select aria-label={t("lyrics.diagnostics.track")} value={sourceID} disabled={!!busy || !tracks.data} onChange={event => setSourceID(Number(event.target.value))}>
       <option value={0}>{t("lyrics.diagnostics.chooseTrack")}</option>
       {tracks.data?.rows.map(source => <option key={source.id} value={source.id} disabled={!source.title.trim() || !source.artist.trim() || !source.duration}>{source.title || source.path} · {source.artist}</option>)}
     </select></label>

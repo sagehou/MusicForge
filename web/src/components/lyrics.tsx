@@ -52,11 +52,11 @@ export function LyricsMaintenance({ inventory, scopeQuery, scope, notify }: { in
         <small>{t("lyrics.inventoryHint")}</small>
       </section>
     </details>
-    <LyricsControls notify={notify} getIDs={getIDs} label={scope === "album" ? "lyrics.searchAlbum" : scope === "artist" ? "lyrics.searchArtist" : "lyrics.searchAll"} />
+    <LyricsControls notify={notify} disabled={!!scope && inventory.total === 0} getIDs={getIDs} label={scope === "album" ? "lyrics.searchAlbum" : scope === "artist" ? "lyrics.searchArtist" : "lyrics.searchAll"} />
   </section>;
 }
 
-function LyricsControls({ notify, settings = false, getIDs, label = "lyrics.searchAll" }: { notify: Notice; settings?: boolean; getIDs?: () => Promise<number[]>; label?: MessageKey }) {
+function LyricsControls({ notify, settings = false, getIDs, disabled = false, label = "lyrics.searchAll" }: { notify: Notice; settings?: boolean; disabled?: boolean; getIDs?: () => Promise<number[]>; label?: MessageKey }) {
   const { t, errorMessage } = useI18n();
   const resource = useResource<LyricsResponse>("/lyrics", 2000);
   const [busy, setBusy] = useState(false);
@@ -70,7 +70,7 @@ function LyricsControls({ notify, settings = false, getIDs, label = "lyrics.sear
   }
   return <div className="lyrics-body" data-running={running}>
     <div className="actions lyrics-quick-actions">
-      <LyricsSearchButton all={!getIDs} getIDs={getIDs} compact={!settings && !getIDs} iconOnly={!settings && !getIDs} label={label} notify={notify} disabled={busy || running} onStarted={resource.retry} />
+      <LyricsSearchButton all={!getIDs} getIDs={getIDs} compact={!settings && !getIDs} iconOnly={!settings && !getIDs} label={label} notify={notify} disabled={disabled || busy || running} onStarted={resource.retry} />
       {settings && <LyricsSearchButton all inspectOnly label="lyrics.inspect" notify={notify} disabled={busy || running} onStarted={resource.retry} />}
       {running && !getIDs && <Button className="lyrics-action" variant="outline" size="sm" aria-label={t(report.stopping ? "lyrics.stopping" : "lyrics.stop")} disabled={busy || report.stopping} onClick={() => void stop()}><Square size={13} /></Button>}
       {!settings && <a className="lyrics-settings-link" href="/settings?section=lyrics" aria-label={t("lyrics.settings")} title={t("lyrics.settings")}><Settings2 size={14} /></a>}

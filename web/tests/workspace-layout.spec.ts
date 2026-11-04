@@ -375,3 +375,26 @@ test("saving inline lyrics protects the editor and preserves its review order ac
   await expect(picker).toHaveCount(0);
   await expect(page.getByRole("button", { name: "View details for Song 50", exact: true })).toHaveCount(0);
 });
+
+
+test("closing details ignores a delayed next-track response", async ({ page }) => {
+  await setup(page);
+  let release!: () => void;
+  const held = new Promise<void>(resolve => { release = resolve; });
+  let requested = false;
+  await routeLibrary(page, async route => {
+    if (route.request().method() === "POST" && route.request().postDataJSON().ids?.[0] === 2) { requested = true; await held; }
+    return route.fulfill({ json: tracks });
+  });
+  await page.goto("/library?view=tracks");
+  await page.getByRole("button", { name: "View details for Song 01", exact: true }).click();
+  const details = page.getByRole("region", { name: "Song details", exact: true });
+  await details.getByRole("button", { name: "Next track", exact: true }).click();
+  await expect.poll(() => requested).toBe(true);
+  await page.keyboard.press("Escape");
+  await expect(details).toHaveCount(0);
+  const response = page.waitForResponse(res => new URL(res.url()).pathname === "/api/library/selection");
+  release(); await response;
+  await expect(details).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "View details for Song 01", exact: true })).toHaveAttribute("aria-expanded", "false");
+});

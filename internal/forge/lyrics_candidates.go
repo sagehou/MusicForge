@@ -292,7 +292,9 @@ func (a *App) newLyricsChoices(target lyricsTarget, provider, query string, cand
 	a.lyricsMu.Unlock()
 	display := append([]lyricsCandidate{}, candidates...)
 	for i := range display {
-		if provider != "source" { display[i].MatchReasons = lyricsMatchReasons(display[i], target.Source) }
+		if provider != "source" {
+			display[i].MatchReasons = lyricsMatchReasons(display[i], target.Source)
+		}
 	}
 	return lyricsCandidateGroup{Provider: provider, Token: token, Candidates: display, Cached: cached, Searched: searched}
 }

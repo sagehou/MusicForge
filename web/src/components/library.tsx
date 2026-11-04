@@ -165,7 +165,7 @@ export function Library({ notify }: { notify: Notice }) {
   const busy = working || pending || selectionPending;
   const rows = data?.rows ?? [];
   const groups = data?.groups ?? [];
-  const known = new Map([...selectionRows, ...(extraSource ? [extraSource] : []), ...(data?.context_source ? [data.context_source] : []), ...rows, ...(data?.active ? [data.active] : [])].map(source => [source.id, source]));
+  const known = new Map([...selectionRows, ...(extraSource && pending && extraSource.id === anchor ? [extraSource] : []), ...(data?.context_source ? [data.context_source] : []), ...rows, ...(data?.active ? [data.active] : [])].map(source => [source.id, source]));
   const chosen = (selectionPending ? [] : [...selected]).flatMap(id => known.has(id) ? [known.get(id)!] : []);
   const selectedKey = [...selected].join(",");
   useEffect(() => {
@@ -351,7 +351,7 @@ export function Library({ notify }: { notify: Notice }) {
     } catch (err) { if (stepRequest.current === version) notify(err as Error, true); }
   }
   if (standalone) {
-    const source = lyricsID ? known.get(lyricsID) : undefined;
+    const source = lyricsID ? pending ? known.get(lyricsID) : data.active?.id === lyricsID ? data.active : undefined : undefined;
     return <div className="lyrics-page">
       <PageHeading><div><h1>{t("lyrics.choose")}</h1><p>{source && `${source.title} · ${source.artist}${source.duration ? ` · ${t("lyrics.targetDuration", { seconds: source.duration })}` : ""}`}</p></div><Button asChild variant="ghost" size="sm"><a href={lyricsBusy ? undefined : pickerHref()} aria-disabled={lyricsBusy || undefined}><ArrowLeft size={16} />{t("lyrics.returnToLibrary")}</a></Button></PageHeading>
       <ResourceWarning error={error} retry={retry} />

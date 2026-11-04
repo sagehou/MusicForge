@@ -374,7 +374,9 @@ func (a *App) providerCandidates(ctx context.Context, provider string, source So
 	started := time.Now()
 	cooling := a.lyricsProviderCooldowns()[provider].After(started.Add(2 * time.Second))
 	a.lyricsMu.Lock()
-	if a.providerChecking == nil { a.providerChecking = map[string]int{} }
+	if a.providerChecking == nil {
+		a.providerChecking = map[string]int{}
+	}
 	a.providerChecking[provider]++
 	a.lyricsMu.Unlock()
 	defer func() { a.recordProviderDiagnostic(ctx, provider, source, started, len(result), err, cooling) }()

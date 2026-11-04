@@ -142,7 +142,7 @@ test("album and artist lyrics actions use all playable tracks in their scope, in
   await page.locator(".lyrics-settings > summary").click();
   await page.getByRole("button", { name: "Fill artist lyrics", exact: true }).click();
   await expect.poll(() => searches.length).toBe(3);
-  expect(searches[2]).toEqual({ ids: [...album.slice(0, 63).map(source => source.id), otherAlbum.id], refresh: false });
+  expect(searches[2]).toEqual({ ids: [otherAlbum.id, ...album.slice(0, 63).map(source => source.id)], refresh: false });
   await page.goto("/library?view=albums&artist=River+Ensemble&album=missing");
   await page.locator(".lyrics-settings > summary").click();
   await expect(page.getByRole("button", { name: "Fill album lyrics", exact: true })).toBeDisabled();

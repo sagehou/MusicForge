@@ -23,12 +23,15 @@ func TestLyricsProvidersValidatePersistAndSurviveLegacyWriters(t *testing.T) {
 			t.Fatal(options, err)
 		}
 	}
-	check(a, false, 96, lyricsProviders)
-	order := []string{"petitlyrics", "lrclib", "migu"}
+	check(a, false, 96, defaultLyricsProviders)
+	order := []string{"amll", "petitlyrics", "unison", "lrclib", "migu"}
 	if w := request("PUT", "/api/lyrics/options", map[string]any{"auto_search": true, "min_score": 90, "providers": order}); w.Code != 200 {
 		t.Fatal(w.Code, w.Body.String())
 	}
 	check(a, true, 90, order)
+	if raw, _ := a.meta(lyricsProvidersKey); raw != `{"version":1,"providers":["petitlyrics","lrclib","migu"]}` {
+		t.Fatal("new source names reached the published policy", raw)
+	}
 	if raw, _ := a.meta(lyricsOptionsKey); raw != `{"auto_search":true}` {
 		t.Fatal("published options format changed", raw)
 	}
@@ -43,6 +46,18 @@ func TestLyricsProvidersValidatePersistAndSurviveLegacyWriters(t *testing.T) {
 	}
 	check(a, true, 98, order)
 	if err := a.setMeta(lyricsOptionsKey, `{"auto_search":false}`); err != nil {
+		t.Fatal(err)
+	}
+	check(a, false, 98, order)
+	if err := a.setMeta(lyricsProvidersKey, `{"version":1,"providers":["migu","qq"]}`); err != nil {
+		t.Fatal(err)
+	}
+	check(a, false, 98, []string{"amll", "migu", "unison", "qq"})
+	if err := a.setMeta(lyricsProvidersKey, `{"version":1,"providers":[]}`); err != nil {
+		t.Fatal(err)
+	}
+	check(a, false, 98, []string{"amll", "unison"})
+	if err := a.setMeta(lyricsProvidersKey, `{"version":1,"providers":["petitlyrics","lrclib","migu"]}`); err != nil {
 		t.Fatal(err)
 	}
 	check(a, false, 98, order)
@@ -67,12 +82,23 @@ func TestLyricsProvidersValidatePersistAndSurviveLegacyWriters(t *testing.T) {
 		t.Fatal(w.Code, w.Body.String())
 	}
 	check(reopened, false, 98, []string{})
-	for _, invalid := range []string{`{"version":2,"providers":[]}`, `{"version":1}`, `{"version":1,"providers":null}`, `{"version":1,"providers":["qq","qq"]}`, `{"version":1,"providers":["other"]}`, `invalid`} {
+	for _, invalid := range []string{`{"version":2,"providers":[]}`, `{"version":1}`, `{"version":1,"providers":null}`, `{"version":1,"providers":["qq","qq"]}`, `{"version":1,"providers":["other"]}`, `{"version":1,"providers":["amll"]}`, `invalid`} {
 		if err := reopened.setMeta(lyricsProvidersKey, invalid); err != nil {
 			t.Fatal(err)
 		}
 		if _, err := reopened.lyricsOptions(ctx); err == nil {
 			t.Fatal("invalid saved policy silently enabled sources", invalid)
+		}
+	}
+	if err := reopened.setMeta(lyricsProvidersKey, `{"version":1,"providers":[]}`); err != nil {
+		t.Fatal(err)
+	}
+	for _, invalid := range []string{`{"version":2,"providers":[]}`, `{"version":1,"providers":null}`, `{"version":1,"providers":["amll","amll"]}`, `{"version":1,"providers":["other"]}`} {
+		if err := reopened.setMeta(communityLyricsProvidersKey, invalid); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := reopened.lyricsOptions(ctx); err == nil {
+			t.Fatal("invalid community settings silently enabled sources", invalid)
 		}
 	}
 }

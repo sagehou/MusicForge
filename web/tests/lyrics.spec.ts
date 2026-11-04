@@ -56,13 +56,22 @@ test("lyrics settings save thresholds, retain drafts and offer output-only inspe
   const score = page.getByLabel("Minimum score for automatic matching", { exact: true });
   await expect(score).toHaveValue("96");
   const sources = page.getByRole("group", { name: "Online lyric sources and priority", exact: true });
+  await expect(sources.getByRole("checkbox")).toHaveCount(9);
   await expect(sources.getByRole("checkbox", { checked: true })).toHaveCount(7);
+  await expect(sources.getByRole("checkbox", { name: "AMLL TTML DB", exact: true })).not.toBeChecked();
+  await expect(sources.getByRole("checkbox", { name: "Unison", exact: true })).not.toBeChecked();
+  await expect(sources).toContainText("manual preview and selection");
+  await expect(sources).toContainText("plain text is excluded");
   await expect(sources).toContainText("Japanese synchronized lyrics");
   await sources.getByRole("checkbox", { name: "QQ Music", exact: true }).uncheck();
   await sources.getByRole("button", { name: "Move PetitLyrics up", exact: true }).click();
   await sources.getByRole("button", { name: "Move PetitLyrics up", exact: true }).click();
   await expect(sources.locator("li").first()).toContainText("PetitLyrics");
   await expect(sources.getByRole("button", { name: "Move PetitLyrics up", exact: true })).toBeDisabled();
+  await sources.getByRole("checkbox", { name: "AMLL TTML DB", exact: true }).check();
+  await sources.getByRole("checkbox", { name: "Unison", exact: true }).check();
+  await sources.getByRole("button", { name: "Move AMLL TTML DB up", exact: true }).click();
+  await sources.getByRole("button", { name: "Move Unison up", exact: true }).click();
   await page.getByRole("button", { name: "90 · Relaxed", exact: true }).click();
   await page.getByRole("switch", { name: "Automatically fill lyrics for new and existing artifacts", exact: true }).check();
   await page.getByRole("tab", { name: "Encoding", exact: true }).click();
@@ -73,15 +82,17 @@ test("lyrics settings save thresholds, retain drafts and offer output-only inspe
   expect(saves).toHaveLength(0);
   await page.getByRole("button", { name: "Save settings", exact: true }).click();
   await expect.poll(() => saves.length).toBe(1);
-  expect(options).toEqual({ auto_search: true, min_score: 90, providers: ["petitlyrics", "kugou", "netease", "lrclib", "kuwo", "migu"] });
+  expect(options).toEqual({ auto_search: true, min_score: 90, providers: ["petitlyrics", "kugou", "netease", "lrclib", "kuwo", "amll", "unison", "migu"] });
   await page.getByRole("button", { name: "100 · Strictest", exact: true }).click();
   await sources.getByRole("checkbox", { name: "QQ Music", exact: true }).focus();
   await page.keyboard.press("Space");
-  await expect(sources.locator("li").last()).toContainText("QQ Music");
+  await expect(sources.locator("li[data-enabled=true]").last()).toContainText("QQ Music");
+  await sources.getByRole("checkbox", { name: "AMLL TTML DB", exact: true }).uncheck();
   await sources.getByRole("button", { name: "Move PetitLyrics down", exact: true }).click();
   await page.getByRole("button", { name: "Discard changes", exact: true }).click();
   await expect(score).toHaveValue("90");
   await expect(sources.getByRole("checkbox", { name: "QQ Music", exact: true })).not.toBeChecked();
+  await expect(sources.getByRole("checkbox", { name: "AMLL TTML DB", exact: true })).toBeChecked();
   await expect(sources.locator("li").first()).toContainText("PetitLyrics");
   await score.fill("101");
   await page.getByRole("button", { name: "Save settings", exact: true }).click();
@@ -92,6 +103,8 @@ test("lyrics settings save thresholds, retain drafts and offer output-only inspe
   expect(batches[0]).toEqual({ all: true, refresh: false, inspect_only: true });
   await page.reload();
   await expect(score).toHaveValue("90");
+  await expect(sources.getByRole("checkbox", { name: "AMLL TTML DB", exact: true })).toBeChecked();
+  await expect(sources.getByRole("checkbox", { name: "Unison", exact: true })).toBeChecked();
   await expect(sources.getByRole("checkbox", { name: "QQ Music", exact: true })).not.toBeChecked();
   await expect(sources.locator("li").first()).toContainText("PetitLyrics");
   await page.screenshot({ path: "test-results/lyrics-settings-desktop-en.png", fullPage: true });
@@ -112,11 +125,12 @@ test("lyrics settings save thresholds, retain drafts and offer output-only inspe
   await expect(page).toHaveURL(/view=tracks&lyrics_script=traditional/);
 });
 
-for (const providers of [["petitlyrics", "lrclib"], []]) {
+for (const providers of [["petitlyrics", "lrclib"], ["amll", "unison"], []]) {
   test(`candidate searches honor enabled sources and priority: ${providers.join(",") || "local only"}`, async ({ page }) => {
     await page.addInitScript(() => localStorage.setItem("musicforge.language", "en"));
     const source: Source = { id: 1, path: "Album/01.flac", artist: "Artist", album: "Album", title: "Track", track: 1, disc: 1, duration: 183, present: true, output: "Album/01.opus", output_present: true, status: "ready", error: "", size: 123, metadata: {} };
-    const candidate = (provider: string) => ({ index: 0, provider, title: "Track", artist: "Artist", album: "Album", duration: 183, high_confidence: true, match_score: 100, script: "unknown" });
+    if (providers.includes("unison")) source.lyrics = { state: "ready", output: source.output, signature: "audio", checked: 1, community_provider: "unison", community_attempts: [{ provider: "amll", state: "needs_review" }, { provider: "unison", state: "ready" }] };
+    const candidate = (provider: string) => ({ index: 0, provider, title: "Track", artist: "Artist", album: "Album", duration: provider === "amll" ? 0 : 183, high_confidence: provider !== "amll", match_score: provider === "amll" ? 80 : 100, script: "unknown" });
     const searches: string[] = [], previews: unknown[] = [];
     let saves = 0;
     await page.route("**/api/auth/me", route => route.fulfill({ json: { initialized: true, authenticated: true, username: "admin", method: "local", csrf: "test", oidc: false, version: "test" } }));
@@ -130,6 +144,12 @@ for (const providers of [["petitlyrics", "lrclib"], []]) {
     await page.route("**/api/library/1/lyrics/preview", route => { const body = route.request().postDataJSON(); previews.push(body); return route.fulfill({ json: { original: body.token === "local" ? "[00:00.00]纯音乐，请欣赏\n" : "[00:01.00]日本語の歌\n" } }); });
     await page.route("**/api/library/1/lyrics", route => { saves++; return route.fulfill({ json: {} }); });
     await page.goto("/library?view=tracks");
+    if (providers.includes("unison")) {
+      await page.locator(".lyrics-details > summary").click();
+      await expect(page.locator(".lyrics-status-popover")).toContainText("From Unison");
+      await page.locator(".lyrics-status-popover > details > summary").click();
+      await expect(page.locator(".lyrics-status-popover")).toContainText("From AMLL TTML DB");
+    }
     await page.getByRole("button", { name: "Choose lyrics", exact: true }).click();
     const picker = page.getByRole("region", { name: "Choose lyrics", exact: true });
     const search = picker.getByRole("button", { name: "Search candidates", exact: true });
@@ -139,11 +159,19 @@ for (const providers of [["petitlyrics", "lrclib"], []]) {
       await search.click();
       const online = picker.locator(".lyrics-candidate:not(.lyrics-instrumental)");
       await expect(online).toHaveCount(2);
-      await expect(online.first()).toContainText("PetitLyrics");
+      const first = providers.includes("unison") ? "unison" : "petitlyrics";
+      await expect(online.first()).toContainText(first === "unison" ? "Unison" : "PetitLyrics");
       await expect(online.first().getByRole("radio")).toBeChecked();
       await expect.poll(() => searches.length).toBe(2);
       expect([...searches].sort()).toEqual([...providers].sort());
-      await expect.poll(() => previews).toEqual([{ token: "petitlyrics", index: 0 }]);
+      await expect.poll(() => previews).toEqual([{ token: first, index: 0 }]);
+      if (providers.includes("amll")) {
+        await picker.getByRole("radio", { name: "Preview Track · Artist · AMLL TTML DB", exact: true }).check();
+        await expect.poll(() => previews).toEqual([{ token: "unison", index: 0 }, { token: "amll", index: 0 }]);
+      }
+      await expect(picker.locator("pre")).toContainText("日本語の歌");
+      await picker.getByRole("button", { name: "Save selected lyrics", exact: true }).click();
+      await expect.poll(() => saves).toBe(1);
     } else {
       await expect(search).toBeDisabled();
       await expect(picker).toContainText("No online sources are enabled");

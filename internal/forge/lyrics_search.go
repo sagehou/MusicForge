@@ -177,8 +177,18 @@ func (a *App) putLyricsOptions(w http.ResponseWriter, r *http.Request) {
 		_, err = tx.ExecContext(r.Context(), "INSERT INTO meta(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", lyricsMatchingKey, string(raw))
 	}
 	if err == nil && body.Providers != nil {
-		raw, _ = json.Marshal(lyricsProviderPolicy{Version: 1, Providers: options.Providers})
+		legacy := []string{}
+		for _, provider := range options.Providers {
+			if !communityLyricsProvider(provider) {
+				legacy = append(legacy, provider)
+			}
+		}
+		raw, _ = json.Marshal(lyricsProviderPolicy{Version: 1, Providers: legacy})
 		_, err = tx.ExecContext(r.Context(), "INSERT INTO meta(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", lyricsProvidersKey, string(raw))
+		if err == nil {
+			raw, _ = json.Marshal(lyricsProviderPolicy{Version: 1, Providers: options.Providers})
+			_, err = tx.ExecContext(r.Context(), "INSERT INTO meta(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", communityLyricsProvidersKey, string(raw))
+		}
 	}
 	if err == nil {
 		err = tx.Commit()

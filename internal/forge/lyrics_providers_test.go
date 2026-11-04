@@ -39,7 +39,7 @@ func lyricsJSON(w http.ResponseWriter, data string) {
 
 func TestLyricsProviderPriorityAndFallback(t *testing.T) {
 	track := Source{Title: "夜に駆ける", Artist: "YOASOBI", Album: "THE BOOK", Duration: 261}
-	for _, provider := range lyricsProviders {
+	for _, provider := range defaultLyricsProviders {
 		t.Run(provider, func(t *testing.T) {
 			a, _ := testApp(t)
 			var calls []string

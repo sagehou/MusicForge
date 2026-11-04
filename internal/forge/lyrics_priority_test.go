@@ -22,6 +22,8 @@ func TestAutomaticLyricsUsesScoreThenProviderPriority(t *testing.T) {
 		{"configured Japanese priority", "petitlyrics", nil, []string{"petitlyrics", "lrclib"}},
 		{"better score still beats configured priority", "lrclib", map[string]float64{"petitlyrics": 183.5}, []string{"petitlyrics", "lrclib"}},
 		{"disabled cached providers cannot win", "migu", map[string]float64{"migu": 183.5}, []string{"migu"}},
+		{"configured community priority", "unison", nil, []string{"unison", "lrclib"}},
+		{"better score beats community priority", "lrclib", map[string]float64{"unison": 183.5}, []string{"unison", "lrclib"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			a, s := testApp(t)

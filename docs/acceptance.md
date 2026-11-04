@@ -8,7 +8,7 @@ This page describes what CI checks and what still needs a trial on your own depl
 
 The latest published reference reviewed for this cleanup is **v0.2.59**, source commit `987f2ffed87d3c4aca96a2d76a170f4e95da59b9`:
 
-- [Main CI](https://github.com/sagehou/MusicForge/actions/runs/41775030154): full application validation, backend race/integration/vet, 104 API-mocked Chromium cases, real-application workflows, real Navidrome/rclone and native image checks.
+- [Main CI](https://github.com/sagehou/MusicForge/actions/runs/41775030154): full application validation, backend race/integration/vet, 104 browser cases (Chromium plus focused phone WebKit), real-application workflows, real Navidrome/rclone and native image checks.
 - [Release CI](https://github.com/sagehou/MusicForge/actions/runs/41776429704): reused successful application evidence; fresh dependency audit, final AMD64/ARM64 image/Compose checks and schema-2 rollback through v0.2.58.
 - [Release and image details](https://github.com/sagehou/MusicForge/releases/tag/v0.2.59): `ghcr.io/sagehou/musicforge:v0.2.59`, multiarchitecture digest `sha256:fc5f541e2c20b219d85205b63c10da5e06ffdd14aa7e8aeb935d829cea21982d`.
 

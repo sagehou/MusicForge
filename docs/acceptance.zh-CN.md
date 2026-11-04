@@ -8,7 +8,7 @@
 
 本次整理核对的最近已发布版本是 **v0.2.59**，源码提交 `987f2ffed87d3c4aca96a2d76a170f4e95da59b9`：
 
-- [主分支 CI](https://github.com/sagehou/MusicForge/actions/runs/41775030154)：完整应用验证、后端 race／集成／vet、104 项模拟 API 的 Chromium 用例、真实应用流程、真实 Navidrome／rclone 和原生镜像检查。
+- [主分支 CI](https://github.com/sagehou/MusicForge/actions/runs/41775030154)：完整应用验证、后端 race／集成／vet、104 项浏览器用例（Chromium 与手机定向 WebKit）、真实应用流程、真实 Navidrome／rclone 和原生镜像检查。
 - [发布 CI](https://github.com/sagehou/MusicForge/actions/runs/41776429704)：复用成功的应用验证，重新进行依赖审计、最终 AMD64／ARM64 镜像与 Compose 检查，并通过 v0.2.58 完成 schema-2 回滚往返。
 - [发布与镜像信息](https://github.com/sagehou/MusicForge/releases/tag/v0.2.59)：`ghcr.io/sagehou/musicforge:v0.2.59`，多架构摘要 `sha256:fc5f541e2c20b219d85205b63c10da5e06ffdd14aa7e8aeb935d829cea21982d`。
 

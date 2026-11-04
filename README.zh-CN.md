@@ -46,6 +46,8 @@ MusicForge 负责准备音乐库，内置试听方便核对编辑结果；日常
 
    `FLAC_DIR` 只是沿用的部署变量名，并不限制只能放 FLAC。三个目录要彼此独立。
 
+   启动前也要设置 `MUSICFORGE_PUBLIC_URL`：在 Docker 宿主机本地访问时填 `http://localhost:8787`；通过反向代理访问时，填实际的 HTTPS 地址。
+
 3. 创建可写目录。使用默认 UID／GID 时，按宿主机权限执行：
 
    ```sh
@@ -60,7 +62,7 @@ MusicForge 负责准备音乐库，内置试听方便核对编辑结果；日常
 
    同一 UID 还需要读取源音乐的权限。`/config` 保存账号和密钥，启动时会限制其访问权限；宿主机挂载路径不存在时，Compose 会拒绝启动。
 
-4. 示例只监听 `127.0.0.1:8787`。在 Docker 宿主机本地访问时，启动前设为 `MUSICFORGE_PUBLIC_URL=http://localhost:8787`。远程访问请配置 HTTPS 反向代理，并填写实际域名，例如 `https://musicforge.example.com`。应用部署在 `/`，不支持子路径。详见[代理设置](docs/deployment.zh-CN.md#反向代理与访问地址)。
+4. 示例只监听 `127.0.0.1:8787`。远程访问时，通过反向代理把实际的 HTTPS 地址转发到这里。应用部署在 `/`，不支持子路径。详见[代理设置](docs/deployment.zh-CN.md#反向代理与访问地址)。
 
 5. 打开页面，填写首次启动日志中的 `setup_code`，创建管理员账号。在**设置**中填写容器路径 `/music/source`、`/music/output`，启用音乐库并保存，再启动扫描。默认是 **Opus VBR 192 kbps**；播放器需要 MP3 时，建议选 **MP3 VBR V2**。
 

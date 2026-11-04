@@ -46,6 +46,8 @@ You need Docker Engine with Compose v2, an existing music folder and a **dedicat
 
    `FLAC_DIR` is a retained deployment variable name, not a FLAC-only restriction. Keep all three directories separate.
 
+   Set `MUSICFORGE_PUBLIC_URL` before starting: use `http://localhost:8787` for access on the Docker host, or your actual HTTPS origin when using a reverse proxy.
+
 3. Create the writable directories. For the default UID/GID, run with the required host permissions:
 
    ```sh
@@ -60,7 +62,7 @@ You need Docker Engine with Compose v2, an existing music folder and a **dedicat
 
    The same UID needs read access to your source music. Startup enforces private permissions on `/config`, which holds accounts and secrets. Compose refuses missing host paths.
 
-4. The example binds to `127.0.0.1:8787`. For access on the Docker host, set `MUSICFORGE_PUBLIC_URL=http://localhost:8787` before starting. For remote access, use an HTTPS reverse proxy and set the public origin, such as `https://musicforge.example.com`. The app serves from `/`. See [proxy setup](docs/deployment.md#reverse-proxy-and-access-origins).
+4. The example binds to `127.0.0.1:8787`. For remote access, forward your HTTPS origin to it through a reverse proxy. The app serves from `/`. See [proxy setup](docs/deployment.md#reverse-proxy-and-access-origins).
 
 5. Open the UI, enter `setup_code` from the first-start logs and create your administrator account. In **Settings**, enter the container paths `/music/source` and `/music/output`, enable the library and save. Start a scan. The default is **Opus VBR at 192 kbps**; choose **MP3 VBR V2** if your players need MP3.
 

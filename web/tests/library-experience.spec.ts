@@ -155,7 +155,7 @@ test("album and artist lyrics actions use all playable tracks in their scope, in
   await expect(page.getByRole("button", { name: "Stop lyrics search", exact: true })).toHaveCount(0);
 });
 
-test("all songs share filters, pagination and batch lyrics with visible file facts", async ({ page }) => {
+test("aligned records show all songs with shared filters, pagination, batch lyrics and file facts", async ({ page }) => {
   const library = collection.map(source => ({ ...source, title: source.id >= 100 ? `Song ${source.id}` : source.title }));
   Object.assign(library[0], { title: "First Light · 海岸与夜晚的音乐记录", size: 26214400, source_bitrate: 894123, source_audio: { codec: "flac", bit_depth: 24, sample_rate: 96000, channels: 2 }, output_size: 5242880, lyrics: { state: "not_found", output: library[0].output, signature: "first", checked: 1 } });
   Object.assign(library[3], { lyrics: { state: "not_found", output: library[3].output, signature: "morning", checked: 1 } });

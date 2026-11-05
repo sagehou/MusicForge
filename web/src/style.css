@@ -2018,9 +2018,15 @@ input[role="switch"]:checked::after { transform: translateX(20px); background: v
 }
 @media (min-width: 1101px) and (max-width: 1199px) {
   .track-table:not(.album-track-table) { --track-duration-width: 56px; --track-size-width: 96px; }
-  .track-table:not(.album-track-table) th.track-audio-column { width: 192px; }
-  .track-table:not(.album-track-table) th.track-status-column { width: 96px; }
-  .track-table:not(.album-track-table) th.track-lyrics-column { width: 200px; }
+  .track-table:not(.album-track-table) th.track-title-column { padding-inline-start: 64px; }
+  .track-table:not(.album-track-table) th.track-status-column { width: 88px; }
+  .track-table:not(.album-track-table) th.track-lyrics-column { width: 184px; }
+  .track-table:not(.album-track-table) .track-title-line { grid-template-columns: 24px minmax(0, 1fr); gap: 6px; }
+  .track-table:not(.album-track-table) .track-audition-trigger { width: 24px; height: 24px; min-height: 24px; padding: 2px; }
+  .track-table:not(.album-track-table) .track-open strong { padding-inline-start: 22px; }
+  .track-table:not(.album-track-table) .track-index { width: 18px; }
+  .track-table:not(.album-track-table) .track-name { display: -webkit-box; white-space: normal; }
+  .track-table:not(.album-track-table) .track-byline { margin-inline-start: 52px; }
   .track-table:not(.album-track-table) .track-output .badge { max-width: 100%; white-space: normal; }
 }
 @media (max-width: 1100px) {

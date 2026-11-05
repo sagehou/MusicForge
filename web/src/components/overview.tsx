@@ -44,6 +44,7 @@ export function Overview({ notify, navigate }: { notify: Notice; navigate: (path
   return <div className="overview-page">
     <ResourceWarning error={error} retry={retry} />
     <PageHeading><div><h1>{t("app.overview")}</h1><p>{t("overview.description")}</p></div><div className="actions hero-actions"><Button variant="outline" onClick={() => navigate("/library")}>{t("overview.viewLibrary")}<ArrowRight size={15} /></Button><Button onClick={() => void scan()} disabled={busy || !data.enabled}><RefreshCw size={15} className={busy ? "animate-spin" : ""} />{t("overview.scan")}</Button></div></PageHeading>
+    <div className="overview-summary">
     <div className="metrics overview-metrics">{metrics.map(metric => <button className="metric" data-tone={metric.tone} key={metric.label} onClick={() => navigate(metric.path)}><div><span>{metric.label}</span><span className="metric-icon"><metric.icon size={15} /></span></div><strong>{number(metric.value)}</strong><small>{metric.note}</small></button>)}</div>
     <section className="readiness-panel">
       <div className="readiness-heading">
@@ -60,6 +61,7 @@ export function Overview({ notify, navigate }: { notify: Notice; navigate: (path
         </div>;
       })}</div>}
     </section>
+    </div>
     <div className="overview-workspace">
       <section className="panel recent-panel"><div className="section-heading"><h2>{t("overview.recent")}</h2><Button variant="ghost" size="sm" onClick={() => navigate("/jobs")}>{t("overview.allJobs")}<ArrowRight size={14} /></Button></div>
         <ResourceWarning error={jobs.error} retry={jobs.retry} />

@@ -1,8 +1,7 @@
 import { useState } from "react";
 import {
-  Activity, ArrowRight, AudioWaveform, Check, Clock3, Disc3,
-  FileMusic, FolderOutput, FolderSync, HardDrive, Loader2, Music2,
-  Radio, RefreshCw, SlidersHorizontal, Sparkles
+  Activity, ArrowRight, Check, Clock3, Disc3,
+  FileMusic, Loader2, Music2, RefreshCw
 } from "lucide-react";
 import { api } from "../api";
 import { useI18n } from "../i18n";
@@ -78,11 +77,10 @@ export function Overview({ notify, navigate }: { notify: Notice; navigate: (path
         <div className="readiness-heading">
           <div className="completion-value">
             <span>{t("overview.complete")} <strong>{percentLabel}</strong></span>
-            {percent === 100 && <span className="readiness-badge-synced"><Check size={12} /> {locale === "zh-CN" ? "全部就绪" : "All Synced"}</span>}
             {active.length > 0 && <Badge status="running" />}
           </div>
           <button className="hero-profile" onClick={() => navigate("/settings?section=encoding")}>
-            <span className="hero-profile-chip"><AudioWaveform size={12} className="inline mr-1" />{data.codec.toUpperCase()} {profile}</span>
+            <strong>{data.codec.toUpperCase()} {profile}</strong>
             <span>{number(data.ready_count)} / {number(data.source_count)}</span>
             <ArrowRight size={14} />
           </button>
@@ -92,7 +90,7 @@ export function Overview({ notify, navigate }: { notify: Notice; navigate: (path
             <span style={{ width: `${percent}%` }} />
           </div>
         </div>
-        {active.length > 0 ? <div className="active-tracks">{active.map(({ job, activity }, index) => {
+        {active.length > 0 && <div className="active-tracks">{active.map(({ job, activity }, index) => {
           const source = library.data?.find(source => source.path === activity.path);
           return <div className="active-track" key={`${job.repair_id || job.id}:${activity.path}:${index}`}>
             <span className="active-track-artwork" aria-hidden="true">{source?.artwork_url ? <img src={source.artwork_url} alt="" loading="lazy" /> : <Music2 size={18} />}</span>
@@ -100,36 +98,20 @@ export function Overview({ notify, navigate }: { notify: Notice; navigate: (path
             <div className="active-track-specs">{source?.source_audio && <span>{source.source_audio.codec?.toUpperCase()}{source.source_audio.bit_depth ? ` ${source.source_audio.bit_depth}` : ""}{source.source_audio.sample_rate ? ` / ${source.source_audio.sample_rate / 1000} kHz` : ""}</span>}{job.profile && <span>{job.profile.codec.toUpperCase()} · {job.profile.codec === "mp3" && job.profile.mode === "vbr" ? `V${job.profile.quality}` : `${job.profile.bitrate} kbps`}</span>}</div>
             <strong className="active-track-percent">{number(Math.round(activity.phase === "convert" ? activity.percent : taskPercent(job)))}%</strong>
           </div>;
-        })}</div> : <div className="readiness-idle-showcase">
-          <div className="readiness-stat-item">
-            <div className="readiness-stat-label"><Sparkles size={13} /><span>{locale === "zh-CN" ? "转码流水线" : "Audio Pipeline"}</span></div>
-            <strong className="readiness-stat-val">{data.codec.toUpperCase()} · {profile}</strong>
-            <small className="readiness-stat-sub">{percent === 100 ? (locale === "zh-CN" ? "100% 格式对齐 · 随时流播" : "100% Aligned · Ready") : (locale === "zh-CN" ? "等待转码就绪" : "Awaiting Build Queue")}</small>
-          </div>
-          <div className="readiness-stat-item">
-            <div className="readiness-stat-label"><SlidersHorizontal size={13} /><span>{locale === "zh-CN" ? "音质保真" : "Master Fidelity"}</span></div>
-            <strong className="readiness-stat-val">{locale === "zh-CN" ? "原盘动态与标签保留" : "Preserving Dynamics"}</strong>
-            <small className="readiness-stat-sub">{locale === "zh-CN" ? "高清封面 · 嵌入元数据" : "Bit-perfect tags & covers"}</small>
-          </div>
-          <div className="readiness-stat-item">
-            <div className="readiness-stat-label"><Radio size={13} /><span>{locale === "zh-CN" ? "流媒体服务" : "Streaming Service"}</span></div>
-            <strong className="readiness-stat-val">{data.online ? (locale === "zh-CN" ? "Navidrome / Subsonic 就绪" : "Navidrome Ready") : (locale === "zh-CN" ? "等待存储连接" : "Awaiting Storage")}</strong>
-            <small className="readiness-stat-sub">{locale === "zh-CN" ? "全平台播放器即点即播" : "Instant playback ready"}</small>
-          </div>
-        </div>}
+        })}</div>}
       </section>
     </div>
     <div className="overview-workspace">
       <section className="panel recent-panel">
         <div className="section-heading">
-          <h2><Activity size={15} />{t("overview.recent")}</h2>
+          <h2>{t("overview.recent")}</h2>
           <Button variant="ghost" size="sm" onClick={() => navigate("/jobs")}>{t("overview.allJobs")}<ArrowRight size={14} /></Button>
         </div>
         <ResourceWarning error={jobs.error} retry={jobs.retry} />
         {!jobs.data ? <Loading error={jobs.error} retry={jobs.retry} /> : jobs.data.jobs.length ? <div className="job-list">{[...jobs.data.jobs].sort((a, b) => Number(b.state === "running") - Number(a.state === "running")).map(job => <button className="job-row" data-state={job.state} key={job.repair_id || job.id} onClick={() => navigate("/jobs")}>
           <span className={`job-symbol ${job.state}`}>{job.state === "running" ? <Loader2 size={15} className="animate-spin" /> : job.state === "success" ? <Check size={15} /> : <Activity size={15} />}</span>
           <div>
-            <strong>{kind(job.kind)} <span className="job-hash-badge">#{job.repair_id?.slice(0, 8) || job.id}</span></strong>
+            <strong>{kind(job.kind)} #{job.repair_id?.slice(0, 8) || job.id}</strong>
             <small>{job.current[0]?.title || job.current[0]?.path || date(job.updated)}{job.counts.total > 0 && ` · ${number(job.counts.done)} / ${number(job.counts.total)}`}</small>
           </div>
           <Badge status={job.state} />
@@ -145,27 +127,24 @@ export function Overview({ notify, navigate }: { notify: Notice; navigate: (path
           <button className="lyrics-overview" onClick={() => navigate("/library?view=tracks&lyrics=needs_review")}>
             <span>{t("overview.lyricCoverage")}</span>
             <strong>{playable ? `${number(lyricReady || 0)} / ${number(playable.length)}` : "—"}</strong>
-            <div className="lyrics-coverage-meter" aria-hidden="true">
-              <span style={{ width: `${playable && playable.length ? Math.min(100, Math.round((lyricReady || 0) / playable.length * 100)) : 0}%` }} />
-            </div>
             <small>{t("overview.lyricReview", { count: review === undefined ? "—" : number(review) })}</small>
-            <ArrowRight size={15} />
+            <ArrowRight size={14} />
           </button>
           <Button variant="outline" size="sm" onClick={() => navigate("/settings?section=lyrics")}>{t("lyrics.settings")}</Button>
         </section>
         <section className="panel storage-summary">
           <div className="section-heading">
-            <h2><HardDrive size={16} />{t("overview.storage")}</h2>
+            <h2>{t("overview.storage")}</h2>
             <span className={`online ${data.online ? "is-online" : ""}`}><span />{data.online ? t("overview.online") : data.storage_checking ? t("overview.checkingShort") : t("overview.waiting")}</span>
           </div>
           <ResourceWarning error={config.error} retry={config.retry} />
           <dl>
             <div>
-              <dt><FolderSync size={13} /> {t("overview.flac")}</dt>
+              <dt>{t("overview.flac")}</dt>
               <dd><code>{config.data?.settings.source || "—"}</code></dd>
             </div>
             <div>
-              <dt><FolderOutput size={13} /> {t("overview.streaming")}</dt>
+              <dt>{t("overview.streaming")}</dt>
               <dd><code>{config.data?.settings.output || "—"}</code></dd>
             </div>
           </dl>
@@ -177,8 +156,7 @@ export function Overview({ notify, navigate }: { notify: Notice; navigate: (path
         </section>
         <section className="panel overview-attention">
           <div className="section-heading">
-            <h2><Clock3 size={16} />{t("overview.attention")}</h2>
-            {attentionCount === 0 && <span className="attention-zero-pill"><Check size={12} /> {locale === "zh-CN" ? "状态良好" : "All Clear"}</span>}
+            <h2>{t("overview.attention")}</h2>
           </div>
           <div className="attention-list">
             {attention.map(item => <button key={item.state} onClick={() => navigate(`/library?view=tracks&status=${item.state}`)}>

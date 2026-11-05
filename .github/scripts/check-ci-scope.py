@@ -18,7 +18,7 @@ import zipfile
 spec = importlib.util.spec_from_file_location("rollback_scope", Path(__file__).with_name("check-rollback-scope.py"))
 rollback = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(rollback)
-POLICY = 2
+POLICY = 3
 
 
 def git(*args):
@@ -105,10 +105,9 @@ def plan(result, runs):
                                for path in result.get("changed_files", [])):
         result.update(required=True, reason="frontend executable or uncertain changes may affect persisted settings")
     result.update(scope=scope, acceptance_base="refs/tags/" + result["baseline"] if "changed_files" in result else "",
-                  reuse_run="", covered_by="", covered_at="")
+                  reuse_run="", covered_by="", covered_at="", environment=environment())
     if "changed_files" not in result:
         return result
-    head = git("rev-parse", "HEAD")
     for run in runs:
         try:
             # Reject unusable runs before fetching and downloading artifacts.
@@ -119,19 +118,22 @@ def plan(result, runs):
             sha = run.get("head_sha", "")
             if not sha or subprocess.run(["git", "merge-base", "--is-ancestor", sha, "HEAD"], capture_output=True).returncode:
                 continue
+            paths = changes(sha)
+            if classify(paths) == "full":
+                continue
             proof = evidence(run)
             if not trusted(run, proof):
+                if proof and proof.get("environment") != result["environment"]:
+                    print(f"Run {run['id']} cannot be reused: runner environment changed "
+                          f"from {proof.get('environment')} to {result['environment']}", file=sys.stderr)
                 continue
             sha = proof["sha"]
-            if sha == head and proof.get("baseline") == result["baseline"]:
-                result.update(scope=proof["scope"], reuse_run=str(run["id"]), covered_by=run["html_url"],
+            if not paths and proof.get("baseline") == result["baseline"]:
+                result.update(scope=proof["scope"], acceptance_base=sha, reuse_run=str(run["id"]), covered_by=run["html_url"],
                               covered_at=proof.get("covered_at", proof["created_at"]))
                 return result
             if proof["scope"] != "full":
                 continue
-            if subprocess.run(["git", "merge-base", "--is-ancestor", sha, "HEAD"], capture_output=True).returncode:
-                continue
-            paths = changes(sha)
             if classify(paths) != "full":
                 result.update(scope=classify(paths), acceptance_base=sha, covered_by=run["html_url"],
                               covered_at=proof.get("covered_at", proof["created_at"]))
@@ -163,7 +165,8 @@ def check_documents(result):
 def record():
     result = json.loads(Path(".ci/ci-scope.json").read_text())
     proof = {"policy": POLICY, "sha": git("rev-parse", "HEAD"), "run_id": os.environ["GITHUB_RUN_ID"],
-             "created_at": datetime.now(timezone.utc).isoformat(), "environment": environment(),
+             # Compare planning runners, not the unrelated runner that aggregates results.
+             "created_at": datetime.now(timezone.utc).isoformat(), "environment": result["environment"],
              "scope": os.environ["VALIDATED_SCOPE"], "baseline": result["baseline"],
              "acceptance_base": result["acceptance_base"], "covered_by": result["covered_by"],
              "covered_at": result["covered_at"] or datetime.now(timezone.utc).isoformat()}
@@ -197,8 +200,10 @@ def main():
                       f"Full rollback: **{'required' if result['required'] else 'skipped'}** ({result['reason']}).\n\n")
         if result["covered_by"]:
             summary.write(f"Successful evidence: {result['covered_by']}. "
-                          + ("Same commit: reuse application checks.\n" if result["reuse_run"] else
+                          + ("Identical source: reuse application checks.\n" if result["reuse_run"] else
                              f"Inherited work covered; inspect all changes after `{result['acceptance_base']}`.\n"))
+        else:
+            summary.write("No reusable evidence; checks are selected from the published-release diff.\n")
         summary.write("Version tags always build and check both final native images.\n")
     print(json.dumps(result))
 

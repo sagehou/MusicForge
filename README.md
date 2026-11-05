@@ -126,7 +126,7 @@ Stop the app before making a backup. v0.3.0 includes configuration backup, integ
 
 ## Development
 
-[AGENTS.md](AGENTS.md) describes the development and release rules. Install dependencies, build and run executable tests **only in GitHub Actions**; local work is source editing and static review. CI selects documentation, presentation or full validation from the complete change. Backend checks, real-application browser checks and rclone checks have separate jobs, so a browser retry keeps successful Go results. Version tags publish checked AMD64/ARM64 images; ordinary branches and PRs do not publish.
+[AGENTS.md](AGENTS.md) describes the development and release rules. Install dependencies, build and run executable tests **only in GitHub Actions**; local work is source editing and static review. CI selects documentation, presentation or full validation from the complete change. Backend, real-application browser and rclone checks share one runtime build and run in parallel; retrying one keeps the others' successful results. Version tags publish checked AMD64/ARM64 images; ordinary branches and PRs do not publish.
 
 - [Behavior and compatibility reference](docs/mvp-design.en.md)
 - [Design guidance](DESIGN.md)

@@ -20,19 +20,25 @@ ENV = {"GITHUB_REPOSITORY": "sagehou/MusicForge", "ImageOS": "ubuntu24", "ImageV
 
 
 class CIScopeTests(unittest.TestCase):
-    def test_split_integrations_reuse_this_runs_binary_and_remain_required(self):
+    def test_parallel_integrations_reuse_this_runs_binary_and_remain_required(self):
         workflow = Path(__file__).parents[1].joinpath("workflows/ci.yml").read_text()
         jobs = dict(re.findall(r"^  (\w+):\n((?:    .*\n|\n)+)", workflow, re.MULTILINE))
         self.assertNotIn("npm test", jobs["backend"])
         self.assertNotIn("check-rclone.py", jobs["backend"])
-        for name, variable in (("rclone", "RCLONE"), ("app_browser", "APP_BROWSER")):
-            self.assertIn("needs: [plan, backend]", jobs[name])
+        self.assertIn("go build -mod=readonly", jobs["runtime"])
+        self.assertNotIn("go test", jobs["runtime"])
+        self.assertNotIn("go build", jobs["backend"])
+        for name, variable in (("backend", "BACKEND"), ("rclone", "RCLONE"), ("app_browser", "APP_BROWSER")):
+            self.assertIn("needs: [plan, runtime]", jobs[name])
             self.assertIn("name: validation-runtime", jobs[name])
             self.assertNotIn("run-id:", jobs[name])
-            self.assertNotIn("go test", jobs[name])
+            if name != "backend":
+                self.assertNotIn("go test", jobs[name])
             self.assertRegex(jobs["validate"], r"needs: \[[^\]]*\b" + name + r"\b")
             self.assertIn(f"test \"${variable}\" = success", jobs["validate"])
             self.assertIn(f"test \"${variable}\" = skipped", jobs["validate"])
+        self.assertIn("test \"$RUNTIME\" = success", jobs["validate"])
+        self.assertIn("test \"$RUNTIME\" = skipped", jobs["validate"])
 
     def test_release_with_skipped_ancestors_requires_all_release_gates(self):
         workflow = Path(__file__).parents[1].joinpath("workflows/ci.yml").read_text()
@@ -89,7 +95,8 @@ class CIScopeTests(unittest.TestCase):
                 self.assertFalse(ci.trusted({**run, key: value}, proof), key)
             for key, value in (("sha", "other"), ("run_id", "11"), ("policy", 0), ("scope", "unknown"),
                                ("created_at", "2020-01-01T00:00:00+00:00"),
-                               ("covered_at", "2020-01-01T00:00:00+00:00"), ("environment", {})):
+                               ("covered_at", "2020-01-01T00:00:00+00:00"), ("environment", {}),
+                               ("environment", {**ci.environment(), "ImageVersion": "another-image"})):
                 self.assertFalse(ci.trusted(run, {**proof, key: value}), key)
 
     def test_git_plans_cover_unreleased_work_without_hiding_mixed_changes(self):
@@ -117,29 +124,44 @@ class CIScopeTests(unittest.TestCase):
                 run = {"id": 10, "html_url": "https://example.test/10", "head_sha": sha,
                        "conclusion": "success", "event": "push", "path": ".github/workflows/ci.yml",
                        "head_repository": {"full_name": ENV["GITHUB_REPOSITORY"]}}
-                proof = {"sha": sha, "scope": "full", "baseline": "v0.2.35", "created_at": datetime.now(timezone.utc).isoformat()}
+                proof = {"policy": ci.POLICY, "sha": sha, "run_id": "10", "scope": "full", "environment": ci.environment(),
+                         "baseline": "v0.2.35", "created_at": datetime.now(timezone.utc).isoformat()}
                 Path("docs/design.md").write_text("Updated design\n")
                 commit("documentation")
-                with patch.object(ci, "evidence", return_value=proof), patch.object(ci, "trusted", return_value=True):
+                with patch.object(ci, "evidence", return_value=proof):
                     planned = ci.plan(ci.rollback.compare("v0.2.35"), [run])
                     self.assertEqual(planned["scope"], "docs")
                     self.assertEqual(planned["acceptance_base"], sha)
                     self.assertTrue(planned["required"])  # Rollback still compares the published release.
                     ci.check_documents(planned)
                     self.assertEqual(ci.plan(ci.rollback.compare("v0.2.35"), [])["scope"], "full")
-                    Path("web/src").mkdir(parents=True)
-                    Path("web/src/style.css").write_text("body { margin: 0; }\n")
-                    commit("presentation")
-                    self.assertEqual(ci.plan(ci.rollback.compare("v0.2.35"), [run])["scope"], "ui")
-                    Path("web/package-lock.json").write_text("{}\n")
-                    commit("mixed dependencies")
-                    self.assertEqual(ci.plan(ci.rollback.compare("v0.2.35"), [run])["scope"], "full")
-                    self.assertEqual(ci.plan(ci.rollback.compare(None), [run])["scope"], "full")
                     with patch.object(ci, "evidence", side_effect=OSError("expired")):
                         self.assertEqual(ci.plan(ci.rollback.compare("v0.2.35"), [run])["scope"], "full")
+                    Path("web/src").mkdir(parents=True)
+                    Path("web/src/style.css").write_text("body { margin: 0; }\n")
+                    ui_sha = commit("presentation")
+                    self.assertEqual(ci.plan(ci.rollback.compare("v0.2.35"), [run])["scope"], "ui")
+                    # A merge with the tested UI tree must retain its UI evidence.
+                    ui_run = {**run, "head_sha": ui_sha}
+                    ui_proof = {**proof, "sha": ui_sha, "scope": "ui"}
+                    git("commit", "--allow-empty", "-m", "merge identical source")
+                    with patch.object(ci, "evidence", return_value=ui_proof):
+                        planned = ci.plan(ci.rollback.compare("v0.2.35"), [ui_run])
+                        self.assertEqual(planned["reuse_run"], "10")
+                        self.assertEqual(planned["scope"], "ui")
+                        self.assertEqual(planned["acceptance_base"], ui_sha)
+                        self.assertEqual(planned["covered_at"], ui_proof["created_at"])
+                        self.assertTrue(planned["required"])
+                    Path("web/package-lock.json").write_text("{}\n")
+                    commit("mixed dependencies")
+                    with patch.object(ci, "evidence") as lookup:
+                        self.assertEqual(ci.plan(ci.rollback.compare("v0.2.35"), [run])["scope"], "full")
+                        lookup.assert_not_called()
+                    self.assertEqual(ci.plan(ci.rollback.compare(None), [run])["scope"], "full")
                 # Same-commit success can be reused, but the baseline must match.
                 proof["sha"] = ci.git("rev-parse", "HEAD")
-                with patch.object(ci, "evidence", return_value=proof), patch.object(ci, "trusted", return_value=True):
+                run["head_sha"] = proof["sha"]
+                with patch.object(ci, "evidence", return_value=proof):
                     self.assertEqual(ci.plan(ci.rollback.compare("v0.2.35"), [run])["reuse_run"], "10")
                     proof["baseline"] = "v0.2.33"
                     self.assertEqual(ci.plan(ci.rollback.compare("v0.2.35"), [run])["reuse_run"], "")
@@ -164,6 +186,12 @@ class CIScopeTests(unittest.TestCase):
                 self.assertEqual(planned["scope"], "full")
                 self.assertTrue(planned["required"])
                 self.assertIn("rollback_required=true", Path("output").read_text())
+                self.assertEqual(planned["environment"], ci.environment())
+                with patch.dict(os.environ, {"ImageVersion": "unrelated-summary-runner", "VALIDATED_SCOPE": "full", "GITHUB_RUN_ID": "10"}), \
+                        patch.object(ci, "git", return_value="abc"):
+                    ci.record()
+                proof = json.loads(Path(".ci/validation-evidence.json").read_text())
+                self.assertEqual(proof["environment"], ci.environment())
             finally:
                 os.chdir(previous)
 

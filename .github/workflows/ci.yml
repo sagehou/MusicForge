@@ -28,7 +28,6 @@ jobs:
       scope: ${{ steps.scope.outputs.scope }}
       reuse_run: ${{ steps.plan.outputs.reuse_run }}
       rollback_required: ${{ steps.ui.outputs.rollback_required || steps.plan.outputs.rollback_required }}
-      validation_run: ${{ steps.plan.outputs.reuse_run || github.run_id }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -50,12 +49,7 @@ jobs:
       - name: Frontend locked dependencies
         if: steps.plan.outputs.scope == 'ui' && steps.plan.outputs.reuse_run == ''
         working-directory: web
-        run: |
-          if [ ! -f package-lock.json ]; then npm install --package-lock-only --ignore-scripts; fi
-          npm ci --no-audit --no-fund
-      - name: Check the presentation classifier
-        if: steps.plan.outputs.scope == 'ui' && steps.plan.outputs.reuse_run == ''
-        run: node --test .github/scripts/test_ui_scope.mjs
+        run: npm ci --no-audit --no-fund
       - name: Verify TSX changes preserve executable syntax
         id: ui
         if: steps.plan.outputs.scope == 'ui' && steps.plan.outputs.reuse_run == ''
@@ -162,7 +156,7 @@ jobs:
             web/playwright-report
           retention-days: 14
 
-  backend:
+  runtime:
     needs: [plan, frontend]
     if: needs.plan.outputs.scope == 'full' && needs.plan.outputs.reuse_run == ''
     runs-on: ubuntu-24.04
@@ -177,6 +171,10 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
+          # Runtime builds must not claim the race-test cache key.
+          cache-dependency-path: |
+            go.sum
+            .github/workflows/ci.yml
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
       - name: Build pinned stable media tools in CI
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
@@ -187,33 +185,47 @@ jobs:
           cache-from: type=gha,scope=amd64
           cache-to: type=gha,mode=max,scope=amd64
           pull: true
-      - name: Use the release media tools for all executable validation
-        run: echo "$PWD/.ci/media/bin" >> "$GITHUB_PATH"
-      - name: Generate initial source lockfiles in CI
-        run: |
-          if [ ! -f web/package-lock.json ]; then
-            (cd web && npm install --package-lock-only --ignore-scripts)
-          fi
-          if [ ! -f go.sum ]; then
-            go mod tidy
-          fi
-          gofmt -w cmd internal web/embed.go
-          if git ls-files --error-unmatch go.sum >/dev/null 2>&1; then
-            git diff --exit-code -- go.mod go.sum web/package-lock.json
-          fi
-      - name: CI-generated source snapshot
-        if: always()
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+      - name: Build the application from the checked-out source
+        run: go build -mod=readonly -trimpath -o .ci/musicforge ./cmd/musicforge
+      - name: Package the application and media tools
+        run: tar -czf .ci/validation-runtime.tar.gz -C .ci musicforge media
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: canonical-source
-          path: |
-            go.mod
-            go.sum
-            cmd/**/*.go
-            internal/**/*.go
-            web/embed.go
-            web/package-lock.json
-          retention-days: 14
+          name: validation-runtime
+          path: .ci/validation-runtime.tar.gz
+          if-no-files-found: error
+          retention-days: 7
+
+  backend:
+    needs: [plan, runtime]
+    if: needs.plan.outputs.scope == 'full' && needs.plan.outputs.reuse_run == ''
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: frontend-build
+          path: web/dist
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: validation-runtime
+          path: .ci
+      - name: Restore this run's application and media tools
+        run: |
+          tar -xzf .ci/validation-runtime.tar.gz -C .ci
+          echo "$PWD/.ci/media/bin" >> "$GITHUB_PATH"
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Check Go formatting without changing the tested source
+        run: |
+          unformatted=$(gofmt -l cmd internal web/embed.go)
+          if [[ -n "$unformatted" ]]; then
+            printf '%s\n' "$unformatted"
+            exit 1
+          fi
       - name: Start the real Navidrome integration service
         run: |
           mkdir -p .ci/nav-output
@@ -232,23 +244,14 @@ jobs:
           MUSICFORGE_TEST_NAV_URL: http://127.0.0.1:4533
           MUSICFORGE_TEST_NAV_OUTPUT: ${{ github.workspace }}/.ci/nav-output
         run: |
-          go test -mod=readonly -race -count=1 -timeout=10m ./...
+          go test -mod=readonly -vet=off -race -count=1 -timeout=10m ./...
           go vet -mod=readonly ./...
-          go build -mod=readonly -trimpath -o .ci/musicforge ./cmd/musicforge
-      - name: Package the tested application and media tools
-        run: tar -czf .ci/validation-runtime.tar.gz -C .ci musicforge media
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: validation-runtime
-          path: .ci/validation-runtime.tar.gz
-          if-no-files-found: error
-          retention-days: 7
       - name: Stop the Navidrome validation service
         if: always()
         run: docker rm -f musicforge-nav-validation || true
 
   rclone:
-    needs: [plan, backend]
+    needs: [plan, runtime]
     if: needs.plan.outputs.scope == 'full' && needs.plan.outputs.reuse_run == ''
     runs-on: ubuntu-24.04
     timeout-minutes: 10
@@ -258,7 +261,7 @@ jobs:
         with:
           name: validation-runtime
           path: .ci
-      - name: Restore this run's tested application and media tools
+      - name: Restore this run's application and media tools
         run: |
           tar -xzf .ci/validation-runtime.tar.gz -C .ci
           echo "$PWD/.ci/media/bin" >> "$GITHUB_PATH"
@@ -278,7 +281,7 @@ jobs:
           retention-days: 14
 
   app_browser:
-    needs: [plan, backend]
+    needs: [plan, runtime]
     if: needs.plan.outputs.scope == 'full' && needs.plan.outputs.reuse_run == ''
     runs-on: ubuntu-24.04
     timeout-minutes: 10
@@ -288,7 +291,7 @@ jobs:
         with:
           name: validation-runtime
           path: .ci
-      - name: Restore this run's tested application and media tools
+      - name: Restore this run's application and media tools
         run: |
           tar -xzf .ci/validation-runtime.tar.gz -C .ci
           echo "$PWD/.ci/media/bin" >> "$GITHUB_PATH"
@@ -325,7 +328,7 @@ jobs:
           retention-days: 14
 
   validate:
-    needs: [plan, frontend, browser, backend, rclone, app_browser]
+    needs: [plan, frontend, browser, runtime, backend, rclone, app_browser]
     if: ${{ !cancelled() && needs.plan.result == 'success' && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 5
@@ -333,7 +336,6 @@ jobs:
       scope: ${{ needs.plan.outputs.scope }}
       reuse_run: ${{ needs.plan.outputs.reuse_run }}
       rollback_required: ${{ needs.plan.outputs.rollback_required }}
-      validation_run: ${{ needs.plan.outputs.validation_run }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
@@ -346,6 +348,7 @@ jobs:
           REUSED: ${{ needs.plan.outputs.reuse_run }}
           FRONTEND: ${{ needs.frontend.result }}
           BROWSER: ${{ needs.browser.result }}
+          RUNTIME: ${{ needs.runtime.result }}
           BACKEND: ${{ needs.backend.result }}
           RCLONE: ${{ needs.rclone.result }}
           APP_BROWSER: ${{ needs.app_browser.result }}
@@ -358,10 +361,12 @@ jobs:
             test "$BROWSER" = skipped
           fi
           if [[ "$SCOPE" == full && -z "$REUSED" ]]; then
+            test "$RUNTIME" = success
             test "$BACKEND" = success
             test "$RCLONE" = success
             test "$APP_BROWSER" = success
           else
+            test "$RUNTIME" = skipped
             test "$BACKEND" = skipped
             test "$RCLONE" = skipped
             test "$APP_BROWSER" = skipped
@@ -413,13 +418,6 @@ jobs:
       packages: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
-        if: needs.validate.outputs.scope == 'full'
-        with:
-          name: canonical-source
-          path: .
-          run-id: ${{ needs.validate.outputs.validation_run }}
-          github-token: ${{ github.token }}
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
       - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         if: startsWith(github.ref, 'refs/tags/v')

@@ -35,9 +35,11 @@ These runs establish the published reference, not automatic approval of later ch
 
 Documentation gets link/consistency/whitespace checks. Presentation changes get frontend typecheck/build, affected existing browser checks and representative screenshots. Functional, backend, dependency, deployment, workflow, test-configuration or uncertain changes use full applicable validation. The comparison includes all unreleased work, not just the last commit.
 
-Go race/integration/vet, real-application browser workflows and rclone acceptance run in separate jobs. The latter two reuse the tested binary and media tools from the same run; retrying either job does not replay successful Go tests. Both remain required for full validation.
+Go race/integration/vet, real-application browser workflows and rclone acceptance run in parallel after one application/media-tool build. They share that run's runtime artifact and remain separate jobs, so retrying one preserves the others' successful results. Full validation requires all of them. Vet runs once; CI checks formatting and locked dependencies without rewriting the tested source or generating replacement lockfiles.
 
 Trusted same-repository push/dispatch evidence can cover identical tested inputs or unchanged inherited work within the policy's seven-day/environment limits. PR/fork evidence cannot. `rollback-scope` records the baseline, selected checks and reused run; `validation-evidence` records successful application evidence; browser artifacts retain screenshots. A new version label does not by itself require replaying identical application checks. Every release still needs a current audit and both final native image checks, plus any required rollback. Never manually bypass failed gates.
+
+The evidence retains the planning runner's fingerprint, rather than replacing it with the unrelated summary runner's environment. Real runner-image changes still invalidate reuse. A merge commit with an identical source tree can reuse the original full or UI result; the source run, commit and original coverage time remain recorded, and the published rollback baseline does not move.
 
 ## Limits to verify on your host
 

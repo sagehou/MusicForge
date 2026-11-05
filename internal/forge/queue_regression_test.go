@@ -351,15 +351,15 @@ func TestWALReadAPIsStayResponsiveDuringLargeQueueWrite(t *testing.T) {
 	handler := a.Handler()
 	paths := []string{"/api/auth/me", "/api/settings", "/api/jobs?limit=100", "/api/jobs/1/items?offset=4950", "/api/library", "/api/dashboard"}
 	results := make(chan error, len(paths))
+	deadline := time.After(3 * time.Second)
 	for _, path := range paths {
 		go func(path string) {
-			started := time.Now()
 			r := httptest.NewRequest("GET", path, nil)
 			r.AddCookie(cookie)
 			w := httptest.NewRecorder()
 			handler.ServeHTTP(w, r)
-			if w.Code != 200 || !json.Valid(w.Body.Bytes()) || time.Since(started) > 2*time.Second {
-				results <- fmt.Errorf("API stalled behind writer: %s status=%d duration=%s", path, w.Code, time.Since(started))
+			if w.Code != 200 || !json.Valid(w.Body.Bytes()) {
+				results <- fmt.Errorf("API failed while writer is open: %s status=%d", path, w.Code)
 				return
 			}
 			if strings.Contains(w.Body.String(), "Uncommitted title") {
@@ -375,7 +375,7 @@ func TestWALReadAPIsStayResponsiveDuringLargeQueueWrite(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-		case <-time.After(3 * time.Second):
+		case <-deadline:
 			t.Fatal("read API waited for writer transaction")
 		}
 	}

@@ -221,7 +221,7 @@ for (const width of [1440, 390]) {
     }
     await page.getByRole("link", { name: "任务", exact: true }).click();
     await expect(page.locator(".task")).toHaveCount(5);
-    await expect(page.locator('.task[data-state="running"] .task-activity')).toContainText("First Light");
+    await expect(page.locator('.task[data-state="running"] .task-activity > strong')).toHaveText(history[0].current.map(activity => activity.title));
     await expect(page.locator('.task[data-state="running"] [role="progressbar"]')).toHaveAttribute("aria-valuenow", "44");
     await expect(page.locator('.task[data-state="success"] .badge > span[aria-hidden="true"]')).toHaveCount(1);
     await expect(page.locator('.task[data-state="success"] .task-meter')).toBeHidden();

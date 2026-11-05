@@ -218,7 +218,6 @@ for (const width of [1440, 390]) {
       await page.setViewportSize({ width, height: 900 });
       await page.locator(".attention-list > button").nth(1).click();
       await expect(page).toHaveURL(/status=needs_rebuild/);
-      await page.goto("/");
     }
     await page.getByRole("link", { name: "任务", exact: true }).click();
     await expect(page.locator(".task")).toHaveCount(5);

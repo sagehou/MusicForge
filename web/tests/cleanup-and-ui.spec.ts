@@ -17,7 +17,7 @@ const jobs: Job[] = ["running", "success", "failed", "paused", "pending"].map((s
   current: state === "running" ? [{ phase: "convert", path: "River Ensemble/Night Studies/01 - First Light · 海岸与夜晚的音乐记录.flac", artist: "River Ensemble", album: "Night Studies", title: "First Light · 海岸与夜晚的音乐记录", processed: 44, total: 100, percent: 61 }] : [],
   scope: [], can_delete: !["running", "pending", "paused"].includes(state),
 }));
-async function setup(page: Page) {
+async function setup(page: Page, history: Job[] = jobs) {
   await page.addInitScript(() => {
     localStorage.setItem("musicforge.language", "en");
     if (!localStorage.getItem("musicforge.theme")) localStorage.setItem("musicforge.theme", "light");
@@ -29,7 +29,7 @@ async function setup(page: Page) {
   await page.route("**/api/jobs?*", route => {
     const params = new URL(route.request().url()).searchParams;
     const state = params.get("state") || "all";
-    const list = jobs.filter(job => state === "all" || job.state === state);
+    const list = history.filter(job => state === "all" || job.state === state);
     return route.fulfill({ json: { jobs: list.slice(0, Number(params.get("limit") || 100)), total: list.length } });
   });
 }
@@ -167,10 +167,21 @@ test("background storage changes stay inside the storage card without shifting t
 
 for (const width of [1440, 390]) {
   test(`dashboard uses aligned cards and compact job visual evidence at ${width}px`, async ({ page }) => {
-    await setup(page);
+    const history = jobs.map((job): Job => width > 800 && job.state === "running" ? {
+      ...job, profile: { codec: "opus", mode: "vbr", bitrate: 192, quality: 2 },
+      current: Array.from({ length: 4 }, (_, index) => ({ ...job.current[0], path: `Artist/Album/${index}.flac`, title: `${job.current[0].title} ${index + 1}` })),
+    } : job);
+    await setup(page, history);
+    if (width > 800) {
+      const sources: Source[] = history[0].current.map((activity, index) => ({
+        ...activity, id: index + 1, track: index + 1, disc: 1, present: true, output: `Artist/Album/${index}.opus`, output_present: true,
+        status: "ready", error: "", size: 26214400, source_audio: { codec: "flac", bit_depth: 24, sample_rate: 96000 }, metadata: {},
+      }));
+      await routeLibrary(page, route => route.fulfill({ json: sources }));
+    }
     const errors: string[] = [];
     page.on("pageerror", error => errors.push(error.message));
-    await page.setViewportSize({ width, height: width > 800 ? 1000 : 844 });
+    await page.setViewportSize({ width, height: width > 800 ? 900 : 844 });
     await page.goto("/");
     await expect(page.locator(".hero-profile")).toContainText("192 kbps");
     for (const theme of ["light", "dark"]) {
@@ -186,6 +197,29 @@ for (const width of [1440, 390]) {
       expect(title!.width).toBeGreaterThan(90);
     }
     await page.screenshot({ path: `test-results/forge-overview-${width}-dark-zh.png`, fullPage: true, animations: "disabled" });
+    if (width > 800) {
+      await expect(page.locator(".active-track")).toHaveCount(4);
+      await expect(page.locator(".job-row")).toHaveCount(5);
+      for (const [screenWidth, screenHeight, language] of [[1366, 768, "zh-CN"], [1280, 720, "zh-CN"], [1024, 768, "zh-CN"], [768, 1024, "zh-CN"], [1280, 720, "en"]] as const) {
+        await page.setViewportSize({ width: screenWidth, height: screenHeight });
+        await setPreference(page, "language", language);
+        const cards = await page.locator(".lyrics-summary, .storage-summary, .overview-attention").all();
+        const boxes = await Promise.all(cards.map(card => card.boundingBox()));
+        expect(Math.max(...boxes.map(box => box!.y)) - Math.min(...boxes.map(box => box!.y))).toBeLessThanOrEqual(1);
+        expect(Math.max(...boxes.map(box => box!.y + box!.height)) - Math.min(...boxes.map(box => box!.y + box!.height))).toBeLessThanOrEqual(1);
+        for (const button of await page.locator(".attention-list > button").all()) await expect(button).toBeInViewport();
+        for (const card of await page.locator(".readiness-panel, .recent-panel, .lyrics-summary, .storage-summary, .overview-attention").all()) {
+          expect(await card.evaluate(element => element.scrollHeight <= element.clientHeight + 1)).toBe(true);
+        }
+        expect(await page.evaluate(() => document.documentElement.scrollHeight <= innerHeight + 1 && document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
+        await page.screenshot({ path: `test-results/overview-fit-${screenWidth}-${screenHeight}-dark-${language}.png`, animations: "disabled" });
+      }
+      await setPreference(page, "language", "zh-CN");
+      await page.setViewportSize({ width, height: 900 });
+      await page.locator(".attention-list > button").nth(1).click();
+      await expect(page).toHaveURL(/status=needs_rebuild/);
+      await page.goto("/");
+    }
     await page.getByRole("link", { name: "任务", exact: true }).click();
     await expect(page.locator(".task")).toHaveCount(5);
     await expect(page.locator('.task[data-state="running"] .task-activity')).toContainText("First Light");

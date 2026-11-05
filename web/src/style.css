@@ -615,7 +615,7 @@ input:not([type="checkbox"], [type="radio"]):focus-visible, select:focus-visible
 
 /* Overview: a shared grid keeps the summary and workspace aligned. */
 .overview-summary { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: 16px; margin-bottom: 20px; }
-.overview-metrics { display: grid; grid-column: 2; grid-row: 1; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; min-width: 0; }
+.overview-metrics { display: grid; grid-column: 2; grid-row: 1; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-auto-rows: 1fr; gap: 12px; min-width: 0; }
 .overview-metrics .metric {
   display: flex;
   flex-direction: column;
@@ -671,7 +671,7 @@ input:not([type="checkbox"], [type="radio"]):focus-visible, select:focus-visible
 }
 .readiness-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; width: 100%; flex-wrap: wrap; }
 .completion-value { display: flex; align-items: flex-end; gap: 12px; font-size: 13px; font-weight: 500; color: var(--muted); font-variant-numeric: tabular-nums; }
-.completion-value > span { display: flex; flex-direction: column; gap: 10px; }
+.completion-value > span:first-child { display: flex; flex-direction: column; gap: 10px; }
 .completion-value strong { font-size: 48px; line-height: 1; letter-spacing: -.05em; font-weight: 600; color: var(--ink); }
 .completion-value > .badge { margin-bottom: 4px; }
 .hero-profile {
@@ -1276,7 +1276,7 @@ table { width: 100%; border-collapse: collapse; text-align: left; }
 .track-table th:first-child, .track-table td:first-child { width: 36px; padding-left: 14px; padding-right: 4px; }
 .track-table th.track-title-column { width: auto; padding-inline-start: 82px; }
 .track-table th.track-duration-column { width: var(--track-duration-width); text-align: right; }
-.track-table th.track-audio-column { width: 184px; }
+.track-table th.track-audio-column { width: 208px; }
 .track-table th.track-size-column { width: var(--track-size-width); text-align: right; }
 .track-table th.track-status-column { width: 108px; }
 .track-table th.track-lyrics-column { width: 216px; }
@@ -1288,7 +1288,7 @@ table { width: 100%; border-collapse: collapse; text-align: left; }
 .album-track-table .album-status-column { width: 112px; }
 .album-track-table .album-lyrics-column { width: 188px; }
 
-.track-table td { vertical-align: middle; padding: 12px; border-top: 1px solid var(--line); font-size: 13px; }
+.track-table td { vertical-align: middle; padding: 9px 12px; border-top: 1px solid var(--line); font-size: 13px; }
 .track-table tbody tr:first-child td { border-top: 0; }
 .track-row { transition: background 140ms var(--ease); }
 .track-row:hover { background: var(--hover); }
@@ -2013,13 +2013,12 @@ input[role="switch"]:checked::after { transform: translateX(20px); background: v
   .track-table:not(.album-track-table) .track-name,
   .track-table:not(.album-track-table) .track-byline { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .track-table:not(.album-track-table) .track-fact-audio { font-size: 12.5px; line-height: 21px; }
-  .track-table:not(.album-track-table) .track-fact-audio > dd { display: inline; line-height: inherit; }
-  .track-table:not(.album-track-table) .track-fact-audio > .track-bitrate { margin-inline-start: 8px; white-space: nowrap; }
+  .track-table:not(.album-track-table) .track-fact-audio > dd { display: block; line-height: inherit; }
   .track-lyrics .lyrics-state { min-width: 0; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; overflow-wrap: anywhere; }
 }
 @media (min-width: 1101px) and (max-width: 1199px) {
   .track-table:not(.album-track-table) { --track-duration-width: 56px; --track-size-width: 96px; }
-  .track-table:not(.album-track-table) th.track-audio-column { width: 176px; }
+  .track-table:not(.album-track-table) th.track-audio-column { width: 192px; }
   .track-table:not(.album-track-table) th.track-status-column { width: 96px; }
   .track-table:not(.album-track-table) th.track-lyrics-column { width: 200px; }
   .track-table:not(.album-track-table) .track-output .badge { max-width: 100%; white-space: normal; }

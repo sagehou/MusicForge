@@ -166,7 +166,7 @@ test("background storage changes stay inside the storage card without shifting t
 });
 
 for (const width of [1440, 390]) {
-  test(`dashboard and compact job visual evidence at ${width}px`, async ({ page }) => {
+  test(`dashboard uses aligned cards and compact job visual evidence at ${width}px`, async ({ page }) => {
     await setup(page);
     const errors: string[] = [];
     page.on("pageerror", error => errors.push(error.message));

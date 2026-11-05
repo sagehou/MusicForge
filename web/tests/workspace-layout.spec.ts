@@ -89,7 +89,7 @@ test("aligned records fit six tracks, and the icon rail keeps navigation and pre
   await page.screenshot({ path: "test-results/workspace-records-tablet.png", animations: "disabled" });
 });
 
-test("inline song details keep the filtered list and restore keyboard focus without a source read", async ({ page }) => {
+test("aligned records keep the filtered list and restore keyboard focus after inline song details without a source read", async ({ page }) => {
   await setup(page);
   await page.setViewportSize({ width: 1440, height: 900 });
   const unexpected: string[] = [];

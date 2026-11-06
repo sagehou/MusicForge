@@ -201,6 +201,12 @@ for (const width of [1440, 390]) {
     if (width <= 600) {
       const title = await page.getByRole("heading", { level: 1 }).boundingBox();
       expect(title!.width).toBeGreaterThan(90);
+      await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+      const attention = (await page.locator(".overview-attention").boundingBox())!;
+      const navigation = (await page.locator(".sidebar").boundingBox())!;
+      expect(attention.y + attention.height).toBeLessThanOrEqual(navigation.y);
+      await page.screenshot({ path: "test-results/overview-bottom-390-dark-zh.png", animations: "disabled" });
+      await page.evaluate(() => window.scrollTo(0, 0));
     }
     await page.screenshot({ path: `test-results/forge-overview-${width}-dark-zh.png`, fullPage: true, animations: "disabled" });
     if (width > 800) {

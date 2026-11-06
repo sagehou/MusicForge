@@ -2619,7 +2619,7 @@ input[role="switch"]:checked::after { transform: translateX(20px); background: v
   .sidebar nav a { display: flex; flex-direction: column; gap: 3px; padding: 5px 2px; font-size: 11px; min-height: 50px; background: transparent; border-radius: var(--radius-control); }
   .sidebar nav a.active { background: transparent; }
   .sidebar .nav-label { display: inline; font-size: 11px; }
-  .page-content { --page-inset: 14px; padding-bottom: calc(76px + env(safe-area-inset-bottom)); }
+  .page-content, .page-content:has(> .overview-page) { --page-inset: 14px; padding-bottom: calc(76px + env(safe-area-inset-bottom)); }
   .page-heading { padding: 16px 0 0; min-height: 52px; margin-bottom: 14px; }
   .heading-content p { font-size: 11.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .overview-page > .page-heading { align-items: flex-start; }
@@ -2634,6 +2634,9 @@ input[role="switch"]:checked::after { transform: translateX(20px); background: v
   .overview-metrics .metric strong { font-size: 24px; }
   .active-track { gap: 10px; }
   .active-track-artwork { width: 30px; height: 30px; }
+  .job-row { min-height: 44px; padding-block: 6px; }
+  .attention-list { gap: 2px; }
+  .attention-list > button { min-height: 30px; padding-block: 2px; }
   .album-summary { grid-template-columns: 88px minmax(0, 1fr); gap: 14px; align-items: start; padding: 14px; }
   .album-summary h2 { font-size: 18px; }
   .library-navigation { flex: 1; }

@@ -1116,9 +1116,9 @@ input:not([type="checkbox"], [type="radio"]):focus-visible, select:focus-visible
   flex-shrink: 0;
   color: var(--muted);
 }
-.job-symbol.running { color: #3b82f6; background: rgba(59, 130, 246, 0.08); border-color: rgba(59, 130, 246, 0.15); }
-.job-symbol.success { color: #10b981; background: rgba(16, 185, 129, 0.08); border-color: rgba(16, 185, 129, 0.15); }
-.job-symbol.failed { color: #ef4444; background: rgba(239, 68, 68, 0.08); border-color: rgba(239, 68, 68, 0.15); }
+.job-symbol.running { color: var(--accent); background: var(--accent-soft); }
+.job-symbol.success { color: var(--success); background: var(--success-soft); }
+.job-symbol.failed { color: var(--danger); background: var(--danger-soft); }
 .recent-arrow {
   display: block;
   color: var(--muted);

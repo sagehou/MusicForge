@@ -10,7 +10,6 @@ import (
 	"io"
 	"net/http"
 	"sync"
-	"syscall"
 	"time"
 )
 
@@ -94,14 +93,12 @@ func (a *App) notificationTick(ctx context.Context, s Settings) {
 	if err != nil || options.NotifyURL == "" {
 		return
 	}
-	// Refresh the cached storage check on scheduler ticks. Checking only once a
-	// minute would always see an expired cache and could miss unattended outages.
-	online, _, checking := a.storageStatus(s)
-	if !checking {
+	online, _, checkedAt := a.storageStatus(s)
+	if checkedAt != 0 {
 		if online {
 			a.offlineSince = time.Time{}
 		} else if a.offlineSince.IsZero() {
-			a.offlineSince = now
+			a.offlineSince = time.Unix(checkedAt, 0)
 		}
 	}
 	if now.Before(a.notifyNext) {
@@ -143,7 +140,7 @@ func (a *App) notificationTick(ctx context.Context, s Settings) {
 		}
 		state.FailedID, state.FailedAt = max(state.FailedID, failedID), max(state.FailedAt, failedAt)
 	}
-	if !checking {
+	if checkedAt != 0 {
 		if online {
 			state.Offline = false
 		} else {
@@ -151,7 +148,7 @@ func (a *App) notificationTick(ctx context.Context, s Settings) {
 				state.Offline = false
 			}
 			if !state.Offline && now.Sub(a.offlineSince) >= 5*time.Minute {
-				if !deliver("storage_offline", "MusicForge storage has been unavailable for at least five minutes. Check the mounts and library settings.") {
+				if !deliver("storage_offline", "The last observed MusicForge storage failure has not been cleared for at least five minutes. Check the mounts and library settings.") {
 					return
 				}
 				state.Offline = true
@@ -159,19 +156,20 @@ func (a *App) notificationTick(ctx context.Context, s Settings) {
 			}
 		}
 	}
-	low := false
-	for _, path := range []string{a.cfg.ConfigDir, s.Output} {
-		var disk syscall.Statfs_t
-		if syscall.Statfs(path, &disk) == nil && uint64(disk.Bavail)*uint64(disk.Bsize) < 256*1024*1024 {
-			low = true
-		}
+	a.storageMu.Lock()
+	low := a.storageLow
+	if a.storageSource != s.Source || a.storageOutput != s.Output {
+		low = nil
 	}
-	if low && !state.LowDisk {
-		if !deliver("low_disk", "MusicForge configuration or output storage has less than 256 MiB available.") {
-			return
+	a.storageMu.Unlock()
+	if low != nil {
+		if *low && !state.LowDisk {
+			if !deliver("low_disk", "MusicForge configuration or output storage has less than 256 MiB available.") {
+				return
+			}
 		}
+		state.LowDisk = *low
 	}
-	state.LowDisk = low
 	if options.NotifyCompletion {
 		tasks, _, taskErr := a.taskListContext(ctx, "success", 25, 0)
 		if taskErr != nil {

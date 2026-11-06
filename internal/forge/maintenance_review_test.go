@@ -473,6 +473,14 @@ func TestStorageChecksAndMigrationPreviewPreservePaths(t *testing.T) {
 	if w = request("POST", "/api/maintenance/storage/check", map[string]any{}); w.Code != 200 || !strings.Contains(w.Body.String(), "error") {
 		t.Fatal("offline source check was not reported", w.Code, w.Body.String())
 	}
+	w = request("GET", "/api/maintenance/storage/health", nil)
+	var health struct {
+		Online    bool  `json:"online"`
+		CheckedAt int64 `json:"checked_at"`
+	}
+	if w.Code != 200 || json.Unmarshal(w.Body.Bytes(), &health) != nil || health.Online || health.CheckedAt == 0 {
+		t.Fatal("explicit check did not update cached storage health", w.Code, w.Body.String())
+	}
 	for _, mismatch := range []bool{false, true} {
 		if mismatch {
 			if err := os.WriteFile(filepath.Join(s.Output, source.Output), []byte("external audio"), 0644); err != nil {

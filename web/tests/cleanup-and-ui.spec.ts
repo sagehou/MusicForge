@@ -132,7 +132,7 @@ test("dashboard uses real clamped completion and functional quick actions", asyn
   await expect(page.locator(".completion-value")).toContainText("0%");
 });
 
-test("background storage changes stay inside the storage card without shifting the dashboard", async ({ page }) => {
+test("observed storage state stays inside the storage card without shifting the dashboard", async ({ page }) => {
   await setup(page);
   let data: Dashboard = { ...dashboard };
   await page.route("**/api/dashboard", route => route.fulfill({ json: data }));
@@ -140,22 +140,24 @@ test("background storage changes stay inside the storage card without shifting t
   await page.goto("/");
   const metrics = page.locator(".overview-metrics");
   const initial = await metrics.boundingBox();
-  data = { ...data, online: false, storage_checking: true, storage_message: "Checking media directories; the web UI and job controls remain available" };
+  data = { ...data, online: false, storage_checked_at: 0, storage_message: "Storage has not been checked; run a library operation or check mounts manually" };
   const storage = page.locator(".storage-summary");
-  await expect(storage).toContainText("Checking music storage in the background", { timeout: 10000 });
+  await expect(storage).toContainText("Not checked yet", { timeout: 10000 });
+  await expect(storage).not.toContainText("Music storage is offline");
   await expect(page.locator(".overview-page > .banner")).toHaveCount(0);
   expect((await metrics.boundingBox())!.y).toBe(initial!.y);
   await setPreference(page, "language", "zh-CN");
   await setPreference(page, "theme", "dark");
-  await page.screenshot({ path: "test-results/storage-checking-1440-dark-zh.png", fullPage: true, animations: "disabled" });
-  data = { ...data, storage_checking: false, storage_message: "Music storage is offline" };
+  await page.screenshot({ path: "test-results/storage-unchecked-1440-dark-zh.png", fullPage: true, animations: "disabled" });
+  data = { ...data, storage_checked_at: Math.floor(Date.now() / 1000), storage_message: "Music storage is offline" };
   await expect(storage.getByRole("status")).toContainText("音乐存储离线", { timeout: 10000 });
+  await expect(storage).toContainText("上次检查：");
   await page.setViewportSize({ width: 390, height: 844 });
   await setPreference(page, "theme", "light");
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
   await page.screenshot({ path: "test-results/storage-offline-390-light-zh.png", fullPage: true, animations: "disabled" });
   data = { ...data, online: true };
-  await expect(storage.locator(".online")).toContainText("在线", { timeout: 10000 });
+  await expect(storage.locator(".online")).toContainText("上次检查可用", { timeout: 10000 });
   await expect(storage.locator(".storage-status")).toBeHidden();
   await page.setViewportSize({ width: 1440, height: 1000 });
   expect((await metrics.boundingBox())!.y).toBe(initial!.y);

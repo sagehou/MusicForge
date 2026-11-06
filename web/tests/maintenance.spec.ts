@@ -100,7 +100,7 @@ test("storage checks and migration previews keep settings unchanged on desktop a
   let checks = 0, previews = 0, settingsWrites = 0, verifies = 0;
   const space = { path: "/new/output", total_bytes: 1000000000, free_bytes: 800000000, empty: true };
   await page.route("**/api/settings", route => { if (route.request().method() === "PUT") settingsWrites++; return route.fulfill({ json: { settings } }); });
-  await page.route("**/api/maintenance/storage/health", route => route.fulfill({ json: { source: "/music/source", output: "/music/output", config: "/config", online: true, checking: false, message: "", tracks: 2, outputs: 1, output_bytes: 12345, staging_bytes: 0, staging_limit_bytes: 4294967296 } }));
+  await page.route("**/api/maintenance/storage/health", route => route.fulfill({ json: { source: "/music/source", output: "/music/output", config: "/config", online: true, checked_at: 1700000000, message: "", tracks: 2, outputs: 1, output_bytes: 12345, staging_bytes: 0, staging_limit_bytes: 4294967296 } }));
   await page.route("**/api/maintenance/storage/check", route => { checks++; return route.fulfill({ json: { output: space, source: { error: "Source mount offline" } } }); });
   await page.route("**/api/maintenance/storage/verify", route => { expect(route.request().postDataJSON()).toEqual({ ids: [1] }); verifies++; return route.fulfill({ status: 202, json: { ok: true } }); });
   await page.route("**/api/maintenance/storage", route => route.fulfill({ json: verifies ? { state: "complete", total: 1, processed: 1, updated: 1, failed: 0, skipped: 0 } : { state: "idle" } }));
@@ -110,6 +110,7 @@ test("storage checks and migration previews keep settings unchanged on desktop a
   await page.locator(".library-tool > summary").filter({ hasText: "Storage health" }).click();
   const storage = page.getByRole("region", { name: "Storage health", exact: true });
   await expect(storage).toContainText("/music/output"); expect(checks + previews + verifies + settingsWrites).toBe(0);
+  await expect(storage).toContainText("Last checked:");
   await storage.getByRole("button", { name: "Check mounts and free space", exact: true }).click();
   await expect(storage).toContainText("Source mount offline");
   await storage.getByRole("button", { name: "Verify 1 output checksums", exact: true }).click();

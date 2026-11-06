@@ -121,6 +121,49 @@ test("settings layouts in both themes and narrow viewports", async ({ page }) =>
   }
 });
 
+test("mount approval preserves drafts and the background-jobs switch", async ({ page }) => {
+  await setup(page);
+  let settingsWrites = 0;
+  let fail = false;
+  const approvals: unknown[] = [];
+  await page.route("**/api/settings", route => {
+    if (route.request().method() === "PUT") settingsWrites++;
+    return route.fulfill({ json: response });
+  });
+  await page.route("**/api/maintenance/storage/acknowledge", route => {
+    approvals.push(route.request().postDataJSON());
+    return route.fulfill({ status: fail ? 409 : 200, json: fail ? { error: "Output storage offline or ownership marker missing" } : { ok: true } });
+  });
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/settings");
+  const approve = page.getByRole("button", { name: "Approve current mount", exact: true });
+  expect(approvals).toHaveLength(0);
+  await page.getByLabel("Enable library scanning and background jobs", { exact: true }).uncheck();
+  await approve.click();
+  await expect(page.getByRole("status")).toContainText("Current mount approved");
+  await expect(page.getByLabel("Enable library scanning and background jobs", { exact: true })).not.toBeChecked();
+  await expect(page.getByRole("button", { name: "Save settings", exact: true })).toBeEnabled();
+  expect(approvals).toEqual([{ source: settings.source, output: settings.output }]);
+  expect(settingsWrites).toBe(0);
+  await page.screenshot({ path: "test-results/mount-approved-1440-light-en.png", fullPage: true, animations: "disabled" });
+  await page.getByLabel("Source audio directory", { exact: true }).fill("/unsaved/source");
+  await expect(approve).toBeDisabled();
+  await page.getByLabel("Source audio directory", { exact: true }).fill(settings.source);
+  await expect(approve).toBeEnabled();
+  fail = true;
+  await setPreference(page, "language", "zh-CN");
+  await page.setViewportSize({ width: 390, height: 844 });
+  await setPreference(page, "theme", "dark");
+  await page.getByRole("button", { name: "批准当前挂载状态", exact: true }).focus();
+  await page.keyboard.press("Enter");
+  await expect(page.getByRole("alert")).toContainText("输出存储离线或缺少归属标记");
+  await expect(page.getByLabel("启用音乐库扫描和后台任务", { exact: true })).not.toBeChecked();
+  expect(approvals).toHaveLength(2);
+  expect(settingsWrites).toBe(0);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
+  await page.screenshot({ path: "test-results/mount-rejected-390-dark-zh.png", fullPage: true, animations: "disabled" });
+});
+
 test("large library returns instantly from memory, revalidates with 304 and clears on logout", async ({ page }) => {
   await setup(page);
   const sources = Array.from({ length: 5000 }, (_, index) => ({ id: index + 1, path: `Artist ${Math.floor(index / 100)}/Album ${Math.floor(index / 10)}/${index}.flac`, artist: `Artist ${Math.floor(index / 100)}`, album: `Album ${Math.floor(index / 10)}`, title: `Track ${index}`, track: index % 10 + 1, disc: 1, duration: 200, present: true, output: "", output_present: false, status: "missing", error: "", size: 100, metadata: {} }));

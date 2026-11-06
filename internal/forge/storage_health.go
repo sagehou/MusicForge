@@ -87,13 +87,27 @@ func (a *App) probeStorage(ctx context.Context, root string) (storageProbe, erro
 	return probe, err
 }
 
+// Sample capacity during file operations, never from the idle notification tick.
+func (a *App) checkStorageSpace(s Settings) {
+	low := false
+	for _, path := range []string{a.cfg.ConfigDir, s.Output} {
+		var disk syscall.Statfs_t
+		if syscall.Statfs(path, &disk) == nil && uint64(disk.Bavail)*uint64(disk.Bsize) < 256*1024*1024 {
+			low = true
+		}
+	}
+	a.storageMu.Lock()
+	a.storageLow = &low
+	a.storageMu.Unlock()
+}
+
 func (a *App) getStorageHealth(w http.ResponseWriter, r *http.Request) {
 	s, err := a.settingsContext(r.Context())
 	if err != nil {
 		apiError(w, 500, err)
 		return
 	}
-	online, message, checking := a.storageStatus(s)
+	online, message, checkedAt := a.storageStatus(s)
 	tracks, outputs, _, outputBytes, err := a.indexedStorageTotals(r.Context())
 	if err != nil {
 		apiError(w, 500, err)
@@ -102,7 +116,49 @@ func (a *App) getStorageHealth(w http.ResponseWriter, r *http.Request) {
 	a.stagingMu.Lock()
 	staging := a.stagingBytes
 	a.stagingMu.Unlock()
-	respond(w, 200, map[string]any{"source": s.Source, "output": s.Output, "config": a.cfg.ConfigDir, "online": online, "checking": checking, "message": message, "tracks": tracks, "outputs": outputs, "output_bytes": outputBytes, "staging_bytes": staging, "staging_limit_bytes": a.cfg.StagingMaxBytes})
+	respond(w, 200, map[string]any{"source": s.Source, "output": s.Output, "config": a.cfg.ConfigDir, "online": online, "checking": false, "checked_at": checkedAt, "message": message, "tracks": tracks, "outputs": outputs, "output_bytes": outputBytes, "staging_bytes": staging, "staging_limit_bytes": a.cfg.StagingMaxBytes})
+}
+
+func (a *App) acknowledgeStorage(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Source string `json:"source"`
+		Output string `json:"output"`
+	}
+	if !decode(w, r, &body) {
+		return
+	}
+	if !a.files.TryLock() {
+		apiError(w, 409, errors.New("Library file operation in progress; try approving the mount again shortly"))
+		return
+	}
+	defer a.files.Unlock()
+	s, err := a.settingsContext(r.Context())
+	if err != nil {
+		apiError(w, 500, err)
+		return
+	}
+	if body.Source != s.Source || body.Output != s.Output {
+		apiError(w, 409, errors.New("Library paths changed; reload Settings before approving the mount"))
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+	defer cancel()
+	// Acknowledgment must not claim an empty replacement output or recreate its marker.
+	err = a.verifyOutputStorage(ctx, s)
+	if err == nil {
+		err = a.initializeStorageContext(ctx, s)
+	}
+	if err == nil {
+		a.checkStorageSpace(s)
+	}
+	if !errors.Is(err, context.Canceled) {
+		a.recordStorageStatus(s, err)
+	}
+	if err != nil {
+		apiError(w, 409, err)
+		return
+	}
+	respond(w, 200, map[string]bool{"ok": true})
 }
 
 func (a *App) checkStorageHealth(w http.ResponseWriter, r *http.Request) {
@@ -114,12 +170,18 @@ func (a *App) checkStorageHealth(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
 	defer cancel()
 	result := map[string]any{}
+	var checkErrors []error
+	low := false
 	for _, item := range []struct{ kind, path string }{{"config", a.cfg.ConfigDir}, {"output", s.Output}, {"staging", a.stagingDir}} {
 		probe, checkErr := a.probeStorage(ctx, item.path)
 		if checkErr != nil {
 			result[item.kind] = map[string]string{"error": checkErr.Error()}
+			checkErrors = append(checkErrors, checkErr)
 		} else {
 			result[item.kind] = probe
+			if item.kind != "staging" && probe.Free < 256*1024*1024 {
+				low = true
+			}
 		}
 	}
 	info, sourceErr := a.sourceStat(ctx, s.Source, ".")
@@ -128,11 +190,20 @@ func (a *App) checkStorageHealth(w http.ResponseWriter, r *http.Request) {
 	}
 	if sourceErr != nil {
 		result["source"] = map[string]string{"error": sourceErr.Error()}
+		checkErrors = append(checkErrors, sourceErr)
 	} else {
 		result["source"] = map[string]string{"path": info.Path, "identity": info.Identity}
 	}
 	if err = a.verifyOutputStorage(ctx, s); err != nil {
 		result["ownership_error"] = err.Error()
+		checkErrors = append(checkErrors, err)
+	}
+	checkErr := errors.Join(checkErrors...)
+	if !errors.Is(checkErr, context.Canceled) {
+		a.storageMu.Lock()
+		a.storageLow = &low
+		a.storageMu.Unlock()
+		a.recordStorageStatus(s, checkErr)
 	}
 	respond(w, 200, result)
 }

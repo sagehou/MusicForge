@@ -233,27 +233,29 @@ def run():
         witness = json.loads(before["source_mount"])
         assert witness["identity"] == before["source_root"] and len(witness["signature"]) == 64
         before_outputs = {path.relative_to(ROOT / "output").as_posix(): hashlib.sha256(path.read_bytes()).hexdigest() for path in (ROOT / "output").rglob("*") if path.is_file()}
+        last_check = api("/api/dashboard")["storage_checked_at"]
         unmount(mounted)
-        wait_for(lambda: api("/api/dashboard"), lambda data: not data["online"] and data["storage_message"].startswith("Source mount changed;"), timeout=15)
+        assert api("/api/dashboard")["storage_checked_at"] == last_check, "browsing probed an idle mount"
         fourth = api("/api/library/scan", {})["job_id"]
         wait_for(lambda: task(fourth), lambda job: job["state"] == "pending" and job.get("log", "").startswith("Source mount changed;"), timeout=10)
+        assert api("/api/dashboard")["storage_message"].startswith("Source mount changed;"), "operation did not update storage status"
         assert all(source["present"] for source in api("/api/library")), "missing mount expired known sources"
         assert source_meta() == before, "missing mount overwrote source acknowledgment"
 
         # A different remote subdirectory is not a reconnect, even on this path.
         mounted = mount(remote + "Artist")
-        time.sleep(5.1)
-        wait_for(lambda: api("/api/dashboard"), lambda data: not data["online"] and data["storage_message"].startswith("Source mount changed;"), timeout=15)
+        check = api("/api/maintenance/storage/check", {})
+        assert check["source"]["error"].startswith("Source mount changed;"), "explicit check accepted a different remote"
         assert source_meta() == before, "wrong remote was automatically acknowledged"
         unmount(mounted)
 
         # The same named remote survives new device IDs without a Settings save.
         mounted = mount(remote)
-        wait_for(lambda: api("/api/dashboard"), lambda data: data["online"], timeout=15)
+        wait_for(lambda: task(fourth), lambda job: job["state"] == "success" and job["attempts"] == 0, timeout=45)
+        assert api("/api/dashboard")["online"], "successful scan did not update storage status"
         after = source_meta()
         assert after["source_root"] != before["source_root"], "fixture did not change root identity"
         assert json.loads(after["source_mount"])["signature"] == witness["signature"], "same remote changed stable signature"
-        wait_for(lambda: task(fourth), lambda job: job["state"] == "success" and job["attempts"] == 0, timeout=45)
         after_outputs = {path.relative_to(ROOT / "output").as_posix(): hashlib.sha256(path.read_bytes()).hexdigest() for path in (ROOT / "output").rglob("*") if path.is_file()}
         assert after_outputs == before_outputs, "reconnect modified playable output"
         assert all(source["status"] == "ready" for source in api("/api/library"))

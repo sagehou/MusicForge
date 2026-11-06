@@ -24,6 +24,7 @@ export function Overview({ notify, navigate }: { notify: Notice; navigate: (path
     catch (err) { notify(err as Error, true); } finally { setBusy(false); }
   }
   if (!data) return <><PageHeading><div><h1>{t("app.overview")}</h1></div></PageHeading><Loading error={error} retry={retry} /></>;
+  const storageUnchecked = data.enabled && data.storage_checked_at === 0;
   const percent = data.source_count ? Math.max(0, Math.min(100, Math.round(data.ready_count / data.source_count * 100))) : 0;
   const percentLabel = new Intl.NumberFormat(locale, { style: "percent" }).format(percent / 100);
   const encoding = config.data?.settings.encoding;
@@ -77,8 +78,21 @@ export function Overview({ notify, navigate }: { notify: Notice; navigate: (path
       <section className="readiness-panel">
         <div className="readiness-heading">
           <div className="completion-value">
-            <span>{t("overview.complete")} <strong>{percentLabel}</strong></span>
-            {active.length > 0 && <Badge status="running" />}
+            <span className="readiness-eyebrow">{t("overview.complete")}</span>
+            <div className="completion-main-stat">
+              <strong>{percentLabel}</strong>
+              {active.length > 0 ? (
+                <Badge status="running" />
+              ) : (
+                <span className={`readiness-status-badge ${percent === 100 ? "is-ready" : ""}`}>
+                  <span className="readiness-status-dot" />
+                  {percent === 100 ? t("overview.allReady") : t("overview.inProgress")}
+                </span>
+              )}
+            </div>
+            {active.length === 0 && (
+              <p className="readiness-summary-desc">{percent === 100 ? t("overview.allReadyDesc") : t("overview.pendingDesc")}</p>
+            )}
           </div>
           <button className="hero-profile" onClick={() => navigate("/settings?section=encoding")}>
             <strong>{data.codec.toUpperCase()} {profile}</strong>
@@ -86,13 +100,14 @@ export function Overview({ notify, navigate }: { notify: Notice; navigate: (path
             <ArrowRight size={14} />
           </button>
         </div>
-        <div className="hero-completion" role="progressbar" aria-label={t("overview.complete")} aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent}>
-          <div className="completion-meter" aria-hidden="true">
-            <span style={{ width: `${percent}%` }} />
-          </div>
-        </div>
         {active.length > 0 ? (
-          <div className="active-tracks">{active.map(({ job, activity }, index) => {
+          <>
+            <div className="hero-completion" role="progressbar" aria-label={t("overview.complete")} aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent}>
+              <div className="completion-meter" aria-hidden="true">
+                <span style={{ width: `${percent}%` }} />
+              </div>
+            </div>
+            <div className="active-tracks">{active.map(({ job, activity }, index) => {
             const source = library.data?.find(source => source.path === activity.path);
             return <div className="active-track" key={`${job.repair_id || job.id}:${activity.path}:${index}`}>
               <span className="active-track-artwork" aria-hidden="true">{source?.artwork_url ? <img src={source.artwork_url} alt="" loading="lazy" /> : <Music2 size={18} />}</span>
@@ -101,13 +116,12 @@ export function Overview({ notify, navigate }: { notify: Notice; navigate: (path
               <strong className="active-track-percent">{number(Math.round(activity.phase === "convert" ? activity.percent : taskPercent(job)))}%</strong>
             </div>;
           })}</div>
+          </>
         ) : (
           <div className="readiness-idle">
-            <div className="readiness-idle-status">
-              <span className={`readiness-idle-dot ${percent === 100 ? "ready" : ""}`} />
-              <div className="readiness-idle-text">
-                <strong>{percent === 100 ? t("overview.allReady") : t("overview.inProgress")}</strong>
-                <p>{percent === 100 ? t("overview.allReadyDesc") : t("overview.pendingDesc")}</p>
+            <div className="hero-completion" role="progressbar" aria-label={t("overview.complete")} aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent}>
+              <div className="completion-meter" aria-hidden="true">
+                <span style={{ width: `${percent}%` }} />
               </div>
             </div>
             <div className="readiness-spec-grid">
@@ -170,7 +184,7 @@ export function Overview({ notify, navigate }: { notify: Notice; navigate: (path
         <section className="panel storage-summary">
           <div className="section-heading">
             <h2>{t("overview.storage")}</h2>
-            <span className={`online ${data.online ? "is-online" : ""}`}><span />{data.online ? t("overview.online") : data.storage_checking ? t("overview.checkingShort") : t("overview.waiting")}</span>
+            <span className={`online ${data.online ? "is-online" : ""}`}><span />{data.online ? t("overview.online") : storageUnchecked ? t("overview.unchecked") : t("overview.waiting")}</span>
           </div>
           <ResourceWarning error={config.error} retry={config.retry} />
           <dl className="storage-paths">
@@ -183,13 +197,14 @@ export function Overview({ notify, navigate }: { notify: Notice; navigate: (path
               <dd><code>{config.data?.settings.output || "—"}</code></dd>
             </div>
           </dl>
+          {data.storage_checked_at ? <p className="storage-checked-at">{t("storage.lastChecked", { time: date(data.storage_checked_at) })}</p> : null}
           {data.online && <div className="storage-online-state">
             <span className="storage-status-dot" />
             <span>{t("overview.storageOnlineReady")} · {t("overview.storageOnlineDesc")}</span>
           </div>}
           <div className="storage-status" data-online={data.online} role="status" aria-live="polite">{!data.online && <>
             <div className="storage-status-header">
-              <strong>{t(data.storage_checking ? "overview.checking" : data.enabled ? "overview.offline" : "overview.configure")}</strong>
+              <strong>{t(storageUnchecked ? "overview.unchecked" : data.enabled ? "overview.offline" : "overview.configure")}</strong>
               <Button variant="ghost" size="sm" onClick={() => navigate("/settings")}>{t("overview.openSettings")}<ArrowRight size={13} /></Button>
             </div>
             <p>{errorMessage(data.storage_message)}</p>

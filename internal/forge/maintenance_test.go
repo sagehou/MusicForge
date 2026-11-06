@@ -387,7 +387,6 @@ func TestNotificationOfflineThresholdWithoutDashboardPolling(t *testing.T) {
 	}
 	a.storageMu.Lock()
 	a.storageSource, a.storageOutput = s.Source, s.Output
-	a.storageCheck = true
 	a.storageAt = time.Now()
 	a.storageError = errors.New("offline")
 	a.storageMu.Unlock()
@@ -409,5 +408,32 @@ func TestNotificationOfflineThresholdWithoutDashboardPolling(t *testing.T) {
 	a.notificationTick(context.Background(), s)
 	if !a.offlineSince.IsZero() {
 		t.Fatal("online recovery did not reset the outage while delivery was throttled")
+	}
+	a.storageMu.Lock()
+	low := true
+	a.storageLow = &low
+	a.storageMu.Unlock()
+	a.notifyNext = time.Time{}
+	a.notificationTick(context.Background(), s)
+	a.notifyNext = time.Time{}
+	a.notificationTick(context.Background(), s)
+	if calls.Load() != 2 {
+		t.Fatal("cached low-space observation was reprobed or delivered twice", calls.Load())
+	}
+	// A restart has no capacity observation yet and must retain the delivery cursor.
+	a.storageMu.Lock()
+	a.storageLow = nil
+	a.storageAt = time.Time{}
+	a.storageMu.Unlock()
+	a.notifyNext = time.Time{}
+	a.notificationTick(context.Background(), s)
+	a.storageMu.Lock()
+	a.storageLow = &low
+	a.storageAt = time.Now()
+	a.storageMu.Unlock()
+	a.notifyNext = time.Time{}
+	a.notificationTick(context.Background(), s)
+	if calls.Load() != 2 {
+		t.Fatal("an unknown capacity observation cleared the delivery cursor", calls.Load())
 	}
 }

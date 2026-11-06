@@ -48,11 +48,11 @@ type App struct {
 	activeJobs    map[int64]context.CancelFunc
 	sourceSlots   chan struct{}
 	storageMu     sync.Mutex
-	storageCheck  bool
 	storageSource string
 	storageOutput string
 	storageAt     time.Time
 	storageError  error
+	storageLow    *bool
 	sourceRootMu  sync.Mutex
 	ioContext     context.Context
 	ioCancel      context.CancelFunc
@@ -467,7 +467,12 @@ func (a *App) dirty(rel string) error {
 	return err
 }
 
-func (a *App) storageContext(ctx context.Context, s Settings) error {
+func (a *App) storageContext(ctx context.Context, s Settings) (err error) {
+	defer func() {
+		if !errors.Is(err, context.Canceled) {
+			a.recordStorageStatus(s, err)
+		}
+	}()
 	source, err := a.sourceStat(ctx, s.Source, ".")
 	if err != nil {
 		if ctx.Err() != nil {
@@ -500,33 +505,31 @@ func (a *App) storageContext(ctx context.Context, s Settings) error {
 	name := f.Name()
 	f.Close()
 	os.Remove(name)
+	a.checkStorageSpace(s)
 	return nil
 }
 
-// Dashboard polling reads the last background check, never the remote mount.
-func (a *App) storageStatus(s Settings) (bool, string, bool) {
+func (a *App) recordStorageStatus(s Settings, err error) {
 	a.storageMu.Lock()
 	defer a.storageMu.Unlock()
-	if a.storageSource != s.Source || a.storageOutput != s.Output {
-		a.storageAt = time.Time{}
+	if err != nil && (a.storageSource != s.Source || a.storageOutput != s.Output) {
+		a.storageLow = nil
 	}
-	if !a.storageCheck && (a.storageAt.IsZero() || time.Since(a.storageAt) >= 5*time.Second) {
-		a.storageCheck = true
-		go func() {
-			err := a.storageContext(a.ioContext, s)
-			a.storageMu.Lock()
-			defer a.storageMu.Unlock()
-			a.storageSource, a.storageOutput = s.Source, s.Output
-			a.storageAt, a.storageError, a.storageCheck = time.Now(), err, false
-		}()
-	}
-	if a.storageAt.IsZero() || a.storageCheck && time.Since(a.storageAt) > 15*time.Second {
-		return false, "Checking library storage", true
+	a.storageSource, a.storageOutput = s.Source, s.Output
+	a.storageAt, a.storageError = time.Now(), err
+}
+
+// Browsing and notifications only read the last operation's result.
+func (a *App) storageStatus(s Settings) (bool, string, int64) {
+	a.storageMu.Lock()
+	defer a.storageMu.Unlock()
+	if a.storageSource != s.Source || a.storageOutput != s.Output || a.storageAt.IsZero() {
+		return false, "Storage has not been checked; run a library operation or check mounts manually", 0
 	}
 	if a.storageError != nil {
-		return false, a.storageError.Error(), false
+		return false, a.storageError.Error(), a.storageAt.Unix()
 	}
-	return true, "", false
+	return true, "", a.storageAt.Unix()
 }
 
 func (a *App) initializeStorageContext(ctx context.Context, s Settings) error {

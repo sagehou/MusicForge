@@ -293,27 +293,50 @@ func TestHungScanLeavesAPIResponsiveAndCanPause(t *testing.T) {
 	}
 }
 
-func TestDashboardDoesNotWaitForRemoteRootStat(t *testing.T) {
-	a, _ := testApp(t)
+func TestStorageViewsNeverProbeAndOperationsRefreshTheirStatus(t *testing.T) {
+	a, s := testApp(t)
 	a.cfg.SourceTimeoutSeconds = 1
+	request := lyricsSession(t, a)
+	trace := filepath.Join(t.TempDir(), "source-io.log")
+	t.Setenv("MUSICFORGE_TEST_SOURCE_TRACE", trace)
 	sourceFault(t, "stat", ".", 10000, 0)
-	started := time.Now()
-	w := httptest.NewRecorder()
-	a.dashboard(w, httptest.NewRequest("GET", "/api/dashboard", nil))
-	if w.Code != 200 || time.Since(started) > 500*time.Millisecond || !strings.Contains(w.Body.String(), `"storage_checking":true`) {
-		t.Fatal("dashboard blocked on the mount", w.Code, w.Body.String())
+	assertViews := func(online bool, checkedAt int64, message string) {
+		t.Helper()
+		for path, timeKey := range map[string]string{"/api/dashboard": "storage_checked_at", "/api/maintenance/storage/health": "checked_at"} {
+			started := time.Now()
+			w := request("GET", path, nil)
+			var data map[string]any
+			if w.Code != 200 || time.Since(started) > 500*time.Millisecond || json.Unmarshal(w.Body.Bytes(), &data) != nil {
+				t.Fatal("storage view waited for the mount", path, w.Code, w.Body.String())
+			}
+			if data["online"] != online || data[timeKey] != float64(checkedAt) || !strings.Contains(w.Body.String(), message) {
+				t.Fatal("storage view changed the last observed result", path, w.Body.String())
+			}
+		}
 	}
-	deadline := time.Now().Add(3 * time.Second)
-	for {
-		w = httptest.NewRecorder()
-		a.dashboard(w, httptest.NewRequest("GET", "/api/dashboard", nil))
-		if strings.Contains(w.Body.String(), "Source storage offline:") {
-			break
-		}
-		if time.Now().After(deadline) {
-			t.Fatal("background storage timeout missing", w.Body.String())
-		}
-		time.Sleep(10 * time.Millisecond)
+	assertViews(false, 0, "Storage has not been checked")
+	if _, err := os.Stat(trace); !os.IsNotExist(err) {
+		t.Fatal("reading an unchecked library started source I/O", err)
+	}
+	if err := a.storageContext(context.Background(), s); err == nil || !strings.Contains(err.Error(), "stalled") {
+		t.Fatal("operation did not observe the stalled mount", err)
+	}
+	_, message, checkedAt := a.storageStatus(s)
+	assertViews(false, checkedAt, message)
+	sourceFault(t, "stat", ".", 0, 0)
+	if err := a.storageContext(context.Background(), s); err != nil {
+		t.Fatal(err)
+	}
+	// Even an old success remains cached until another operation checks storage.
+	a.storageMu.Lock()
+	a.storageAt = time.Now().Add(-time.Hour)
+	checkedAt = a.storageAt.Unix()
+	a.storageMu.Unlock()
+	assertViews(true, checkedAt, "")
+	assertViews(true, checkedAt, "")
+	raw, err := os.ReadFile(trace)
+	if err != nil || string(raw) != "stat:.\nstat:.\n" {
+		t.Fatal("browsing triggered extra storage I/O", string(raw), err)
 	}
 }
 

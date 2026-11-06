@@ -121,6 +121,7 @@ func (a *App) Handler() http.Handler {
 	mux.HandleFunc("PUT /api/maintenance/issues", a.auth(a.saveQualityDecisions))
 	mux.HandleFunc("GET /api/maintenance/storage/health", a.auth(a.getStorageHealth))
 	mux.HandleFunc("POST /api/maintenance/storage/check", a.auth(a.checkStorageHealth))
+	mux.HandleFunc("POST /api/maintenance/storage/acknowledge", a.auth(a.acknowledgeStorage))
 	mux.HandleFunc("POST /api/maintenance/storage/verify", a.auth(a.startStorageVerification))
 	mux.HandleFunc("POST /api/maintenance/migration/preview", a.auth(a.previewMigration))
 	mux.HandleFunc("GET /api/maintenance/operations", a.auth(a.getOperations))
@@ -351,12 +352,12 @@ func (a *App) dashboard(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	online := s.Enabled
-	checking := false
+	var checkedAt int64
 	reason := "Library is not enabled"
 	if s.Enabled {
-		online, reason, checking = a.storageStatus(s)
+		online, reason, checkedAt = a.storageStatus(s)
 	}
-	respond(w, 200, map[string]any{"source_count": sourceCount, "output_count": outputCount, "ready_count": ready, "expired_count": expired, "rebuild_count": rebuild, "failed_count": failed, "online": online, "storage_checking": checking, "storage_message": reason, "codec": s.Encoding.Codec, "enabled": s.Enabled, "version": a.version})
+	respond(w, 200, map[string]any{"source_count": sourceCount, "output_count": outputCount, "ready_count": ready, "expired_count": expired, "rebuild_count": rebuild, "failed_count": failed, "online": online, "storage_checking": false, "storage_checked_at": checkedAt, "storage_message": reason, "codec": s.Encoding.Codec, "enabled": s.Enabled, "version": a.version})
 }
 
 func (a *App) jobs(w http.ResponseWriter, r *http.Request) {

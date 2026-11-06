@@ -73,7 +73,7 @@ func (a *App) verifySourceRoot(source sourceInfo) error {
 	if err != nil && err != sql.ErrNoRows {
 		return err
 	}
-	changed := later("Source mount changed; verify the mount and save Settings to acknowledge it", 30)
+	changed := later("Source mount changed; verify the directories and approve the current mount in Settings", 30)
 	if err == sql.ErrNoRows {
 		return changed
 	}

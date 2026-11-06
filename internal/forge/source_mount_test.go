@@ -5,6 +5,8 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -85,6 +87,9 @@ func TestSourceMountReconnectPreservesSchemaTwoAcknowledgmentAndRestart(t *testi
 		t.Fatal(err)
 	}
 	defer a.Close()
+	if online, _, at := a.storageStatus(s); online || at != 0 {
+		t.Fatal("restart claimed storage was checked", online, at)
+	}
 	root.Identity = "67890:1"
 	if err = a.verifySourceRoot(root); err != nil {
 		t.Fatal("reconnect witness lost across restart", err)
@@ -132,6 +137,80 @@ func TestSourceMountUnknownAndMalformedWitnessRequireAcknowledgment(t *testing.T
 			value, _ := a.meta("source_root")
 			if value != "1:1" {
 				t.Fatal("failed verification overwrote the last acknowledgment")
+			}
+		})
+	}
+}
+
+func TestApproveCurrentMountPreservesSettingsAndOutputOwnership(t *testing.T) {
+	for _, enabled := range []bool{true, false} {
+		t.Run(fmt.Sprintf("enabled:%t", enabled), func(t *testing.T) {
+			a, s := testApp(t)
+			s.Enabled = enabled
+			if err := a.saveSettings(s); err != nil {
+				t.Fatal(err)
+			}
+			request := lyricsSession(t, a)
+			before, _ := a.meta("source_root")
+			markerPath := filepath.Join(s.Output, ".musicforge")
+			marker, err := os.ReadFile(markerPath)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err = os.Rename(s.Source, s.Source+".previous"); err != nil {
+				t.Fatal(err)
+			}
+			if err = os.Mkdir(s.Source, 0755); err != nil {
+				t.Fatal(err)
+			}
+			if err = a.storageContext(context.Background(), s); err == nil {
+				t.Fatal("operation accepted an unapproved replacement mount")
+			}
+			body := map[string]string{"source": s.Source, "output": s.Output}
+			stale := map[string]string{"source": s.Source + ".previous", "output": s.Output}
+			if w := request("POST", "/api/maintenance/storage/acknowledge", stale); w.Code != 409 {
+				t.Fatal("approved different paths than the user reviewed", w.Code, w.Body.String())
+			}
+			// An empty output that lost its marker must not be silently claimed.
+			if err = os.Remove(markerPath); err != nil {
+				t.Fatal(err)
+			}
+			if w := request("POST", "/api/maintenance/storage/acknowledge", body); w.Code != 409 {
+				t.Fatal("approved an output without ownership", w.Code, w.Body.String())
+			}
+			if _, err = os.Stat(markerPath); !os.IsNotExist(err) {
+				t.Fatal("approval recreated a missing ownership marker", err)
+			}
+			if root, _ := a.meta("source_root"); root != before {
+				t.Fatal("failed approval changed the acknowledged source", root)
+			}
+			if err = os.WriteFile(markerPath, marker, 0600); err != nil {
+				t.Fatal(err)
+			}
+			a.files.Lock()
+			w := request("POST", "/api/maintenance/storage/acknowledge", body)
+			a.files.Unlock()
+			if w.Code != 409 {
+				t.Fatal("approval raced with a library file operation", w.Code, w.Body.String())
+			}
+			if w = request("POST", "/api/maintenance/storage/acknowledge", body); w.Code != 200 {
+				t.Fatal(w.Code, w.Body.String())
+			}
+			if root, _ := a.meta("source_root"); root == before {
+				t.Fatal("explicit approval did not acknowledge the new source")
+			}
+			if got, err := a.settings(); err != nil || got != s {
+				t.Fatal("approval changed settings or the background-jobs switch", got, err)
+			}
+			var jobs int
+			if err = a.reads.QueryRow("SELECT count(*) FROM jobs").Scan(&jobs); err != nil || jobs != 0 {
+				t.Fatal("approval queued an unexpected scan", jobs, err)
+			}
+			if online, message, at := a.storageStatus(s); !online || message != "" || at == 0 {
+				t.Fatal("approval did not refresh observed availability", online, message, at)
+			}
+			if err = a.storageContext(context.Background(), s); err != nil {
+				t.Fatal("operation did not accept the approved mount", err)
 			}
 		})
 	}

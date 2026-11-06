@@ -2634,7 +2634,8 @@ input[role="switch"]:checked::after { transform: translateX(20px); background: v
   .overview-metrics .metric strong { font-size: 24px; }
   .active-track { gap: 10px; }
   .active-track-artwork { width: 30px; height: 30px; }
-  .job-row { min-height: 44px; padding-block: 6px; }
+  .job-list { gap: 4px; }
+  .job-row { min-height: 56px; padding-block: 10px; }
   .attention-list { gap: 2px; }
   .attention-list > button { min-height: 30px; padding-block: 2px; }
   .album-summary { grid-template-columns: 88px minmax(0, 1fr); gap: 14px; align-items: start; padding: 14px; }

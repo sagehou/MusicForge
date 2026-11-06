@@ -56,7 +56,7 @@ test("scan failure summaries show file paths and causes in both languages", asyn
   await expect(page.locator(".task-outcome")).toContainText("1 unavailable source files and 0 invalid audio files");
   await expect(page.locator(".task-outcome")).toContainText(diagnostic);
   await setPreference(page, "language", "zh-CN");
-  await expect(page.locator(".task-outcome")).toContainText("1 个源文件无法读取、0 个音频文件无效");
+  await expect(page.locator(".task-outcome")).toContainText("1 个源文件无法读取，0 个音频文件无效");
   await expect(page.locator(".task-outcome")).toContainText(diagnostic);
   await page.setViewportSize({ width: 390, height: 844 });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);

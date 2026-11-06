@@ -109,7 +109,7 @@ test("settings layouts in both themes and narrow viewports", async ({ page }) =>
       if (width <= 600) {
         if (id === "library") {
           const sourceHint = page.locator('[data-settings-section="library"] .field > small').first();
-          await expect(sourceHint).toContainText("MKA");
+          await expect(sourceHint).toContainText("FLAC");
           expect(await sourceHint.evaluate(element => element.scrollWidth <= element.clientWidth + 1 && element.scrollHeight <= element.clientHeight + 1)).toBe(true);
         }
         for (const field of await page.locator('.settings-panel input:visible:not([type="checkbox"]), .settings-panel select:visible, .settings-panel textarea:visible').all()) {

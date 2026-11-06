@@ -139,7 +139,7 @@ test("phone lyric selection opens a separate tab with visible preview and confir
   await pickerTab.screenshot({ path: "test-results/lyrics-instrumental-320-light-en.png", animations: "disabled" });
   await picker.getByRole("button", { name: "Confirm instrumental", exact: true }).click();
   await expect(picker.getByRole("button", { name: "Confirm instrumental", exact: true })).toBeDisabled();
-  await expect(picker.getByRole("status")).toContainText("Saved");
+  await expect(picker.getByRole("status")).toContainText("Lyrics saved.");
   expect(saves.at(-1)).toEqual({ token: "instrumental-2", index: 0, translation: false, romanization: false });
   await pickerTab.close();
   await page.bringToFront();
@@ -207,7 +207,7 @@ test("instrumental choices renew expired and consumed targets when replacing lyr
   expect(previews[0]).not.toBe("instrumental-1");
   await confirm.click();
   await expect(confirm).toBeDisabled();
-  await expect(picker.getByRole("status")).toContainText("Saved");
+  await expect(picker.getByRole("status")).toContainText("Lyrics saved.");
   expect(saves).toHaveLength(1);
   expect(searches).toHaveLength(0);
 
@@ -219,7 +219,7 @@ test("instrumental choices renew expired and consumed targets when replacing lyr
   }
   await searchAndSelect();
   await picker.getByRole("button", { name: "Save selected lyrics", exact: true }).click();
-  await expect(picker.getByRole("status")).toContainText("Saved");
+  await expect(picker.getByRole("status")).toContainText("Lyrics saved.");
   expect(saves).toHaveLength(2);
   await expect(picker.getByRole("radio", { name: "Preview Track · Artist · LRCLIB", exact: true })).toHaveCount(0);
 
@@ -228,7 +228,7 @@ test("instrumental choices renew expired and consumed targets when replacing lyr
   await expect(confirm).toBeEnabled();
   await confirm.click();
   await expect(confirm).toBeDisabled();
-  await expect(picker.getByRole("status")).toContainText("Saved");
+  await expect(picker.getByRole("status")).toContainText("Lyrics saved.");
   expect(saves).toHaveLength(3);
   expect(saves[2]).not.toBe(saves[0]);
 
@@ -239,7 +239,7 @@ test("instrumental choices renew expired and consumed targets when replacing lyr
   await expect(confirm).toBeEnabled();
   await confirm.click();
   await expect(confirm).toBeDisabled();
-  await expect(picker.getByRole("status")).toContainText("Saved");
+  await expect(picker.getByRole("status")).toContainText("Lyrics saved.");
   expect(saves).toHaveLength(4);
   const providers = ["qq", "kugou", "netease", "petitlyrics", "lrclib", "kuwo", "migu"];
   expect([...searches].sort()).toEqual([...providers, ...providers].sort());

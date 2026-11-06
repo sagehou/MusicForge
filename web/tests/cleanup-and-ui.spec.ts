@@ -157,7 +157,7 @@ test("observed storage state stays inside the storage card without shifting the 
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
   await page.screenshot({ path: "test-results/storage-offline-390-light-zh.png", fullPage: true, animations: "disabled" });
   data = { ...data, online: true };
-  await expect(storage.locator(".online")).toContainText("上次检查可用", { timeout: 10000 });
+  await expect(storage.locator(".online")).toContainText("检查通过", { timeout: 10000 });
   await expect(storage.locator(".storage-status")).toBeHidden();
   await page.setViewportSize({ width: 1440, height: 1000 });
   expect((await metrics.boundingBox())!.y).toBe(initial!.y);

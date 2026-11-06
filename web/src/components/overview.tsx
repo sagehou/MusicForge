@@ -45,7 +45,6 @@ export function Overview({ notify, navigate }: { notify: Notice; navigate: (path
     { label: t("overview.profileReady"), value: data.ready_count, icon: Check, path: "/library?view=tracks&status=ready", note: t("overview.currentProfile"), tone: "ready" },
     { label: t("overview.attention"), value: attentionCount, icon: Clock3, path: "/library?view=tracks&sort=attention", note: t("overview.attentionCounts", { rebuild: data.rebuild_count, expired: data.expired_count, failed: data.failed_count }), tone: attentionCount > 0 ? "attention" : "neutral" },
   ];
-  const lyricPercent = playable?.length ? Math.round((lyricReady || 0) / playable.length * 100) : 0;
   return <div className="overview-page">
     <ResourceWarning error={error} retry={retry} />
     <PageHeading>
@@ -58,7 +57,7 @@ export function Overview({ notify, navigate }: { notify: Notice; navigate: (path
           {t("overview.viewLibrary")}
           <ArrowRight size={15} />
         </Button>
-        <Button onClick={() => void scan()} disabled={busy || !data.enabled}>
+        <Button variant="outline" onClick={() => void scan()} disabled={busy || !data.enabled}>
           <RefreshCw size={15} className={busy ? "animate-spin" : ""} />
           {t("overview.scan")}
         </Button>
@@ -104,11 +103,7 @@ export function Overview({ notify, navigate }: { notify: Notice; navigate: (path
         </div>
         {active.length > 0 ? (
           <>
-            <div className="hero-completion" role="progressbar" aria-label={t("overview.complete")} aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent}>
-              <div className="completion-meter" aria-hidden="true">
-                <span style={{ width: `${percent}%` }} />
-              </div>
-            </div>
+            <div className="hero-completion sr-only" role="progressbar" aria-label={t("overview.complete")} aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent} />
             <div className="active-tracks">{active.map(({ job, activity }, index) => {
               const source = library.data?.find(source => source.path === activity.path);
               return <div className="active-track" key={`${job.repair_id || job.id}:${activity.path}:${index}`}>
@@ -121,6 +116,7 @@ export function Overview({ notify, navigate }: { notify: Notice; navigate: (path
           </>
         ) : (
           <div className="readiness-idle">
+            <div className="hero-completion sr-only" role="progressbar" aria-label={t("overview.complete")} aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent} />
             <div className="audio-pipeline-visual">
               <div className="pipeline-node">
                 <span className="pipeline-icon"><Disc3 size={15} /></span>
@@ -142,11 +138,6 @@ export function Overview({ notify, navigate }: { notify: Notice; navigate: (path
                 </div>
               </div>
             </div>
-            <div className="hero-completion" role="progressbar" aria-label={t("overview.complete")} aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent}>
-              <div className="completion-meter" aria-hidden="true">
-                <span style={{ width: `${percent}%` }} />
-              </div>
-            </div>
             <div className="readiness-spec-grid">
               <div className="spec-col">
                 <span className="spec-label">{t("overview.readyTracks")}</span>
@@ -158,7 +149,7 @@ export function Overview({ notify, navigate }: { notify: Notice; navigate: (path
               </div>
               <div className="spec-col">
                 <span className="spec-label">{t("overview.statusLabel")}</span>
-                <strong className={`spec-val ${percent === 100 ? "text-success" : ""}`}>{percent === 100 ? t("overview.allReadyShort") : t("overview.pendingShort")}</strong>
+                <strong className={`spec-val ${percent === 100 ? "text-ready" : ""}`}>{percent === 100 ? t("overview.allReadyShort") : t("overview.pendingShort")}</strong>
               </div>
             </div>
           </div>
@@ -193,9 +184,6 @@ export function Overview({ notify, navigate }: { notify: Notice; navigate: (path
             <div className="lyrics-stat-row">
               <span className="lyrics-stat-label">{t("overview.lyricCoverage")}</span>
               <strong className="lyrics-stat-val">{playable ? `${number(lyricReady || 0)} / ${number(playable.length)}` : "—"}</strong>
-            </div>
-            <div className="lyrics-progress-bar">
-              <span style={{ width: `${lyricPercent}%` }} />
             </div>
             <div className="lyrics-review-hint">
               <span className="review-dot" />

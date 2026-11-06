@@ -63,7 +63,7 @@ test("missing records have confirmed individual, selected and all cleanup with p
   await selectLibraryPage(page);
   await page.getByRole("button", { name: "Remove 3 selected records", exact: true }).click();
   expect(requests).toHaveLength(0);
-  expect(dialogs[0]).toContain("no files or task history are deleted");
+  expect(dialogs[0]).toContain("Files and job history are kept");
   accept = true;
   await page.getByRole("button", { name: "Remove 3 selected records", exact: true }).click();
   await expect.poll(() => requests.length).toBe(1);
@@ -79,7 +79,7 @@ test("missing records have confirmed individual, selected and all cleanup with p
   await page.getByRole("table").getByRole("button", { name: "移除记录", exact: true }).click();
   await expect.poll(() => requests.length).toBe(3);
   expect(requests[2]).toEqual({ ids: [5] });
-  expect(dialogs.at(-1)).toContain("不删除文件或任务历史");
+  expect(dialogs.at(-1)).toContain("不会删除文件或任务历史");
   await expect(page.locator(".toast")).toContainText("已移除 0 条库记录；跳过 1 条受保护的记录");
 });
 

@@ -26,7 +26,7 @@ test("decode failures show a translated summary and retain full diagnostics", as
   await page.locator(".task-diagnostic summary").click();
   await expect(page.locator(".task-diagnostic pre")).toContainText("MD5 signature mismatch");
   await setPreference(page, "language", "zh-CN");
-  await expect(page.locator(".task-error-summary")).toContainText("尚不能认定源文件损坏");
+  await expect(page.locator(".task-error-summary")).toContainText("请检查文件与解码器兼容性");
   await expect(page.locator(".task-diagnostic pre")).toContainText("Source SHA-256:");
   await page.setViewportSize({ width: 390, height: 844 });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);

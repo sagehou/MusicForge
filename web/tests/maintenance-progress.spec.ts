@@ -107,7 +107,7 @@ test("maintenance progress and grouped recovery reuse exact existing actions", a
   writes.length = 0;
   await page.locator(".maintenance-failures > summary").click();
   const decode = page.getByRole("region", { name: "Audio decoding", exact: true });
-  await expect(decode).toContainText("Paused, stopped or still active queues are preserved");
+  await expect(decode).toContainText("Resume paused or stopped queues manually");
   await decode.getByRole("button", { name: "Retry 2 queue items in this group", exact: true }).click();
   await expect(page.locator(".toast")).toContainText("Please retry shortly");
   fail = false;

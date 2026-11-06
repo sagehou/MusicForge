@@ -44,7 +44,7 @@ test("best-effort repair requires consent and imports normal audio with a persis
   await expect(button).toBeVisible();
   page.once("dialog", async dialog => {
     expect(dialog.message()).toContain("missing sections");
-    expect(dialog.message()).toContain("normal output path");
+    expect(dialog.message()).toContain("added to your output library");
     expect(dialog.message()).toContain("appear in Navidrome");
     expect(dialog.message()).toContain("existing outputs will not be replaced");
     await dialog.dismiss();

@@ -198,10 +198,6 @@ export function Overview({ notify, navigate }: { notify: Notice; navigate: (path
             </div>
           </dl>
           {data.storage_checked_at ? <p className="storage-checked-at">{t("storage.lastChecked", { time: date(data.storage_checked_at) })}</p> : null}
-          {data.online && <div className="storage-online-state">
-            <span className="storage-status-dot" />
-            <span>{t("overview.storageOnlineReady")} · {t("overview.storageOnlineDesc")}</span>
-          </div>}
           <div className="storage-status" data-online={data.online} role="status" aria-live="polite">{!data.online && <>
             <div className="storage-status-header">
               <strong>{t(storageUnchecked ? "overview.unchecked" : data.enabled ? "overview.offline" : "overview.configure")}</strong>

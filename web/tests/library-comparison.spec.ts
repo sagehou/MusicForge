@@ -71,8 +71,8 @@ test("file comparison explains count differences and queues only selected direct
   await page.locator(".library-comparison > summary").filter({ hasText: "File counts · compare with Lidarr" }).click();
   await expect(compare).toBeEnabled();
   await compare.click();
-  await expect(page.getByText("Some Lidarr paths are outside", { exact: false })).toBeVisible();
-  await expect(page.getByText("This is an index snapshot", { exact: false })).toBeVisible();
+  await expect(page.getByText("Some files are outside the source directory", { exact: false })).toBeVisible();
+  await expect(page.getByText("Results reflect the latest index", { exact: false })).toBeVisible();
   await expect(page.locator(".comparison-results > li")).toHaveCount(3);
   await page.getByLabel("Select re-scannable files on this page", { exact: true }).check();
   await page.getByRole("button", { name: "Re-scan selected directories (2 files)", exact: true }).click();
@@ -80,7 +80,7 @@ test("file comparison explains count differences and queues only selected direct
   expect(checks).toBe(1);
   await page.getByLabel("Difference type", { exact: true }).selectOption("failed");
   await expect(page.locator(".comparison-results > li")).toHaveCount(1);
-  await expect(page.locator(".comparison-results")).toContainText("not a source-count difference");
+  await expect(page.locator(".comparison-results")).toContainText("Review the track or job failure details");
   await setPreference(page, "language", "zh-CN");
   await expect(page.getByRole("button", { name: "核对文件清单", exact: true })).toBeVisible();
   await page.setViewportSize({ width: 390, height: 844 });

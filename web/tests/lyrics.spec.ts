@@ -28,7 +28,7 @@ test("incremental filling shows pending and skipped counts and succeeds when no 
   await page.locator(".lyrics-panel > .lyrics-settings > summary").click();
   await page.getByRole("button", { name: "Fill lyrics for all artifacts", exact: true }).click();
   const progress = page.getByRole("status", { name: "Current lyrics batch", exact: true });
-  await expect(progress).toContainText("No lyrics need filling. Existing results were retained.");
+  await expect(progress).toContainText("No lyrics need filling.");
   await expect(progress).toContainText("Skipped 1 tracks with lyrics or no work due");
   await expect(progress).not.toContainText("0/0");
   await expect(page.locator(".toast")).toContainText("No lyrics need filling");
@@ -61,9 +61,9 @@ test("lyrics settings save thresholds, retain drafts and offer output-only inspe
   await expect(sources.getByRole("checkbox", { checked: true })).toHaveCount(7);
   await expect(sources.getByRole("checkbox", { name: "AMLL TTML DB", exact: true })).not.toBeChecked();
   await expect(sources.getByRole("checkbox", { name: "Unison", exact: true })).not.toBeChecked();
-  await expect(sources).toContainText("manual preview and selection");
-  await expect(sources).toContainText("plain text is excluded");
-  await expect(sources).toContainText("Japanese synchronized lyrics");
+  await expect(sources).toContainText("Preview and select manually");
+  await expect(sources).toContainText("Community synchronized LRC / TTML lyrics");
+  await expect(sources).toContainText("Synchronized Japanese lyrics");
   await sources.getByRole("checkbox", { name: "QQ Music", exact: true }).uncheck();
   await sources.getByRole("button", { name: "Move PetitLyrics up", exact: true }).click();
   await sources.getByRole("button", { name: "Move PetitLyrics up", exact: true }).click();
@@ -676,7 +676,7 @@ test("song details and automatic saved recommendations survive reopening and pag
   await page.locator(".lyrics-details > summary").click();
   await page.getByRole("button", { name: "Choose lyrics", exact: true }).click();
   let picker = page.getByRole("region", { name: "Choose lyrics", exact: true });
-  await expect(picker.getByText("Saved search", { exact: false })).toHaveCount(2);
+  await expect(picker.getByText("Recent search", { exact: false })).toHaveCount(2);
   const recommended = picker.locator(".lyrics-candidate").filter({ hasText: "Recommended" });
   await expect(recommended).toContainText("Traditional Chinese characters detected");
   await expect(recommended).toContainText("Match score 100/100");

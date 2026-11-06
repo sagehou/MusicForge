@@ -224,14 +224,14 @@ test("audition errors retry and missing or changed lyrics do not block playback"
   await expect(page.locator(".artifact-audition").getByRole("alert")).toContainText("Generated audio is unavailable");
   state = "missing";
   await page.getByRole("button", { name: "Reload audition", exact: true }).click();
-  await expect(page.locator(".audition-empty")).toContainText("No saved output lyrics");
+  await expect(page.locator(".audition-empty")).toContainText("No lyrics available");
   await page.getByRole("button", { name: "Play artifact", exact: true }).click();
   await expect.poll(() => page.locator(".artifact-audition audio").evaluate(node => !(node as HTMLAudioElement).paused)).toBe(true);
   await page.locator(".artifact-audition audio").dispatchEvent("error");
-  await expect(page.locator(".artifact-audition").getByRole("alert")).toContainText("Cannot play this artifact");
+  await expect(page.locator(".artifact-audition").getByRole("alert")).toContainText("Could not play this file");
   state = "unavailable";
   await page.getByRole("button", { name: "Reload audition", exact: true }).click();
-  await expect(page.locator(".audition-empty")).toContainText("have changed");
+  await expect(page.locator(".audition-empty")).toContainText("Could not load lyrics");
   await expect(page.getByRole("slider", { name: "Playback position", exact: true })).toBeEnabled();
 });
 

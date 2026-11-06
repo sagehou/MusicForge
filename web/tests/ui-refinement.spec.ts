@@ -156,7 +156,7 @@ test("mount approval preserves drafts and the background-jobs switch", async ({ 
   await setPreference(page, "theme", "dark");
   await page.getByRole("button", { name: "批准当前挂载状态", exact: true }).focus();
   await page.keyboard.press("Enter");
-  await expect(page.getByRole("alert")).toContainText("输出存储离线或缺少归属标记");
+  await expect(page.getByRole("alert")).toContainText("输出目录不可用或无法确认归属");
   await expect(page.getByLabel("启用音乐库扫描和后台任务", { exact: true })).not.toBeChecked();
   expect(approvals).toHaveLength(2);
   expect(settingsWrites).toBe(0);

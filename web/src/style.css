@@ -1151,25 +1151,6 @@ input:not([type="checkbox"], [type="radio"]):focus-visible, select:focus-visible
   white-space: nowrap;
 }
 
-.storage-online-state {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  margin-top: auto;
-  padding-top: 8px;
-  font-size: 11px;
-  color: var(--muted);
-  border-top: 1px solid var(--line);
-}
-.storage-status-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--success);
-  box-shadow: 0 0 0 2px var(--success-soft);
-  flex-shrink: 0;
-}
-
 .storage-checked-at {
   font-size: 11px;
   color: var(--muted);

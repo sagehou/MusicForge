@@ -292,7 +292,7 @@ input:not([type="checkbox"], [type="radio"]):focus-visible, select:focus-visible
 
 /* App Shell & Frosted Glass Sidebar */
 .app-shell { --sidebar-width: 232px; display: flex; min-height: 100vh; }
-.main { flex: 1; min-width: 0; margin-left: var(--sidebar-width); display: flex; flex-direction: column; }
+.main { flex: 1; min-width: 0; margin-left: var(--sidebar-width); }
 .sidebar {
   position: fixed;
   width: var(--sidebar-width);

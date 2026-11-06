@@ -1204,5 +1204,7 @@
   "overview.statusLabel": "Processing status",
   "overview.allReadyShort": "Ready",
   "overview.pendingShort": "Pending",
-  "overview.allGood": "All good"
+  "overview.allGood": "All good",
+  "overview.storageOnlineReady": "Available at last check",
+  "overview.storageOnlineDesc": "Idle storage is not probed; the next operation checks again"
 }

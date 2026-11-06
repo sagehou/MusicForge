@@ -67,12 +67,14 @@ export function Overview({ notify, navigate }: { notify: Notice; navigate: (path
     <div className="overview-summary">
       <div className="metrics overview-metrics">
         {metrics.map(metric => <button className="metric" data-tone={metric.tone} key={metric.label} onClick={() => navigate(metric.path)}>
-          <div>
-            <span>{metric.label}</span>
-            <span className="metric-icon"><metric.icon size={15} /></span>
+          <div className="metric-header">
+            <span className="metric-icon"><metric.icon size={13} /></span>
+            <span className="metric-label">{metric.label}</span>
           </div>
-          <strong>{number(metric.value)}</strong>
-          <small>{metric.note}</small>
+          <div className="metric-body">
+            <strong>{number(metric.value)}</strong>
+            <small>{metric.note}</small>
+          </div>
         </button>)}
       </div>
       <section className="readiness-panel">
@@ -108,17 +110,38 @@ export function Overview({ notify, navigate }: { notify: Notice; navigate: (path
               </div>
             </div>
             <div className="active-tracks">{active.map(({ job, activity }, index) => {
-            const source = library.data?.find(source => source.path === activity.path);
-            return <div className="active-track" key={`${job.repair_id || job.id}:${activity.path}:${index}`}>
-              <span className="active-track-artwork" aria-hidden="true">{source?.artwork_url ? <img src={source.artwork_url} alt="" loading="lazy" /> : <Music2 size={18} />}</span>
-              <div className="active-track-title"><strong>{activity.title || activity.path || kind(job.kind)}<span className="audio-eq-wave" aria-hidden="true"><i /><i /><i /><i /></span></strong><small>{[activity.artist, activity.album].filter(Boolean).join(" · ") || kind(job.kind)}</small></div>
-              <div className="active-track-specs">{source?.source_audio && <span>{source.source_audio.codec?.toUpperCase()}{source.source_audio.bit_depth ? ` ${source.source_audio.bit_depth}` : ""}{source.source_audio.sample_rate ? ` / ${source.source_audio.sample_rate / 1000} kHz` : ""}</span>}{job.profile && <span>{job.profile.codec.toUpperCase()} · {job.profile.codec === "mp3" && job.profile.mode === "vbr" ? `V${job.profile.quality}` : `${job.profile.bitrate} kbps`}</span>}</div>
-              <strong className="active-track-percent">{number(Math.round(activity.phase === "convert" ? activity.percent : taskPercent(job)))}%</strong>
-            </div>;
-          })}</div>
+              const source = library.data?.find(source => source.path === activity.path);
+              return <div className="active-track" key={`${job.repair_id || job.id}:${activity.path}:${index}`}>
+                <span className="active-track-artwork" aria-hidden="true">{source?.artwork_url ? <img src={source.artwork_url} alt="" loading="lazy" /> : <Music2 size={18} />}</span>
+                <div className="active-track-title"><strong>{activity.title || activity.path || kind(job.kind)}<span className="audio-eq-wave" aria-hidden="true"><i /><i /><i /><i /></span></strong><small>{[activity.artist, activity.album].filter(Boolean).join(" · ") || kind(job.kind)}</small></div>
+                <div className="active-track-specs">{source?.source_audio && <span>{source.source_audio.codec?.toUpperCase()}{source.source_audio.bit_depth ? ` ${source.source_audio.bit_depth}` : ""}{source.source_audio.sample_rate ? ` / ${source.source_audio.sample_rate / 1000} kHz` : ""}</span>}{job.profile && <span>{job.profile.codec.toUpperCase()} · {job.profile.codec === "mp3" && job.profile.mode === "vbr" ? `V${job.profile.quality}` : `${job.profile.bitrate} kbps`}</span>}</div>
+                <strong className="active-track-percent">{number(Math.round(activity.phase === "convert" ? activity.percent : taskPercent(job)))}%</strong>
+              </div>;
+            })}</div>
           </>
         ) : (
           <div className="readiness-idle">
+            <div className="audio-pipeline-visual">
+              <div className="pipeline-node">
+                <span className="pipeline-icon"><Disc3 size={15} /></span>
+                <div className="pipeline-meta">
+                  <span className="pipeline-label">{t("overview.flac")}</span>
+                  <strong className="pipeline-val">{number(data.source_count)}</strong>
+                </div>
+              </div>
+              <div className="pipeline-flow">
+                <span className="flow-line" />
+                <span className="flow-badge">{data.codec.toUpperCase()} · {profile}</span>
+                <span className="flow-line" />
+              </div>
+              <div className="pipeline-node is-ready">
+                <span className="pipeline-icon"><Music2 size={15} /></span>
+                <div className="pipeline-meta">
+                  <span className="pipeline-label">{t("overview.streaming")}</span>
+                  <strong className="pipeline-val">{number(data.ready_count)}</strong>
+                </div>
+              </div>
+            </div>
             <div className="hero-completion" role="progressbar" aria-label={t("overview.complete")} aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent}>
               <div className="completion-meter" aria-hidden="true">
                 <span style={{ width: `${percent}%` }} />
@@ -163,6 +186,7 @@ export function Overview({ notify, navigate }: { notify: Notice; navigate: (path
         <section className="panel lyrics-summary">
           <div className="section-heading">
             <h2><FileMusic size={16} />{t("lyrics.title")}</h2>
+            <Button variant="ghost" size="sm" onClick={() => navigate("/settings?section=lyrics")}>{t("lyrics.settings")}<ArrowRight size={13} /></Button>
           </div>
           <ResourceWarning error={library.error} retry={library.retry} />
           <button className="lyrics-overview" onClick={() => navigate("/library?view=tracks&lyrics=needs_review")}>
@@ -179,7 +203,6 @@ export function Overview({ notify, navigate }: { notify: Notice; navigate: (path
               <ArrowRight size={13} className="lyrics-arrow" />
             </div>
           </button>
-          <Button variant="outline" size="sm" onClick={() => navigate("/settings?section=lyrics")}>{t("lyrics.settings")}</Button>
         </section>
         <section className="panel storage-summary">
           <div className="section-heading">
@@ -198,6 +221,10 @@ export function Overview({ notify, navigate }: { notify: Notice; navigate: (path
             </div>
           </dl>
           {data.storage_checked_at ? <p className="storage-checked-at">{t("storage.lastChecked", { time: date(data.storage_checked_at) })}</p> : null}
+          {data.online && <div className="storage-online-state">
+            <span className="storage-status-dot" />
+            <span>{t("overview.storageOnlineReady")} · {t("overview.storageOnlineDesc")}</span>
+          </div>}
           <div className="storage-status" data-online={data.online} role="status" aria-live="polite">{!data.online && <>
             <div className="storage-status-header">
               <strong>{t(storageUnchecked ? "overview.unchecked" : data.enabled ? "overview.offline" : "overview.configure")}</strong>

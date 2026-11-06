@@ -1162,5 +1162,7 @@
   "overview.statusLabel": "处理状态",
   "overview.allReadyShort": "已就绪",
   "overview.pendingShort": "待处理",
-  "overview.allGood": "状态良好"
+  "overview.allGood": "状态良好",
+  "overview.storageOnlineReady": "上次检查可用",
+  "overview.storageOnlineDesc": "空闲时不探测，下次操作时重新校验"
 }

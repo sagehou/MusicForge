@@ -217,7 +217,7 @@ test("filtered failed tracks can be selected across pages and repaired with one 
   await selectLibraryPage(page);
   await page.getByRole("button", { name: "Select all 65 matching tracks", exact: true }).click();
   const repair = page.getByRole("button", { name: "Best-effort repair selected (60)", exact: true });
-  page.once("dialog", async dialog => { expect(dialog.message()).toContain("60 selected tracks"); expect(dialog.message()).toContain("one task"); await dialog.dismiss(); });
+  page.once("dialog", async dialog => { expect(dialog.message()).toContain("60 selected tracks"); expect(dialog.message()).toContain("existing outputs will not be replaced"); await dialog.dismiss(); });
   await repair.click(); expect(starts).toBe(0);
   page.once("dialog", dialog => dialog.accept());
   await repair.click();

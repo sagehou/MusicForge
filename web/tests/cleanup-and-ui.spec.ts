@@ -151,7 +151,9 @@ test("observed storage state stays inside the storage card without shifting the 
   await page.screenshot({ path: "test-results/storage-unchecked-1440-dark-zh.png", fullPage: true, animations: "disabled" });
   data = { ...data, storage_checked_at: Math.floor(Date.now() / 1000), storage_message: "Music storage is offline" };
   await expect(storage.getByRole("status")).toContainText("音乐存储离线", { timeout: 10000 });
-  await expect(storage).toContainText("上次检查：");
+  const lastCheck = storage.locator(".storage-paths > div").filter({ hasText: "上次检查" });
+  await expect(lastCheck.locator("dt")).toHaveText("上次检查");
+  await expect(lastCheck.locator("dd")).not.toHaveText("—");
   await page.setViewportSize({ width: 390, height: 844 });
   await setPreference(page, "theme", "light");
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
@@ -174,18 +176,20 @@ for (const width of [1440, 390]) {
       current: Array.from({ length: 4 }, (_, index) => ({ ...job.current[0], path: `Artist/Album/${index}.flac`, title: `${job.current[0].title} ${index + 1}` })),
     } : job);
     await setup(page, history);
-    if (width > 800) {
-      const sources: Source[] = history[0].current.map((activity, index) => ({
-        ...activity, id: index + 1, track: index + 1, disc: 1, present: true, output: `Artist/Album/${index}.opus`, output_present: true,
-        status: "ready", error: "", size: 26214400, source_audio: { codec: "flac", bit_depth: 24, sample_rate: 96000 }, metadata: {},
-      }));
-      await routeLibrary(page, route => route.fulfill({ json: sources }));
-    }
+    const sources: Source[] = ([undefined, "not_found", "instrumental", "needs_review", "failed", "ready", "failed"] as const).map((state, index) => ({
+      id: index + 1, path: `Artist/Album/${index}.flac`, artist: "Artist", album: "Album", title: `Track ${index + 1}`,
+      track: index + 1, disc: 1, present: true, output: `Artist/Album/${index}.opus`, output_present: index < 6,
+      status: "ready", error: "", size: 26214400, source_audio: { codec: "flac", bit_depth: 24, sample_rate: 96000 }, metadata: {},
+      lyrics: state ? { state: state === "instrumental" ? "ready" : state, instrumental: state === "instrumental", output: `Artist/Album/${index}.opus`, signature: "audio", checked: 1 } : undefined,
+    }));
+    await routeLibrary(page, route => route.fulfill({ json: sources }));
     const errors: string[] = [];
     page.on("pageerror", error => errors.push(error.message));
     await page.setViewportSize({ width, height: width > 800 ? 900 : 844 });
     await page.goto("/");
-    await expect(page.locator(".hero-profile")).toContainText("192 kbps");
+    await expect(page.locator(".flow-badge")).toHaveText("OPUS · VBR · 192 kbps");
+    await expect(page.locator(".lyrics-stat-val")).toHaveText("1 / 6");
+    await expect(page.locator(".lyrics-state-row > strong")).toHaveText(["1", "1", "1", "1", "1"]);
     for (const theme of ["light", "dark"]) {
       await setPreference(page, "theme", theme);
       await expect(page.locator("html")).toHaveAttribute("data-theme", theme);
@@ -200,7 +204,7 @@ for (const width of [1440, 390]) {
     }
     await page.screenshot({ path: `test-results/forge-overview-${width}-dark-zh.png`, fullPage: true, animations: "disabled" });
     if (width > 800) {
-      await expect(page.locator(".active-track")).toHaveCount(4);
+      await expect(page.locator(".active-track")).toHaveCount(3);
       await expect(page.locator(".job-row")).toHaveCount(5);
       for (const [screenWidth, screenHeight, language] of [[1366, 768, "zh-CN"], [1280, 720, "zh-CN"], [1024, 768, "zh-CN"], [768, 1024, "zh-CN"], [1280, 720, "en"]] as const) {
         await page.setViewportSize({ width: screenWidth, height: screenHeight });
@@ -220,6 +224,13 @@ for (const width of [1440, 390]) {
       await page.setViewportSize({ width, height: 900 });
       await page.locator(".attention-list > button").nth(1).click();
       await expect(page).toHaveURL(/status=needs_rebuild/);
+      for (const [index, state] of ["unchecked", "not_found", "instrumental", "needs_review", "failed"].entries()) {
+        await page.getByRole("link", { name: "概览", exact: true }).click();
+        await page.locator(".lyrics-state-row").nth(index).click();
+        await expect(page).toHaveURL(new RegExp(`lyrics=${state}`));
+        await expect(page.locator("tbody tr")).toHaveCount(1);
+        await expect(page.locator("tbody tr")).toContainText(`Track ${index + 1}`);
+      }
     }
     await page.getByRole("link", { name: "任务", exact: true }).click();
     await expect(page.locator(".task")).toHaveCount(5);

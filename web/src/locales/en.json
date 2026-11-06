@@ -1187,5 +1187,16 @@
   "lyricsEdit.lineAlign": "Use playhead",
   "error.lyricsResumeEmpty": "No stopped lyrics batch to continue",
   "error.lyricsResumePaths": "Restore the batch's library paths and enable the library before continuing",
-  "error.lyricsResumeFailed": "Could not continue lyrics batch; check settings and configuration storage"
+  "error.lyricsResumeFailed": "Could not continue lyrics batch; check settings and configuration storage",
+  "overview.storageOnlineReady": "Storage connected",
+  "overview.storageOnlineDesc": "Source and streaming libraries are accessible",
+  "overview.allReady": "All tracks ready",
+  "overview.allReadyDesc": "All audio tracks converted to target profile and ready for playback",
+  "overview.inProgress": "Tracks pending build",
+  "overview.pendingDesc": "Some tracks need transcode or rebuild; start a scan to process",
+  "overview.readyTracks": "Ready tracks",
+  "overview.encodingConfig": "Encoding profile",
+  "overview.statusLabel": "Status",
+  "overview.allReadyShort": "Ready",
+  "overview.pendingShort": "Pending"
 }

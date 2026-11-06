@@ -90,15 +90,41 @@ export function Overview({ notify, navigate }: { notify: Notice; navigate: (path
             <span style={{ width: `${percent}%` }} />
           </div>
         </div>
-        {active.length > 0 && <div className="active-tracks">{active.map(({ job, activity }, index) => {
-          const source = library.data?.find(source => source.path === activity.path);
-          return <div className="active-track" key={`${job.repair_id || job.id}:${activity.path}:${index}`}>
-            <span className="active-track-artwork" aria-hidden="true">{source?.artwork_url ? <img src={source.artwork_url} alt="" loading="lazy" /> : <Music2 size={18} />}</span>
-            <div className="active-track-title"><strong>{activity.title || activity.path || kind(job.kind)}<span className="audio-eq-wave" aria-hidden="true"><i /><i /><i /><i /></span></strong><small>{[activity.artist, activity.album].filter(Boolean).join(" · ") || kind(job.kind)}</small></div>
-            <div className="active-track-specs">{source?.source_audio && <span>{source.source_audio.codec?.toUpperCase()}{source.source_audio.bit_depth ? ` ${source.source_audio.bit_depth}` : ""}{source.source_audio.sample_rate ? ` / ${source.source_audio.sample_rate / 1000} kHz` : ""}</span>}{job.profile && <span>{job.profile.codec.toUpperCase()} · {job.profile.codec === "mp3" && job.profile.mode === "vbr" ? `V${job.profile.quality}` : `${job.profile.bitrate} kbps`}</span>}</div>
-            <strong className="active-track-percent">{number(Math.round(activity.phase === "convert" ? activity.percent : taskPercent(job)))}%</strong>
-          </div>;
-        })}</div>}
+        {active.length > 0 ? (
+          <div className="active-tracks">{active.map(({ job, activity }, index) => {
+            const source = library.data?.find(source => source.path === activity.path);
+            return <div className="active-track" key={`${job.repair_id || job.id}:${activity.path}:${index}`}>
+              <span className="active-track-artwork" aria-hidden="true">{source?.artwork_url ? <img src={source.artwork_url} alt="" loading="lazy" /> : <Music2 size={18} />}</span>
+              <div className="active-track-title"><strong>{activity.title || activity.path || kind(job.kind)}<span className="audio-eq-wave" aria-hidden="true"><i /><i /><i /><i /></span></strong><small>{[activity.artist, activity.album].filter(Boolean).join(" · ") || kind(job.kind)}</small></div>
+              <div className="active-track-specs">{source?.source_audio && <span>{source.source_audio.codec?.toUpperCase()}{source.source_audio.bit_depth ? ` ${source.source_audio.bit_depth}` : ""}{source.source_audio.sample_rate ? ` / ${source.source_audio.sample_rate / 1000} kHz` : ""}</span>}{job.profile && <span>{job.profile.codec.toUpperCase()} · {job.profile.codec === "mp3" && job.profile.mode === "vbr" ? `V${job.profile.quality}` : `${job.profile.bitrate} kbps`}</span>}</div>
+              <strong className="active-track-percent">{number(Math.round(activity.phase === "convert" ? activity.percent : taskPercent(job)))}%</strong>
+            </div>;
+          })}</div>
+        ) : (
+          <div className="readiness-idle">
+            <div className="readiness-idle-status">
+              <span className={`readiness-idle-dot ${percent === 100 ? "ready" : ""}`} />
+              <div className="readiness-idle-text">
+                <strong>{percent === 100 ? t("overview.allReady") : t("overview.inProgress")}</strong>
+                <p>{percent === 100 ? t("overview.allReadyDesc") : t("overview.pendingDesc")}</p>
+              </div>
+            </div>
+            <div className="readiness-idle-stats">
+              <div className="readiness-idle-stat">
+                <span>{t("overview.readyTracks")}</span>
+                <strong>{number(data.ready_count)} / {number(data.source_count)}</strong>
+              </div>
+              <div className="readiness-idle-stat">
+                <span>{t("overview.encodingConfig")}</span>
+                <strong>{data.codec.toUpperCase()} · {profile}</strong>
+              </div>
+              <div className="readiness-idle-stat">
+                <span>{t("overview.statusLabel")}</span>
+                <strong className={percent === 100 ? "is-ready" : ""}>{percent === 100 ? t("overview.allReadyShort") : t("overview.pendingShort")}</strong>
+              </div>
+            </div>
+          </div>
+        )}
       </section>
     </div>
     <div className="overview-workspace">
@@ -148,10 +174,19 @@ export function Overview({ notify, navigate }: { notify: Notice; navigate: (path
               <dd><code>{config.data?.settings.output || "—"}</code></dd>
             </div>
           </dl>
+          {data.online && <div className="storage-online-state">
+            <span className="storage-online-check"><Check size={13} /></span>
+            <div>
+              <strong>{t("overview.storageOnlineReady")}</strong>
+              <small>{t("overview.storageOnlineDesc")}</small>
+            </div>
+          </div>}
           <div className="storage-status" data-online={data.online} role="status" aria-live="polite">{!data.online && <>
-            <strong>{t(data.storage_checking ? "overview.checking" : data.enabled ? "overview.offline" : "overview.configure")}</strong>
+            <div className="storage-status-header">
+              <strong>{t(data.storage_checking ? "overview.checking" : data.enabled ? "overview.offline" : "overview.configure")}</strong>
+              <Button variant="ghost" size="sm" onClick={() => navigate("/settings")}>{t("overview.openSettings")}<ArrowRight size={13} /></Button>
+            </div>
             <p>{errorMessage(data.storage_message)}</p>
-            <Button variant="ghost" size="sm" onClick={() => navigate("/settings")}>{t("overview.openSettings")}<ArrowRight size={13} /></Button>
           </>}</div>
         </section>
         <section className="panel overview-attention">

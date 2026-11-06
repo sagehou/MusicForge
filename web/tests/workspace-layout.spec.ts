@@ -239,6 +239,22 @@ test("album rows expose useful audio facts and toggle song and lyric details dir
     await page.setViewportSize({ width, height: 1000 });
     const facts = row.locator(".track-facts-compact");
     await expectCompactAlbumFacts(facts, width > 1100 ? 1 : 2);
+    if (width <= 600) {
+      await expect(facts.locator(".track-spec-chip")).toBeVisible();
+      for (const fact of await facts.locator(".track-bitrate, .track-fact-sizes").all()) await expect(fact).toBeHidden();
+      expect((await row.boundingBox())!.height).toBeLessThanOrEqual(116);
+      const titleBox = (await row.locator(".track-name").boundingBox())!;
+      const durationBox = (await row.locator(".track-duration").boundingBox())!;
+      expect(titleBox.x + titleBox.width).toBeLessThanOrEqual(durationBox.x);
+      for (const control of await row.locator(".track-audition-trigger, .lyrics-action:visible, .lyrics-details > summary").all()) {
+        expect((await control.boundingBox())!.height).toBeGreaterThanOrEqual(40);
+      }
+      await row.getByRole("checkbox").check();
+      await expect(row).toHaveClass(/selected/);
+      await row.getByRole("checkbox").uncheck();
+      await page.mouse.move(0, 0);
+      await page.screenshot({ path: `test-results/album-tracklist-${width}-light-en.png`, fullPage: true, animations: "disabled" });
+    }
   }
   await page.setViewportSize({ width: 1440, height: 1000 });
   await expect(row).not.toContainText(tracks[0].path);
@@ -289,14 +305,24 @@ test("album rows expose useful audio facts and toggle song and lyric details dir
     await expect(details).toHaveAccessibleName("歌曲详情");
     await expectCompactSongHeader(details);
     expect(await details.locator(".detail-heading p").evaluate(element => element.scrollWidth <= element.clientWidth + 1)).toBe(true);
-    for (const fact of await row.locator(".track-fact-audio dd, .track-fact-sizes dd").all()) {
+    for (const fact of await row.locator(width <= 600 ? ".track-spec-chip" : ".track-fact-audio dd, .track-fact-sizes dd").all()) {
       await expect(fact).toBeVisible();
       expect(await fact.evaluate(element => element.scrollWidth <= element.clientWidth + 1)).toBe(true);
+    }
+    if (width <= 600) {
+      for (const value of ["894,000 bps", "25 MiB", "5 MiB"]) await expect(details.locator(".track-file > dl")).toContainText(value);
     }
     await expectCompactAlbumFacts(row.locator(".track-facts-compact"), width > 1100 ? 1 : 2);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
     await page.screenshot({ path: `test-results/album-song-inline-${width}-dark-zh.png`, animations: "disabled" });
     await page.keyboard.press("Escape");
+    if (width <= 600) {
+      await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+      const pager = (await page.locator(".pagination").boundingBox())!;
+      const navigation = (await page.locator(".sidebar").boundingBox())!;
+      expect(pager.y + pager.height).toBeLessThanOrEqual(navigation.y);
+      await page.screenshot({ path: `test-results/album-tracklist-${width}-dark-zh.png`, fullPage: true, animations: "disabled" });
+    }
   }
   await page.locator(".track-row").nth(2).locator(".track-open").click();
   await expectCompactSongHeader(details);

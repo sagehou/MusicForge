@@ -2664,6 +2664,33 @@ input[role="switch"]:checked::after { transform: translateX(20px); background: v
   .track-lyrics .lyrics-track { justify-content: space-between; flex-wrap: nowrap; }
   .track-lyrics .lyrics-state { min-width: 0; }
   .track-lyrics .lyrics-actions .lyrics-action, .lyrics-details > summary { width: 40px; min-height: 40px; height: 40px; }
+  .album-tracks-heading { gap: 8px; padding: 10px 12px; background: transparent; }
+  .album-tracks-heading h3 { flex: 1; }
+  .album-tracks-heading > .ui-button { order: 1; font-size: 11px; }
+  .album-track-table .track-row { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; padding: 12px; }
+  .album-track-table .track-row > td:first-child { flex: 0 0 16px; width: 16px; padding: 0; align-self: flex-start; margin-top: 12px; }
+  .album-track-table td.track-title { flex: 1 1 calc(100% - 24px); }
+  .album-track-table .track-cell > div { position: relative; min-height: 40px; padding-inline-start: 48px; }
+  .album-track-table .track-title-line { grid-template-columns: minmax(0, 1fr) 32px; gap: 6px; }
+  .album-track-table .track-open { grid-column: 1; min-height: 24px; }
+  .album-track-table .track-open strong { display: flex; align-items: baseline; gap: 6px; padding: 0; font-size: 15px; line-height: 22px; }
+  .album-track-table .track-index { position: static; flex: none; width: auto; font-size: 11px; }
+  .album-track-table .track-expand-icon { display: none; }
+  .album-track-table .track-title-line .track-audition-trigger { position: absolute; inset-inline-start: 0; top: 1px; border-color: transparent; color: var(--accent); background: var(--accent-soft); }
+  .album-track-table .track-audition-trigger svg { width: 16px; height: 16px; fill: currentColor; }
+  .album-track-table .track-duration { grid-column: 2; align-self: start; margin-top: 4px; font-size: 11px; }
+  .album-track-table .track-byline { margin-inline-start: 0; }
+  .album-track-table .track-facts-compact { margin: 1px 0 0; }
+  .album-track-table .track-spec-chip { padding: 0; border: 0; background: transparent; color: var(--muted); font-size: 11px; line-height: 17px; }
+  /* Full file facts remain available through the song's existing details. */
+  .album-track-table .track-facts-compact :is(.track-bitrate, .track-fact-sizes) { display: none; }
+  .album-track-table td.track-output { flex: 0 1 auto; max-width: 34%; }
+  .album-track-table .track-output > .badge { white-space: normal; }
+  .album-track-table .track-output > .badge-ready { border: 0; padding: 0; background: transparent; font-size: 11px; }
+  .album-track-table td.track-lyrics { flex: 1 1 0; }
+  .album-track-table .lyrics-track { gap: 6px; }
+  .album-track-table .lyrics-state { font-size: 11px; overflow-wrap: anywhere; }
+  .album-track-table .track-row[data-expanded="false"] .lyrics-script { display: none; }
   .detail-heading { padding: 8px; }
   .track-details .detail-heading { padding: 6px 4px; }
   .track-details .detail-titlebar > div:first-child { gap: 6px; }

@@ -1,12 +1,13 @@
 import { useState } from "react";
 import {
-  Activity, ArrowRight, Check, Clock3, Disc3,
-  FileMusic, Loader2, Music2, RefreshCw
+  Activity, ArrowRight, AudioLines, Check, CircleAlert, CircleSlash,
+  CircleX, Clock3, Disc3, FileMusic, Loader2, Music2, RefreshCw
 } from "lucide-react";
 import { api } from "../api";
 import { useI18n } from "../i18n";
 import { PageHeading } from "./page-heading";
 import { taskPercent } from "../lib/utils";
+import { lyricsMatchState } from "./lyrics";
 import type { Dashboard, Job, Settings, Source } from "../types";
 import { Badge, Empty, Loading, ResourceWarning, useResource, type Notice } from "./resource";
 import { Button } from "./ui/button";
@@ -30,27 +31,27 @@ export function Overview({ notify, navigate }: { notify: Notice; navigate: (path
   const encoding = config.data?.settings.encoding;
   const profile = encoding ? `${encoding.mode.toUpperCase()} · ${encoding.codec === "mp3" && encoding.mode === "vbr" ? `V${encoding.quality}` : `${number(encoding.bitrate)} kbps`}` : "—";
   const playable = library.data?.filter(source => source.output_present && source.output);
-  const lyricReady = playable?.filter(source => source.lyrics?.state === "ready").length;
-  const review = playable?.filter(source => source.lyrics?.state === "needs_review").length;
-  const active = jobs.data?.jobs.filter(job => job.state === "running").flatMap(job => job.current.map(activity => ({ job, activity }))).slice(0, 4) || [];
+  const lyricReady = playable?.filter(source => lyricsMatchState(source) === "ready").length;
+  const lyricIssues = playable ? (["unchecked", "not_found", "instrumental", "needs_review", "failed"] as const).map(state => ({ state, count: playable.filter(source => lyricsMatchState(source) === state).length })).filter(item => item.count > 0) : undefined;
+  const active = jobs.data?.jobs.filter(job => job.state === "running").flatMap(job => job.current.map(activity => ({ job, activity }))).slice(0, 3) || [];
   const attentionCount = data.expired_count + data.rebuild_count + data.failed_count;
   const attention = [
     { state: "failed", count: data.failed_count },
     { state: "needs_rebuild", count: data.rebuild_count },
     { state: "expired", count: data.expired_count },
   ];
-  const metrics = [
-    { label: t("overview.sources"), value: data.source_count, icon: Disc3, path: "/library?view=tracks", note: t("overview.masters"), tone: "sources" },
-    { label: t("overview.outputs"), value: data.output_count, icon: Music2, path: "/library?view=tracks", note: t("overview.outputLibrary", { codec: data.codec.toUpperCase() }), tone: "outputs" },
-    { label: t("overview.profileReady"), value: data.ready_count, icon: Check, path: "/library?view=tracks&status=ready", note: t("overview.currentProfile"), tone: "ready" },
-    { label: t("overview.attention"), value: attentionCount, icon: Clock3, path: "/library?view=tracks&sort=attention", note: t("overview.attentionCounts", { rebuild: data.rebuild_count, expired: data.expired_count, failed: data.failed_count }), tone: attentionCount > 0 ? "attention" : "neutral" },
+  const metrics: { label: string; value: number; icon: typeof Disc3; path: string; tone: string; track?: string }[] = [
+    { label: t("overview.sources"), value: data.source_count, icon: Disc3, path: "/library?view=tracks", tone: "sources" },
+    { label: t("overview.outputs"), value: data.output_count, icon: Music2, path: "/library?view=tracks", tone: "outputs" },
+    { label: t("overview.profileReady"), value: data.ready_count, icon: Check, path: "/library?view=tracks&status=ready", tone: "ready", track: number(data.source_count) },
+    { label: t("overview.attention"), value: attentionCount, icon: Clock3, path: "/library?view=tracks&sort=attention", tone: attentionCount > 0 ? "attention" : "neutral" },
   ];
+  const stateGlyph = { unchecked: Clock3, not_found: CircleSlash, instrumental: Music2, needs_review: CircleAlert, failed: CircleX } as const;
   return <div className="overview-page">
     <ResourceWarning error={error} retry={retry} />
     <PageHeading>
       <div>
         <h1>{t("app.overview")}</h1>
-        <p>{t("overview.description")}</p>
       </div>
       <div className="actions hero-actions">
         <Button variant="outline" onClick={() => navigate("/library")}>
@@ -72,87 +73,47 @@ export function Overview({ notify, navigate }: { notify: Notice; navigate: (path
           </div>
           <div className="metric-body">
             <strong>{number(metric.value)}</strong>
-            <small>{metric.note}</small>
+            {metric.track ? <small>{`/ ${metric.track}`}</small> : null}
           </div>
         </button>)}
       </div>
       <section className="readiness-panel">
-        <div className="readiness-heading">
-          <div className="completion-value">
-            <span className="readiness-eyebrow">{t("overview.complete")}</span>
-            <div className="completion-main-stat">
-              <strong>{percentLabel}</strong>
-              {active.length > 0 ? (
-                <Badge status="running" />
-              ) : (
-                <span className={`readiness-status-badge ${percent === 100 ? "is-ready" : ""}`}>
-                  <span className="readiness-status-dot" />
-                  {percent === 100 ? t("overview.allReady") : t("overview.inProgress")}
-                </span>
-              )}
-            </div>
-            {active.length === 0 && (
-              <p className="readiness-summary-desc">{percent === 100 ? t("overview.allReadyDesc") : t("overview.pendingDesc")}</p>
+        <div className="completion-value">
+          <span className="readiness-eyebrow">{t("overview.complete")}</span>
+          <div className="completion-main-stat">
+            <strong>{percentLabel}</strong>
+            {active.length > 0 ? (
+              <Badge status="running" />
+            ) : (
+              <span className={`readiness-status-badge ${percent === 100 ? "is-ready" : ""}`}>
+                <span className="readiness-status-dot" />
+                {percent === 100 ? t("overview.allReady") : t("overview.inProgress")}
+              </span>
             )}
           </div>
-          <button className="hero-profile" onClick={() => navigate("/settings?section=encoding")}>
-            <strong>{data.codec.toUpperCase()} {profile}</strong>
-            <span>{number(data.ready_count)} / {number(data.source_count)}</span>
-            <ArrowRight size={14} />
-          </button>
         </div>
-        {active.length > 0 ? (
-          <>
-            <div className="hero-completion sr-only" role="progressbar" aria-label={t("overview.complete")} aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent} />
-            <div className="active-tracks">{active.map(({ job, activity }, index) => {
-              const source = library.data?.find(source => source.path === activity.path);
-              return <div className="active-track" key={`${job.repair_id || job.id}:${activity.path}:${index}`}>
-                <span className="active-track-artwork" aria-hidden="true">{source?.artwork_url ? <img src={source.artwork_url} alt="" loading="lazy" /> : <Music2 size={18} />}</span>
-                <div className="active-track-title"><strong>{activity.title || activity.path || kind(job.kind)}<span className="audio-eq-wave" aria-hidden="true"><i /><i /><i /><i /></span></strong><small>{[activity.artist, activity.album].filter(Boolean).join(" · ") || kind(job.kind)}</small></div>
-                <div className="active-track-specs">{source?.source_audio && <span>{source.source_audio.codec?.toUpperCase()}{source.source_audio.bit_depth ? ` ${source.source_audio.bit_depth}` : ""}{source.source_audio.sample_rate ? ` / ${source.source_audio.sample_rate / 1000} kHz` : ""}</span>}{job.profile && <span>{job.profile.codec.toUpperCase()} · {job.profile.codec === "mp3" && job.profile.mode === "vbr" ? `V${job.profile.quality}` : `${job.profile.bitrate} kbps`}</span>}</div>
-                <strong className="active-track-percent">{number(Math.round(activity.phase === "convert" ? activity.percent : taskPercent(job)))}%</strong>
-              </div>;
-            })}</div>
-          </>
-        ) : (
-          <div className="readiness-idle">
-            <div className="hero-completion sr-only" role="progressbar" aria-label={t("overview.complete")} aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent} />
-            <div className="audio-pipeline-visual">
-              <div className="pipeline-node">
-                <span className="pipeline-icon"><Disc3 size={15} /></span>
-                <div className="pipeline-meta">
-                  <span className="pipeline-label">{t("overview.flac")}</span>
-                  <strong className="pipeline-val">{number(data.source_count)}</strong>
-                </div>
-              </div>
-              <div className="pipeline-flow">
-                <span className="flow-line" />
-                <span className="flow-badge">{data.codec.toUpperCase()} · {profile}</span>
-                <span className="flow-line" />
-              </div>
-              <div className="pipeline-node is-ready">
-                <span className="pipeline-icon"><Music2 size={15} /></span>
-                <div className="pipeline-meta">
-                  <span className="pipeline-label">{t("overview.streaming")}</span>
-                  <strong className="pipeline-val">{number(data.ready_count)}</strong>
-                </div>
-              </div>
-            </div>
-            <div className="readiness-spec-grid">
-              <div className="spec-col">
-                <span className="spec-label">{t("overview.readyTracks")}</span>
-                <strong className="spec-val">{number(data.ready_count)} / {number(data.source_count)}</strong>
-              </div>
-              <div className="spec-col">
-                <span className="spec-label">{t("overview.encodingConfig")}</span>
-                <strong className="spec-val">{data.codec.toUpperCase()} · {profile}</strong>
-              </div>
-              <div className="spec-col">
-                <span className="spec-label">{t("overview.statusLabel")}</span>
-                <strong className={`spec-val ${percent === 100 ? "text-ready" : ""}`}>{percent === 100 ? t("overview.allReadyShort") : t("overview.pendingShort")}</strong>
-              </div>
-            </div>
+        <div className="hero-completion sr-only" role="progressbar" aria-label={t("overview.complete")} aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent} />
+        <div className="audio-pipeline-visual">
+          <Disc3 size={18} className="pipeline-glyph" aria-hidden="true" />
+          <div className="pipeline-flow">
+            <span className="flow-line" />
+            <span className="flow-badge">{`${data.codec.toUpperCase()} · ${profile}`}</span>
+            <span className="flow-line" />
           </div>
+          <AudioLines size={18} className="pipeline-glyph is-ready" aria-hidden="true" />
+        </div>
+        {active.length > 0 && (
+          <div className="active-tracks">{active.map(({ job, activity }, index) => {
+            const source = library.data?.find(source => source.path === activity.path);
+            return <div className="active-track" key={`${job.repair_id || job.id}:${activity.path}:${index}`}>
+              <span className="active-track-artwork" aria-hidden="true">{source?.artwork_url ? <img src={source.artwork_url} alt="" loading="lazy" /> : <Music2 size={16} />}</span>
+              <div className="active-track-main">
+                <div className="active-track-title">{activity.title || activity.path || kind(job.kind)}<span className="audio-eq-wave" aria-hidden="true"><i /><i /><i /><i /></span></div>
+                <small>{[activity.artist, activity.album].filter(Boolean).join(" · ") || kind(job.kind)}</small>
+              </div>
+              <strong className="active-track-percent">{number(Math.round(activity.phase === "convert" ? activity.percent : taskPercent(job)))}%</strong>
+            </div>;
+          })}</div>
         )}
       </section>
     </div>
@@ -180,17 +141,21 @@ export function Overview({ notify, navigate }: { notify: Notice; navigate: (path
             <Button variant="ghost" size="sm" onClick={() => navigate("/settings?section=lyrics")}>{t("lyrics.settings")}<ArrowRight size={13} /></Button>
           </div>
           <ResourceWarning error={library.error} retry={library.retry} />
-          <button className="lyrics-overview" onClick={() => navigate("/library?view=tracks&lyrics=needs_review")}>
+          <div className="lyrics-overview">
             <div className="lyrics-stat-row">
               <span className="lyrics-stat-label">{t("overview.lyricCoverage")}</span>
               <strong className="lyrics-stat-val">{playable ? `${number(lyricReady || 0)} / ${number(playable.length)}` : "—"}</strong>
             </div>
-            <div className="lyrics-review-hint">
-              <span className="review-dot" />
-              <small>{t("overview.lyricReview", { count: review === undefined ? "—" : number(review) })}</small>
-              <ArrowRight size={13} className="lyrics-arrow" />
-            </div>
-          </button>
+            {lyricIssues && lyricIssues.length > 0 && <div className="lyrics-breakdown">{lyricIssues.map(item => {
+              const Glyph = stateGlyph[item.state];
+              return <button className="lyrics-state-row" key={item.state} onClick={() => navigate(`/library?view=tracks&lyrics=${item.state}`)}>
+                <Glyph size={14} data-tone={item.state} aria-hidden="true" />
+                <span className="lyrics-state-label">{t(`lyrics.state.${item.state}`)}</span>
+                <strong>{number(item.count)}</strong>
+                <ArrowRight size={13} className="lyrics-arrow" aria-hidden="true" />
+              </button>;
+            })}</div>}
+          </div>
         </section>
         <section className="panel storage-summary">
           <div className="section-heading">
@@ -207,12 +172,11 @@ export function Overview({ notify, navigate }: { notify: Notice; navigate: (path
               <dt>{t("overview.streaming")}</dt>
               <dd><code>{config.data?.settings.output || "—"}</code></dd>
             </div>
+            <div>
+              <dt>{t("storage.lastCheck")}</dt>
+              <dd><code>{data.storage_checked_at ? date(data.storage_checked_at) : "—"}</code></dd>
+            </div>
           </dl>
-          {data.storage_checked_at ? <p className="storage-checked-at">{t("storage.lastChecked", { time: date(data.storage_checked_at) })}</p> : null}
-          {data.online && <div className="storage-online-state">
-            <span className="storage-status-dot" />
-            <span>{t("overview.storageOnlineReady")} · {t("overview.storageOnlineDesc")}</span>
-          </div>}
           <div className="storage-status" data-online={data.online} role="status" aria-live="polite">{!data.online && <>
             <div className="storage-status-header">
               <strong>{t(storageUnchecked ? "overview.unchecked" : data.enabled ? "overview.offline" : "overview.configure")}</strong>

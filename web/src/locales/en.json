@@ -30,11 +30,9 @@
   "auth.oidc": "Sign in with OIDC",
   "auth.footer": "Source music · Incremental builds · Self-hosted",
   "overview.sources": "Audio source files",
-  "overview.masters": "Read-only source library",
   "overview.outputs": "Streaming artifacts",
   "overview.complete": "Build completion",
   "overview.attention": "Needs attention",
-  "overview.description": "Library status and processing progress.",
   "overview.scan": "Scan library",
   "overview.offline": "Music storage is offline; jobs are paused",
   "overview.configure": "Connect your library to get started",
@@ -45,7 +43,6 @@
   "overview.waiting": "Waiting for storage",
   "overview.flac": "Source library",
   "overview.streaming": "Streaming library",
-  "overview.currentProfile": "Matches the current build profile",
   "overview.recent": "Recent jobs",
   "overview.allJobs": "All jobs",
   "overview.noJobs": "No jobs yet",
@@ -200,8 +197,6 @@
   "kind.delete": "Delete expired artifacts",
   "kind.upgrade": "Clean up replaced artifacts",
   "kind.refresh": "Refresh Navidrome",
-  "overview.outputLibrary": "Target format: {codec}",
-  "overview.attentionCounts": "{rebuild} need rebuild · {expired} expired · {failed} failed",
   "library.description": {
     "one": "{count} track",
     "other": "{count} tracks"
@@ -750,7 +745,6 @@
   "app.close": "Close panel",
   "overview.storage": "Music storage",
   "overview.lyricCoverage": "Synchronized lyrics",
-  "overview.lyricReview": "{count} waiting for review",
   "library.more": "Library tools",
   "library.audioColumn": "Audio / bitrate",
   "library.sizesColumn": "Source / output",
@@ -1196,15 +1190,7 @@
   "error.lyricsResumePaths": "Restore the batch's library paths and enable the library before continuing",
   "error.lyricsResumeFailed": "Could not continue lyrics batch; check settings and configuration storage",
   "overview.allReady": "All tracks ready",
-  "overview.allReadyDesc": "All tracks match the current encoding profile.",
   "overview.inProgress": "Tracks pending build",
-  "overview.pendingDesc": "Scan the library to process new or outdated tracks.",
-  "overview.readyTracks": "Ready tracks",
-  "overview.encodingConfig": "Encoding profile",
-  "overview.statusLabel": "Processing status",
-  "overview.allReadyShort": "Ready",
-  "overview.pendingShort": "Pending",
   "overview.allGood": "All good",
-  "overview.storageOnlineReady": "Available at last check",
-  "overview.storageOnlineDesc": "Idle storage is not probed; the next operation checks again"
+  "storage.lastCheck": "Last checked"
 }

@@ -44,6 +44,7 @@ export function Overview({ notify, navigate }: { notify: Notice; navigate: (path
     { label: t("overview.profileReady"), value: data.ready_count, icon: Check, path: "/library?view=tracks&status=ready", note: t("overview.currentProfile"), tone: "ready" },
     { label: t("overview.attention"), value: attentionCount, icon: Clock3, path: "/library?view=tracks&sort=attention", note: t("overview.attentionCounts", { rebuild: data.rebuild_count, expired: data.expired_count, failed: data.failed_count }), tone: attentionCount > 0 ? "attention" : "neutral" },
   ];
+  const lyricPercent = playable?.length ? Math.round((lyricReady || 0) / playable.length * 100) : 0;
   return <div className="overview-page">
     <ResourceWarning error={error} retry={retry} />
     <PageHeading>
@@ -109,18 +110,18 @@ export function Overview({ notify, navigate }: { notify: Notice; navigate: (path
                 <p>{percent === 100 ? t("overview.allReadyDesc") : t("overview.pendingDesc")}</p>
               </div>
             </div>
-            <div className="readiness-idle-stats">
-              <div className="readiness-idle-stat">
-                <span>{t("overview.readyTracks")}</span>
-                <strong>{number(data.ready_count)} / {number(data.source_count)}</strong>
+            <div className="readiness-spec-grid">
+              <div className="spec-col">
+                <span className="spec-label">{t("overview.readyTracks")}</span>
+                <strong className="spec-val">{number(data.ready_count)} / {number(data.source_count)}</strong>
               </div>
-              <div className="readiness-idle-stat">
-                <span>{t("overview.encodingConfig")}</span>
-                <strong>{data.codec.toUpperCase()} · {profile}</strong>
+              <div className="spec-col">
+                <span className="spec-label">{t("overview.encodingConfig")}</span>
+                <strong className="spec-val">{data.codec.toUpperCase()} · {profile}</strong>
               </div>
-              <div className="readiness-idle-stat">
-                <span>{t("overview.statusLabel")}</span>
-                <strong className={percent === 100 ? "is-ready" : ""}>{percent === 100 ? t("overview.allReadyShort") : t("overview.pendingShort")}</strong>
+              <div className="spec-col">
+                <span className="spec-label">{t("overview.statusLabel")}</span>
+                <strong className={`spec-val ${percent === 100 ? "text-success" : ""}`}>{percent === 100 ? t("overview.allReadyShort") : t("overview.pendingShort")}</strong>
               </div>
             </div>
           </div>
@@ -151,10 +152,18 @@ export function Overview({ notify, navigate }: { notify: Notice; navigate: (path
           </div>
           <ResourceWarning error={library.error} retry={library.retry} />
           <button className="lyrics-overview" onClick={() => navigate("/library?view=tracks&lyrics=needs_review")}>
-            <span>{t("overview.lyricCoverage")}</span>
-            <strong>{playable ? `${number(lyricReady || 0)} / ${number(playable.length)}` : "—"}</strong>
-            <small>{t("overview.lyricReview", { count: review === undefined ? "—" : number(review) })}</small>
-            <ArrowRight size={14} />
+            <div className="lyrics-stat-row">
+              <span className="lyrics-stat-label">{t("overview.lyricCoverage")}</span>
+              <strong className="lyrics-stat-val">{playable ? `${number(lyricReady || 0)} / ${number(playable.length)}` : "—"}</strong>
+            </div>
+            <div className="lyrics-progress-bar">
+              <span style={{ width: `${lyricPercent}%` }} />
+            </div>
+            <div className="lyrics-review-hint">
+              <span className="review-dot" />
+              <small>{t("overview.lyricReview", { count: review === undefined ? "—" : number(review) })}</small>
+              <ArrowRight size={13} className="lyrics-arrow" />
+            </div>
           </button>
           <Button variant="outline" size="sm" onClick={() => navigate("/settings?section=lyrics")}>{t("lyrics.settings")}</Button>
         </section>
@@ -164,7 +173,7 @@ export function Overview({ notify, navigate }: { notify: Notice; navigate: (path
             <span className={`online ${data.online ? "is-online" : ""}`}><span />{data.online ? t("overview.online") : data.storage_checking ? t("overview.checkingShort") : t("overview.waiting")}</span>
           </div>
           <ResourceWarning error={config.error} retry={config.retry} />
-          <dl>
+          <dl className="storage-paths">
             <div>
               <dt>{t("overview.flac")}</dt>
               <dd><code>{config.data?.settings.source || "—"}</code></dd>
@@ -175,11 +184,8 @@ export function Overview({ notify, navigate }: { notify: Notice; navigate: (path
             </div>
           </dl>
           {data.online && <div className="storage-online-state">
-            <span className="storage-online-check"><Check size={13} /></span>
-            <div>
-              <strong>{t("overview.storageOnlineReady")}</strong>
-              <small>{t("overview.storageOnlineDesc")}</small>
-            </div>
+            <span className="storage-status-dot" />
+            <span>{t("overview.storageOnlineReady")} · {t("overview.storageOnlineDesc")}</span>
           </div>}
           <div className="storage-status" data-online={data.online} role="status" aria-live="polite">{!data.online && <>
             <div className="storage-status-header">
@@ -192,6 +198,7 @@ export function Overview({ notify, navigate }: { notify: Notice; navigate: (path
         <section className="panel overview-attention">
           <div className="section-heading">
             <h2>{t("overview.attention")}</h2>
+            {attentionCount === 0 && <span className="attention-clean-badge"><Check size={12} /> {t("overview.allGood")}</span>}
           </div>
           <div className="attention-list">
             {attention.map(item => <button key={item.state} onClick={() => navigate(`/library?view=tracks&status=${item.state}`)}>

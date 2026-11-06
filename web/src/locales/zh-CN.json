@@ -1156,5 +1156,6 @@
   "overview.encodingConfig": "编码配置",
   "overview.statusLabel": "同步状态",
   "overview.allReadyShort": "已就绪",
-  "overview.pendingShort": "待处理"
+  "overview.pendingShort": "待处理",
+  "overview.allGood": "状态良好"
 }

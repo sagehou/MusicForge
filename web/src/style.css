@@ -802,29 +802,29 @@ input:not([type="checkbox"], [type="radio"]):focus-visible, select:focus-visible
   transition: width 400ms var(--ease);
 }
 
-/* Readiness Idle Status */
+/* Readiness Idle Status - Apple Style */
 .readiness-idle {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
   margin-top: auto;
-  padding-top: 8px;
+  padding-top: 6px;
 }
 .readiness-idle-status {
   display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 8px 12px;
-  border-radius: var(--radius-control);
-  background: var(--subtle);
-  border: 1px solid var(--line);
+  align-items: flex-start;
+  gap: 9px;
+  padding: 0;
+  background: transparent;
+  border: none;
 }
 .readiness-idle-dot {
-  width: 8px;
-  height: 8px;
+  width: 7px;
+  height: 7px;
   border-radius: 50%;
   background: var(--muted);
   flex-shrink: 0;
+  margin-top: 4px;
 }
 .readiness-idle-dot.ready {
   background: var(--success);
@@ -836,10 +836,10 @@ input:not([type="checkbox"], [type="radio"]):focus-visible, select:focus-visible
 }
 .readiness-idle-text strong {
   display: block;
-  font-size: 12px;
+  font-size: 12.5px;
   font-weight: 600;
   color: var(--ink);
-  line-height: 16px;
+  line-height: 17px;
 }
 .readiness-idle-text p {
   margin: 2px 0 0;
@@ -850,21 +850,19 @@ input:not([type="checkbox"], [type="radio"]):focus-visible, select:focus-visible
   white-space: nowrap;
   text-overflow: ellipsis;
 }
-.readiness-idle-stats {
+.readiness-spec-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 8px;
+  gap: 14px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
 }
-.readiness-idle-stat {
+.spec-col {
   display: flex;
   flex-direction: column;
   gap: 2px;
-  padding: 6px 10px;
-  background: var(--subtle);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-control);
 }
-.readiness-idle-stat span {
+.spec-label {
   font-size: 10.5px;
   font-weight: 500;
   color: var(--muted);
@@ -872,7 +870,7 @@ input:not([type="checkbox"], [type="radio"]):focus-visible, select:focus-visible
   white-space: nowrap;
   text-overflow: ellipsis;
 }
-.readiness-idle-stat strong {
+.spec-val {
   font-size: 12px;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
@@ -881,7 +879,7 @@ input:not([type="checkbox"], [type="radio"]):focus-visible, select:focus-visible
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.readiness-idle-stat strong.is-ready {
+.spec-val.text-success {
   color: var(--success);
 }
 
@@ -1033,72 +1031,117 @@ input:not([type="checkbox"], [type="radio"]):focus-visible, select:focus-visible
 }
 .lyrics-summary > .ui-button { width: 100%; margin-top: auto; }
 
-/* Lyrics Card */
+/* Lyrics Card - Apple Style */
 .lyrics-overview {
   display: flex;
   flex-direction: column;
-  gap: 4px;
   width: 100%;
   text-align: left;
-  font-size: 12px;
-  padding: 6px 0;
-  margin: 4px 0 auto;
+  padding: 2px 0 0;
+  margin: 0 0 auto;
   background: transparent;
   border: none;
   cursor: pointer;
 }
-.lyrics-overview > span {
-  font-size: 12px;
+.lyrics-stat-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+}
+.lyrics-stat-label {
+  font-size: 11.5px;
   font-weight: 500;
   color: var(--muted);
 }
-.lyrics-overview > strong {
-  font-size: 28px;
-  line-height: 1.15;
+.lyrics-stat-val {
+  font-size: 20px;
+  line-height: 1.2;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
-  letter-spacing: -.03em;
-  margin: 2px 0;
+  letter-spacing: -.025em;
   color: var(--ink);
 }
-.lyrics-overview > small {
-  font-size: 12px;
-  color: var(--muted);
-  margin-top: 2px;
+.lyrics-progress-bar {
+  height: 4px;
+  width: 100%;
+  background: var(--subtle);
+  border-radius: var(--radius-pill);
+  overflow: hidden;
+  margin: 8px 0 10px;
+}
+.lyrics-progress-bar > span {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+  border-radius: inherit;
+  transition: width 300ms var(--ease);
+}
+.lyrics-review-hint {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-}
-.lyrics-overview > svg {
+  gap: 6px;
+  font-size: 11.5px;
   color: var(--muted);
-  margin-left: auto;
+  width: 100%;
 }
-.lyrics-overview:hover > small { color: var(--ink); }
+.review-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--warning);
+  flex-shrink: 0;
+}
+.lyrics-review-hint small {
+  font-size: 11.5px;
+  color: var(--muted);
+  transition: color var(--duration) var(--ease);
+}
+.lyrics-arrow {
+  margin-left: auto;
+  color: var(--muted);
+  opacity: 0.6;
+  transition: transform var(--duration) var(--ease), opacity var(--duration) var(--ease);
+}
+.lyrics-overview:hover .lyrics-arrow {
+  transform: translateX(2px);
+  opacity: 1;
+  color: var(--ink);
+}
+.lyrics-overview:hover .lyrics-review-hint small {
+  color: var(--ink);
+}
 
-/* Storage Card */
+/* Storage Card - Apple Style Key-Value */
 .storage-summary dl {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 6px 10px;
-  margin: 4px 0 8px;
-  font-size: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 6px 0 auto;
 }
 .storage-summary dl > div {
   display: flex;
-  flex-direction: column;
-  gap: 2px;
-  min-width: 0;
-  padding: 6px 8px;
-  background: var(--subtle);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-control);
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 4px 0;
+  border-bottom: 1px solid var(--line);
+  background: transparent;
+  border-radius: 0;
 }
 .storage-summary dt {
   color: var(--muted);
-  font-size: 11px;
+  font-size: 11.5px;
   font-weight: 500;
+  flex-shrink: 0;
 }
-.storage-summary dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+.storage-summary dd {
+  margin: 0;
+  min-width: 0;
+  text-align: right;
+  overflow: hidden;
+}
 .storage-summary code {
   display: block;
   font-size: 11.5px;
@@ -1115,40 +1158,25 @@ input:not([type="checkbox"], [type="radio"]):focus-visible, select:focus-visible
 .storage-online-state {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 7px;
   margin-top: auto;
-  padding: 6px 10px;
-  border-radius: var(--radius-control);
-  background: var(--subtle);
-  border: 1px solid var(--line);
-}
-.storage-online-check {
-  width: 18px;
-  height: 18px;
-  border-radius: 50%;
-  background: var(--success-soft);
-  color: var(--success);
-  display: grid;
-  place-items: center;
-  flex-shrink: 0;
-}
-.storage-online-state strong {
-  display: block;
-  font-size: 11.5px;
-  font-weight: 600;
-  color: var(--ink);
-  line-height: 15px;
-}
-.storage-online-state small {
-  display: block;
-  font-size: 10.5px;
+  padding-top: 8px;
+  font-size: 11px;
   color: var(--muted);
-  line-height: 14px;
+  border-top: 1px solid var(--line);
+}
+.storage-status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--success);
+  box-shadow: 0 0 0 2px var(--success-soft);
+  flex-shrink: 0;
 }
 
 .storage-status {
   margin-top: auto;
-  font-size: 11.5px;
+  font-size: 11px;
   line-height: 15px;
   padding: 6px 10px;
   border-radius: var(--radius-control);
@@ -1210,9 +1238,18 @@ input:not([type="checkbox"], [type="radio"]):focus-visible, select:focus-visible
   font-weight: 600;
   color: var(--ink);
 }
+.attention-clean-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--success);
+}
 .attention-list {
   display: flex;
   flex-direction: column;
+  gap: 2px;
   margin: 4px 0 auto;
 }
 .attention-list > button {
@@ -1221,7 +1258,7 @@ input:not([type="checkbox"], [type="radio"]):focus-visible, select:focus-visible
   gap: 8px;
   width: 100%;
   min-height: 34px;
-  padding: 4px 4px;
+  padding: 4px 6px;
   border-radius: var(--radius-control);
   text-align: left;
   border: none;
@@ -1237,7 +1274,7 @@ input:not([type="checkbox"], [type="radio"]):focus-visible, select:focus-visible
 }
 .attention-list strong {
   margin-left: auto;
-  font-size: 14px;
+  font-size: 13.5px;
   font-family: var(--font-mono);
   font-weight: 600;
   font-variant-numeric: tabular-nums;
@@ -1245,9 +1282,14 @@ input:not([type="checkbox"], [type="radio"]):focus-visible, select:focus-visible
 }
 .attention-list svg {
   color: var(--muted);
-  transition: transform var(--duration) var(--ease);
+  opacity: 0.6;
+  transition: transform var(--duration) var(--ease), opacity var(--duration) var(--ease);
 }
-.attention-list > button:hover svg { transform: translateX(2px); }
+.attention-list > button:hover svg {
+  transform: translateX(2px);
+  opacity: 1;
+  color: var(--ink);
+}
 
 /* Responsive adjustments */
 @media (min-width: 601px) {

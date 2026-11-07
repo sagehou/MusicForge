@@ -2330,7 +2330,7 @@ table { width: 100%; border-collapse: collapse; text-align: left; }
   flex-shrink: 0;
 }
 .settings-title > div { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0; }
-.settings-title h2 { font-size: 15px; line-height: 22px; font-weight: 600; }
+.settings-title h2 { flex: 1; min-width: 0; font-size: 15px; line-height: 22px; font-weight: 600; }
 .settings-title p { color: var(--muted); font-size: 12.5px; line-height: 19px; margin-top: 2px; max-width: 70ch; }
 .settings-title > button { margin-left: auto; flex-shrink: 0; }
 

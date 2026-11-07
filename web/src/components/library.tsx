@@ -355,12 +355,12 @@ export function Library({ notify }: { notify: Notice }) {
     return <div className="lyrics-page">
       <PageHeading><div><h1>{t("lyrics.choose")}</h1><p>{source && `${source.title} · ${source.artist}${source.duration ? ` · ${t("lyrics.targetDuration", { seconds: source.duration })}` : ""}`}</p></div><Button asChild variant="ghost" size="sm"><a href={lyricsBusy ? undefined : pickerHref()} aria-disabled={lyricsBusy || undefined}><ArrowLeft size={16} />{t("lyrics.returnToLibrary")}</a></Button></PageHeading>
       <ResourceWarning error={error} retry={retry} />
-      {source?.output_present && source.output ? <LyricsPicker standalone key={`${source.id}:${source.output}`} onBusyChange={setLyricsBusy} source={source} notify={notify} close={clearDetails} saved={retry} previous={adjacent(source.id, -1, true) ? () => step(adjacent(source.id, -1, true), true) : undefined} next={adjacent(source.id, 1, true) ? () => step(adjacent(source.id, 1, true), true) : undefined} /> : <Empty title={t("lyrics.trackUnavailable")}><a href={pickerHref()}>{t("lyrics.returnToLibrary")}</a></Empty>}
+      {source?.output_present && source.output ? <LyricsPicker standalone key={`${source.id}:${source.output}`} onBusyChange={setLyricsBusy} source={source} notify={notify} close={clearDetails} saved={retry} previous={adjacent(source.id, -1, true) ? () => step(adjacent(source.id, -1, true), true) : undefined} next={adjacent(source.id, 1, true) ? () => step(adjacent(source.id, 1, true), true) : undefined} /> : <Empty title={t("lyrics.trackUnavailable")}><Button asChild variant="outline"><a href={pickerHref()}>{t("lyrics.returnToLibrary")}</a></Button></Empty>}
     </div>;
   }
   return <>
     <ResourceWarning error={error} retry={retry} />
-    <PageHeading><div><h1 id="library-title" tabIndex={-1}>{t("app.library")}</h1><p className="library-description">{t("library.description", { count: data.counts.tracks })}</p><h1 className="comparison-page-title">{t("compare.title")}</h1><p className="comparison-page-description">{t("compare.description")}</p></div>
+    <PageHeading><div><h1 id="library-title" tabIndex={-1}>{t("app.library")}</h1><p className="library-description">{t("library.description", { count: data.counts.tracks })}</p><h1 className="comparison-page-title">{t("compare.title")}</h1></div>
       <div className="actions"><Button className="comparison-close" variant="outline" size="icon" aria-label={t("compare.collapse")} title={t("compare.collapse")} onClick={() => {
         const panel = document.getElementById("library-comparison") as HTMLDetailsElement | null;
         if (panel) { panel.open = false; panel.querySelector("summary")?.focus(); }
@@ -474,7 +474,7 @@ export function Library({ notify }: { notify: Notice }) {
           <Button variant="ghost" size="icon" aria-label={t("library.previous")} title={t("library.previous")} disabled={lyricsBusy || pending || safeOffset === 0} onClick={() => changePage(Math.max(0, safeOffset - 50))}><ChevronLeft size={16} /></Button>
           <Button variant="ghost" size="icon" aria-label={t("library.next")} title={t("library.next")} disabled={lyricsBusy || pending || safeOffset + 50 >= count} onClick={() => changePage(safeOffset + 50)}><ChevronRight size={16} /></Button>
         </div>
-      </> : <Empty title={data.counts.tracks ? t("library.noMatch") : t("library.empty")}>{data.counts.tracks ? t("library.noMatchHint") : t("library.emptyHint")}</Empty>}
+      </> : <Empty title={data.counts.tracks ? t("library.noMatch") : t("library.empty")}>{data.counts.tracks ? <Button variant="outline" onClick={() => { clearDetails(); setFilter("all"); setLyricsFilter("all"); setScriptFilter("all"); setQuery(""); setOffset(0); }}>{t("library.clearFilters")}</Button> : <Button asChild variant="outline"><a href="/settings?section=library">{t("overview.openSettings")}</a></Button>}</Empty>}
     </section>
   </>;
 }

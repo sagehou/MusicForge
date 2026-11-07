@@ -5,6 +5,7 @@ import { useI18n } from "../i18n";
 import type { LibraryPage } from "../library-data";
 import type { LyricsProvider } from "../types";
 import { Button } from "./ui/button";
+import { InfoHint } from "./info-hint";
 import { Loading, ResourceWarning, useResource, type Notice } from "./resource";
 
 type ProviderStatus = {
@@ -17,7 +18,7 @@ type ProviderStatus = {
 export function LyricsProviderDiagnostics({ notify }: { notify: Notice }) {
   const { t } = useI18n();
   const [open, setOpen] = useState(false);
-  return <section className="panel settings-panel"><div className="settings-title"><Activity /><div><h2>{t("lyrics.diagnostics.title")}</h2><p>{t("lyrics.diagnostics.hint")}</p></div></div>
+  return <section className="panel settings-panel"><div className="settings-title"><Activity /><div><h2>{t("lyrics.diagnostics.title")}</h2><InfoHint>{t("lyrics.diagnostics.hint")}</InfoHint></div></div>
     <details onToggle={event => setOpen(event.currentTarget.open)}><summary>{t("lyrics.diagnostics.open")}</summary>{open && <ProviderChecks notify={notify} />}</details>
   </section>;
 }

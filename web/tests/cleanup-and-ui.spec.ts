@@ -352,17 +352,17 @@ test("task states use the active palette and Canvas status tones across light an
         function style(state: string, selector: string) { return getComputedStyle(document.querySelector(`.task[data-state="${state}"] ${selector}`)!); }
         const result = {
           accent: token("accent"), successTone: token("success"), warning: token("warning"), danger: token("danger"),
-          running: style("running", ".badge").color, runningIcon: style("running", ".job-symbol").color, progress: style("running", ".task-meter > span").backgroundColor, fill: token("accent-fill"),
-          success: style("success", ".badge").color, successIcon: style("success", ".job-symbol").color, successFill: style("success", ".badge").backgroundColor, successSoft: token("success-soft"),
+          running: style("running", ".badge").color, progress: style("running", ".task-meter > span").backgroundColor, fill: token("accent-fill"),
+          success: style("success", ".badge").color, successFill: style("success", ".badge").backgroundColor, successSoft: token("success-soft"),
           paused: style("paused", ".badge").color, failed: style("failed", ".badge").color,
         };
         sample.remove();
         return result;
       });
-      expect([colors.running, colors.runningIcon]).toEqual([colors.accent, colors.accent]);
+      expect(colors.running).toBe(colors.accent);
       // Progress is a solid fill; small accent text separately adapts for contrast.
       expect(colors.progress).toBe(colors.fill);
-      expect([colors.success, colors.successIcon]).toEqual([colors.successTone, colors.successTone]);
+      expect(colors.success).toBe(colors.successTone);
       // Status pills retain the shared semantic surface in either appearance.
       expect(colors.successFill).toBe(colors.successSoft);
       expect(colors.paused).toBe(colors.warning);

@@ -58,7 +58,7 @@ export function Badge({ status, compact = false }: { status: string; compact?: b
   return <span className={`badge badge-${status}`} title={compact ? label(status) : undefined}><span aria-hidden="true" />{compact ? <><span className="badge-label-full">{label(status)}</span><small className="badge-label-short" aria-hidden="true">{t(`badge.${status}` as MessageKey)}</small></> : label(status)}</span>;
 }
 export function Empty({ title, children }: { title: string; children?: ReactNode }) {
-  return <div className="empty"><Disc3 size={36} strokeWidth={1.2} /><h3>{title}</h3><p>{children}</p></div>;
+  return <div className="empty"><Disc3 size={36} strokeWidth={1.2} /><h3>{title}</h3>{children}</div>;
 }
 export function Loading({ error, retry }: { error?: string; retry?: () => void }) {
   const { t, errorMessage } = useI18n();

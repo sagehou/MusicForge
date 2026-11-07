@@ -6,6 +6,7 @@ import type { LyricsProvider, Source } from "../types";
 import type { LyricsInventory } from "../library-data";
 import { Loading, ResourceWarning, useResource, type Notice } from "./resource";
 import { Button } from "./ui/button";
+import { InfoHint } from "./info-hint";
 import { InlineDetails } from "./inline-details";
 import { LyricsProviderDiagnostics } from "./lyrics-provider-diagnostics";
 
@@ -114,16 +115,15 @@ export function LyricsSettings({ notify, notification }: { notify: Notice; notif
       event.preventDefault(); setBusy(true);
       void api<LyricsResponse["options"]>("/lyrics/options", "PUT", options).then(result => { resource.update(data => ({ ...data, options: result })); setDraft(undefined); notify("notice.saved"); }).catch(err => notify(err as Error, true)).finally(() => setBusy(false));
     }}>
-      <section className="panel settings-panel"><div className="settings-title"><FileMusic /><div><h2>{t("lyrics.settings")}</h2><p>{t("lyrics.hint")}</p></div></div>
+      <section className="panel settings-panel"><div className="settings-title"><FileMusic /><div><h2>{t("lyrics.settings")}</h2><InfoHint><p>{t("lyrics.hint")}</p><p>{t("lyrics.thresholdHint")}</p><p>{t("lyrics.privacy")}</p><p>{t("lyrics.stopHint")}</p></InfoHint></div></div>
         <label className="check-field switch-field"><input type="checkbox" role="switch" checked={options.auto_search} disabled={busy} onChange={event => setDraft({ ...options, auto_search: event.target.checked })} /><span>{t("lyrics.automatic")}</span></label>
         <div className="lyrics-threshold"><label className="field field-label"><span>{t("lyrics.threshold")}</span><input type="number" min={0} max={100} step={1} required value={options.min_score} disabled={busy} onChange={event => setDraft({ ...options, min_score: event.target.valueAsNumber })} /></label><div className="actions" role="group" aria-label={t("lyrics.presets")}>{([100, 96, 90] as const).map(score => <Button key={score} type="button" variant="outline" size="sm" aria-pressed={options.min_score === score} disabled={busy} onClick={() => setDraft({ ...options, min_score: score })}>{t(`lyrics.preset.${score}`)}</Button>)}</div></div>
-        <small>{t("lyrics.thresholdHint")}</small><small>{t("lyrics.privacy")}</small><small>{t("lyrics.stopHint")}</small>
         <LyricsProviderOptions providers={options.providers} disabled={busy} change={providers => setDraft({ ...options, providers })} />
       </section>
 
       <div className="settings-save" data-dirty={dirty}>{notification}<span>{t(dirty ? "settings.unsaved" : "settings.savedIn")}</span><Button type="button" variant="ghost" disabled={busy || !dirty} onClick={() => setDraft(undefined)}>{t("settings.discard")}</Button><Button type="submit" form="lyrics-options-form" disabled={busy || !dirty}><Check size={16} />{t("settings.save")}</Button></div>
     </form>
-    <section className="panel settings-panel lyrics-batch-settings"><div className="settings-title"><Search /><div><h2>{t("lyrics.batchTitle")}</h2><p>{t("lyrics.batchHint")}</p></div></div><LyricsControls notify={notify} settings /><small>{t("lyrics.inspectHint")}</small><div className="actions"><Button asChild variant="outline" size="sm"><a href="/library?view=tracks&lyrics_script=traditional">{t("lyrics.filterTraditional")}</a></Button></div><small>{t("lyrics.replaceHint")}</small></section>
+    <section className="panel settings-panel lyrics-batch-settings"><div className="settings-title"><Search /><div><h2>{t("lyrics.batchTitle")}</h2><InfoHint><p>{t("lyrics.batchHint")}</p><p>{t("lyrics.inspectHint")}</p><p>{t("lyrics.replaceHint")}</p></InfoHint></div></div><LyricsControls notify={notify} settings /><div className="actions"><Button asChild variant="outline" size="sm"><a href="/library?view=tracks&lyrics_script=traditional">{t("lyrics.filterTraditional")}</a></Button></div></section>
     <LyricsProviderDiagnostics notify={notify} />
   </div>;
 }
@@ -137,7 +137,7 @@ function LyricsProviderOptions({ providers, disabled, change }: { providers: Onl
     change(next);
   }
   return <fieldset className="lyrics-provider-options" disabled={disabled}>
-    <legend>{t("lyrics.sourcesTitle")}</legend><p>{t("lyrics.sourcesHint")}</p>
+    <legend>{t("lyrics.sourcesTitle")}</legend><InfoHint>{t("lyrics.sourcesHint")}</InfoHint>
     <ol>{order.map(provider => {
       const index = providers.indexOf(provider), enabled = index >= 0, name = t(`lyrics.name.${provider}`);
       return <li key={provider} data-enabled={enabled}>

@@ -1,7 +1,7 @@
 import { useState } from "react";
 import {
-  Activity, ArrowRight, AudioLines, Check, CircleAlert, CircleSlash,
-  CircleX, Clock3, Disc3, FileMusic, Loader2, Music2, RefreshCw
+  ArrowRight, AudioLines, Check, CircleAlert, CircleSlash,
+  CircleX, Clock3, Disc3, FileMusic, Music2, RefreshCw
 } from "lucide-react";
 import { api } from "../api";
 import { useI18n } from "../i18n";
@@ -125,14 +125,13 @@ export function Overview({ notify, navigate }: { notify: Notice; navigate: (path
         </div>
         <ResourceWarning error={jobs.error} retry={jobs.retry} />
         {!jobs.data ? <Loading error={jobs.error} retry={jobs.retry} /> : jobs.data.jobs.length ? <div className="job-list">{[...jobs.data.jobs].sort((a, b) => Number(b.state === "running") - Number(a.state === "running")).map(job => <button className="job-row" data-state={job.state} key={job.repair_id || job.id} onClick={() => navigate("/jobs")}>
-          <span className={`job-symbol ${job.state}`}>{job.state === "running" ? <Loader2 size={15} className="animate-spin" /> : job.state === "success" ? <Check size={15} /> : <Activity size={15} />}</span>
           <div>
             <strong>{kind(job.kind)} #{job.repair_id?.slice(0, 8) || job.id}</strong>
             <small>{job.current[0]?.title || job.current[0]?.path || date(job.updated)}{job.counts.total > 0 && ` · ${number(job.counts.done)} / ${number(job.counts.total)}`}</small>
           </div>
           <Badge status={job.state} />
           <ArrowRight className="recent-arrow" size={14} />
-        </button>)}</div> : <Empty title={t("overview.noJobs")}>{t("overview.noJobsHint")}</Empty>}
+        </button>)}</div> : <Empty title={t("overview.noJobs")}><Button variant="outline" onClick={() => navigate("/library")}>{t("overview.viewLibrary")}</Button></Empty>}
       </section>
       <aside className="overview-side">
         <section className="panel lyrics-summary">

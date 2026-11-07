@@ -106,12 +106,24 @@ test("settings layouts in both themes and narrow viewports", async ({ page }) =>
     for (const [id, label] of sections) {
       await page.getByRole("tab", { name: label, exact: true }).click();
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
+      if (id === "library") {
+        const hint = page.locator('[data-settings-section="library"] .field > .info-hint').first();
+        const trigger = hint.locator("summary");
+        const content = hint.locator(".info-hint-content");
+        await expect(content).toBeHidden();
+        await trigger.focus();
+        await trigger.press("Enter");
+        await expect(content).toBeVisible();
+        await expect(content).toContainText("FLAC");
+        const bounds = (await content.boundingBox())!;
+        expect(bounds.x).toBeGreaterThanOrEqual(0);
+        expect(bounds.x + bounds.width).toBeLessThanOrEqual(width);
+        await page.screenshot({ path: `test-results/settings-hint-${width}-${theme}.png`, fullPage: true, animations: "disabled" });
+        await page.keyboard.press("Escape");
+        await expect(content).toBeHidden();
+        await expect(trigger).toBeFocused();
+      }
       if (width <= 600) {
-        if (id === "library") {
-          const sourceHint = page.locator('[data-settings-section="library"] .field > small').first();
-          await expect(sourceHint).toContainText("FLAC");
-          expect(await sourceHint.evaluate(element => element.scrollWidth <= element.clientWidth + 1 && element.scrollHeight <= element.clientHeight + 1)).toBe(true);
-        }
         for (const field of await page.locator('.settings-panel input:visible:not([type="checkbox"]), .settings-panel select:visible, .settings-panel textarea:visible').all()) {
           expect(await field.evaluate(element => parseFloat(getComputedStyle(element).fontSize))).toBeGreaterThanOrEqual(16);
         }

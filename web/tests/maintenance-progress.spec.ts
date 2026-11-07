@@ -31,6 +31,10 @@ test("saved library views preserve filters, update results and clear selections"
   await expect(page.locator(".selection-bar")).toContainText("Selected: 1");
   await page.getByRole("button", { name: "Clear filters", exact: true }).click();
   await page.getByRole("searchbox").fill("Other");
+  await expect(page.locator(".empty")).toBeVisible();
+  await page.locator(".empty").getByRole("button", { name: "Clear filters", exact: true }).click();
+  await expect(page.getByRole("searchbox")).toHaveValue("");
+  await expect(page.locator(".track-row")).toHaveCount(1);
   await views.getByRole("button", { name: "Lyrics to retry", exact: true }).click();
   await expect(page.getByRole("searchbox")).toHaveValue("Track");
   await expect(page.locator(".selection-bar")).toHaveCount(0);
@@ -95,6 +99,7 @@ test("maintenance progress and grouped recovery reuse exact existing actions", a
   await page.route("**/api/lyrics/search", route => { writes.push({ path: "/lyrics/search", body: route.request().postDataJSON() }); return route.fulfill({ status: 202, json: { selected: 1 } }); });
   await page.route("**/api/maintenance/loudness", route => { expect(route.request().method()).toBe("DELETE"); stopped = true; writes.push({ path: "/maintenance/loudness" }); return route.fulfill({ json: { ok: true } }); });
   await page.setViewportSize({ width: 1440, height: 1000 }); await page.goto("/jobs");
+  await expect(page.locator(".jobs-panel .empty").getByRole("link", { name: "View library", exact: true })).toHaveAttribute("href", "/library");
   const progress = page.locator("#maintenance-progress");
   await expect(progress).toHaveAccessibleName("Maintenance progress");
   await expect(progress).toContainText("Waiting for the configured maintenance window");

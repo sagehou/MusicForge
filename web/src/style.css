@@ -2714,6 +2714,9 @@ input[role="switch"]:checked::after { transform: translateX(20px); background: v
   .jobs-panel .task-actions .ui-button:hover:not(:disabled) { background: var(--hover); }
   .jobs-panel .task:not([data-state="running"]) .task-actions { margin-top: 0; }
   .jobs-panel .task-title > .badge { grid-row: 1; justify-self: end; }
+  .jobs-panel .task[data-state="success"] .task-title { display: flex; grid-column: 3 / -1; grid-row: 1; justify-content: space-between; align-items: center; gap: 8px; min-width: 0; }
+  .jobs-panel .task[data-state="success"] .task-title > strong { min-width: 0; }
+  .jobs-panel .task[data-state="success"] .task-title > .badge { flex-shrink: 0; }
   .jobs-panel .task[data-state="success"] .task-actions { grid-column: 4; grid-row: 2; }
   .jobs-panel .task[data-state="success"] .task-progress { grid-column: 3; align-self: center; }
   .jobs-panel .task-progress-label { flex-wrap: wrap; }

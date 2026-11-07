@@ -752,7 +752,11 @@ test("provider diagnostics are passive until a track and source are explicitly c
   const panel = page.locator(".settings-panel").filter({ has: page.getByRole("heading", { name: "Lyric source checks", exact: true }) });
   await expect(panel).toBeVisible();
   expect(reads).toBe(0);
-  await panel.locator("summary").click();
+  await panel.locator(".info-hint > summary").click();
+  await expect(panel.locator(".info-hint-content")).toBeVisible();
+  expect(reads).toBe(0);
+  await page.keyboard.press("Escape");
+  await panel.locator(":scope > details > summary").click();
   await expect(panel.getByRole("button", { name: "Check LRCLIB", exact: true })).toBeDisabled();
   await expect.poll(() => reads).toBeGreaterThan(0);
   expect(checks).toBe(0);

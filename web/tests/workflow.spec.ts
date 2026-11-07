@@ -36,7 +36,11 @@ test("bilingual setup, real incremental build, state preservation and login", as
   await expect(page.getByLabel("Enable library scanning and background jobs", { exact: true })).toBeChecked();
   await page.getByRole("tab", { name: "Encoding", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Encoding profile" })).toBeVisible();
+  const modeHint = page.locator(".info-hint").filter({ hasText: "VBR varies bitrate with audio complexity; CBR uses a fixed bitrate." });
+  await expect(modeHint.locator(".info-hint-content")).toBeHidden();
+  await modeHint.locator("summary").click();
   await expect(page.getByText("VBR varies bitrate with audio complexity; CBR uses a fixed bitrate.", { exact: true })).toBeVisible();
+  await page.keyboard.press("Escape");
   await page.getByRole("tab", { name: "Account & security", exact: true }).click();
   await expect(page.getByRole("button", { name: "Bind your OIDC identity", exact: true })).toBeVisible();
   // The selector's native language names are intentionally not translated.

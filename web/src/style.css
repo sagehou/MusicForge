@@ -2708,14 +2708,21 @@ input[role="switch"]:checked::after { transform: translateX(20px); background: v
   .comparison-filters { grid-template-columns: 1fr; }
   .filter-tabs { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); width: 100%; overflow: visible; }
   .filter-tabs button { min-height: 40px; padding: 6px 4px; }
-  .jobs-panel .task { grid-template-columns: 16px 20px minmax(0, 1fr) auto; padding: 12px 14px; gap: 4px 10px; }
+  .jobs-panel .task { grid-template-columns: 16px 20px minmax(0, 1fr) auto; padding: 8px 12px; gap: 2px 8px; }
   .jobs-panel .task-actions { grid-column: 1 / -1; grid-row: 3; justify-content: flex-end; margin-top: 6px; }
-  .jobs-panel .task-actions .ui-button { min-width: 40px; min-height: 40px; padding: 6px 4px; }
-  .jobs-panel .task-title > .badge { grid-row: 1; }
+  .jobs-panel .task-actions .ui-button { min-width: 40px; min-height: 40px; padding: 6px 4px; border-color: transparent; background: transparent; box-shadow: none; }
+  .jobs-panel .task-actions .ui-button:hover:not(:disabled) { background: var(--hover); }
+  .jobs-panel .task:not([data-state="running"]) .task-actions { margin-top: 0; }
+  .jobs-panel .task-title > .badge { grid-row: 1; justify-self: end; }
+  .jobs-panel .task[data-state="success"] .task-actions { grid-column: 4; grid-row: 2; }
+  .jobs-panel .task[data-state="success"] .task-progress { grid-column: 3; align-self: center; }
   .jobs-panel .task-progress-label { flex-wrap: wrap; }
   .jobs-panel .task[data-state="running"] .task-title > .badge { grid-row: auto; }
   .jobs-panel .task-progress { grid-column: 3 / -1; }
   .jobs-panel .task-failure { grid-column: 1 / -1; grid-row: 4; }
+  .jobs-panel .task:not([data-state="running"]) > .task-waiting { grid-row: 3; margin: 2px 0 0; padding: 0; border: 0; background: transparent; gap: 6px; font-size: 11.5px; line-height: 17px; }
+  .jobs-panel .task-waiting > svg { flex-shrink: 0; width: 14px; height: 14px; margin-top: 2px; }
+  .jobs-panel .task:not([data-state="running"]):has(> .task-waiting) .task-actions { grid-row: 4; }
   .task-expanded { padding: 12px; }
   .task-facts { grid-template-columns: 1fr; }
   .track-file > dl { grid-template-columns: 1fr; }

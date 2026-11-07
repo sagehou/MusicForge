@@ -304,6 +304,30 @@ for (const width of [1440, 390]) {
     await page.screenshot({ path: `test-results/forge-jobs-${width}-light.png`, fullPage: true, animations: "disabled" });
     await page.emulateMedia({ reducedMotion: "reduce" });
     expect(await page.locator('.task[data-state="running"] .task-meter > span').evaluate(node => getComputedStyle(node, "::after").animationName)).toBe("none");
+    if (width <= 600) {
+      const refreshes = Array.from({ length: 4 }, (_, index): Job => ({ ...jobs[index ? 1 : 4], id: 9029 - index, kind: "refresh", progress: index ? 1 : 0,
+        counts: { total: 0, done: 0, pending: 0, running: 0, failed: 0, cancelled: 0 },
+        waiting_reason: index ? undefined : "Waiting for Navidrome scan completion", retry_at: index ? undefined : 1800000120,
+      }));
+      await page.route("**/api/jobs?*", route => route.fulfill({ json: { jobs: refreshes, total: refreshes.length } }));
+      await page.reload();
+      for (const [screenWidth, theme, language] of [[390, "light", "zh-CN"], [320, "dark", "en"]] as const) {
+        await page.setViewportSize({ width: screenWidth, height: 844 });
+        await setPreference(page, "theme", theme);
+        await setPreference(page, "language", language);
+        await expect(page.locator(".task-waiting")).toContainText("Navidrome");
+        await expect(page.locator(".task-waiting small")).toBeVisible();
+        for (const task of await page.locator('.task[data-state="success"]').all()) {
+          expect((await task.boundingBox())!.height).toBeLessThanOrEqual(screenWidth === 390 ? 84 : 108);
+          const progress = (await task.locator(".task-progress").boundingBox())!;
+          const actions = (await task.locator(".task-actions").boundingBox())!;
+          expect(progress.x + progress.width).toBeLessThanOrEqual(actions.x);
+        }
+        for (const button of await page.locator('.task-actions .ui-button:visible').all()) expect((await button.boundingBox())!.height).toBeGreaterThanOrEqual(40);
+        expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
+        await page.screenshot({ path: `test-results/jobs-refresh-${screenWidth}-${theme}-${language}.png`, fullPage: true, animations: "disabled" });
+      }
+    }
     expect(errors).toEqual([]);
   });
 }

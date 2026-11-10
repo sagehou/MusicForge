@@ -237,8 +237,12 @@ for (const width of [1440, 390]) {
         for (const card of await page.locator(".readiness-panel, .recent-panel, .lyrics-summary, .storage-summary, .overview-attention").all()) {
           expect(await card.evaluate(element => element.scrollHeight <= element.clientHeight + 1)).toBe(true);
         }
-        for (const row of await page.locator(".job-row").all()) expect((await row.boundingBox())!.height).toBeGreaterThanOrEqual(52);
-        expect((await page.locator(".readiness-panel").boundingBox())!.height).toBeGreaterThanOrEqual(360);
+        for (const row of await page.locator(".job-row").all()) {
+          const height = (await row.boundingBox())!.height;
+          expect(height).toBeGreaterThanOrEqual(44);
+          expect(height).toBeLessThanOrEqual(56);
+        }
+        if (screenWidth > 1100) expect((await page.locator(".readiness-panel").boundingBox())!.height).toBeLessThan(370);
         for (const button of await page.locator(".attention-list > button").all()) {
           await button.scrollIntoViewIfNeeded();
           await expect(button).toBeInViewport();

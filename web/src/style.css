@@ -631,8 +631,8 @@ input:not([type="checkbox"], [type="radio"]):focus-visible, select:focus-visible
 
 /* Overview */
 .overview-page {
-  --overview-gap: 18px;
-  --overview-padding: 20px 22px;
+  --overview-gap: 14px;
+  --overview-padding: 16px 18px;
   display: grid;
   grid-template-columns: repeat(12, minmax(0, 1fr));
   gap: var(--overview-gap);
@@ -687,14 +687,14 @@ input:not([type="checkbox"], [type="radio"]):focus-visible, select:focus-visible
   position: relative;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
   text-align: left;
   background: transparent;
   border: none;
   border-right: 1px solid var(--line);
   border-radius: 0;
-  min-height: 92px;
-  padding: 16px 22px;
+  min-height: 80px;
+  padding: 12px 18px;
   box-shadow: none;
   cursor: pointer;
   transition: background var(--duration) var(--ease);
@@ -771,7 +771,7 @@ input:not([type="checkbox"], [type="radio"]):focus-visible, select:focus-visible
   flex-direction: column;
   align-items: stretch;
   justify-content: flex-start;
-  gap: 18px;
+  gap: 12px;
   padding: var(--overview-padding);
   min-width: 0;
   border: 1px solid var(--line);
@@ -894,23 +894,23 @@ input:not([type="checkbox"], [type="radio"]):focus-visible, select:focus-visible
 }
 
 /* Current and recently completed tracks */
-.build-tracks > h2 { margin-bottom: 12px; }
-.active-tracks { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 18px; }
+.build-tracks > h2 { margin-bottom: 8px; }
+.active-tracks { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px 16px; }
 .active-track {
   display: flex;
   align-items: center;
   gap: 12px;
   width: 100%;
   min-width: 0;
-  min-height: 72px;
-  padding: 8px 0;
+  min-height: 64px;
+  padding: 4px 0;
   text-align: left;
   border: 0;
 }
 .active-track-artwork {
   flex-shrink: 0;
-  width: 52px;
-  height: 52px;
+  width: 48px;
+  height: 48px;
   display: grid;
   place-items: center;
   overflow: hidden;
@@ -959,13 +959,13 @@ input:not([type="checkbox"], [type="radio"]):focus-visible, select:focus-visible
   margin: 0 0 2px;
   border-bottom: 1px solid var(--line);
 }
-.job-list { flex: 1; display: flex; flex-direction: column; justify-content: space-between; }
+.job-list { display: flex; flex-direction: column; }
 .job-row {
   position: relative;
   width: 100%;
   text-align: left;
-  min-height: 52px;
-  padding: 8px 4px;
+  min-height: 48px;
+  padding: 6px 4px;
   gap: 8px;
   border-bottom: 1px solid var(--line);
   display: flex;
@@ -1273,11 +1273,11 @@ input:not([type="checkbox"], [type="radio"]):focus-visible, select:focus-visible
 }
 
 @media (min-width: 601px) {
-  .overview-page > .page-heading { min-height: 72px; padding-block: 24px 8px; }
-  .readiness-panel { min-height: 360px; }
-  .lyrics-summary, .storage-summary, .overview-attention { min-height: 252px; }
-  .overview-page .attention-list { justify-content: center; gap: 8px; }
-  .overview-page .attention-list > button { min-height: 40px; }
+  .overview-page > .page-heading { min-height: 64px; padding-block: 18px 6px; }
+  .readiness-panel { min-height: 324px; }
+  .lyrics-summary, .storage-summary, .overview-attention { min-height: 232px; }
+  .overview-page .attention-list { justify-content: center; gap: 4px; }
+  .overview-page .attention-list > button { min-height: 36px; }
 }
 @media (min-width: 601px) and (max-width: 1100px) {
   .readiness-panel, .recent-panel { grid-column: 1 / -1; }

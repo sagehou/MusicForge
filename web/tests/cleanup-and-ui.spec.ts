@@ -177,7 +177,7 @@ test("observed storage state stays inside the storage card without shifting the 
 });
 
 for (const width of [1440, 390]) {
-  test(`dashboard keeps comfortable cards, recent builds and compact jobs at ${width}px`, async ({ page }) => {
+  test(`dashboard uses comfortable cards, recent builds and compact jobs at ${width}px`, async ({ page }) => {
     const history = jobs.map((job): Job => width > 800 && job.state === "running" ? {
       ...job, profile: { codec: "opus", mode: "vbr", bitrate: 192, quality: 2 },
       current: Array.from({ length: 4 }, (_, index) => ({ ...job.current[0], path: `Artist/Album/${index}.flac`, title: `${job.current[0].title} ${index + 1}` })),

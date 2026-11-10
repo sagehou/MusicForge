@@ -110,7 +110,16 @@ func TestDashboardRecentBuildsAreDistinctCompletedPlayableTracks(t *testing.T) {
 	if _, err := a.db.Exec(`INSERT INTO jobs(kind,dedup,args,state,created,updated) VALUES
  ('convert','again:2','{"id":2}','success',1,1001),
  ('convert','older:2','{"id":2}','success',1,999),
- ('scan','scan:1','{"id":1}','success',1,2000)`); err != nil {
+ ('scan','scan:1','{"id":1}','success',1,2000),
+ ('scan','scan:prepare:3','{"dirs":["3.flac"],"verify":true}','success',1,1002),
+ ('scan','scan:prepare:1','{"dirs":["1.flac"],"verify":true}','success',1,1002),
+ ('scan','scan:prepare:4','{"dirs":["4.flac"],"verify":true}','success',1,2000),
+ ('scan','scan:prepare:5','{"dirs":["5.flac"],"verify":true}','success',1,2000),
+ ('scan','scan:ordinary','{"dirs":["6.flac"],"verify":true}','success',1,2000),
+ ('scan','scan:prepare:13','{"dirs":["13.flac"],"verify":true}','failed',1,2000);
+ INSERT INTO meta SELECT 'task-progress:'||id,'{"phase":"validate"}' FROM jobs WHERE dedup IN ('scan:prepare:3','scan:ordinary','scan:prepare:13');
+ INSERT INTO meta SELECT 'task-progress:'||id,'{"phase":"move"}' FROM jobs WHERE dedup='scan:prepare:1';
+ INSERT INTO meta SELECT 'task-progress:'||id,'{"phase":"read"}' FROM jobs WHERE dedup='scan:prepare:5'`); err != nil {
 		t.Fatal(err)
 	}
 	check := func(want []int64) {
@@ -123,7 +132,7 @@ func TestDashboardRecentBuildsAreDistinctCompletedPlayableTracks(t *testing.T) {
 			t.Fatal("recent builds must be ordered, distinct, playable and capped at six", w.Code, w.Body.String())
 		}
 	}
-	check([]int64{2, 8, 7, 6, 5, 4})
+	check([]int64{1, 3, 2, 8, 7, 6})
 	if _, err := a.db.Exec("DELETE FROM jobs WHERE state='success'"); err != nil {
 		t.Fatal(err)
 	}

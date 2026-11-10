@@ -357,10 +357,19 @@ func (a *App) dashboard(w http.ResponseWriter, r *http.Request) {
 	if s.Enabled {
 		online, reason, checkedAt = a.storageStatus(s)
 	}
-	rows, err := a.reads.QueryContext(r.Context(), `SELECT s.id FROM sources s
- JOIN jobs j ON json_extract(j.args,'$.id')=s.id
- WHERE j.kind IN ('convert','move') AND j.state='success' AND s.output_present=1 AND s.output<>''
- GROUP BY s.id ORDER BY max(j.updated) DESC,max(j.id) DESC LIMIT 6`)
+	// Preparation scans can build directly; their final phase excludes verification-only scans.
+	rows, err := a.reads.QueryContext(r.Context(), `WITH builds AS (
+ SELECT json_extract(args,'$.id') AS source_id,updated,id FROM jobs
+ WHERE kind IN ('convert','move') AND state='success'
+ UNION ALL
+ SELECT s.id,j.updated,j.id FROM jobs j
+ JOIN sources s ON s.rel=json_extract(j.args,'$.dirs[0]')
+ JOIN meta p ON p.key='task-progress:'||j.id
+ WHERE j.kind='scan' AND j.dedup LIKE 'scan:prepare:%' AND j.state='success'
+ AND json_extract(p.value,'$.phase') IN ('validate','move')
+ ) SELECT s.id FROM builds b JOIN sources s ON s.id=b.source_id
+ WHERE s.output_present=1 AND s.output<>''
+ GROUP BY s.id ORDER BY max(b.updated) DESC,max(b.id) DESC LIMIT 6`)
 	if err != nil {
 		apiError(w, 500, err)
 		return

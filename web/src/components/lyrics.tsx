@@ -142,7 +142,7 @@ function LyricsProviderOptions({ providers, disabled, change }: { providers: Onl
       const index = providers.indexOf(provider), enabled = index >= 0, name = t(`lyrics.name.${provider}`);
       return <li key={provider} data-enabled={enabled}>
         <span className="lyrics-provider-rank" aria-hidden="true">{enabled ? index + 1 : "—"}</span>
-        <label className="check-field"><input type="checkbox" checked={enabled} aria-label={name} onChange={event => change(event.target.checked ? [...providers, provider] : providers.filter(item => item !== provider))} /><span>{name}{provider === "petitlyrics" && <small>{t("lyrics.japaneseSource")}</small>}{provider === "amll" && <small>{t("lyrics.amllSource")}</small>}{provider === "unison" && <small>{t("lyrics.unisonSource")}</small>}</span></label>
+        <label className="check-field"><input type="checkbox" checked={enabled} aria-label={name} onChange={event => change(event.target.checked ? [...providers, provider] : providers.filter(item => item !== provider))} /><span>{name}</span></label>
         <div className="actions"><Button type="button" variant="ghost" size="icon" aria-label={t("lyrics.sourceUp", { name })} disabled={disabled || !enabled || index === 0} onClick={() => move(index, -1)}><ArrowUp size={16} /></Button><Button type="button" variant="ghost" size="icon" aria-label={t("lyrics.sourceDown", { name })} disabled={disabled || !enabled || index === providers.length - 1} onClick={() => move(index, 1)}><ArrowDown size={16} /></Button></div>
       </li>;
     })}</ol>

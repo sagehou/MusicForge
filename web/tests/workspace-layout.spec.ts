@@ -21,7 +21,7 @@ async function setup(page: Page) {
   await page.route("**/api/settings", route => route.fulfill({ json: { settings, configured: { webhook: false, nav_password: false, oidc_secret: false }, public_url: "", allowed_origins: [] } }));
   await page.route("**/api/lyrics", route => route.fulfill({ json: { options: { auto_search: false }, report: { state: "idle", total: 0, processed: 0, found: 0, not_found: 0, failed: 0, stopping: false } } }));
   await page.route("**/api/jobs?*", route => route.fulfill({ json: { jobs: [], total: 0 } }));
-  await page.route("**/api/dashboard", route => route.fulfill({ json: { source_count: 30, output_count: 30, ready_count: 28, rebuild_count: 1, failed_count: 1, expired_count: 0, online: true, codec: "opus", enabled: true, version: "test" } }));
+  await page.route("**/api/dashboard", route => route.fulfill({ json: { source_count: 30, output_count: 30, ready_count: 28, rebuild_count: 1, failed_count: 1, expired_count: 0, online: true, codec: "opus", enabled: true, version: "test", recent_build_ids: [] } }));
 }
 
 async function expectCompactSongHeader(panel: Locator) {

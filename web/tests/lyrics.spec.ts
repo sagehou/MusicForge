@@ -61,9 +61,7 @@ test("lyrics settings save thresholds, retain drafts and offer output-only inspe
   await expect(sources.getByRole("checkbox", { checked: true })).toHaveCount(7);
   await expect(sources.getByRole("checkbox", { name: "AMLL TTML DB", exact: true })).not.toBeChecked();
   await expect(sources.getByRole("checkbox", { name: "Unison", exact: true })).not.toBeChecked();
-  await expect(sources).toContainText("Preview and select manually");
-  await expect(sources).toContainText("Community synchronized LRC / TTML lyrics");
-  await expect(sources).toContainText("Synchronized Japanese lyrics");
+  await expect(sources.locator("li small")).toHaveCount(0);
   await sources.getByRole("checkbox", { name: "QQ Music", exact: true }).uncheck();
   await sources.getByRole("button", { name: "Move PetitLyrics up", exact: true }).click();
   await sources.getByRole("button", { name: "Move PetitLyrics up", exact: true }).click();

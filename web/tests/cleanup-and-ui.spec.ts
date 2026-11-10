@@ -1,6 +1,8 @@
 import { routeLibrary } from "./library-fixture";
 import { selectLibraryPage, setPreference } from "./preferences";
 import { test, expect, type Page } from "@playwright/test";
+import { readFile } from "node:fs/promises";
+import { resolve } from "node:path";
 import type { Dashboard, Job, Source } from "../src/types";
 
 test.beforeEach(async ({ page }) => {
@@ -9,7 +11,7 @@ test.beforeEach(async ({ page }) => {
 
 const me = { initialized: true, authenticated: true, username: "admin", method: "local", csrf: "test", oidc: false, version: "test" };
 const settings = { enabled: true, source: "/music/source", output: "/music/output", encoding: { codec: "opus", mode: "vbr", bitrate: 192, quality: 2 }, concurrency: 1, scan_minutes: 60, lidarr_prefix: "", nav_url: "", nav_user: "", nav_library: 1, oidc_issuer: "", oidc_client_id: "" };
-const dashboard: Dashboard = { source_count: 1215, output_count: 1149, ready_count: 1103, expired_count: 4, rebuild_count: 46, failed_count: 12, online: true, storage_message: "", codec: "opus", enabled: true, version: "test" };
+const dashboard: Dashboard = { source_count: 1215, output_count: 1149, ready_count: 1103, expired_count: 4, rebuild_count: 46, failed_count: 12, online: true, storage_message: "", codec: "opus", enabled: true, version: "test", recent_build_ids: [] };
 const jobs: Job[] = ["running", "success", "failed", "paused", "pending"].map((state, index) => ({
   id: 130 - index, kind: index === 4 ? "refresh" : index === 0 ? "scan" : "convert", state, attempts: state === "failed" ? 3 : 0, progress: state === "success" ? 1 : .44,
   created: 1800000000, updated: 1800000060 - index, args: {}, counts: { total: 100, done: state === "success" ? 100 : 44, pending: state === "running" ? 55 : 0, running: state === "running" ? 1 : 0, failed: state === "failed" ? 12 : 0, cancelled: 0 },
@@ -25,6 +27,11 @@ async function setup(page: Page, history: Job[] = jobs) {
   await page.route("**/api/auth/me", route => route.fulfill({ json: me }));
   await page.route("**/api/settings", route => route.fulfill({ json: { settings, configured: { webhook: false, nav_password: false, oidc_secret: false }, public_url: "", allowed_origins: [] } }));
   await routeLibrary(page, route => route.fulfill({ json: [] }));
+  await page.route("**/api/library/*/artwork?*", async route => {
+    const id = Number(new URL(route.request().url()).pathname.split("/")[3]);
+    const body = await readFile(resolve(process.env.MUSICFORGE_TEST_ROOT || "../.ci", "artwork", `${id % 4}.png`));
+    await route.fulfill({ contentType: "image/png", body });
+  });
   await page.route("**/api/dashboard", route => route.fulfill({ json: dashboard }));
   await page.route("**/api/jobs?*", route => {
     const params = new URL(route.request().url()).searchParams;
@@ -170,15 +177,18 @@ test("observed storage state stays inside the storage card without shifting the 
 });
 
 for (const width of [1440, 390]) {
-  test(`dashboard uses aligned cards and compact job visual evidence at ${width}px`, async ({ page }) => {
+  test(`dashboard keeps comfortable cards, recent builds and compact jobs at ${width}px`, async ({ page }) => {
     const history = jobs.map((job): Job => width > 800 && job.state === "running" ? {
       ...job, profile: { codec: "opus", mode: "vbr", bitrate: 192, quality: 2 },
       current: Array.from({ length: 4 }, (_, index) => ({ ...job.current[0], path: `Artist/Album/${index}.flac`, title: `${job.current[0].title} ${index + 1}` })),
     } : job);
     await setup(page, history);
+    let overviewData: Dashboard = { ...dashboard, recent_build_ids: [6, 5, 4, 3, 2, 1] };
+    await page.route("**/api/dashboard", route => route.fulfill({ json: overviewData }));
     const sources: Source[] = ([undefined, "not_found", "instrumental", "needs_review", "failed", "ready", "failed"] as const).map((state, index) => ({
       id: index + 1, path: `Artist/Album/${index}.flac`, artist: "Artist", album: "Album", title: `Track ${index + 1}`,
       track: index + 1, disc: 1, present: true, output: `Artist/Album/${index}.opus`, output_present: index < 6,
+      artwork_url: `/api/library/${index + 1}/artwork?signature=test`,
       status: "ready", error: "", size: 26214400, source_audio: { codec: "flac", bit_depth: 24, sample_rate: 96000 }, metadata: {},
       lyrics: state ? { state: state === "instrumental" ? "ready" : state, instrumental: state === "instrumental", output: `Artist/Album/${index}.opus`, signature: "audio", checked: 1 } : undefined,
     }));
@@ -190,6 +200,10 @@ for (const width of [1440, 390]) {
     await expect(page.locator(".flow-badge")).toHaveText("OPUS · VBR · 192 kbps");
     await expect(page.locator(".lyrics-stat-val")).toHaveText("1 / 6");
     await expect(page.locator(".lyrics-state-row > strong")).toHaveText(["1", "1", "1", "1", "1"]);
+    await expect(page.locator(".active-track")).toHaveCount(6);
+    for (const cover of await page.locator(".active-track:visible img").all()) {
+      await expect.poll(() => cover.evaluate((node: HTMLImageElement) => node.naturalWidth)).toBe(320);
+    }
     for (const theme of ["light", "dark"]) {
       await setPreference(page, "theme", theme);
       await expect(page.locator("html")).toHaveAttribute("data-theme", theme);
@@ -210,21 +224,31 @@ for (const width of [1440, 390]) {
     }
     await page.screenshot({ path: `test-results/forge-overview-${width}-dark-zh.png`, fullPage: true, animations: "disabled" });
     if (width > 800) {
-      await expect(page.locator(".active-track")).toHaveCount(3);
+      await expect(page.locator('.active-track[data-active="true"]')).toHaveCount(4);
+      await expect(page.locator('.active-track[data-active="false"] .active-track-title')).toHaveText(["Track 6", "Track 5"]);
       await expect(page.locator(".job-row")).toHaveCount(5);
-      for (const [screenWidth, screenHeight, language] of [[1366, 768, "zh-CN"], [1280, 720, "zh-CN"], [1024, 768, "zh-CN"], [768, 1024, "zh-CN"], [1280, 720, "en"]] as const) {
+      for (const [screenWidth, screenHeight, language] of [[1366, 768, "zh-CN"], [1280, 720, "zh-CN"], [1101, 768, "en"], [1024, 768, "zh-CN"], [768, 1024, "zh-CN"], [1280, 720, "en"]] as const) {
         await page.setViewportSize({ width: screenWidth, height: screenHeight });
         await setPreference(page, "language", language);
         const cards = await page.locator(".lyrics-summary, .storage-summary, .overview-attention").all();
         const boxes = await Promise.all(cards.map(card => card.boundingBox()));
         expect(Math.max(...boxes.map(box => box!.y)) - Math.min(...boxes.map(box => box!.y))).toBeLessThanOrEqual(1);
         expect(Math.max(...boxes.map(box => box!.y + box!.height)) - Math.min(...boxes.map(box => box!.y + box!.height))).toBeLessThanOrEqual(1);
-        for (const button of await page.locator(".attention-list > button").all()) await expect(button).toBeInViewport();
         for (const card of await page.locator(".readiness-panel, .recent-panel, .lyrics-summary, .storage-summary, .overview-attention").all()) {
           expect(await card.evaluate(element => element.scrollHeight <= element.clientHeight + 1)).toBe(true);
         }
-        expect(await page.evaluate(() => document.documentElement.scrollHeight <= innerHeight + 1 && document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
-        await page.screenshot({ path: `test-results/overview-fit-${screenWidth}-${screenHeight}-dark-${language}.png`, animations: "disabled" });
+        for (const row of await page.locator(".job-row").all()) expect((await row.boundingBox())!.height).toBeGreaterThanOrEqual(52);
+        expect((await page.locator(".readiness-panel").boundingBox())!.height).toBeGreaterThanOrEqual(360);
+        for (const button of await page.locator(".attention-list > button").all()) {
+          await button.scrollIntoViewIfNeeded();
+          await expect(button).toBeInViewport();
+          expect(await button.evaluate(element => {
+            const box = element.getBoundingClientRect();
+            return element.contains(document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2));
+          })).toBe(true);
+        }
+        expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
+        await page.screenshot({ path: `test-results/overview-layout-${screenWidth}-${screenHeight}-dark-${language}.png`, fullPage: true, animations: "disabled" });
       }
       await setPreference(page, "language", "zh-CN");
       await page.setViewportSize({ width, height: 900 });
@@ -327,6 +351,49 @@ for (const width of [1440, 390]) {
         expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
         await page.screenshot({ path: `test-results/jobs-refresh-${screenWidth}-${theme}-${language}.png`, fullPage: true, animations: "disabled" });
       }
+    }
+    overviewData = { ...overviewData, ready_count: dashboard.source_count, failed_count: 0, rebuild_count: 0, expired_count: 0 };
+    await page.route("**/api/jobs?*", route => route.fulfill({ json: { jobs: history.map(job => ({ ...job, state: "success", progress: 1, current: [] })), total: history.length } }));
+    await page.setViewportSize({ width, height: width > 800 ? 1000 : 844 });
+    await page.goto("/");
+    await expect(page.locator(".completion-value")).toContainText("100%");
+    const completed = page.locator('.active-track[data-active="false"]');
+    await expect(completed).toHaveCount(6);
+    await expect(completed.locator(".active-track-title")).toHaveText(["Track 6", "Track 5", "Track 4", "Track 3", "Track 2", "Track 1"]);
+    await expect(completed.locator(".active-track-main > small:not(.active-track-album)")).toHaveText(Array(6).fill("Artist"));
+    await expect(completed.locator(".active-track-album")).toHaveText(Array(6).fill("Album"));
+    await expect(page.locator(".active-track-percent, .audio-eq-wave")).toHaveCount(0);
+    for (const theme of ["light", "dark"]) {
+      await setPreference(page, "theme", theme);
+      for (const cover of await completed.locator("img:visible").all()) {
+        await expect.poll(() => cover.evaluate((node: HTMLImageElement) => node.naturalWidth)).toBe(320);
+      }
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
+      await page.screenshot({ path: `test-results/overview-completed-${width}-${theme}.png`, fullPage: true, animations: "disabled" });
+    }
+    if (width > 800) {
+      const first = (await completed.nth(0).boundingBox())!;
+      const second = (await completed.nth(1).boundingBox())!;
+      const third = (await completed.nth(2).boundingBox())!;
+      expect(Math.abs(first.y - second.y)).toBeLessThanOrEqual(1);
+      expect(second.x).toBeGreaterThanOrEqual(first.x + first.width);
+      expect(third.y).toBeGreaterThanOrEqual(first.y + first.height);
+      await page.setViewportSize({ width: 2560, height: 1440 });
+      const content = (await page.locator(".page-content").boundingBox())!;
+      const main = (await page.locator(".main").boundingBox())!;
+      expect(content.width).toBeLessThanOrEqual(1360);
+      expect(Math.abs(content.x - main.x - (main.width - content.width) / 2)).toBeLessThanOrEqual(1);
+      expect(await page.evaluate(() => document.documentElement.scrollHeight <= innerHeight + 1)).toBe(true);
+      await page.screenshot({ path: "test-results/overview-completed-2560-dark.png", animations: "disabled" });
+    } else {
+      await expect(completed.filter({ visible: true })).toHaveCount(4);
+      await page.setViewportSize({ width: 320, height: 844 });
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
+      await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+      const attention = (await page.locator(".overview-attention").boundingBox())!;
+      const navigation = (await page.locator(".sidebar").boundingBox())!;
+      expect(attention.y + attention.height).toBeLessThanOrEqual(navigation.y);
+      await page.screenshot({ path: "test-results/overview-completed-320-dark.png", fullPage: true, animations: "disabled" });
     }
     expect(errors).toEqual([]);
   });

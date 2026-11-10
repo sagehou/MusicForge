@@ -33,7 +33,15 @@ export function Overview({ notify, navigate }: { notify: Notice; navigate: (path
   const playable = library.data?.filter(source => source.output_present && source.output);
   const lyricReady = playable?.filter(source => lyricsMatchState(source) === "ready").length;
   const lyricIssues = playable ? (["unchecked", "not_found", "instrumental", "needs_review", "failed"] as const).map(state => ({ state, count: playable.filter(source => lyricsMatchState(source) === state).length })).filter(item => item.count > 0) : undefined;
-  const active = jobs.data?.jobs.filter(job => job.state === "running").flatMap(job => job.current.map(activity => ({ job, activity }))).slice(0, 3) || [];
+  const active = jobs.data?.jobs.filter(job => job.state === "running").flatMap(job => job.current.map(activity => ({ job, activity }))).slice(0, 6) || [];
+  const recent = data.recent_build_ids.flatMap(id => {
+    const source = playable?.find(source => source.id === id);
+    return source && !active.some(({ activity }) => activity.path === source.path) ? [source] : [];
+  });
+  const tracks: { source?: Source; job?: Job; activity?: Job["current"][number] }[] = [
+    ...active.map(item => ({ ...item, source: library.data?.find(source => source.path === item.activity.path) })),
+    ...recent.map(source => ({ source })),
+  ].slice(0, 6);
   const attentionCount = data.expired_count + data.rebuild_count + data.failed_count;
   const attention = [
     { state: "failed", count: data.failed_count },
@@ -78,43 +86,49 @@ export function Overview({ notify, navigate }: { notify: Notice; navigate: (path
         </button>)}
       </div>
       <section className="readiness-panel">
-        <div className="completion-value">
-          <span className="readiness-eyebrow">{t("overview.complete")}</span>
-          <div className="completion-main-stat">
-            <strong>{percentLabel}</strong>
-            {active.length > 0 ? (
-              <Badge status="running" />
-            ) : (
-              <span className={`readiness-status-badge ${percent === 100 ? "is-ready" : ""}`}>
-                <span className="readiness-status-dot" />
-                {percent === 100 ? t("overview.allReady") : t("overview.inProgress")}
-              </span>
-            )}
+        <div className="readiness-header">
+          <div className="completion-value">
+            <span className="readiness-eyebrow">{t("overview.complete")}</span>
+            <div className="completion-main-stat">
+              <strong>{percentLabel}</strong>
+              {active.length > 0 ? (
+                <Badge status="running" />
+              ) : (
+                <span className={`readiness-status-badge ${percent === 100 ? "is-ready" : ""}`}>
+                  <span className="readiness-status-dot" />
+                  {percent === 100 ? t("overview.allReady") : t("overview.inProgress")}
+                </span>
+              )}
+            </div>
+          </div>
+          <div className="hero-completion sr-only" role="progressbar" aria-label={t("overview.complete")} aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent} />
+          <div className="audio-pipeline-visual">
+            <Disc3 size={18} className="pipeline-glyph" aria-hidden="true" />
+            <div className="pipeline-flow">
+              <span className="flow-line" />
+              <span className="flow-badge">{`${data.codec.toUpperCase()} · ${profile}`}</span>
+              <span className="flow-line" />
+            </div>
+            <AudioLines size={18} className="pipeline-glyph is-ready" aria-hidden="true" />
           </div>
         </div>
-        <div className="hero-completion sr-only" role="progressbar" aria-label={t("overview.complete")} aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent} />
-        <div className="audio-pipeline-visual">
-          <Disc3 size={18} className="pipeline-glyph" aria-hidden="true" />
-          <div className="pipeline-flow">
-            <span className="flow-line" />
-            <span className="flow-badge">{`${data.codec.toUpperCase()} · ${profile}`}</span>
-            <span className="flow-line" />
-          </div>
-          <AudioLines size={18} className="pipeline-glyph is-ready" aria-hidden="true" />
-        </div>
-        {active.length > 0 && (
-          <div className="active-tracks">{active.map(({ job, activity }, index) => {
-            const source = library.data?.find(source => source.path === activity.path);
-            return <div className="active-track" key={`${job.repair_id || job.id}:${activity.path}:${index}`}>
-              <span className="active-track-artwork" aria-hidden="true">{source?.artwork_url ? <img src={source.artwork_url} alt="" loading="lazy" /> : <Music2 size={16} />}</span>
+        {tracks.length > 0 ? <div className="build-tracks">
+          <h2>{t("overview.recentBuilds")}</h2>
+          <div className="active-tracks">{tracks.map(({ job, activity, source }, index) => {
+            const title = activity?.title || source?.title || activity?.path || source?.path || (job && kind(job.kind));
+            const artist = activity?.artist || source?.artist || t("library.unknownArtist");
+            const album = activity?.album || source?.album || t("library.unknownAlbum");
+            return <div className="active-track" data-active={Boolean(activity)} key={`${job?.repair_id || job?.id || "recent"}:${source?.id ?? activity?.path}:${index}`}>
+              <span className="active-track-artwork" aria-hidden="true">{source?.artwork_url ? <img src={source.artwork_url} alt="" loading="lazy" /> : <Music2 size={20} />}</span>
               <div className="active-track-main">
-                <div className="active-track-title">{activity.title || activity.path || kind(job.kind)}<span className="audio-eq-wave" aria-hidden="true"><i /><i /><i /><i /></span></div>
-                <small>{[activity.artist, activity.album].filter(Boolean).join(" · ") || kind(job.kind)}</small>
+                <div className="active-track-title" title={title}>{title}{activity && <span className="audio-eq-wave" aria-hidden="true"><i /><i /><i /><i /></span>}</div>
+                <small title={artist}>{artist}</small>
+                <small className="active-track-album" title={album}>{album}</small>
               </div>
-              <strong className="active-track-percent">{number(Math.round(activity.phase === "convert" ? activity.percent : taskPercent(job)))}%</strong>
+              {job && activity && <strong className="active-track-percent">{number(Math.round(activity.phase === "convert" ? activity.percent : taskPercent(job)))}%</strong>}
             </div>;
           })}</div>
-        )}
+        </div> : <Empty title={t("overview.noBuilds")}><Button variant="outline" onClick={() => navigate("/library")}>{t("overview.viewLibrary")}</Button></Empty>}
       </section>
     </div>
     <div className="overview-workspace">

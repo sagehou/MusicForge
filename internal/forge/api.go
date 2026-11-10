@@ -357,7 +357,29 @@ func (a *App) dashboard(w http.ResponseWriter, r *http.Request) {
 	if s.Enabled {
 		online, reason, checkedAt = a.storageStatus(s)
 	}
-	respond(w, 200, map[string]any{"source_count": sourceCount, "output_count": outputCount, "ready_count": ready, "expired_count": expired, "rebuild_count": rebuild, "failed_count": failed, "online": online, "storage_checking": false, "storage_checked_at": checkedAt, "storage_message": reason, "codec": s.Encoding.Codec, "enabled": s.Enabled, "version": a.version})
+	rows, err := a.reads.QueryContext(r.Context(), `SELECT s.id FROM sources s
+ JOIN jobs j ON json_extract(j.args,'$.id')=s.id
+ WHERE j.kind IN ('convert','move') AND j.state='success' AND s.output_present=1 AND s.output<>''
+ GROUP BY s.id ORDER BY max(j.updated) DESC,max(j.id) DESC LIMIT 6`)
+	if err != nil {
+		apiError(w, 500, err)
+		return
+	}
+	defer rows.Close()
+	recent := []int64{}
+	for rows.Next() {
+		var id int64
+		if err = rows.Scan(&id); err != nil {
+			apiError(w, 500, err)
+			return
+		}
+		recent = append(recent, id)
+	}
+	if err = rows.Err(); err != nil {
+		apiError(w, 500, err)
+		return
+	}
+	respond(w, 200, map[string]any{"source_count": sourceCount, "output_count": outputCount, "ready_count": ready, "expired_count": expired, "rebuild_count": rebuild, "failed_count": failed, "online": online, "storage_checking": false, "storage_checked_at": checkedAt, "storage_message": reason, "codec": s.Encoding.Codec, "enabled": s.Enabled, "version": a.version, "recent_build_ids": recent})
 }
 
 func (a *App) jobs(w http.ResponseWriter, r *http.Request) {

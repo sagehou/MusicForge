@@ -5,10 +5,12 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -81,6 +83,51 @@ func TestDeferredAPIResponsesAreRetryableNotInternalErrors(t *testing.T) {
 	if w.Code != 503 || w.Header().Get("Retry-After") != "10" || !strings.Contains(w.Body.String(), "Waiting for Navidrome") {
 		t.Fatal("a normal wait became an internal error", w.Code, w.Header(), w.Body.String())
 	}
+}
+
+func TestDashboardRecentBuildsAreDistinctCompletedPlayableTracks(t *testing.T) {
+	a, _ := testApp(t)
+	request := lyricsSession(t, a)
+	for id := 1; id <= 13; id++ {
+		output, present := fmt.Sprintf("%d.opus", id), id != 9
+		if id == 10 {
+			output = ""
+		}
+		if _, err := a.db.Exec("INSERT INTO sources(id,rel,output,output_present) VALUES(?,?,?,?)", id, fmt.Sprintf("%d.flac", id), output, present); err != nil {
+			t.Fatal(err)
+		}
+		kind, state := "convert", "success"
+		if id == 8 {
+			kind = "move"
+		}
+		if id >= 11 {
+			state = []string{"failed", "pending", "running"}[id-11]
+		}
+		if _, err := a.db.Exec("INSERT INTO jobs(kind,dedup,args,state,created,updated) VALUES(?,?,?,?,1,1000)", kind, fmt.Sprintf("build:%d", id), fmt.Sprintf(`{"id":%d}`, id), state); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := a.db.Exec(`INSERT INTO jobs(kind,dedup,args,state,created,updated) VALUES
+ ('convert','again:2','{"id":2}','success',1,1001),
+ ('convert','older:2','{"id":2}','success',1,999),
+ ('scan','scan:1','{"id":1}','success',1,2000)`); err != nil {
+		t.Fatal(err)
+	}
+	check := func(want []int64) {
+		t.Helper()
+		w := request("GET", "/api/dashboard", nil)
+		var data struct {
+			Recent []int64 `json:"recent_build_ids"`
+		}
+		if w.Code != 200 || json.Unmarshal(w.Body.Bytes(), &data) != nil || !reflect.DeepEqual(data.Recent, want) {
+			t.Fatal("recent builds must be ordered, distinct, playable and capped at six", w.Code, w.Body.String())
+		}
+	}
+	check([]int64{2, 8, 7, 6, 5, 4})
+	if _, err := a.db.Exec("DELETE FROM jobs WHERE state='success'"); err != nil {
+		t.Fatal(err)
+	}
+	check([]int64{})
 }
 
 func TestRefreshAPIQueuesWithoutWaitingForNavidrome(t *testing.T) {

@@ -222,6 +222,7 @@ test("existing lyrics require explicit association review and retain the preview
   await editor.getByRole("button", { name: "Review existing lyric association", exact: true }).click();
   await preview.getByRole("button", { name: "Confirm lyrics belong to this song", exact: true }).click();
   await expect(editor.getByRole("alert")).toContainText("review again");
+  await expect(editor.getByRole("alert").getByRole("button")).toHaveCount(0);
   await expect(preview.getByLabel("Existing output LRC", { exact: true })).toHaveValue(original);
   await setPreference(page, "theme", "dark"); await setPreference(page, "language", "zh-CN");
   await page.setViewportSize({ width: 320, height: 844 });

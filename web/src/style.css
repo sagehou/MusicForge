@@ -1498,11 +1498,6 @@ input:not([type="checkbox"], [type="radio"]):focus-visible, select:focus-visible
 .library-options-body .layout-control { align-self: flex-start; }
 .library-options-body .layout-control button { width: 36px; padding: 4px 8px; }
 .library-options-body select { width: 100%; max-width: none; font-size: 12.5px; }
-.library-options-body .page-tools { position: relative; }
-.library-options-body .page-tools > summary { display: flex; align-items: center; width: auto; padding: 5px 8px; gap: 8px; border: 1px solid var(--line); border-radius: var(--radius-control); background: var(--subtle); color: var(--ink); font-size: 12px; }
-.library-options-body .page-tools > summary::after { content: attr(aria-label); }
-.library-options-body .tools-popover { position: static; width: 100%; min-width: 0; max-width: none; padding: 6px 0 0; border: 0; box-shadow: none; display: grid; gap: 4px; background: transparent; }
-.library-options-body .tools-popover > .ui-button { width: 100%; justify-content: flex-start; }
 
 .active-filters { flex-basis: 100%; order: 4; display: flex; align-items: center; flex-wrap: wrap; gap: 6px; padding-top: 4px; }
 .active-filters button { display: inline-flex; align-items: center; gap: 5px; border: 1px solid color-mix(in srgb, var(--accent) 25%, var(--line)); border-radius: var(--radius-badge); padding: 2px 9px; color: var(--accent); background: var(--accent-soft); font-size: 12px; line-height: 20px; min-height: 26px; }
@@ -1512,8 +1507,9 @@ input:not([type="checkbox"], [type="radio"]):focus-visible, select:focus-visible
 /* Library Maintenance Strip & Lidarr Comparison */
 .library-maintenance { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 270px), 1fr)); align-items: start; gap: 10px; margin: 0 0 16px; }
 .library-maintenance > * { min-width: 0; }
-.library-tool-actions { display: flex; align-items: center; gap: 6px; min-width: 0; overflow-x: auto; padding-bottom: 8px; }
+.library-tool-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; min-width: 0; padding-bottom: 8px; }
 .library-tool-actions > * { flex-shrink: 0; }
+.library-tool-actions:has(.maintenance-report) > .build-preview { flex: 1 0 100%; min-width: 0; }
 .library-tool-actions .ui-button { white-space: nowrap; }
 .library-comparison, .maintenance-workbench, .library-maintenance > .lyrics-panel {
   border: 1px solid var(--glass-border);
@@ -1555,8 +1551,6 @@ input:not([type="checkbox"], [type="radio"]):focus-visible, select:focus-visible
 .lyrics-panel:not(:has(.lyrics-settings[open])) .lyrics-quick-actions { display: none; }
 .lyrics-panel:has(.lyrics-settings[open]) .lyrics-quick-actions { flex-basis: 100%; flex-wrap: wrap; margin-top: 12px; }
 .lyrics-quick-actions .lyrics-action { min-height: 28px; padding: 3px 8px; }
-.lyrics-settings-link { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; color: var(--muted); border-radius: var(--radius-control); }
-.lyrics-settings-link:hover { color: var(--ink); background: var(--hover); }
 .lyrics-global-progress { font-size: 12px; color: var(--accent); }
 .lyrics-panel:not(:has(.lyrics-settings[open])) .lyrics-body:not([data-running="true"]) > [role="status"] { display: none; }
 .lyrics-body > [role="status"] { flex-basis: 100%; padding-top: 8px; border-top: 1px solid var(--line); font-size: 12px; }
@@ -1831,7 +1825,6 @@ table { width: 100%; border-collapse: collapse; text-align: left; }
   box-shadow: none;
   white-space: nowrap;
 }
-.track-lyrics .lyrics-actions .lyrics-choose-page { display: none; }
 .lyrics-actions .lyrics-action:hover:not(:disabled), .lyrics-details > summary:hover { color: var(--accent); background: var(--accent-soft); }
 .lyrics-details { position: relative; }
 .lyrics-details > summary { list-style: none; margin: 0; cursor: pointer; }
@@ -2375,9 +2368,6 @@ input[role="switch"]:checked::after { transform: translateX(20px); background: v
 .lyrics-threshold { display: flex; align-items: end; flex-wrap: wrap; gap: 12px; }
 .lyrics-threshold input { width: 110px; }
 .lyrics-settings-page { display: grid; gap: 16px; }
-.lyrics-batch-settings .lyrics-body { display: grid; gap: 8px; }
-.lyrics-batch-settings .lyrics-body > .actions { margin: 0; flex-wrap: wrap; }
-.lyrics-batch-settings .lyrics-quick-actions .lyrics-action { width: auto; }
 
 /* Toasts, Auth & Dialogs */
 .toast {

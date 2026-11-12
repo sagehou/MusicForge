@@ -22,7 +22,7 @@ export function LibraryComparison({ counts, notify }: { counts: LibraryCounts; n
     setOpen(event.currentTarget.open);
     if (event.currentTarget.open) document.querySelector<HTMLButtonElement>(".comparison-close")?.focus();
   }} onKeyDown={event => {
-    if (event.key === "Escape" && event.currentTarget.open && !event.defaultPrevented) {
+    if (event.key === "Escape" && event.currentTarget.open && !event.defaultPrevented && (event.target as Element).closest("details[open]") === event.currentTarget) {
       event.preventDefault(); event.currentTarget.open = false; event.currentTarget.querySelector("summary")?.focus();
     }
   }}>

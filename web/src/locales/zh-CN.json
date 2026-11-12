@@ -63,7 +63,7 @@
   "notice.refresh": "Navidrome 刷新已加入队列",
   "notice.password": "密码已更新，其他会话已退出",
   "library.deleteSelectedConfirm": "永久删除所选歌曲中的过期产物？",
-  "library.verify": "完整校验",
+  "library.verify": "校验全库",
   "library.scan": "扫描音乐库",
   "library.expiredHint": "源文件已删除。手动删除产物后，Navidrome 会移除相应歌曲。",
   "library.deleteExpired": "批量删除过期",

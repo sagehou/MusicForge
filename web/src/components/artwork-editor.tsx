@@ -54,7 +54,7 @@ export function ArtworkEditor({ source, saved, close, returnFocusID, onBusyChang
   }, [file, crop, t]);
   async function save(reset = false) {
     setBusy(true); setError(undefined);
-    try { await api(`/library/${source.id}/artwork/edit`, reset ? "DELETE" : "PUT", { token: data?.token, ...(reset ? {} : { image: image.split(",")[1] }) }); saved(); close(); requestAnimationFrame(() => document.getElementById(returnFocusID)?.focus()); }
+    try { await api(`/library/${source.id}/artwork/edit`, reset ? "DELETE" : "PUT", { token: data?.token, ...(reset ? {} : { image: image.split(",")[1] }) }); onBusyChange(false); saved(); close(); requestAnimationFrame(() => document.getElementById(returnFocusID)?.focus()); }
     catch (err) { setError(err as Error); }
     finally { setBusy(false); }
   }

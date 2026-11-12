@@ -54,7 +54,7 @@ export function BuildPreview({ selection, notify, currentScope = false }: { sele
 export function MaintenanceWorkbench({ scopeQuery, attention, selected, select, notify, comparisonAvailable }: { scopeQuery: string; attention: number; selected: Source[]; select: (ids: number[]) => void; notify: Notice; comparisonAvailable: boolean }) {
   const { t, number } = useI18n();
   const [open, setOpen] = useState(() => location.hash === "#maintenance-workbench");
-  return <details className="maintenance-workbench" id="maintenance-workbench" open={open} onToggle={event => setOpen(event.currentTarget.open)} onKeyDown={event => { if (event.key === "Escape" && event.currentTarget.open && !event.defaultPrevented) { event.preventDefault(); setOpen(false); event.currentTarget.querySelector("summary")?.focus(); } }}>
+  return <details className="maintenance-workbench" id="maintenance-workbench" open={open} onToggle={event => setOpen(event.currentTarget.open)} onKeyDown={event => { if (event.key === "Escape" && event.currentTarget.open && !event.defaultPrevented && (event.target as Element).closest("details[open]") === event.currentTarget) { event.preventDefault(); setOpen(false); event.currentTarget.querySelector("summary")?.focus(); } }}>
     <summary><ClipboardList size={18} /><span>{t("maintenance.title")}</span><small className="quality-count">{number(attention)}</small></summary>
     {open && <WorkbenchContent scopeQuery={scopeQuery} selected={selected} select={select} notify={notify} comparisonAvailable={comparisonAvailable} />}
   </details>;

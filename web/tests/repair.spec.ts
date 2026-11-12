@@ -183,7 +183,9 @@ test("repair queues share the Jobs list, filters and safe controls in both langu
   await page.reload();
   await expect(row.locator(".task-main .badge")).toHaveText("Success");
   await expect(row).toContainText("Possibly damaged");
-  await row.getByRole("button", { name: "Details", exact: true }).click(); await inspector.locator(".task-diagnostic summary").click();
+  await expect(row.getByRole("button", { name: "Collapse", exact: true })).toHaveAttribute("aria-expanded", "true");
+  await expect(inspector).toBeVisible();
+  await inspector.locator(".task-diagnostic summary").click();
   await expect(inspector.locator("pre")).toContainText("Original strict conversion failure");
   await expect(row.getByRole("button", { name: "Retry", exact: true })).toHaveCount(0);
   for (const width of [1440, 768, 390, 320]) {

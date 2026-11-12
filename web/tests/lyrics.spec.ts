@@ -367,7 +367,7 @@ test("lyrics filters compose with audio status and library coverage survives new
   await refresh();
   await expect(inventory).toContainText("Album checked 6/7 tracks");
   await expect(inventory).toContainText("Available 2");
-  await expect(page.getByRole("status", { name: "Current lyrics batch", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("status", { name: "Current lyrics batch", exact: true })).toContainText("This batch: checked 1/1");
   await page.locator(".library-breadcrumbs > button").first().click();
   await expect(inventory).toContainText("Library checked 7/8 tracks");
   await expect(page.getByRole("status", { name: "Current lyrics batch", exact: true })).toContainText("This batch: checked 1/1");

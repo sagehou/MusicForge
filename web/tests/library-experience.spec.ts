@@ -231,9 +231,9 @@ test("aligned records show all songs with shared filters, pagination, batch lyri
     await setPreference(page, "theme", theme);
     await expect(first.locator(".track-facts")).toContainText("3:21");
     await expect(first.locator(".track-facts")).toContainText("FLAC · 24 bit / 96 kHz · 2 声道");
-    const phonePicker = first.getByRole("link", { name: "选择歌词（在新标签页打开）", exact: true });
+    const phonePicker = first.getByRole("button", { name: "选择歌词", exact: true });
     await expect(phonePicker).toBeVisible();
-    await expect(phonePicker).toHaveAttribute("target", "_blank");
+    await expect(phonePicker).toHaveAttribute("aria-expanded", "false");
     await expect(first.getByRole("button", { name: "编辑歌词", exact: true })).toBeVisible();
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
     expect(await page.locator(".table-scroll").evaluate(element => element.scrollWidth <= element.clientWidth + 1)).toBe(true);

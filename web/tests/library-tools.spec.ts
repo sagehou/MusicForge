@@ -129,10 +129,14 @@ test("lyrics history compares revisions before an explicit restore save", async 
 test("online cover preview shows dimensions and requires a separate save", async ({ page }) => {
   await mock(page);
   let writes = 0;
+  let finishSave!: () => void;
+  const saving = new Promise<void>(resolve => { finishSave = resolve; });
   const image = await page.evaluate(() => { const canvas = document.createElement("canvas"); canvas.width = 64; canvas.height = 32; const ctx = canvas.getContext("2d")!; ctx.fillStyle = "#7a4caa"; ctx.fillRect(0, 0, 64, 32); return canvas.toDataURL("image/jpeg").split(",")[1]; });
-  await page.route("**/api/library/1/artwork/edit", route => {
+  await page.route("**/api/library/1/artwork/edit", async route => {
     if (route.request().method() === "GET") return route.fulfill({ json: { token: "cover", override: false } });
-    writes++; expect(route.request().postDataJSON().token).toBe("cover"); return route.fulfill({ json: { ok: true } });
+    writes++; expect(route.request().postDataJSON().token).toBe("cover");
+    await saving;
+    return route.fulfill({ json: { ok: true } });
   });
   await page.route("**/api/library/1/artwork/search", route => { expect(route.request().postDataJSON()).toEqual({ query: "Artist Album" }); return route.fulfill({ json: { candidates: [{ id: "release", title: "Album", artist: "Artist", country: "GB", date: "2026", source: "MusicBrainz / Cover Art Archive", url: "https://musicbrainz.org/release/release" }] } }); });
   await page.route("**/api/library/1/artwork/preview?release=release", route => route.fulfill({ json: { image, width: 64, height: 32, source: "MusicBrainz / Cover Art Archive", url: "https://musicbrainz.org/release/release" } }));
@@ -154,6 +158,10 @@ test("online cover preview shows dimensions and requires a separate save", async
   expect(writes).toBe(0);
   await editor.getByRole("button", { name: "Save output cover", exact: true }).click();
   await expect.poll(() => writes).toBe(1);
+  await expect(editor.getByRole("button", { name: "Close", exact: true })).toBeDisabled();
+  await page.keyboard.press("Escape");
+  await expect(editor).toBeVisible();
+  finishSave();
   await expect(editor).toHaveCount(0);
   await expect(page.locator("#track-title-1")).toBeFocused();
 });

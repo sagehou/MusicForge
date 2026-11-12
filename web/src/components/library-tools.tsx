@@ -31,7 +31,7 @@ export function ToolStatus({ report, kind, retry, notify }: { report?: ToolRepor
 
 export function ToolSection({ title, icon, children }: { title: string; icon: ReactNode; children: ReactNode }) {
   const [open, setOpen] = useState(false);
-  return <details className="library-tool" onToggle={event => setOpen(event.currentTarget.open)} onKeyDown={event => { if (event.key === "Escape" && event.currentTarget.open && !event.defaultPrevented) { event.preventDefault(); event.currentTarget.open = false; event.currentTarget.querySelector("summary")?.focus(); } }}><summary>{icon}{title}</summary>{open && <div className="comparison-body">{children}</div>}</details>;
+  return <details className="library-tool" onToggle={event => setOpen(event.currentTarget.open)} onKeyDown={event => { if (event.key === "Escape" && event.currentTarget.open && !event.defaultPrevented && (event.target as Element).closest("details[open]") === event.currentTarget) { event.preventDefault(); event.currentTarget.open = false; event.currentTarget.querySelector("summary")?.focus(); } }}><summary>{icon}{title}</summary>{open && <div className="comparison-body">{children}</div>}</details>;
 }
 
 const tagKeys = ["title", "artist", "album", "album_artist", "track", "disc"] as const;

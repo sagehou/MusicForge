@@ -92,7 +92,7 @@ export function App() {
   }, [locked]);
   useEffect(() => {
     const outside = (event: PointerEvent) => {
-      document.querySelectorAll<HTMLDetailsElement>(".palette-menu[open], .page-tools[open], .heading-preferences[open], .lyrics-details[open]").forEach(menu => {
+      document.querySelectorAll<HTMLDetailsElement>(".palette-menu[open], .heading-preferences[open], .lyrics-details[open], .info-hint[open]").forEach(menu => {
         if (!menu.contains(event.target as Node)) menu.open = false;
       });
     };
@@ -126,7 +126,11 @@ export function App() {
   ];
   const current = nav.find(item => item.path === page) || nav[0];
   const notification = toast && <div className={`toast ${toast.error ? "toast-error" : ""}`} role={toast.error ? "alert" : "status"}>{toast.error ? <Activity size={17} /> : <Check size={17} />}<span>{toast.message instanceof Error ? errorMessage(toast.message.message) : t(toast.message, toast.params)}</span><button type="button" aria-label={t("app.dismiss")} title={t("app.dismiss")} onClick={() => setToast(undefined)}><X size={17} /></button></div>;
-  return <><div className="app-shell" onClick={followLink} data-sidebar-collapsed={sidebarCollapsed} inert={locked ? true : undefined} aria-hidden={locked ? true : undefined}><a className="skip-link" href="#main-content">{t("app.skipContent")}</a>
+  return <><div className="app-shell" onClick={followLink} onKeyDown={event => {
+    if (event.key !== "Escape" || event.defaultPrevented) return;
+    const details = (event.target as Element).closest<HTMLDetailsElement>("details[open]");
+    if (details) { event.preventDefault(); details.open = false; details.querySelector("summary")?.focus(); }
+  }} data-sidebar-collapsed={sidebarCollapsed} inert={locked ? true : undefined} aria-hidden={locked ? true : undefined}><a className="skip-link" href="#main-content">{t("app.skipContent")}</a>
     <aside className="sidebar">
       <div className="brand-row"><a className="brand" href="/" aria-label="MusicForge" title="MusicForge"><span className="brand-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" aria-hidden="true"><path d="M2 12c2.5 0 2.5-4 5-4s2.5 4 5 4 2.5-4 5-4 2.5 4 5 4" /></svg></span><span className="brand-wordmark">MusicForge<small className="brand-version">{me.version}</small></span></a><Button className="sidebar-toggle" variant="ghost" size="icon" aria-label={t(sidebarCollapsed ? "app.expandSidebar" : "app.collapseSidebar")} title={t(sidebarCollapsed ? "app.expandSidebar" : "app.collapseSidebar")} aria-expanded={!sidebarCollapsed} aria-controls="main-navigation" onClick={toggleSidebar}>{sidebarCollapsed ? <PanelLeftOpen size={18} /> : <PanelLeftClose size={18} />}</Button></div>
       <div className="sidebar-navigation">

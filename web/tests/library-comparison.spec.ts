@@ -49,11 +49,11 @@ test("file comparison explains count differences and queues only selected direct
   await page.goto("/library");
   await page.locator(".library-comparison > summary").filter({ hasText: "File counts · compare with Lidarr" }).click();
   const compare = page.getByRole("button", { name: "Compare file lists", exact: true });
-  await expect(compare).toBeDisabled();
+  await expect(compare).toHaveCount(0);
+  await expect(page.locator(".comparison-connection").getByRole("link", { name: "Lidarr settings", exact: true })).toBeVisible();
   await expect(page.getByLabel("Lidarr URL", { exact: true })).toHaveCount(0);
   await expect(page.getByLabel("Lidarr API key", { exact: true })).toHaveCount(0);
-  await page.locator(".comparison-notes").first().locator("summary").click();
-  await page.getByRole("link", { name: "Lidarr settings", exact: true }).click();
+  await page.locator(".comparison-connection").getByRole("link", { name: "Lidarr settings", exact: true }).click();
   await expect(page.getByRole("tab", { name: "Integrations", exact: true })).toHaveAttribute("aria-selected", "true");
   await page.getByLabel("Lidarr URL", { exact: true }).fill("http://lidarr:8686");
   await page.getByLabel("Lidarr API key", { exact: true }).fill("test-only-key");
@@ -72,6 +72,9 @@ test("file comparison explains count differences and queues only selected direct
   await expect(compare).toBeEnabled();
   await compare.click();
   await expect(page.getByText("Some files are outside the source directory", { exact: false })).toBeVisible();
+  const snapshotHint = page.locator(".info-hint").filter({ hasText: "Results reflect the latest index" });
+  await expect(snapshotHint).not.toHaveAttribute("open", "");
+  await snapshotHint.locator("summary").click();
   await expect(page.getByText("Results reflect the latest index", { exact: false })).toBeVisible();
   await expect(page.locator(".comparison-results > li")).toHaveCount(3);
   await page.getByLabel("Select re-scannable files on this page", { exact: true }).check();

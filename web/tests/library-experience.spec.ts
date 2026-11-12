@@ -401,7 +401,19 @@ test("cover density and list preferences persist, pagination and polling retain 
   await mockLibrary(page, collection);
   await page.setViewportSize({ width: 1440, height: 1000 });
   let reads = 0;
-  await routeLibrary(page, route => { reads++; return route.fulfill({ json: collection }); });
+  let library = collection;
+  let holdSelection = false;
+  let waitingSelections = 0;
+  let releaseSelection: () => void = () => {};
+  const selectionGate = new Promise<void>(resolve => { releaseSelection = resolve; });
+  await routeLibrary(page, async route => {
+    reads++;
+    if (new URL(route.request().url()).pathname.endsWith("/selection") && holdSelection) {
+      waitingSelections++;
+      await selectionGate;
+    }
+    return route.fulfill({ json: library });
+  });
   await page.goto("/library?view=albums");
   await expect(page.locator(".library-group")).toHaveCount(50);
   const columns = () => page.locator(".library-groups").evaluate(node => getComputedStyle(node).gridTemplateColumns.split(" ").length);
@@ -424,6 +436,26 @@ test("cover density and list preferences persist, pagination and polling retain 
   await expect.poll(() => reads).toBeGreaterThan(loadedReads);
   await expect(image).toHaveAttribute("data-poll-identity", "retained");
   await expect(image).toHaveClass("cover-loaded");
+  await expect(page.getByLabel("Select album Night Studies", { exact: true })).toBeChecked();
+  const selection = page.locator(".selection-bar");
+  const build = page.getByRole("button", { name: "Build selected", exact: true });
+  await expect(build).toBeEnabled();
+  await selection.evaluate(node => node.setAttribute("data-poll-identity", "retained"));
+  const before = await page.locator(".library-groups").boundingBox();
+  holdSelection = true;
+  library = collection.map(source => source.id === 100 ? { ...source, output_size: 12345 } : source);
+  await page.evaluate(() => document.dispatchEvent(new Event("visibilitychange")));
+  await expect.poll(() => waitingSelections).toBeGreaterThan(0);
+  await expect(build).toBeDisabled();
+  await expect(selection).toBeVisible();
+  await expect(selection).toHaveAttribute("aria-busy", "true");
+  await expect(selection).toHaveAttribute("data-poll-identity", "retained");
+  await expect(selection).toContainText("Selected: 2");
+  expect((await page.locator(".library-groups").boundingBox())!.y).toBe(before!.y);
+  holdSelection = false;
+  releaseSelection();
+  await expect(build).toBeEnabled();
+  await expect(selection).toHaveAttribute("data-poll-identity", "retained");
   await expect(page.getByLabel("Select album Night Studies", { exact: true })).toBeChecked();
   await page.getByRole("button", { name: "Next page", exact: true }).click();
   await expect(page.locator(".library-group")).toHaveCount(17);

@@ -156,10 +156,13 @@ test("presets and custom colors persist, retain contrast and stay synchronized w
 
 test("partial selection, keyboard focus and settings switches stay usable", async ({ page }) => {
   await setup(page);
+  await page.setViewportSize({ width: 1560, height: 900 });
   await page.goto("/library?view=tracks");
   const first = page.getByLabel("Select Song 1", { exact: true });
   const all = page.getByLabel("Select current page", { exact: true });
+  const toolbar = page.locator(".library-selection-toolbar");
   await expect(all).toBeVisible();
+  await toolbar.screenshot({ path: "test-results/library-toolbar-unselected-desktop-en.png", animations: "disabled" });
   await first.check();
   await expect(first).toBeChecked();
   await expect(page.locator(".track-table tr.selected")).toHaveCount(1);
@@ -170,7 +173,28 @@ test("partial selection, keyboard focus and settings switches stay usable", asyn
   await expect(first).toBeFocused();
   expect(await first.evaluate(element => getComputedStyle(element).outlineStyle)).not.toBe("none");
   expect(await first.evaluate(element => parseFloat(getComputedStyle(element).outlineWidth))).toBeGreaterThan(0);
+  const controls = [all, toolbar.getByText("2 tracks", { exact: true }), page.getByRole("button", { name: "Preview selected build", exact: true }), page.getByRole("button", { name: "Clear selection", exact: true })];
+  const centers = await Promise.all(controls.map(async control => { const box = (await control.boundingBox())!; return box.y + box.height / 2; }));
+  expect(Math.max(...centers) - Math.min(...centers)).toBeLessThan(2);
   await page.screenshot({ path: "test-results/appearance-selected-controls.png", animations: "disabled" });
+  await setPreference(page, "language", "zh-CN");
+  await setPreference(page, "theme", "dark");
+  await page.screenshot({ path: "test-results/library-toolbar-selected-desktop-zh-CN.png", animations: "disabled" });
+  await page.setViewportSize({ width: 320, height: 844 });
+  const clear = page.getByRole("button", { name: "取消选择", exact: true });
+  await clear.focus();
+  await expect(clear).toBeInViewport();
+  const selectPage = page.getByLabel("全选本页", { exact: true });
+  await selectPage.focus();
+  await expect(selectPage).toBeInViewport();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
+  await page.screenshot({ path: "test-results/library-toolbar-selected-mobile-zh-CN.png", animations: "disabled" });
+  await page.getByLabel("选择 Song 1", { exact: true }).uncheck();
+  await expect(page.locator(".selection-bar")).toHaveCount(0);
+  await expect(selectPage).not.toBeChecked();
+  await page.setViewportSize({ width: 1560, height: 900 });
+  await setPreference(page, "language", "en");
+  await setPreference(page, "theme", "light");
   await page.getByRole("link", { name: "Settings", exact: true }).click();
   const save = page.getByRole("button", { name: "Save settings", exact: true });
   await expect(save).toBeDisabled();

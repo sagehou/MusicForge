@@ -4,6 +4,7 @@ import { api } from "../api";
 import { useI18n } from "../i18n";
 import type { LibraryCounts } from "../library-data";
 import { Button } from "./ui/button";
+import { InfoHint } from "./info-hint";
 import { Loading, ResourceWarning, useResource, type Notice } from "./resource";
 
 type DifferenceKind = "not_indexed" | "expired" | "unsupported" | "not_in_lidarr" | "unmapped" | "failed" | "possibly_damaged" | "no_output" | "outside_scope";
@@ -32,7 +33,7 @@ export function LibraryComparison({ counts, notify }: { counts: LibraryCounts; n
       sources: number(counts.present), expired: number(counts.deleted),
       outputs: number(counts.outputs), failed: number(counts.failed),
     })}</p>
-    <p>{t("compare.countHint")}</p></div>
+    <InfoHint>{t("compare.countHint")}</InfoHint></div>
   </details>;
 }
 
@@ -77,7 +78,7 @@ function LidarrComparison({ notify }: { notify: Notice }) {
   const selectable = visible.filter(row => row.scan_dir).map(row => row.path);
   return <div className="comparison-body">
     <ResourceWarning error={connection.error} retry={connection.retry} />
-    <div className="comparison-connection"><div><h2>{t("compare.heading")}</h2><p>{t(connection.data.key_configured ? "compare.connected" : "compare.configureHint")}</p></div><Button disabled={busy || running || !connection.data.key_configured} onClick={() => void start()}><RefreshCw size={15} className={running ? "animate-spin" : ""} />{t("compare.start")}</Button></div>
+    <div className="comparison-connection"><div><h2>{t("compare.heading")}</h2><p>{t(connection.data.key_configured ? "compare.connected" : "compare.configureHint")}</p></div>{connection.data.key_configured ? <Button disabled={busy || running} onClick={() => void start()}><RefreshCw size={15} className={running ? "animate-spin" : ""} />{t("compare.start")}</Button> : <Button asChild><a href="/settings?section=integrations">{t("compare.configure")}</a></Button>}</div>
 
     {running && <p role="status">{t("compare.progress", { done: number(data?.processed || 0), total: number(data?.total || 0) })}</p>}
     <ResourceWarning error={report.error} retry={report.retry} />
@@ -88,7 +89,7 @@ function LidarrComparison({ notify }: { notify: Notice }) {
         ["onlyLidarr", data.only_lidarr], ["onlyMusicForge", data.only_musicforge], ["unmapped", data.unmapped], ["outsideScope", data.outside_scope],
       ] as const).map(([label, value]) => <div key={label}><dt>{t(`compare.metric.${label}`)}</dt><dd>{number(value)}</dd></div>)}</dl>
       {data.outside_scope > 0 && <p className="repair-warning">{t("compare.outsideHint")}</p>}
-      <p>{t("compare.snapshotHint")}</p>
+      <InfoHint>{t("compare.snapshotHint")}</InfoHint>
       <details className="comparison-notes"><summary>{t("compare.snapshot", { time: date(data.finished) })}</summary>
       <p className="comparison-paths"><code>{data.prefix || data.source}</code><span aria-hidden="true"> → </span><code>{data.source}</code></p>
       </details>

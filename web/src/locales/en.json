@@ -1213,5 +1213,10 @@
   "overview.allReady": "All tracks ready",
   "overview.inProgress": "Tracks pending build",
   "overview.allGood": "All good",
-  "storage.lastCheck": "Last checked"
+  "storage.lastCheck": "Last checked",
+  "lyrics.manage": "Manage lyrics",
+  "library.tools": "Library actions",
+  "tags.open": "Edit tags",
+  "playlist.create": "Create playlist",
+  "fingerprint.open": "Find duplicates"
 }

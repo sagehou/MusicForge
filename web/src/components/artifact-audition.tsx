@@ -10,15 +10,17 @@ import { LyricsEditor } from "./lyrics-editor";
 
 type Audition = { audio_url: string; format: string; size: number; lyrics: string; lyrics_state: "ready" | "missing" | "unavailable" };
 
-export function ArtifactAudition({ source, close, editLyrics = false }: { source: Source; close: () => void; editLyrics?: boolean }) {
+export function ArtifactAudition({ source, close, editLyrics = false, onBusyChange }: { source: Source; close: () => void; editLyrics?: boolean; onBusyChange: (busy: boolean) => void }) {
   const { t } = useI18n();
   const [attempt, setAttempt] = useState(0);
-  return <InlineDetails id={`audition-${source.id}`} title={t(editLyrics ? "lyricsEdit.title" : "audition.title")} subtitle={[source.title || source.output.split("/").pop(), source.artist].filter(Boolean).join(" · ")} close={close} returnFocusID={`${editLyrics ? "lyrics-edit" : "audition"}-trigger-${source.id}`} className="artifact-audition">
-    <LoadAudition key={attempt} source={source} editLyrics={editLyrics} reload={() => setAttempt(value => value + 1)} />
+  const [busy, setBusy] = useState(false);
+  useEffect(() => { onBusyChange(busy); return () => onBusyChange(false); }, [busy, onBusyChange]);
+  return <InlineDetails id={`audition-${source.id}`} title={t(editLyrics ? "lyricsEdit.title" : "audition.title")} subtitle={[source.title || source.output.split("/").pop(), source.artist].filter(Boolean).join(" · ")} close={close} returnFocusID={`${editLyrics ? "lyrics-edit" : "audition"}-trigger-${source.id}`} className="artifact-audition" busy={busy}>
+    <LoadAudition key={attempt} busy={busy} onBusyChange={setBusy} source={source} editLyrics={editLyrics} reload={() => setAttempt(value => value + 1)} />
   </InlineDetails>;
 }
 
-function LoadAudition({ source, reload, editLyrics }: { source: Source; reload: () => void; editLyrics: boolean }) {
+function LoadAudition({ source, reload, editLyrics, busy, onBusyChange }: { source: Source; reload: () => void; editLyrics: boolean; busy: boolean; onBusyChange: (busy: boolean) => void }) {
   const { t, errorMessage } = useI18n();
   const [data, setData] = useState<Audition>();
   const [error, setError] = useState<Error>();
@@ -31,10 +33,10 @@ function LoadAudition({ source, reload, editLyrics }: { source: Source; reload: 
   }, [source.id]);
   if (error) return <div className="audition-error" role="alert"><p>{errorMessage(error.message)}</p><Button size="sm" variant="outline" onClick={reload}><RotateCcw size={14} />{t("audition.reload")}</Button></div>;
   if (!data) return <p className="audition-loading" role="status"><Loader2 size={16} className="animate-spin" />{t("audition.loading")}</p>;
-  return <AudioPreview data={data} source={source} reload={reload} editLyrics={editLyrics} />;
+  return <AudioPreview data={data} source={source} reload={reload} editLyrics={editLyrics} busy={busy} onBusyChange={onBusyChange} />;
 }
 
-function AudioPreview({ data, source, reload, editLyrics }: { data: Audition; source: Source; reload: () => void; editLyrics: boolean }) {
+function AudioPreview({ data, source, reload, editLyrics, busy, onBusyChange }: { data: Audition; source: Source; reload: () => void; editLyrics: boolean; busy: boolean; onBusyChange: (busy: boolean) => void }) {
   const { t } = useI18n();
   const audio = useRef<HTMLAudioElement>(null);
   const lyrics = useRef<HTMLDivElement>(null);
@@ -116,8 +118,8 @@ function AudioPreview({ data, source, reload, editLyrics }: { data: Audition; so
       {failed ? <div className="audition-error" role="alert"><p>{t("audition.failed")}</p><Button size="sm" variant="outline" onClick={reload}><RotateCcw size={14} />{t("audition.reload")}</Button></div> : blocked && <p role="status" className="audition-note">{t("audition.blocked")}</p>}
     </div>
     <div className="audition-transcript">
-      {editing && <LyricsEditor id={source.id} position={position} canAudition={duration > 0 && !failed} audition={time => { seekTo(time); if (audio.current?.paused) void toggle(); }} preview={setPreviewLyrics} saved={text => { setSavedLyrics(text); setEditing(false);  }} close={() => setEditing(false)} />}
-      <div className="audition-lyrics-heading"><span>{t("audition.outputLyrics")}{cues.length > 0 && <small>{t("audition.seekHint")}</small>}</span><div className="actions">{cues.length > 0 && <Button size="sm" variant="ghost" aria-pressed={follow} onClick={() => setFollow(value => !value)}>{t("audition.follow")}</Button>}<Button size="sm" variant="outline" aria-expanded={editing} onClick={() => { setPreviewLyrics(savedLyrics); setEditing(value => !value); }}><Pencil size={14} />{t("lyricsEdit.title")}</Button></div></div>
+      {editing && <LyricsEditor onBusyChange={onBusyChange} id={source.id} position={position} canAudition={duration > 0 && !failed} audition={time => { seekTo(time); if (audio.current?.paused) void toggle(); }} preview={setPreviewLyrics} saved={text => { setSavedLyrics(text); setEditing(false);  }} close={() => setEditing(false)} />}
+      <div className="audition-lyrics-heading"><span>{t("audition.outputLyrics")}{cues.length > 0 && <small>{t("audition.seekHint")}</small>}</span><div className="actions">{cues.length > 0 && <Button size="sm" variant="ghost" aria-pressed={follow} onClick={() => setFollow(value => !value)}>{t("audition.follow")}</Button>}<Button size="sm" variant="outline" aria-expanded={editing} disabled={busy} onClick={() => { setPreviewLyrics(savedLyrics); setEditing(value => !value); }}><Pencil size={14} />{t("lyricsEdit.title")}</Button></div></div>
       <div className="audition-lyrics" ref={lyrics} role="region" aria-label={t("audition.outputLyrics")} tabIndex={0}>
         {cues.length ? cues.map((cue, index) => <button type="button" key={cue.time} className="audition-line" aria-current={current === index ? "true" : undefined} disabled={!duration || failed || cue.time > duration} aria-label={t("audition.seekLyric", { time: audioTime(cue.time), text: cue.text || "♪" })} onClick={() => seekTo(cue.time)}><time>{audioTime(cue.time)}</time><span dir="auto">{cue.text || "♪"}</span></button>) : <p className="audition-empty">{t(data.lyrics_state === "unavailable" ? "audition.lyricsUnavailable" : "audition.noLyrics")}</p>}
       </div>

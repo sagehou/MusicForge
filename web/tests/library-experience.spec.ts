@@ -129,6 +129,9 @@ test("album and artist lyrics actions use all playable tracks in their scope, in
   await expect(page.locator(".lyrics-settings")).toContainText("0 / 63");
   await page.getByLabel("Search library", { exact: true }).fill("Song 01");
   await expect(page.locator(".track-table tbody > tr")).toHaveCount(1);
+  await expect(page).toHaveURL(/q=Song\+01/);
+  await page.reload();
+  await expect(page.getByLabel("Search library", { exact: true })).toHaveValue("Song 01");
   await expect(page.getByRole("button", { name: "Fill lyrics for all artifacts", exact: true })).toHaveCount(0);
   await page.locator(".lyrics-settings > summary").click();
   await page.getByRole("button", { name: "Fill album lyrics", exact: true }).click();
@@ -151,8 +154,8 @@ test("album and artist lyrics actions use all playable tracks in their scope, in
   await page.goto("/library?view=albums&artist=River+Ensemble&album=River+Ensemble%2FNight+Studies");
   await page.locator(".lyrics-settings > summary").click();
   await expect(page.getByRole("button", { name: "Fill album lyrics", exact: true })).toBeDisabled();
-  await expect(page.getByRole("link", { name: "View background lyrics task", exact: true })).toHaveAttribute("href", "/settings?section=lyrics");
-  await expect(page.getByRole("button", { name: "Stop lyrics search", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("link", { name: "View background lyrics task", exact: true })).toHaveAttribute("href", "/library?view=tracks#lyrics-maintenance");
+  await expect(page.getByRole("button", { name: "Stop lyrics search", exact: true })).toBeEnabled();
 });
 
 test("aligned records show all songs with shared filters, pagination, batch lyrics and file facts", async ({ page }) => {

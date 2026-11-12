@@ -13,7 +13,7 @@ async function visibleInViewport(page: Page, locator: Locator) {
   expect(box.y + box.height).toBeLessThanOrEqual(viewport.height + 1);
 }
 
-test("phone lyric selection opens a separate tab with visible preview and confirmation and retains album review order", async ({ page, context }) => {
+test("phone lyric selection opens inline and offers an explicit new tab without losing album review order", async ({ page, context }) => {
   await context.addInitScript(() => { localStorage.setItem("musicforge.language", "zh-CN"); localStorage.setItem("musicforge.theme", "dark"); });
   await page.setViewportSize({ width: 390, height: 844 });
   const sources: Source[] = Array.from({ length: 3 }, (_, index) => ({
@@ -56,6 +56,17 @@ test("phone lyric selection opens a separate tab with visible preview and confir
   await page.goto("/library?view=albums&artist=Artist&album=Artist%2FAlbum&lyrics=needs_review");
   await page.getByLabel("搜索音乐库", { exact: true }).fill("Song");
   const originalURL = page.url();
+  const phoneTrigger = page.getByRole("button", { name: "选择歌词", exact: true }).first();
+  await phoneTrigger.click();
+  await expect(page.locator(".lyrics-picker")).toBeVisible();
+  expect(page.url()).toBe(originalURL);
+  expect(context.pages()).toHaveLength(1);
+  await page.screenshot({ path: "test-results/lyrics-inline-390-dark-zh.png", fullPage: true, animations: "disabled" });
+  await page.keyboard.press("Escape");
+  await expect(page.locator(".lyrics-picker")).toHaveCount(0);
+  await expect(phoneTrigger).toBeFocused();
+  await phoneTrigger.click();
+  await page.locator(".lyrics-guidance > summary").click();
   const [pickerTab] = await Promise.all([
     context.waitForEvent("page"),
     page.getByRole("link", { name: "选择歌词（在新标签页打开）", exact: true }).first().click(),
@@ -66,7 +77,7 @@ test("phone lyric selection opens a separate tab with visible preview and confir
   await expect(pickerTab).toHaveURL(/q=Song/);
   expect(await pickerTab.evaluate(() => window.opener)).toBeNull();
   expect(page.url()).toBe(originalURL);
-  await expect(page.locator(".lyrics-picker")).toHaveCount(0);
+  await expect(page.locator(".lyrics-picker")).toBeVisible();
   const picker = pickerTab.locator(".lyrics-picker");
   await expect(picker).toHaveAccessibleName("选择歌词");
   await expect(picker.getByRole("radio")).toHaveCount(41);

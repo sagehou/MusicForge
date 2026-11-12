@@ -35,9 +35,29 @@ test("settings sections preserve drafts, reveal invalid controls, discard and sa
       })).toBe(true);
     }
   }
+  await page.getByLabel("Source audio directory", { exact: true }).fill("/retained/source");
+  await page.evaluate(() => Reflect.set(window, "navigationSentinel", true));
+  const modifiedLinks = await page.locator('.account-link').evaluate(link => ["ctrlKey", "metaKey", "shiftKey", "altKey"].map(modifier => {
+    let prevented = false;
+    document.addEventListener("click", event => { prevented = event.defaultPrevented; event.preventDefault(); }, { once: true });
+    link.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, [modifier]: true }));
+    return prevented;
+  }));
+  expect(modifiedLinks).toEqual([false, false, false, false]);
+  await page.locator('.account-link').click();
+  await expect(page).toHaveURL(/section=security/);
+  expect(await page.evaluate(() => Reflect.get(window, "navigationSentinel"))).toBe(true);
+  await page.getByRole("tab", { name: "Library", exact: true }).click();
+  await expect(page.getByLabel("Source audio directory", { exact: true })).toHaveValue("/retained/source");
   await page.getByLabel("Source audio directory", { exact: true }).fill("");
   await expectSaveActionsReachable();
   await page.getByRole("tab", { name: "Encoding", exact: true }).click();
+  await expect(page).toHaveURL(/section=encoding/);
+  await page.goBack();
+  await expect(page.getByRole("tab", { name: "Library", exact: true })).toHaveAttribute("aria-selected", "true");
+  await expect(page.getByLabel("Source audio directory", { exact: true })).toHaveValue("");
+  await page.goForward();
+  await expect(page.getByRole("tab", { name: "Encoding", exact: true })).toHaveAttribute("aria-selected", "true");
   await page.getByLabel("Concurrent conversions", { exact: true }).fill("17");
   await page.getByRole("tab", { name: "Account & security", exact: true }).click();
   await page.getByRole("button", { name: "Save settings", exact: true }).click();

@@ -1,6 +1,6 @@
 import { useDeferredValue, useEffect, useRef, useState, Fragment, memo } from "react";
 import { flushSync } from "react-dom";
-import { ArrowLeft, ChevronLeft, ChevronRight, Clock3, Copy, Info, Disc3, Ellipsis, Grid2X2, List, Play, RefreshCw, Search, ShieldCheck, SlidersHorizontal, Trash2, X } from "lucide-react";
+import { ArrowLeft, ChevronLeft, ChevronRight, Clock3, Copy, Info, Disc3, Fingerprint, Grid2X2, ListMusic, Tags, List, Play, RefreshCw, Search, ShieldCheck, SlidersHorizontal, Trash2, X } from "lucide-react";
 import { api } from "../api";
 import { useI18n, type MessageKey } from "../i18n";
 import type { Source } from "../types";
@@ -13,6 +13,7 @@ import { MaintenanceWorkbench, BuildPreview } from "./maintenance";
 import { ArtifactAudition } from "./artifact-audition";
 import { LibraryComparison } from "./library-comparison";
 import { InlineDetails } from "./inline-details";
+import { LibraryTools, type LibraryTool } from "./library-tools";
 import { PageHeading } from "./page-heading";
 import { SavedLibraryViews } from "./saved-library-views";
 import { LyricsMaintenance, LyricsPicker, LyricsSearchButton, LyricsTrack, lyricsMatchStates, type LyricsMatchState } from "./lyrics";
@@ -133,10 +134,12 @@ export function Library({ notify }: { notify: Notice }) {
   const [auditionID, setAuditionID] = useState<number>();
   const [auditionEditing, setAuditionEditing] = useState(false);
   const [coverID, setCoverID] = useState<number>();
+  const [coverTrigger, setCoverTrigger] = useState("");
+  const [tool, setTool] = useState<{ kind: LibraryTool; trigger: string; sources?: Source[] }>();
   const standalone = new URLSearchParams(location.search).has("lyrics_track");
   const [lyricsID, setLyricsID] = useState<number | undefined>(lyricsPageTrack);
   const [lyricsOrder, setLyricsOrder] = useState<number[]>([]);
-  const [lyricsBusy, setLyricsBusy] = useState(false);
+  const [editorBusy, setEditorBusy] = useState(false);
   const [optionsOpen, setOptionsOpen] = useState(false);
   const [sort, setSort] = useState(() => new URLSearchParams(location.search).get("sort") === "attention" ? "attention" : "name");
   const [selected, setSelected] = useState<Set<number>>(new Set());
@@ -160,7 +163,7 @@ export function Library({ notify }: { notify: Notice }) {
   if (scope.album !== undefined) scopeParams.set("album", scope.album);
   const request = new URLSearchParams(filters);
   request.set("offset", String(offset));
-  const anchor = lyricsID ?? detailID ?? auditionID;
+  const anchor = lyricsID ?? detailID ?? auditionID ?? coverID;
   if (anchor) request.set("anchor", String(anchor));
   const { data, error, retry, pending } = useResource<LibraryPage>(`/library/browse?${request}`, true, true);
   const busy = working || pending || selectionPending;
@@ -184,7 +187,7 @@ export function Library({ notify }: { notify: Notice }) {
     return () => controller.abort();
   }, [selectedKey, data?.revision]);
   useEffect(() => {
-    const back = () => { reviewRequest.current++; stepRequest.current++; standaloneOrderLoaded.current = false; navigation.current++; transition.current?.skipTransition(); setScope(readScope()); const params = new URLSearchParams(location.search); setFilter(params.get("status") || "all"); setLyricsFilter((params.get("lyrics") || "all") as LyricsMatchState | "all"); setScriptFilter(readScriptFilter()); setSort(params.get("sort") === "attention" ? "attention" : "name"); setQuery(params.get("q") || ""); setOffset(0); setDetailID(undefined); setAuditionID(undefined); setLyricsID(lyricsPageTrack()); setOptionsOpen(false); setLyricsOrder([]); };
+    const back = () => { reviewRequest.current++; stepRequest.current++; standaloneOrderLoaded.current = false; navigation.current++; transition.current?.skipTransition(); setScope(readScope()); const params = new URLSearchParams(location.search); setFilter(params.get("status") || "all"); setLyricsFilter((params.get("lyrics") || "all") as LyricsMatchState | "all"); setScriptFilter(readScriptFilter()); setSort(params.get("sort") === "attention" ? "attention" : "name"); setQuery(params.get("q") || ""); setOffset(0); setDetailID(undefined); setAuditionID(undefined); setLyricsID(lyricsPageTrack()); setOptionsOpen(false); setLyricsOrder([]); setCoverID(undefined); setTool(undefined); };
     window.addEventListener("popstate", back);
     window.addEventListener("route-changed", back);
     return () => { window.removeEventListener("popstate", back); window.removeEventListener("route-changed", back); };
@@ -225,12 +228,13 @@ export function Library({ notify }: { notify: Notice }) {
     catch (err) { notify(err as Error, true); } finally { setBusy(false); }
   }
   function navigate(next: Scope, origin?: HTMLElement) {
-    if (lyricsBusy) return;
+    if (editorBusy) return;
     reviewRequest.current++; stepRequest.current++; setLyricsOrder([]);
-    setDetailID(undefined); setLyricsID(undefined); setAuditionID(undefined);
+    setDetailID(undefined); setLyricsID(undefined); setAuditionID(undefined); setCoverID(undefined); setTool(undefined);
     const params = new URLSearchParams({ view: next.view });
     if (next.artist !== undefined) params.set("artist", next.artist);
     if (next.album !== undefined) params.set("album", next.album);
+    if (query.trim()) params.set("q", query.trim());
     if (filter !== "all") params.set("status", filter);
     if (lyricsFilter !== "all") params.set("lyrics", lyricsFilter);
     if (scriptFilter !== "all") params.set("lyrics_script", scriptFilter);
@@ -256,9 +260,10 @@ export function Library({ notify }: { notify: Notice }) {
     for (const [key, value] of [["status", filter], ["lyrics", lyricsFilter], ["lyrics_script", scriptFilter], ["sort", sort]]) {
       if (value === "all" || key === "sort" && value === "name") params.delete(key); else params.set(key, value);
     }
-    const query = params.toString();
-    history.replaceState(null, "", `/library${query ? `?${query}` : ""}`);
-  }, [filter, lyricsFilter, scriptFilter, sort]);
+    if (query.trim()) params.set("q", query.trim()); else params.delete("q");
+    const search = params.toString();
+    history.replaceState(null, "", `/library${search ? `?${search}` : ""}${location.hash}`);
+  }, [filter, lyricsFilter, scriptFilter, sort, query]);
   function toggle(ids: number[], checked: boolean) {
     setSelected(old => { const next = new Set(old); ids.forEach(id => checked ? next.add(id) : next.delete(id)); return next; });
   }
@@ -302,24 +307,36 @@ export function Library({ notify }: { notify: Notice }) {
     return `/library?${params}`;
   }
   function clearDetails() {
-    if (lyricsBusy) return;
+    if (editorBusy) return;
     reviewRequest.current++; stepRequest.current++;
-    if (standalone) { location.assign(pickerHref()); return; }
-    setOffset(safeOffset); setDetailID(undefined); setLyricsID(undefined); setAuditionID(undefined);
+    if (standalone) { history.pushState(null, "", pickerHref()); window.dispatchEvent(new Event("route-changed")); return; }
+    setOffset(safeOffset); setDetailID(undefined); setLyricsID(undefined); setAuditionID(undefined); setCoverID(undefined); setTool(undefined);
   }
   function openDetails(id: number) {
-    if (lyricsBusy) return;
+    if (editorBusy) return;
     reviewRequest.current++; stepRequest.current++;
-    setLyricsID(undefined); setAuditionID(undefined); setDetailID(current => current === id ? undefined : id);
+    setCoverID(undefined); setTool(undefined); setLyricsID(undefined); setAuditionID(undefined); setDetailID(current => current === id ? undefined : id);
   }
   function openAudition(id: number, editLyrics = false) {
-    if (lyricsBusy) return;
+    if (editorBusy) return;
     reviewRequest.current++; stepRequest.current++;
-    setDetailID(undefined); setLyricsID(undefined);
+    setCoverID(undefined); setTool(undefined); setDetailID(undefined); setLyricsID(undefined);
     setAuditionID(current => current === id && auditionEditing === editLyrics ? undefined : id);
     setAuditionEditing(editLyrics);
   }
-  function changePage(next: number) { if (!lyricsBusy) { clearDetails(); setOffset(next); } }
+  function openTool(kind: LibraryTool, trigger: string, sources?: Source[]) {
+    if (editorBusy) return;
+    clearDetails(); setTool({ kind, trigger, sources });
+  }
+  function openArtwork(id: number, trigger: string) {
+    if (editorBusy) return;
+    clearDetails(); setCoverID(id); setCoverTrigger(trigger);
+  }
+  function reviewTracks(ids: number[]) {
+    if (editorBusy) return;
+    clearDetails(); setSelected(new Set(ids)); navigate({ ...scope, view: "tracks" }); setFilter("all"); setLyricsFilter("all"); setScriptFilter("all"); setQuery(""); setOffset(0);
+  }
+  function changePage(next: number) { if (!editorBusy) { clearDetails(); setOffset(next); } }
   function adjacent(id: number, direction: number, lyrics = false) {
     if (pending) return undefined;
     if (!lyrics) return direction < 0 ? data?.previous : data?.next;
@@ -327,14 +344,14 @@ export function Library({ notify }: { notify: Notice }) {
     return index < 0 ? undefined : lyricsOrder[index + direction];
   }
   function openLyrics(id: number) {
-    if (lyricsBusy) return;
-    setDetailID(undefined); setAuditionID(undefined);
+    if (editorBusy) return;
+    setCoverID(undefined); setTool(undefined); setDetailID(undefined); setAuditionID(undefined);
     stepRequest.current++; reviewRequest.current++;
     setLyricsOrder([]); if (lyricsID !== id) void loadLyricsOrder();
     setLyricsID(current => current === id ? undefined : id);
   }
   async function step(id: number | undefined, lyrics = false) {
-    if (!id || lyricsBusy) return;
+    if (!id || editorBusy) return;
     const version = ++stepRequest.current;
     try {
       let next: Source | undefined;
@@ -355,9 +372,9 @@ export function Library({ notify }: { notify: Notice }) {
   if (standalone) {
     const source = lyricsID ? pending ? known.get(lyricsID) : data.active?.id === lyricsID ? data.active : undefined : undefined;
     return <div className="lyrics-page">
-      <PageHeading><div><h1>{t("lyrics.choose")}</h1><p>{source && `${source.title} · ${source.artist}${source.duration ? ` · ${t("lyrics.targetDuration", { seconds: source.duration })}` : ""}`}</p></div><Button asChild variant="ghost" size="sm"><a href={lyricsBusy ? undefined : pickerHref()} aria-disabled={lyricsBusy || undefined}><ArrowLeft size={16} />{t("lyrics.returnToLibrary")}</a></Button></PageHeading>
+      <PageHeading><div><h1>{t("lyrics.choose")}</h1><p>{source && `${source.title} · ${source.artist}${source.duration ? ` · ${t("lyrics.targetDuration", { seconds: source.duration })}` : ""}`}</p></div><Button asChild variant="ghost" size="sm"><a href={editorBusy ? undefined : pickerHref()} aria-disabled={editorBusy || undefined}><ArrowLeft size={16} />{t("lyrics.returnToLibrary")}</a></Button></PageHeading>
       <ResourceWarning error={error} retry={retry} />
-      {source?.output_present && source.output ? <LyricsPicker standalone key={`${source.id}:${source.output}`} onBusyChange={setLyricsBusy} source={source} notify={notify} close={clearDetails} saved={retry} previous={adjacent(source.id, -1, true) ? () => step(adjacent(source.id, -1, true), true) : undefined} next={adjacent(source.id, 1, true) ? () => step(adjacent(source.id, 1, true), true) : undefined} /> : <Empty title={t("lyrics.trackUnavailable")}><Button asChild variant="outline"><a href={pickerHref()}>{t("lyrics.returnToLibrary")}</a></Button></Empty>}
+      {source?.output_present && source.output ? <LyricsPicker standalone key={`${source.id}:${source.output}`} onBusyChange={setEditorBusy} source={source} notify={notify} close={clearDetails} saved={retry} previous={adjacent(source.id, -1, true) ? () => step(adjacent(source.id, -1, true), true) : undefined} next={adjacent(source.id, 1, true) ? () => step(adjacent(source.id, 1, true), true) : undefined} /> : <Empty title={t("lyrics.trackUnavailable")}><Button asChild variant="outline"><a href={pickerHref()}>{t("lyrics.returnToLibrary")}</a></Button></Empty>}
     </div>;
   }
   return <>
@@ -376,7 +393,7 @@ export function Library({ notify }: { notify: Notice }) {
       {isAlbum && <><ChevronRight size={14} /><span aria-current="page">{album?.album || scope.album}</span></>}
     </nav>}
     {isAlbum && <section className="album-summary">
-      <Cover tracks={data.scope.covers} name={album?.album || t("library.unknownAlbum")} transition />
+      <button id="album-artwork-trigger" className="album-cover-edit" disabled={editorBusy || !data.context_source} onClick={() => data.context_source && openArtwork(data.context_source.id, "album-artwork-trigger")} aria-label={t("coverEdit.title")}><Cover tracks={data.scope.covers} name={album?.album || t("library.unknownAlbum")} transition /><span>{t("coverEdit.title")}</span></button>
       <div><Button variant="ghost" size="sm" onClick={() => navigate({ view: scope.view, artist: scope.artist })}><ArrowLeft size={14} />{t("library.backToAlbums")}</Button>
         <h2>{album?.album || t("library.unknownAlbum")}</h2><p>{album?.artist || t("library.unknownArtist")}</p>
         <div className="album-facts"><span>{t("library.trackCount", { count: data.scope.count })}</span>{discs.length > 1 && <span>{t("library.discCount", { count: discs.length })}</span>}{albumDuration > 0 && <span><Clock3 size={14} />{duration(albumDuration)}</span>}
@@ -393,8 +410,8 @@ export function Library({ notify }: { notify: Notice }) {
       </div>}
 
       </div>
-      <SavedLibraryViews disabled={lyricsBusy || busy} search={new URLSearchParams({ view: scope.view, ...(scope.artist !== undefined ? { artist: scope.artist } : {}), ...(scope.album !== undefined ? { album: scope.album } : {}), q: query, status: filter, lyrics: lyricsFilter, lyrics_script: scriptFilter, sort }).toString()} apply={search => {
-        if (lyricsBusy || busy) return;
+      <SavedLibraryViews disabled={editorBusy || busy} search={new URLSearchParams({ view: scope.view, ...(scope.artist !== undefined ? { artist: scope.artist } : {}), ...(scope.album !== undefined ? { album: scope.album } : {}), q: query, status: filter, lyrics: lyricsFilter, lyrics_script: scriptFilter, sort }).toString()} apply={search => {
+        if (editorBusy || busy) return;
         setSelected(new Set()); setCoverID(undefined);
         history.pushState(null, "", `/library?${search}`);
         window.dispatchEvent(new Event("route-changed"));
@@ -412,35 +429,41 @@ export function Library({ notify }: { notify: Notice }) {
           <button aria-label={t("library.grid")} title={t("library.grid")} aria-pressed={layout === "grid"} onClick={event => { setLayout("grid"); savePreference("layout", "grid"); setOptionsOpen(false); event.currentTarget.closest("details")?.querySelector("summary")?.focus(); }}><Grid2X2 size={17} /></button>
           <button aria-label={t("library.list")} title={t("library.list")} aria-pressed={layout === "list"} onClick={event => { setLayout("list"); savePreference("layout", "list"); setOptionsOpen(false); event.currentTarget.closest("details")?.querySelector("summary")?.focus(); }}><List size={17} /></button>
         </div>}
-            <details className="page-tools"><summary aria-label={t("library.more")} title={t("library.more")}><Ellipsis size={19} /></summary><div className="tools-popover"><Button variant="ghost" disabled={busy} onClick={() => void action("/library/scan", { verify: true }, "notice.verify")}><ShieldCheck size={16} />{t("library.verify")}</Button><Button variant="ghost" disabled={busy} onClick={() => void action("/library/rebuild", { all: true }, "notice.rebuild")}><RefreshCw size={14} />{t("library.startRebuild")}</Button></div></details>
-            <select disabled={lyricsBusy} aria-label={t("library.filter")} value={filter} onChange={event => { clearDetails(); setFilter(event.target.value); setOffset(0); setOptionsOpen(false); }}><option value="all">{t("library.allStatuses")}</option>{priority.slice().reverse().map(state => <option value={state} key={state}>{statusLabel(state)}</option>)}</select>
-            <select disabled={lyricsBusy} aria-label={t("lyrics.filter")} value={lyricsFilter} onChange={event => { clearDetails(); setLyricsFilter(event.target.value as LyricsMatchState | "all"); setOffset(0); setOptionsOpen(false); }}><option value="all">{t("lyrics.allStates")}</option>{lyricsMatchStates.map(state => <option value={state} key={state}>{t(`lyrics.state.${state}`)}</option>)}</select>
-            <select disabled={lyricsBusy} aria-label={t("lyrics.scriptFilter")} value={scriptFilter} onChange={event => { clearDetails(); setScriptFilter(event.target.value as ScriptFilter); setOffset(0); setOptionsOpen(false); }}>{scriptFilters.map(script => <option value={script} key={script}>{t(`lyrics.script.${script}`)}</option>)}</select>
-            {!isAlbum && <select disabled={lyricsBusy} aria-label={t("library.sort")} value={sort} onChange={event => { clearDetails(); setSort(event.target.value); setOffset(0); setOptionsOpen(false); }}><option value="name">{t("library.sortName")}</option><option value="attention">{t("library.sortAttention")}</option></select>}
+            <select disabled={editorBusy} aria-label={t("library.filter")} value={filter} onChange={event => { clearDetails(); setFilter(event.target.value); setOffset(0); setOptionsOpen(false); }}><option value="all">{t("library.allStatuses")}</option>{priority.slice().reverse().map(state => <option value={state} key={state}>{statusLabel(state)}</option>)}</select>
+            <select disabled={editorBusy} aria-label={t("lyrics.filter")} value={lyricsFilter} onChange={event => { clearDetails(); setLyricsFilter(event.target.value as LyricsMatchState | "all"); setOffset(0); setOptionsOpen(false); }}><option value="all">{t("lyrics.allStates")}</option>{lyricsMatchStates.map(state => <option value={state} key={state}>{t(`lyrics.state.${state}`)}</option>)}</select>
+            <select disabled={editorBusy} aria-label={t("lyrics.scriptFilter")} value={scriptFilter} onChange={event => { clearDetails(); setScriptFilter(event.target.value as ScriptFilter); setOffset(0); setOptionsOpen(false); }}>{scriptFilters.map(script => <option value={script} key={script}>{t(`lyrics.script.${script}`)}</option>)}</select>
+            {!isAlbum && <select disabled={editorBusy} aria-label={t("library.sort")} value={sort} onChange={event => { clearDetails(); setSort(event.target.value); setOffset(0); setOptionsOpen(false); }}><option value="name">{t("library.sortName")}</option><option value="attention">{t("library.sortAttention")}</option></select>}
 
           </div>
         </details>
         </div>
       </div>
-        <div className="search"><Search size={17} aria-hidden="true" /><input type="search" disabled={lyricsBusy} aria-label={t("library.search")} placeholder={t("library.searchPlaceholder")} value={query} onChange={event => { clearDetails(); setQuery(event.target.value); setOffset(0); }} />{query && <button disabled={lyricsBusy} aria-label={t("library.clearSearch")} title={t("library.clearSearch")} onClick={() => { clearDetails(); setQuery(""); setOffset(0); }}><X size={16} /></button>}</div>
+        <div className="search"><Search size={17} aria-hidden="true" /><input type="search" disabled={editorBusy} aria-label={t("library.search")} placeholder={t("library.searchPlaceholder")} value={query} onChange={event => { clearDetails(); setQuery(event.target.value); setOffset(0); }} />{query && <button disabled={editorBusy} aria-label={t("library.clearSearch")} title={t("library.clearSearch")} onClick={() => { clearDetails(); setQuery(""); setOffset(0); }}><X size={16} /></button>}</div>
       {(filter !== "all" || lyricsFilter !== "all" || scriptFilter !== "all") && <div className="active-filters" role="group" aria-label={t("library.activeFilters")}>
-        {filter !== "all" && <button disabled={lyricsBusy} aria-label={t("library.removeFilter", { name: statusLabel(filter) })} onClick={() => { clearDetails(); setFilter("all"); setOffset(0); }}><span>{t("library.filter")} · {statusLabel(filter)}</span><X size={12} /></button>}
-        {lyricsFilter !== "all" && <button disabled={lyricsBusy} aria-label={t("library.removeFilter", { name: t(`lyrics.state.${lyricsFilter}`) })} onClick={() => { clearDetails(); setLyricsFilter("all"); setOffset(0); }}><span>{t("lyrics.filter")} · {t(`lyrics.state.${lyricsFilter}`)}</span><X size={12} /></button>}
-        {scriptFilter !== "all" && <button disabled={lyricsBusy} aria-label={t("library.removeFilter", { name: t(`lyrics.script.${scriptFilter}`) })} onClick={() => { clearDetails(); setScriptFilter("all"); setOffset(0); }}><span>{t("lyrics.scriptFilter")} · {t(`lyrics.script.${scriptFilter}`)}</span><X size={12} /></button>}
-        <button disabled={lyricsBusy} className="clear-filters" onClick={() => { clearDetails(); setFilter("all"); setLyricsFilter("all"); setScriptFilter("all"); setOffset(0); }}>{t("library.clearFilters")}</button>
+        {filter !== "all" && <button disabled={editorBusy} aria-label={t("library.removeFilter", { name: statusLabel(filter) })} onClick={() => { clearDetails(); setFilter("all"); setOffset(0); }}><span>{t("library.filter")} · {statusLabel(filter)}</span><X size={12} /></button>}
+        {lyricsFilter !== "all" && <button disabled={editorBusy} aria-label={t("library.removeFilter", { name: t(`lyrics.state.${lyricsFilter}`) })} onClick={() => { clearDetails(); setLyricsFilter("all"); setOffset(0); }}><span>{t("lyrics.filter")} · {t(`lyrics.state.${lyricsFilter}`)}</span><X size={12} /></button>}
+        {scriptFilter !== "all" && <button disabled={editorBusy} aria-label={t("library.removeFilter", { name: t(`lyrics.script.${scriptFilter}`) })} onClick={() => { clearDetails(); setScriptFilter("all"); setOffset(0); }}><span>{t("lyrics.scriptFilter")} · {t(`lyrics.script.${scriptFilter}`)}</span><X size={12} /></button>}
+        <button disabled={editorBusy} className="clear-filters" onClick={() => { clearDetails(); setFilter("all"); setLyricsFilter("all"); setScriptFilter("all"); setOffset(0); }}>{t("library.clearFilters")}</button>
       </div>}
 
       </div>
+    <div className="library-tool-actions" role="group" aria-label={t("library.tools")}>
+      <Button id="playlist-tool-trigger" size="sm" variant="ghost" disabled={editorBusy} onClick={() => openTool("playlist", "playlist-tool-trigger")}><ListMusic size={15} />{t("playlist.title")}</Button>
+      <Button id="fingerprints-tool-trigger" size="sm" variant="ghost" disabled={editorBusy} onClick={() => openTool("fingerprints", "fingerprints-tool-trigger")}><Fingerprint size={15} />{t("fingerprint.open")}</Button>
+      <Button size="sm" variant="ghost" disabled={busy || editorBusy} onClick={() => void action("/library/scan", { verify: true }, "notice.verify")}><ShieldCheck size={15} />{t("library.verify")}</Button>
+      <BuildPreview selection={{ all: true }} notify={notify} />
+    </div>
     <div className="library-maintenance">
-      <MaintenanceWorkbench comparisonAvailable={!scope.artist && !isAlbum} scopeQuery={scopeParams.toString()} attention={data.attention} selected={chosen} notify={notify} select={ids => { clearDetails(); setSelected(new Set(ids)); navigate({ ...scope, view: "tracks" }); setFilter("all"); setLyricsFilter("all"); setScriptFilter("all"); setQuery(""); setOffset(0); }} />
+      <MaintenanceWorkbench comparisonAvailable={!scope.artist && !isAlbum} scopeQuery={scopeParams.toString()} attention={data.attention} selected={chosen} notify={notify} select={reviewTracks} />
       {!scope.artist && !isAlbum && <LibraryComparison counts={data.counts} notify={notify} />}
       <LyricsMaintenance inventory={data.lyrics} scopeQuery={scopeParams.toString()} scope={isAlbum ? "album" : scope.artist ? "artist" : undefined} notify={notify} />
     </div>
-      {coverID && known.has(coverID) && <ArtworkEditor source={known.get(coverID)!} saved={retry} close={() => setCoverID(undefined)} />}
+      {coverID && known.has(coverID) && <ArtworkEditor key={coverID} source={known.get(coverID)!} saved={retry} close={() => setCoverID(undefined)} returnFocusID={coverTrigger} onBusyChange={setEditorBusy} />}
       <div className="library-selection-toolbar">
       {count > 0 && <div className="library-selection"><label className="check-field"><input type="checkbox" aria-label={t("library.selectPage")} checked={pageIDs.length > 0 && pageIDs.every(id => selected.has(id))} ref={node => { if (node) node.indeterminate = pageIDs.some(id => selected.has(id)) && !pageIDs.every(id => selected.has(id)); }} disabled={busy} onChange={event => toggle(pageIDs, event.target.checked)} /><span>{t("library.selectPage")}</span></label>{data.matched > pageIDs.length && <Button type="button" size="sm" variant="ghost" disabled={busy} onClick={() => void selectMatching()}>{t("library.selectMatching", { count: data.matched })}</Button>}<span>{t(showingTracks ? "library.trackCount" : showingArtists ? "library.artistCount" : "library.albumCount", { count })}</span></div>}
-      {selected.size > 0 && <div className="selection-bar" aria-busy={selectionPending}><span>{t("library.selected", { count: selected.size })}</span><BuildPreview selection={{ ids: [...selected] }} notify={notify} /><Button size="sm" variant="outline" disabled={busy} onClick={() => void action("/library/rebuild", { ids: [...selected] }, "notice.selectedBuild")}><RefreshCw size={14} />{t("library.buildSelected")}</Button><LyricsSearchButton ids={chosen.filter(source => source.output && source.output_present).map(source => source.id)} label="lyrics.searchSelected" notify={notify} disabled={busy} /><LyricsSearchButton ids={chosen.filter(source => source.output && source.output_present).map(source => source.id)} simplifyTraditional label="lyrics.simplifySelected" notify={notify} disabled={busy} />{chosen.some(source => source.lyrics_script === "traditional" && source.output_present) && <LyricsSearchButton ids={chosen.filter(source => source.lyrics_script === "traditional" && source.output_present).map(source => source.id)} replaceTraditional label="lyrics.replaceSelected" notify={notify} disabled={busy} />}<BatchRepairButton sources={chosen} notify={notify} disabled={busy} refresh={() => { setSelected(new Set()); retry(); }} /><Button size="sm" variant="destructive" disabled={busy || selectedExpired === 0} onClick={() => deleteSelected(false)}><Trash2 size={14} />{t("library.deleteSelected")}</Button>{selectedRemovable.length > 0 && <Button size="sm" variant="outline" disabled={busy} onClick={() => void forget(selectedRemovable.map(source => source.id))}><Trash2 size={14} />{t("library.forgetSelected", { count: selectedRemovable.length })}</Button>}<Button size="sm" variant="ghost" onClick={() => setSelected(new Set())}><X size={14} />{t("library.clearSelection")}</Button></div>}
+      {selected.size > 0 && <div className="selection-bar" aria-busy={selectionPending}><span>{t("library.selected", { count: selected.size })}</span><Button id="tags-selected-trigger" size="sm" variant="outline" disabled={busy || editorBusy || !chosen.some(source => source.output_present)} onClick={() => openTool("tags", "tags-selected-trigger")}><Tags size={14} />{t("tags.open")}</Button><Button id="playlist-selected-trigger" size="sm" variant="outline" disabled={busy || editorBusy} onClick={() => openTool("playlist", "playlist-selected-trigger")}><ListMusic size={14} />{t("playlist.create")}</Button><BuildPreview selection={{ ids: [...selected] }} notify={notify} /><Button size="sm" variant="outline" disabled={busy} onClick={() => void action("/library/rebuild", { ids: [...selected] }, "notice.selectedBuild")}><RefreshCw size={14} />{t("library.buildSelected")}</Button><LyricsSearchButton ids={chosen.filter(source => source.output && source.output_present).map(source => source.id)} label="lyrics.searchSelected" notify={notify} disabled={busy} /><LyricsSearchButton ids={chosen.filter(source => source.output && source.output_present).map(source => source.id)} simplifyTraditional label="lyrics.simplifySelected" notify={notify} disabled={busy} />{chosen.some(source => source.lyrics_script === "traditional" && source.output_present) && <LyricsSearchButton ids={chosen.filter(source => source.lyrics_script === "traditional" && source.output_present).map(source => source.id)} replaceTraditional label="lyrics.replaceSelected" notify={notify} disabled={busy} />}<BatchRepairButton sources={chosen} notify={notify} disabled={busy} refresh={() => { setSelected(new Set()); retry(); }} /><Button size="sm" variant="destructive" disabled={busy || selectedExpired === 0} onClick={() => deleteSelected(false)}><Trash2 size={14} />{t("library.deleteSelected")}</Button>{selectedRemovable.length > 0 && <Button size="sm" variant="outline" disabled={busy} onClick={() => void forget(selectedRemovable.map(source => source.id))}><Trash2 size={14} />{t("library.forgetSelected", { count: selectedRemovable.length })}</Button>}<Button size="sm" variant="ghost" onClick={() => setSelected(new Set())}><X size={14} />{t("library.clearSelection")}</Button></div>}
       </div>
+      {tool && <LibraryTools key={tool.kind} tool={tool.kind} scopeQuery={scopeParams.toString()} selected={tool.sources ?? chosen} select={reviewTracks} notify={notify} close={() => setTool(undefined)} returnFocusID={tool.trigger} onBusyChange={setEditorBusy} />}
       {count > 0 ? <>
         {!showingTracks ? <div className={`library-groups library-${layout}`} data-density={density}>{layout === "list" && <div className="library-list-header" aria-hidden="true"><span>#</span><span>{t("library.coverColumn")}</span><span>{t(showingArtists ? "library.artists" : "library.albumArtistColumn")}</span><span>{t("library.tracksDurationColumn")}</span><span>{t("library.sourceAudio")}</span><span>{t("library.outputColumn")}</span><span>{t("lyrics.title")}</span><span>{t("library.statusColumn")}</span></div>}{visibleGroups.map(group => {
           const ready = group.ready;
@@ -459,24 +482,24 @@ export function Library({ notify }: { notify: Notice }) {
               <Badge status={state} compact={layout === "grid"} />
             </div>
           </article>;
-        })}</div> : <div className={`table-scroll ${isAlbum ? "album-tracks" : ""}`}>{isAlbum && <div className="album-tracks-heading"><h3>{t("library.albumTracks")}</h3>{data.context_source && <Button size="sm" variant="ghost" onClick={() => setCoverID(data.context_source!.id)}>{t("coverEdit.title")}</Button>}<span>{t("library.trackCount", { count: data.matched })}</span></div>}<table className={`track-table ${isAlbum ? "album-track-table" : ""}`}>{isAlbum && <colgroup><col className="album-select-column" /><col /><col className="album-status-column" /><col className="album-lyrics-column" /></colgroup>}<thead><tr><th aria-label={t("library.selectedTracks")} /><th className="track-title-column">{t("library.trackFile")}</th>{!isAlbum && <><th className="track-duration-column">{t("library.duration")}</th><th className="track-audio-column">{t("library.audioColumn")}</th><th className="track-size-column">{t("library.sizesColumn")}</th></>}<th className="track-status-column">{t("library.artifact")}</th><th className="track-lyrics-column">{t("lyrics.title")}</th></tr></thead><tbody>{shown.map((source, index) => {
+        })}</div> : <div className={`table-scroll ${isAlbum ? "album-tracks" : ""}`}>{isAlbum && <div className="album-tracks-heading"><h3>{t("library.albumTracks")}</h3><span>{t("library.trackCount", { count: data.matched })}</span></div>}<table className={`track-table ${isAlbum ? "album-track-table" : ""}`}>{isAlbum && <colgroup><col className="album-select-column" /><col /><col className="album-status-column" /><col className="album-lyrics-column" /></colgroup>}<thead><tr><th aria-label={t("library.selectedTracks")} /><th className="track-title-column">{t("library.trackFile")}</th>{!isAlbum && <><th className="track-duration-column">{t("library.duration")}</th><th className="track-audio-column">{t("library.audioColumn")}</th><th className="track-size-column">{t("library.sizesColumn")}</th></>}<th className="track-status-column">{t("library.artifact")}</th><th className="track-lyrics-column">{t("lyrics.title")}</th></tr></thead><tbody>{shown.map((source, index) => {
           const disc = source.disc || 1;
           const heading = isAlbum && discs.length > 1 && (index === 0 || disc !== (shown[index - 1].disc || 1));
           return <Fragment key={source.id}>{heading && <tr className="disc-heading"><th colSpan={trackColumns} scope="rowgroup"><Disc3 size={15} />{t("library.disc", { number: disc })}</th></tr>}<tr className={`track-row ${selected.has(source.id) ? "selected" : ""}`} data-expanded={detailID === source.id || lyricsID === source.id || auditionID === source.id}>
             <td><input type="checkbox" aria-label={t("library.selectTrack", { title: source.title || source.path })} checked={selected.has(source.id)} disabled={busy} onChange={event => toggle([source.id], event.target.checked)} /></td>
-            <td className="track-title"><div className="track-cell"><div><div className="track-title-line"><button id={`track-title-${source.id}`} className="track-open" title={source.title || source.path.split("/").pop() || source.path} aria-expanded={detailID === source.id} aria-controls={detailID === source.id ? `track-details-${source.id}` : undefined} disabled={lyricsBusy} aria-label={t("library.openDetails", { title: source.title || source.path })} onClick={() => openDetails(source.id)}><strong dir="auto">{source.track ? <span className="track-index">{String(source.track).padStart(2, "0")}. </span> : null}<span className="track-name">{source.title || source.path.split("/").pop()}</span></strong><ChevronRight className="track-expand-icon" size={14} aria-hidden="true" /></button>{source.output_present && source.output && <Button id={`audition-trigger-${source.id}`} className="track-audition-trigger" size="icon" variant="ghost" aria-label={t("audition.open", { title: source.title || source.output.split("/").pop() || "" })} title={t("audition.title")} aria-expanded={auditionID === source.id && !auditionEditing} aria-controls={auditionID === source.id && !auditionEditing ? `audition-${source.id}` : undefined} disabled={lyricsBusy} onClick={() => openAudition(source.id)}><Play size={18} /></Button>}{isAlbum && <span className="track-duration">{duration(source.duration || 0)}</span>}</div>{isAlbum ? <>{source.artist && source.artist !== album?.artist && <small className="track-byline" dir="auto" title={source.artist}>{source.artist}</small>}<TrackFacts source={source} compact /></> : <small className="track-byline" dir="auto" title={`${source.artist || t("library.unknownArtist")} · ${source.album || t("library.unknownAlbum")}`}>{source.artist || t("library.unknownArtist")} · {source.album || t("library.unknownAlbum")}</small>}{!source.present && <small className="source-missing">{t("library.sourceDeleted")}</small>}</div></div></td>
+            <td className="track-title"><div className="track-cell"><div><div className="track-title-line"><button id={`track-title-${source.id}`} className="track-open" title={source.title || source.path.split("/").pop() || source.path} aria-expanded={detailID === source.id} aria-controls={detailID === source.id ? `track-details-${source.id}` : undefined} disabled={editorBusy} aria-label={t("library.openDetails", { title: source.title || source.path })} onClick={() => openDetails(source.id)}><strong dir="auto">{source.track ? <span className="track-index">{String(source.track).padStart(2, "0")}. </span> : null}<span className="track-name">{source.title || source.path.split("/").pop()}</span></strong><ChevronRight className="track-expand-icon" size={14} aria-hidden="true" /></button>{source.output_present && source.output && <Button id={`audition-trigger-${source.id}`} className="track-audition-trigger" size="icon" variant="ghost" aria-label={t("audition.open", { title: source.title || source.output.split("/").pop() || "" })} title={t("audition.title")} aria-expanded={auditionID === source.id && !auditionEditing} aria-controls={auditionID === source.id && !auditionEditing ? `audition-${source.id}` : undefined} disabled={editorBusy} onClick={() => openAudition(source.id)}><Play size={18} /></Button>}{isAlbum && <span className="track-duration">{duration(source.duration || 0)}</span>}</div>{isAlbum ? <>{source.artist && source.artist !== album?.artist && <small className="track-byline" dir="auto" title={source.artist}>{source.artist}</small>}<TrackFacts source={source} compact /></> : <small className="track-byline" dir="auto" title={`${source.artist || t("library.unknownArtist")} · ${source.album || t("library.unknownAlbum")}`}>{source.artist || t("library.unknownArtist")} · {source.album || t("library.unknownAlbum")}</small>}{!source.present && <small className="source-missing">{t("library.sourceDeleted")}</small>}</div></div></td>
             {!isAlbum && <td className="track-facts-cell" colSpan={3}><TrackFacts source={source} /></td>}
-            <td className="track-output"><Badge status={source.status} />{source.output_present && source.status !== "ready" && source.status !== "possibly_damaged" && <small>{t("library.stillPlayable")}</small>}<RepairControls source={source} notify={notify} refresh={retry} compact />{!source.present && !source.output && !source.output_present && <Button className="forget-record" size="icon" variant="ghost" aria-label={t("library.forgetRecord")} title={t("library.forgetRecord")} disabled={busy} onClick={() => void forget([source.id])}><Trash2 size={15} /></Button>}{source.error && <Button variant="ghost" size="icon" aria-label={t("library.errorDetails")} title={t("library.errorDetails")} disabled={lyricsBusy} onClick={() => openDetails(source.id)}><Info size={15} /></Button>}</td>
-            <td className="track-lyrics"><LyricsTrack source={source} notify={notify} pickerHref={pickerHref(source.id)} onChoose={() => openLyrics(source.id)} onEdit={() => openAudition(source.id, true)} expanded={lyricsID === source.id} editing={auditionID === source.id && auditionEditing} disabled={lyricsBusy} /></td>
+            <td className="track-output"><Badge status={source.status} />{source.output_present && source.status !== "ready" && source.status !== "possibly_damaged" && <small>{t("library.stillPlayable")}</small>}<RepairControls source={source} notify={notify} refresh={retry} compact />{!source.present && !source.output && !source.output_present && <Button className="forget-record" size="icon" variant="ghost" aria-label={t("library.forgetRecord")} title={t("library.forgetRecord")} disabled={busy} onClick={() => void forget([source.id])}><Trash2 size={15} /></Button>}{source.error && <Button variant="ghost" size="icon" aria-label={t("library.errorDetails")} title={t("library.errorDetails")} disabled={editorBusy} onClick={() => openDetails(source.id)}><Info size={15} /></Button>}</td>
+            <td className="track-lyrics"><LyricsTrack source={source} notify={notify} onChoose={() => openLyrics(source.id)} onEdit={() => openAudition(source.id, true)} expanded={lyricsID === source.id} editing={auditionID === source.id && auditionEditing} disabled={editorBusy} /></td>
           </tr>{(detailID === source.id || lyricsID === source.id || auditionID === source.id) && <tr className="track-expanded-row"><td colSpan={trackColumns}>
-            {detailID === source.id && <InlineDetails className="track-details" id={`track-details-${source.id}`} returnFocusID={`track-title-${source.id}`} title={t("library.fileDetails")} subtitle={source.title || source.path} close={clearDetails} actions={<><Button variant="ghost" size="icon" aria-label={t("library.previousTrack")} title={t("library.previousTrack")} disabled={!adjacent(source.id, -1)} onClick={() => step(adjacent(source.id, -1))}><ChevronLeft size={17} /></Button><Button variant="ghost" size="icon" aria-label={t("library.nextTrack")} title={t("library.nextTrack")} disabled={!adjacent(source.id, 1)} onClick={() => step(adjacent(source.id, 1))}><ChevronRight size={17} /></Button></>}><TrackDetails source={source} notify={notify} /><Button size="sm" variant="outline" onClick={() => setCoverID(source.id)}>{t("coverEdit.title")}</Button></InlineDetails>}
-            {lyricsID === source.id && <LyricsPicker onBusyChange={setLyricsBusy} key={`${source.id}:${source.output}`} source={source} notify={notify} close={clearDetails} saved={retry} previous={adjacent(source.id, -1, true) ? () => step(adjacent(source.id, -1, true), true) : undefined} next={adjacent(source.id, 1, true) ? () => step(adjacent(source.id, 1, true), true) : undefined} />}
-            {auditionID === source.id && source.output_present && source.output && <ArtifactAudition key={`${source.id}:${source.output}:${auditionEditing}`} source={source} close={clearDetails} editLyrics={auditionEditing} />}
+            {detailID === source.id && <InlineDetails className="track-details" id={`track-details-${source.id}`} returnFocusID={`track-title-${source.id}`} title={t("library.fileDetails")} subtitle={source.title || source.path} close={clearDetails} actions={<><Button variant="ghost" size="icon" aria-label={t("library.previousTrack")} title={t("library.previousTrack")} disabled={!adjacent(source.id, -1)} onClick={() => step(adjacent(source.id, -1))}><ChevronLeft size={17} /></Button><Button variant="ghost" size="icon" aria-label={t("library.nextTrack")} title={t("library.nextTrack")} disabled={!adjacent(source.id, 1)} onClick={() => step(adjacent(source.id, 1))}><ChevronRight size={17} /></Button></>}><div className="actions track-detail-actions"><Button size="sm" variant="outline" disabled={editorBusy || !source.output_present} onClick={() => openTool("tags", `track-title-${source.id}`, [source])}><Tags size={14} />{t("tags.open")}</Button><Button size="sm" variant="outline" disabled={editorBusy} onClick={() => openArtwork(source.id, `track-title-${source.id}`)}>{t("coverEdit.title")}</Button></div><TrackDetails source={source} notify={notify} /></InlineDetails>}
+            {lyricsID === source.id && <LyricsPicker onBusyChange={setEditorBusy} key={`${source.id}:${source.output}`} source={source} notify={notify} close={clearDetails} saved={retry} previous={adjacent(source.id, -1, true) ? () => step(adjacent(source.id, -1, true), true) : undefined} next={adjacent(source.id, 1, true) ? () => step(adjacent(source.id, 1, true), true) : undefined} />}
+            {auditionID === source.id && source.output_present && source.output && <ArtifactAudition key={`${source.id}:${source.output}:${auditionEditing}`} source={source} close={clearDetails} editLyrics={auditionEditing} onBusyChange={setEditorBusy} />}
           </td></tr>}</Fragment>;
         })}</tbody></table></div>}
         <div className="pagination"><span>{t(showingTracks ? "library.pagination" : "library.groupPagination", { start: safeOffset + 1, end: Math.min(safeOffset + 50, count), total: count })}</span>
-          <Button variant="ghost" size="icon" aria-label={t("library.previous")} title={t("library.previous")} disabled={lyricsBusy || pending || safeOffset === 0} onClick={() => changePage(Math.max(0, safeOffset - 50))}><ChevronLeft size={16} /></Button>
-          <Button variant="ghost" size="icon" aria-label={t("library.next")} title={t("library.next")} disabled={lyricsBusy || pending || safeOffset + 50 >= count} onClick={() => changePage(safeOffset + 50)}><ChevronRight size={16} /></Button>
+          <Button variant="ghost" size="icon" aria-label={t("library.previous")} title={t("library.previous")} disabled={editorBusy || pending || safeOffset === 0} onClick={() => changePage(Math.max(0, safeOffset - 50))}><ChevronLeft size={16} /></Button>
+          <Button variant="ghost" size="icon" aria-label={t("library.next")} title={t("library.next")} disabled={editorBusy || pending || safeOffset + 50 >= count} onClick={() => changePage(safeOffset + 50)}><ChevronRight size={16} /></Button>
         </div>
       </> : <Empty title={data.counts.tracks ? t("library.noMatch") : t("library.empty")}>{data.counts.tracks ? <Button variant="outline" onClick={() => { clearDetails(); setFilter("all"); setLyricsFilter("all"); setScriptFilter("all"); setQuery(""); setOffset(0); }}>{t("library.clearFilters")}</Button> : <Button asChild variant="outline"><a href="/settings?section=library">{t("overview.openSettings")}</a></Button>}</Empty>}
     </section>

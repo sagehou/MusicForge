@@ -5,8 +5,8 @@ import { useI18n } from "../i18n";
 import type { Encoding, LoudnessReport, Source } from "../types";
 import { Button } from "./ui/button";
 import { Loading, ResourceWarning, useResource, type Notice } from "./resource";
-import { LibraryTools } from "./library-tools";
 import { MaintenanceReview, QualityReview } from "./maintenance-review";
+import { InfoHint } from "./info-hint";
 
 export function storageSize(bytes: number, locale: string) {
   const unit = Math.min(4, Math.floor(Math.log2(Math.max(bytes, 1)) / 10));
@@ -42,7 +42,7 @@ export function BuildPreview({ selection, notify, currentScope = false }: { sele
       <p>{t("buildPlan.scope", { count: number(plan.tracks), skipped: number(plan.skipped) })}</p>
       <dl className="comparison-metrics">{([ ["input", plan.input_bytes], ["output", plan.estimated_output_bytes], ["current", plan.current_output_bytes], ["staging", plan.staging_limit_bytes] ] as const).map(([key, value]) => <div key={key}><dt>{t(`buildPlan.${key}`)}</dt><dd>{storageSize(value, locale)}</dd></div>)}</dl>
       <ul>{Object.entries(plan.reasons).map(([reason, count]) => <li key={reason}>{status(reason)} · {number(count)}</li>)}</ul>
-      <p>{t("buildPlan.estimate")}</p>
+      <InfoHint>{t("buildPlan.estimate")}</InfoHint>
       {plan.unverified > 0 && <p>{t("buildPlan.unverified", { count: number(plan.unverified) })}</p>}
       {plan.unknown_duration > 0 && <p>{t("buildPlan.unknown", { count: number(plan.unknown_duration) })}</p>}
       {plan.largest_source_bytes > plan.staging_limit_bytes && <p className="repair-warning">{t("buildPlan.stagingWarning")}</p>}
@@ -54,7 +54,7 @@ export function BuildPreview({ selection, notify, currentScope = false }: { sele
 export function MaintenanceWorkbench({ scopeQuery, attention, selected, select, notify, comparisonAvailable }: { scopeQuery: string; attention: number; selected: Source[]; select: (ids: number[]) => void; notify: Notice; comparisonAvailable: boolean }) {
   const { t, number } = useI18n();
   const [open, setOpen] = useState(() => location.hash === "#maintenance-workbench");
-  return <details className="maintenance-workbench" id="maintenance-workbench" open={open} onToggle={event => setOpen(event.currentTarget.open)}>
+  return <details className="maintenance-workbench" id="maintenance-workbench" open={open} onToggle={event => setOpen(event.currentTarget.open)} onKeyDown={event => { if (event.key === "Escape" && event.currentTarget.open && !event.defaultPrevented) { event.preventDefault(); setOpen(false); event.currentTarget.querySelector("summary")?.focus(); } }}>
     <summary><ClipboardList size={18} /><span>{t("maintenance.title")}</span><small className="quality-count">{number(attention)}</small></summary>
     {open && <WorkbenchContent scopeQuery={scopeQuery} selected={selected} select={select} notify={notify} comparisonAvailable={comparisonAvailable} />}
   </details>;
@@ -71,12 +71,11 @@ function WorkbenchContent({ scopeQuery, selected, select, notify, comparisonAvai
   const sources = resource.data;
   return <div className="comparison-body">
     <ResourceWarning error={resource.error} retry={resource.retry} />
-    <p>{t("maintenance.hint")}</p>
+    <InfoHint>{t("maintenance.hint")}</InfoHint>
     <p><a href="/jobs#maintenance-progress">{t("progress.open")}</a></p>
     <div className="maintenance-actions"><BuildPreview selection={{ ids: sources.map(source => source.id) }} currentScope notify={notify} />{selected.length > 0 && <BuildPreview selection={{ ids: selected.map(source => source.id) }} notify={notify} />}<Button size="sm" variant="ghost" onClick={() => reveal(".lyrics-panel > details")}>{t("lyrics.title")}</Button>{comparisonAvailable && <Button size="sm" variant="ghost" onClick={() => reveal("#library-comparison")}>{t("compare.heading")}</Button>}<a href="/settings?section=encoding">{t("maintenance.scheduleLink")}</a></div>
     <QualityReview sources={sources} selected={selected} select={select} notify={notify} />
     <LoudnessMaintenance selected={selected} sources={sources} notify={notify} />
-    <LibraryTools sources={sources} selected={selected} select={select} notify={notify} />
     <MaintenanceReview sources={sources} selected={selected} select={select} notify={notify} />
   </div>;
 }
@@ -95,5 +94,5 @@ function LoudnessMaintenance({ selected, sources, notify }: { selected: Source[]
     finally { setBusy(false); }
   }
   const ready = sources.filter(source => source.output_present && source.output_gain);
-  return <section className="loudness-maintenance" aria-label={t("gain.title")}><h3>{t("gain.title")}</h3><p>{t("gain.hint")}</p><p>{t("gain.coverage", { done: number(ready.length), total: number(sources.filter(source => source.output_present).length) })}</p><ResourceWarning error={report.error} retry={report.retry} /><div className="actions"><Button size="sm" variant="outline" disabled={busy || running || !sources.some(source => source.output_present)} onClick={() => void action(false, sources)}><RefreshCw size={14} />{t("gain.fill")}</Button>{selected.length > 0 && <Button size="sm" variant="outline" disabled={busy || running || !selected.some(source => source.output_present)} onClick={() => void action(false, selected)}>{t("gain.selected")}</Button>}{running && <Button size="sm" variant="outline" disabled={busy} onClick={() => void action(true, [])}><Square size={14} />{t("gain.stop")}</Button>}</div>{report.data && report.data.state !== "idle" && <div role="status"><p>{t(`gain.state.${report.data.state}`)} · {t("gain.progress", { done: number(report.data.processed), total: number(report.data.total), updated: number(report.data.updated), skipped: number(report.data.skipped), failed: number(report.data.failed) })}</p>{report.data.current && <code>{report.data.current}</code>}{report.data.error && <p role="alert">{errorMessage(report.data.error)}</p>}</div>}</section>;
+  return <section className="loudness-maintenance" aria-label={t("gain.title")}><h3>{t("gain.title")}</h3><InfoHint>{t("gain.hint")}</InfoHint><p>{t("gain.coverage", { done: number(ready.length), total: number(sources.filter(source => source.output_present).length) })}</p><ResourceWarning error={report.error} retry={report.retry} /><div className="actions"><Button size="sm" variant="outline" disabled={busy || running || !sources.some(source => source.output_present)} onClick={() => void action(false, sources)}><RefreshCw size={14} />{t("gain.fill")}</Button>{selected.length > 0 && <Button size="sm" variant="outline" disabled={busy || running || !selected.some(source => source.output_present)} onClick={() => void action(false, selected)}>{t("gain.selected")}</Button>}{running && <Button size="sm" variant="outline" disabled={busy} onClick={() => void action(true, [])}><Square size={14} />{t("gain.stop")}</Button>}</div>{report.data && report.data.state !== "idle" && <div role="status"><p>{t(`gain.state.${report.data.state}`)} · {t("gain.progress", { done: number(report.data.processed), total: number(report.data.total), updated: number(report.data.updated), skipped: number(report.data.skipped), failed: number(report.data.failed) })}</p>{report.data.current && <code>{report.data.current}</code>}{report.data.error && <p role="alert">{errorMessage(report.data.error)}</p>}</div>}</section>;
 }

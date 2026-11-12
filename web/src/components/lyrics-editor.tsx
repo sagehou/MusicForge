@@ -9,7 +9,7 @@ import { InfoHint } from "./info-hint";
 
 type LyricsAssociation = { path: string; text: string; fingerprint: string; required: boolean };
 
-export function LyricsEditor({ id, position, audition, canAudition, preview, saved, close }: { id: number; position: number; audition: (time: number) => void; canAudition: boolean; preview: (text: string) => void; saved: (text: string) => void; close: () => void }) {
+export function LyricsEditor({ id, position, audition, canAudition, preview, saved, close, onBusyChange }: { id: number; position: number; audition: (time: number) => void; canAudition: boolean; preview: (text: string) => void; saved: (text: string) => void; close: () => void; onBusyChange: (busy: boolean) => void }) {
   const { t, errorMessage } = useI18n();
   const [token, setToken] = useState("");
   const [text, setText] = useState("");
@@ -17,6 +17,7 @@ export function LyricsEditor({ id, position, audition, canAudition, preview, sav
   const [delay, setDelay] = useState(0);
   const [anchor, setAnchor] = useState(0);
   const [busy, setBusy] = useState(false);
+  useEffect(() => { onBusyChange(busy); return () => onBusyChange(false); }, [busy, onBusyChange]);
   const [error, setError] = useState<Error>();
   const [attempt, setAttempt] = useState(0);
   const [association, setAssociation] = useState<LyricsAssociation>();
@@ -80,7 +81,7 @@ export function LyricsEditor({ id, position, audition, canAudition, preview, sav
       <label className="field"><span className="field-label">{t("lyricsEdit.text")}</span><textarea aria-label={t("lyricsEdit.text")} dir="auto" rows={7} disabled={busy} value={text} onChange={event => { setText(event.target.value); setAnchor(0); }} /></label>
       <details className="lyric-line-editor">
         <summary>{t("lyricsEdit.lines")}</summary>
-        <p>{t("lyricsEdit.shortcuts")}</p>
+        <InfoHint>{t("lyricsEdit.shortcuts")}</InfoHint>
         <div className="lyric-edit-rows">{rows.map((row, index) => <div className="lyric-edit-row" key={`${row.line}:${row.stamp}`} onKeyDown={event => {
           if (busy || !event.altKey || event.ctrlKey || event.metaKey || !["ArrowLeft", "ArrowRight", "Enter"].includes(event.key)) return;
           if (event.key === "Enter" && !canAudition) return;

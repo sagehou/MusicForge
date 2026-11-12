@@ -1,3 +1,4 @@
+import { InfoHint } from "./info-hint";
 import { useEffect, useState, type FormEvent } from "react";
 import { Bookmark, Trash2 } from "lucide-react";
 import { useI18n } from "../i18n";
@@ -69,7 +70,7 @@ export function SavedLibraryViews({ search, apply, disabled }: { search: string;
   return <details className="saved-library-views">
     <summary><Bookmark size={15} />{t("views.title", { count: views.length })}</summary>
     <div className="comparison-body">
-      <p>{t("views.hint")}</p>
+      <InfoHint>{t("views.hint")}</InfoHint>
       <form className="actions" onSubmit={save}>
         <label className="field"><span className="field-label">{t("views.name")}</span><input value={name} maxLength={80} disabled={disabled} onChange={event => setName(event.target.value)} /></label>
         <Button size="sm" variant="outline" disabled={disabled || !name.trim() || views.length >= limit && !views.some(view => view.name === name.trim())}>{t(views.some(view => view.name === name.trim()) ? "views.replace" : "views.save")}</Button>

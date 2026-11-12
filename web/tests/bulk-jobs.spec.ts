@@ -22,6 +22,8 @@ test("task details expand in the page with keyboard access, result filters and p
   const toggle = task.locator("#task-toggle-7");
   await toggle.focus();
   await page.keyboard.press("Enter");
+  await expect(page).toHaveURL(/task=7/);
+  await page.reload();
   const details = task.getByRole("region");
   await expect(details).toBeVisible();
   await expect(toggle).toBeFocused();
@@ -46,6 +48,7 @@ test("task details expand in the page with keyboard access, result filters and p
   await details.getByRole("button", { name: "Previous results page", exact: true }).focus();
   await page.keyboard.press("Escape");
   await expect(details).toHaveCount(0);
+  await expect(page).not.toHaveURL(/task=/);
   await expect(task.getByRole("button", { name: "Details", exact: true })).toBeFocused();
 });
 
@@ -73,7 +76,8 @@ test("jobs support page and filtered selection, mixed states and accurate bulk r
   await page.goto("/jobs");
   const pageSelection = page.getByRole("checkbox", { name: "Select this page", exact: true });
   await pageSelection.check();
-  await expect(page.locator(".selection-bar")).toContainText(["Select this page", "Selected: 100"]);
+  await expect(page.locator(".jobs-selection-toolbar")).toContainText("Select this page");
+  await expect(page.locator(".selection-bar")).toContainText("Selected: 100");
   await page.getByRole("checkbox", { name: "Select task 3", exact: true }).uncheck();
   await expect(pageSelection).toHaveJSProperty("indeterminate", true);
   await page.getByRole("checkbox", { name: "Select task 3", exact: true }).check();
@@ -89,7 +93,8 @@ test("jobs support page and filtered selection, mixed states and accurate bulk r
   await page.getByRole("button", { name: "Select all 205 matching tasks", exact: true }).click();
   await page.getByRole("button", { name: "Next jobs page", exact: true }).click();
   await expect(page.getByRole("checkbox", { name: "Select task 205", exact: true })).toBeChecked();
-  await expect(page.locator(".selection-bar")).toContainText(["Select this page", "All 205 matching tasks selected"]);
+  await expect(page.locator(".jobs-selection-toolbar")).toContainText("Select this page");
+  await expect(page.locator(".selection-bar")).toContainText("All 205 matching tasks selected");
   changed = 1;
   await page.locator(".selection-bar").getByRole("button", { name: "Stop", exact: true }).click();
   await expect.poll(() => requests.length).toBe(2);
@@ -100,7 +105,8 @@ test("jobs support page and filtered selection, mixed states and accurate bulk r
   await expect(pageSelection).not.toBeChecked();
   await page.getByRole("button", { name: "Select all 203 matching tasks", exact: true }).click();
   await setPreference(page, "language", "zh-CN");
-  await expect(page.locator(".selection-bar")).toContainText(["全选本页", "已选择筛选结果中的全部 203 项任务"]);
+  await expect(page.locator(".jobs-selection-toolbar")).toContainText("全选本页");
+  await expect(page.locator(".selection-bar")).toContainText("已选择筛选结果中的全部 203 项任务");
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(page.locator(".selection-bar").getByRole("button", { name: "删除记录", exact: true })).toBeVisible();
   changed = 0;

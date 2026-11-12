@@ -43,21 +43,27 @@ export function LyricsSearchButton({ ids, getIDs, all = false, refresh = false, 
 
 export function LyricsMaintenance({ inventory, scopeQuery, scope, notify }: { inventory: LyricsInventory; scopeQuery: string; scope?: "album" | "artist"; notify: Notice }) {
   const { t } = useI18n();
+  const details = useRef<HTMLDetailsElement>(null);
+  useEffect(() => {
+    const reveal = () => { if (location.hash === "#lyrics-maintenance" && details.current) { details.current.open = true; details.current.scrollIntoView({ block: "nearest" }); } };
+    reveal(); window.addEventListener("route-changed", reveal); window.addEventListener("popstate", reveal);
+    return () => { window.removeEventListener("route-changed", reveal); window.removeEventListener("popstate", reveal); };
+  }, []);
   const coverage = scope === "album" ? "lyrics.albumCoverage" : scope === "artist" ? "lyrics.artistCoverage" : "lyrics.coverage";
   const getIDs = scope ? async () => (await api<{ ids: number[] }>("/library/selection", "POST", { query: scopeQuery, ids_only: true, playable: true })).ids : undefined;
-  return <section className="library-comparison lyrics-panel">
-    <details className="lyrics-settings"><summary><FileMusic size={18} /><span>{t("lyrics.title")}</span><small className="maintenance-count" aria-label={t(coverage, { done: inventory.checked, total: inventory.total })}>{inventory.checked} / {inventory.total}</small><ChevronRight size={16} /></summary>
+  return <section className="library-comparison lyrics-panel" id="lyrics-maintenance">
+    <details ref={details} className="lyrics-settings" onKeyDown={event => { if (event.key === "Escape" && event.currentTarget.open && !event.defaultPrevented) { event.preventDefault(); event.currentTarget.open = false; event.currentTarget.querySelector("summary")?.focus(); } }}><summary><FileMusic size={18} /><span>{t("lyrics.manage")}</span><small className="maintenance-count" aria-label={t(coverage, { done: inventory.checked, total: inventory.total })}>{inventory.checked} / {inventory.total}</small><ChevronRight size={16} /></summary>
       <section className="lyrics-library-summary" aria-label={t(scope === "album" ? "lyrics.albumStatus" : scope === "artist" ? "lyrics.artistStatus" : "lyrics.libraryStatus")}>
         <strong>{t(coverage, { done: inventory.checked, total: inventory.total })}</strong>
         <p>{t("lyrics.inventory", { found: inventory.counts.ready, missing: inventory.counts.not_found, instrumental: inventory.counts.instrumental, review: inventory.counts.needs_review, failed: inventory.counts.failed, unchecked: inventory.counts.unchecked })}</p>
-        <small>{t("lyrics.inventoryHint")}</small>
+        <InfoHint>{t("lyrics.inventoryHint")}</InfoHint>
       </section>
     </details>
     <LyricsControls notify={notify} disabled={!!scope && inventory.total === 0} getIDs={getIDs} label={scope === "album" ? "lyrics.searchAlbum" : scope === "artist" ? "lyrics.searchArtist" : "lyrics.searchAll"} />
   </section>;
 }
 
-function LyricsControls({ notify, settings = false, getIDs, disabled = false, label = "lyrics.searchAll" }: { notify: Notice; settings?: boolean; disabled?: boolean; getIDs?: () => Promise<number[]>; label?: MessageKey }) {
+function LyricsControls({ notify, getIDs, disabled = false, label = "lyrics.searchAll" }: { notify: Notice; disabled?: boolean; getIDs?: () => Promise<number[]>; label?: MessageKey }) {
   const { t, errorMessage } = useI18n();
   const resource = useResource<LyricsResponse>("/lyrics", 2000);
   const [busy, setBusy] = useState(false);
@@ -76,16 +82,18 @@ function LyricsControls({ notify, settings = false, getIDs, disabled = false, la
   }
   return <div className="lyrics-body" data-running={running}>
     <div className="actions lyrics-quick-actions">
-      <LyricsSearchButton all={!getIDs} getIDs={getIDs} compact={!settings && !getIDs} iconOnly={!settings && !getIDs} label={label} notify={notify} disabled={disabled || busy || running} onStarted={resource.retry} />
+      <LyricsSearchButton all={!getIDs} getIDs={getIDs} label={label} notify={notify} disabled={disabled || busy || running} onStarted={resource.retry} />
       {!getIDs && report.resumable && <Button type="button" size="sm" variant="outline" disabled={busy || running} onClick={() => void resume()}><Play size={13} />{t("lyrics.resume", { count: report.remaining ?? 0 })}</Button>}
-      {settings && <LyricsSearchButton all inspectOnly label="lyrics.inspect" notify={notify} disabled={busy || running} onStarted={resource.retry} />}
-      {settings && <LyricsSearchButton all simplifyTraditional label="lyrics.simplifyAll" notify={notify} disabled={busy || running} onStarted={resource.retry} />}
-      {running && !getIDs && <Button className="lyrics-action" variant="outline" size="sm" aria-label={t(report.stopping ? "lyrics.stopping" : "lyrics.stop")} disabled={busy || report.stopping} onClick={() => void stop()}><Square size={13} /></Button>}
-      {!settings && <a className="lyrics-settings-link" href="/settings?section=lyrics" aria-label={t("lyrics.settings")} title={t("lyrics.settings")}><Settings2 size={14} /></a>}
+      <LyricsSearchButton all={!getIDs} getIDs={getIDs} inspectOnly label="lyrics.inspect" notify={notify} disabled={disabled || busy || running} onStarted={resource.retry} />
+      <LyricsSearchButton all={!getIDs} getIDs={getIDs} simplifyTraditional label="lyrics.simplifyAll" notify={notify} disabled={disabled || busy || running} onStarted={resource.retry} />
+      {running && <Button variant="outline" size="sm" disabled={busy || report.stopping} onClick={() => void stop()}><Square size={13} />{t(report.stopping ? "lyrics.stopping" : "lyrics.stop")}</Button>}
+      <Button asChild variant="ghost" size="sm"><a href="/settings?section=lyrics"><Settings2 size={14} />{t("lyrics.settings")}</a></Button>
+      <InfoHint><p>{t("lyrics.batchHint")}</p><p>{t("lyrics.inspectHint")}</p><p>{t("lyrics.simplifyHint")}</p><p>{t("lyrics.replaceHint")}</p></InfoHint>
+      <Button asChild variant="ghost" size="sm"><a href="/library?view=tracks&lyrics_script=traditional">{t("lyrics.filterTraditional")}</a></Button>
     </div>
     <ResourceWarning error={resource.error} retry={resource.retry} />
-    {running && !!getIDs && <a className="lyrics-global-progress" href="/settings?section=lyrics">{t("lyrics.globalProgress")}</a>}
-    {!getIDs && report.state !== "idle" && <div role="status" aria-label={t("lyrics.batchProgress")} aria-live="polite">
+    {running && !!getIDs && <a className="lyrics-global-progress" href="/library?view=tracks#lyrics-maintenance">{t("lyrics.globalProgress")}</a>}
+    {report.state !== "idle" && <div role="status" aria-label={t("lyrics.batchProgress")} aria-live="polite">
       <strong>{t(report.total === 0 && report.skipped ? "lyrics.nothingPending" : report.mode === "simplify" ? `lyrics.simplifyReport.${report.state}` : report.mode === "inspect" ? `lyrics.inspectReport.${report.state}` : report.mode === "replace" ? `lyrics.replaceReport.${report.state}` : `lyrics.report.${report.state}`)}</strong>
       {report.total > 0 && <p>{report.mode === "simplify" ? t("lyrics.simplifyProgress", { done: report.processed, total: report.total, converted: report.replaced ?? 0, unchanged: report.unchanged ?? 0, failed: report.failed }) : report.mode === "replace" ? t("lyrics.replaceProgress", { done: report.processed, total: report.total, replaced: report.replaced ?? 0, unchanged: report.unchanged ?? 0, failed: report.failed }) : report.mode === "inspect" ? t("lyrics.inspectProgress", { done: report.processed, total: report.total, found: report.found, failed: report.failed }) : t("lyrics.progress", { done: report.processed, total: report.total, found: report.found, missing: report.not_found, failed: report.failed, review: report.needs_review ?? 0 })}</p>}
       {(report.skipped ?? 0) > 0 && <small>{t("lyrics.skipped", { count: report.skipped ?? 0 })}</small>}
@@ -124,7 +132,7 @@ export function LyricsSettings({ notify, notification }: { notify: Notice; notif
 
       <div className="settings-save" data-dirty={dirty}>{notification}<span>{t(dirty ? "settings.unsaved" : "settings.savedIn")}</span><Button type="button" variant="ghost" disabled={busy || !dirty} onClick={() => setDraft(undefined)}>{t("settings.discard")}</Button><Button type="submit" form="lyrics-options-form" disabled={busy || !dirty}><Check size={16} />{t("settings.save")}</Button></div>
     </form>
-    <section className="panel settings-panel lyrics-batch-settings"><div className="settings-title"><Search /><div><h2>{t("lyrics.batchTitle")}</h2><InfoHint><p>{t("lyrics.batchHint")}</p><p>{t("lyrics.inspectHint")}</p><p>{t("lyrics.simplifyHint")}</p><p>{t("lyrics.replaceHint")}</p></InfoHint></div></div><LyricsControls notify={notify} settings /><div className="actions"><Button asChild variant="outline" size="sm"><a href="/library?view=tracks&lyrics_script=traditional">{t("lyrics.filterTraditional")}</a></Button></div></section>
+    <div className="actions"><Button asChild variant="outline" size="sm"><a href="/library?view=tracks#lyrics-maintenance"><FileMusic size={15} />{t("lyrics.manage")}</a></Button></div>
     <LyricsProviderDiagnostics notify={notify} />
   </div>;
 }
@@ -151,7 +159,7 @@ function LyricsProviderOptions({ providers, disabled, change }: { providers: Onl
   </fieldset>;
 }
 
-export function LyricsTrack({ source, notify, onChoose, onEdit, pickerHref, expanded = false, editing = false, disabled = false }: { source: Source; notify: Notice; onChoose: () => void; onEdit: () => void; pickerHref: string; expanded?: boolean; editing?: boolean; disabled?: boolean }) {
+export function LyricsTrack({ source, notify, onChoose, onEdit, expanded = false, editing = false, disabled = false }: { source: Source; notify: Notice; onChoose: () => void; onEdit: () => void; expanded?: boolean; editing?: boolean; disabled?: boolean }) {
   const { t, errorMessage } = useI18n();
   if (!source.output_present || !source.output) return null;
   const state = lyricsMatchState(source) || "unchecked";
@@ -162,7 +170,6 @@ export function LyricsTrack({ source, notify, onChoose, onEdit, pickerHref, expa
     <div className="lyrics-actions">
       <LyricsSearchButton ids={[source.id]} refresh compact iconOnly disabled={disabled} label="lyrics.searchAgain" notify={notify} />
       <Button type="button" variant="outline" size="sm" className="lyrics-action lyrics-choose-inline" id={`track-lyrics-trigger-${source.id}`} aria-label={t("lyrics.choose")} title={t("lyrics.choose")} aria-expanded={expanded} aria-controls={expanded ? `track-lyrics-${source.id}` : undefined} disabled={disabled} onClick={onChoose}><FileMusic size={15} /></Button>
-      <Button asChild variant="outline" size="sm" className="lyrics-action lyrics-choose-page"><a data-lyrics-trigger={`track-lyrics-trigger-${source.id}`} href={disabled ? undefined : pickerHref} target="_blank" rel="noopener" aria-label={t("lyrics.chooseNewTab")} title={t("lyrics.chooseNewTab")} aria-disabled={disabled || undefined}><ExternalLink size={15} /></a></Button>
     {source.lyrics && <details className="lyrics-details"><summary aria-label={t("lyrics.details")} title={t("lyrics.details")}><Info size={14} /></summary><div className="lyrics-status-popover">
     {source.lyrics?.path && <small>{source.lyrics.path}</small>}
     {source.lyrics?.instrumental ? <small>{t("lyrics.instrumentalConfirmed")}</small> : provider && <small>{t(`lyrics.provider.${provider}`)}</small>}
@@ -320,6 +327,7 @@ export function LyricsPicker({ source, notify, close, saved, previous, next, onB
     </form>
     <details className="lyrics-guidance" open={groups.some(group => !!group.error) || undefined}><summary>{t("lyrics.recommendationInfo")}</summary><p>{t("lyrics.recommendationHint")}</p><p>{t("lyrics.cacheHint")}</p>
       <Button type="button" variant="ghost" disabled={!options.data || !providers.length || saving || restoring || loading || !query.trim()} onClick={() => void search(true)}>{t("lyrics.forceSearch")}</Button>
+      {!standalone && <Button asChild type="button" variant="ghost" size="sm"><a href={saving ? undefined : (() => { const params = new URLSearchParams(location.search); params.set("lyrics_track", String(source.id)); return `/library?${params}`; })()} target="_blank" rel="noopener" aria-disabled={saving || undefined}><ExternalLink size={15} />{t("lyrics.chooseNewTab")}</a></Button>}
       <div className="lyrics-provider-status" aria-label={t("lyrics.providerStatus")}>{groups.filter(group => providers.includes(group.provider)).map(group => <fieldset key={group.provider} disabled={saving}><legend>{t(`lyrics.name.${group.provider}`)}{group.provider === providers[0] && <> <span className="provider-priority">{t("lyrics.preferredSource")}</span></>}</legend>{group.cached && <small>{t("lyrics.cached")}{group.searched ? <> · {new Date(group.searched * 1000).toLocaleString(locale)}</> : null}</small>}{group.loading && <p role="status">{t("app.loading")}</p>}{group.error && <p role="alert">{errorMessage(group.error)}</p>}{!group.loading && !group.error && group.candidates.length === 0 && <p>{t("lyrics.noCandidates")}</p>}</fieldset>)}</div></details>
     </div>
     <div className="lyrics-candidate-groups">

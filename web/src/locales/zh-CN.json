@@ -1171,5 +1171,10 @@
   "overview.allReady": "全部就绪",
   "overview.inProgress": "待处理",
   "overview.allGood": "状态良好",
-  "storage.lastCheck": "上次检查"
+  "storage.lastCheck": "上次检查",
+  "lyrics.manage": "管理歌词",
+  "library.tools": "音乐库操作",
+  "tags.open": "编辑标签",
+  "playlist.create": "创建歌单",
+  "fingerprint.open": "查找重复歌曲"
 }

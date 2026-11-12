@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
+import { useEffect, useRef, useState, type FormEvent, type MouseEvent, type ReactNode } from "react";
 import { flushSync } from "react-dom";
 import { Activity, ArrowRight, Check, ChevronLeft, ChevronRight, Clock3, Disc3, FileMusic, FolderOpen, LayoutDashboard, ListChecks, ListMusic, Loader2, Mic2, PanelLeftClose, PanelLeftOpen, Pause, Play, RefreshCw, Settings as SettingsIcon, ShieldCheck, Square, Trash2, Waves, X } from "lucide-react";
 import { Button } from "./components/ui/button";
@@ -100,6 +100,14 @@ export function App() {
     return () => document.removeEventListener("pointerdown", outside);
   }, []);
   function navigate(path: string) { history.pushState(null, "", path); setPage(location.pathname); window.dispatchEvent(new Event("route-changed")); window.scrollTo(0, 0); }
+  function followLink(event: MouseEvent<HTMLDivElement>) {
+    if (event.defaultPrevented || event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
+    const link = (event.target as Element).closest<HTMLAnchorElement>("a[href]");
+    if (!link || link.target || link.hasAttribute("download") || link.getAttribute("aria-disabled") === "true") return;
+    const url = new URL(link.href);
+    if (url.origin !== location.origin || !["/", "/library", "/jobs", "/settings"].includes(url.pathname) || link.getAttribute("href")?.startsWith("#")) return;
+    event.preventDefault(); navigate(url.pathname + url.search + url.hash);
+  }
   if (!me) return <div className="auth-layout"><AppearanceControls /><Loading error={authError} />{authError && <Button onClick={() => void loadMe()}>{t("app.reconnect")}</Button>}</div>;
   if (!me.authenticated) return <Auth me={me} done={loadMe} recoveryError={authError} />;
   const nav = [{ path: "/", label: t("app.overview"), icon: LayoutDashboard }, { path: "/library", label: t("app.library"), icon: Disc3 }, { path: "/jobs", label: t("app.jobs"), icon: Activity }, { path: "/settings", label: t("app.settings"), icon: SettingsIcon }];
@@ -118,19 +126,19 @@ export function App() {
   ];
   const current = nav.find(item => item.path === page) || nav[0];
   const notification = toast && <div className={`toast ${toast.error ? "toast-error" : ""}`} role={toast.error ? "alert" : "status"}>{toast.error ? <Activity size={17} /> : <Check size={17} />}<span>{toast.message instanceof Error ? errorMessage(toast.message.message) : t(toast.message, toast.params)}</span><button type="button" aria-label={t("app.dismiss")} title={t("app.dismiss")} onClick={() => setToast(undefined)}><X size={17} /></button></div>;
-  return <><div className="app-shell" data-sidebar-collapsed={sidebarCollapsed} inert={locked ? true : undefined} aria-hidden={locked ? true : undefined}><a className="skip-link" href="#main-content">{t("app.skipContent")}</a>
+  return <><div className="app-shell" onClick={followLink} data-sidebar-collapsed={sidebarCollapsed} inert={locked ? true : undefined} aria-hidden={locked ? true : undefined}><a className="skip-link" href="#main-content">{t("app.skipContent")}</a>
     <aside className="sidebar">
-      <div className="brand-row"><a className="brand" href="/" aria-label="MusicForge" title="MusicForge" onClick={e => { e.preventDefault(); navigate("/"); }}><span className="brand-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" aria-hidden="true"><path d="M2 12c2.5 0 2.5-4 5-4s2.5 4 5 4 2.5-4 5-4 2.5 4 5 4" /></svg></span><span className="brand-wordmark">MusicForge<small className="brand-version">{me.version}</small></span></a><Button className="sidebar-toggle" variant="ghost" size="icon" aria-label={t(sidebarCollapsed ? "app.expandSidebar" : "app.collapseSidebar")} title={t(sidebarCollapsed ? "app.expandSidebar" : "app.collapseSidebar")} aria-expanded={!sidebarCollapsed} aria-controls="main-navigation" onClick={toggleSidebar}>{sidebarCollapsed ? <PanelLeftOpen size={18} /> : <PanelLeftClose size={18} />}</Button></div>
+      <div className="brand-row"><a className="brand" href="/" aria-label="MusicForge" title="MusicForge"><span className="brand-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" aria-hidden="true"><path d="M2 12c2.5 0 2.5-4 5-4s2.5 4 5 4 2.5-4 5-4 2.5 4 5 4" /></svg></span><span className="brand-wordmark">MusicForge<small className="brand-version">{me.version}</small></span></a><Button className="sidebar-toggle" variant="ghost" size="icon" aria-label={t(sidebarCollapsed ? "app.expandSidebar" : "app.collapseSidebar")} title={t(sidebarCollapsed ? "app.expandSidebar" : "app.collapseSidebar")} aria-expanded={!sidebarCollapsed} aria-controls="main-navigation" onClick={toggleSidebar}>{sidebarCollapsed ? <PanelLeftOpen size={18} /> : <PanelLeftClose size={18} />}</Button></div>
       <div className="sidebar-navigation">
-        <nav id="main-navigation" aria-label={t("app.navigation")}>{nav.map(item => <a key={item.path} href={item.path} aria-label={item.label} title={item.label} aria-current={current.path === item.path ? "page" : undefined} className={current.path === item.path ? "active" : ""} onClick={e => { e.preventDefault(); navigate(item.path); }}><item.icon size={19} /><span className="nav-label">{item.label}</span>{current.path === item.path && <span className="nav-dot" />}</a>)}</nav>
+        <nav id="main-navigation" aria-label={t("app.navigation")}>{nav.map(item => <a key={item.path} href={item.path} aria-label={item.label} title={item.label} aria-current={current.path === item.path ? "page" : undefined} className={current.path === item.path ? "active" : ""}><item.icon size={19} /><span className="nav-label">{item.label}</span>{current.path === item.path && <span className="nav-dot" />}</a>)}</nav>
         <nav className="sidebar-shortcuts" aria-label={t("app.shortcuts")}>
           {shortcuts.map(group => <div className="sidebar-group" key={group.label}>
             <p className="sidebar-group-title">{group.label}</p>
-            {group.items.map(item => <a key={item.path} href={item.path} aria-label={item.label} title={item.label} onClick={event => { event.preventDefault(); navigate(item.path); }}><item.icon size={16} /><span className="nav-label">{item.label}</span></a>)}
+            {group.items.map(item => <a key={item.path} href={item.path} aria-label={item.label} title={item.label}><item.icon size={16} /><span className="nav-label">{item.label}</span></a>)}
           </div>)}
         </nav>
       </div>
-      <div className="sidebar-bottom"><a className="account-link" href="/settings?section=security" aria-label={t("app.account")} title={t("app.account")} onClick={event => { event.preventDefault(); navigate("/settings?section=security"); }}>
+      <div className="sidebar-bottom"><a className="account-link" href="/settings?section=security" aria-label={t("app.account")} title={t("app.account")}>
         <span className="account-initial" aria-hidden="true">{me.username?.slice(0, 1).toUpperCase()}</span>
         <span className="account-name"><span className="account-identity"><span className="account-username">{me.username}</span></span><small>{t("app.account")}</small></span>
       </a></div>
@@ -189,10 +197,26 @@ function TaskDetails({ job, notify }: { job: Job; notify: Notice }) {
   </div>;
 }
 
+function taskFromURL(): number | string | undefined { const value = new URLSearchParams(location.search).get("task"); return value ? /^\d+$/.test(value) ? Number(value) : value : undefined; }
+
 function Jobs({ notify }: { notify: Notice }) {
   const { t, status, kind, date, errorMessage } = useI18n();
-  const [offset, setOffset] = useState(0); const [filter, setFilter] = useState("all"); const [expanded, setExpanded] = useState<number | string>(); const [selected, setSelected] = useState<Set<number | string>>(new Set()); const [busy, setBusy] = useState(false); const [allSelected, setAllSelected] = useState(false);
+  const [offset, setOffset] = useState(0); const [filter, setFilter] = useState("all"); const [expanded, setExpanded] = useState<number | string | undefined>(taskFromURL); const [selected, setSelected] = useState<Set<number | string>>(new Set()); const [busy, setBusy] = useState(false); const [allSelected, setAllSelected] = useState(false);
   const { data, error, retry: retryResource } = useResource<{ jobs: Job[]; total: number }>(`/jobs?offset=${offset}&limit=100&state=${filter}&include_repairs=true`, 2000);
+  useEffect(() => {
+    const change = () => { setExpanded(taskFromURL()); setFilter("all"); setOffset(0); setSelected(new Set()); setAllSelected(false); };
+    window.addEventListener("route-changed", change); window.addEventListener("popstate", change);
+    return () => { window.removeEventListener("route-changed", change); window.removeEventListener("popstate", change); };
+  }, []);
+  useEffect(() => {
+    if (!expanded) return;
+    const frame = requestAnimationFrame(() => { const button = document.getElementById(`task-toggle-${expanded}`); button?.scrollIntoView({ block: "nearest" }); button?.focus({ preventScroll: true }); });
+    return () => cancelAnimationFrame(frame);
+  }, [expanded, Boolean(data)]);
+  function expandTask(key?: number | string) {
+    setExpanded(key);
+    history.replaceState(null, "", key ? `/jobs?task=${encodeURIComponent(key)}` : "/jobs");
+  }
   type Action = "pause" | "resume" | "stop" | "delete" | "retry";
   const taskKey = (job: Job) => job.repair_id || job.id;
   function eligible(job: Job, action: Action) {
@@ -229,18 +253,18 @@ function Jobs({ notify }: { notify: Notice }) {
     <PageHeading><div><h1>{t("jobs.title")}</h1></div></PageHeading>
     <MaintenanceProgress notify={notify} />
     <MaintenanceFailures notify={notify} refresh={retryResource} />
-    {!data ? <Loading error={error} retry={retryResource} /> : <div className="panel jobs-panel"><div className="table-toolbar"><div className="filter-tabs">{["all", "pending", "running", "paused", "success", "failed", "stopped"].map(state => <button key={state} className={filter === state ? "active" : ""} aria-pressed={filter === state} onClick={() => { setFilter(state); setOffset(0); clearSelection(); setExpanded(undefined); }}>{state === "all" ? t("jobs.all") : status(state)}</button>)}</div><Button variant="outline" disabled={busy} onClick={() => void control("retry")}><RefreshCw size={16} />{t("jobs.retryAll")}</Button></div>
-      {data.jobs.length > 0 && <div className="selection-bar"><label className="check-field"><input type="checkbox" checked={pageChecked} ref={node => { if (node) node.indeterminate = !pageChecked && chosen.length > 0; }} disabled={busy} onChange={event => { setAllSelected(false); setSelected(event.target.checked ? new Set(data.jobs.map(taskKey)) : new Set()); }} /><span>{t("jobs.selectPage")}</span></label><Button variant="ghost" size="sm" disabled={busy || allSelected} onClick={() => { setAllSelected(true); setSelected(new Set()); }}>{t("jobs.selectMatching", { count: data.total })}</Button>{selectedCount > 0 && <Button variant="ghost" size="sm" disabled={busy} onClick={clearSelection}>{t("library.clearSelection")}</Button>}</div>}
-      {selectedCount > 0 && <div className="selection-bar"><span>{t(allSelected ? "jobs.allSelected" : "library.selected", { count: selectedCount })}</span><Button size="sm" disabled={busy || !canBulk("pause")} onClick={() => bulk("pause")}>{t("jobs.pause")}</Button><Button size="sm" disabled={busy || !canBulk("resume")} onClick={() => bulk("resume")}>{t("jobs.resume")}</Button><Button size="sm" variant="outline" disabled={busy || !canBulk("stop")} onClick={() => bulk("stop")}>{t("jobs.stop")}</Button><Button size="sm" variant="outline" disabled={busy || !canBulk("retry")} onClick={() => bulk("retry")}>{t("jobs.retry")}</Button><Button size="sm" variant="destructive" disabled={busy || !canBulk("delete")} onClick={() => bulk("delete")}>{t("jobs.delete")}</Button><small className="selection-hint">{t("jobs.bulkHint")}</small></div>}
+    {!data ? <Loading error={error} retry={retryResource} /> : <div className="panel jobs-panel"><div className="table-toolbar"><div className="filter-tabs">{["all", "pending", "running", "paused", "success", "failed", "stopped"].map(state => <button key={state} className={filter === state ? "active" : ""} aria-pressed={filter === state} onClick={() => { setFilter(state); setOffset(0); clearSelection(); setExpanded(undefined); }}>{state === "all" ? t("jobs.all") : status(state)}</button>)}</div><Button variant="outline" disabled={busy} onClick={() => void control("retry")}><RefreshCw size={16} />{t("jobs.retryAll")}</Button><InfoHint>{t("jobs.bulkHint")}</InfoHint></div>
+      {data.jobs.length > 0 && <div className="library-selection-toolbar jobs-selection-toolbar"><div className="library-selection"><label className="check-field"><input type="checkbox" checked={pageChecked} ref={node => { if (node) node.indeterminate = !pageChecked && chosen.length > 0; }} disabled={busy} onChange={event => { setAllSelected(false); setSelected(event.target.checked ? new Set(data.jobs.map(taskKey)) : new Set()); }} /><span>{t("jobs.selectPage")}</span></label><Button variant="ghost" size="sm" disabled={busy || allSelected} onClick={() => { setAllSelected(true); setSelected(new Set()); }}>{t("jobs.selectMatching", { count: data.total })}</Button>{selectedCount > 0 && <Button variant="ghost" size="sm" disabled={busy} onClick={clearSelection}>{t("library.clearSelection")}</Button>}</div>
+      {selectedCount > 0 && <div className="selection-bar"><span>{t(allSelected ? "jobs.allSelected" : "library.selected", { count: selectedCount })}</span><Button size="sm" disabled={busy || !canBulk("pause")} onClick={() => bulk("pause")}>{t("jobs.pause")}</Button><Button size="sm" disabled={busy || !canBulk("resume")} onClick={() => bulk("resume")}>{t("jobs.resume")}</Button><Button size="sm" variant="outline" disabled={busy || !canBulk("stop")} onClick={() => bulk("stop")}>{t("jobs.stop")}</Button><Button size="sm" variant="outline" disabled={busy || !canBulk("retry")} onClick={() => bulk("retry")}>{t("jobs.retry")}</Button><Button size="sm" variant="destructive" disabled={busy || !canBulk("delete")} onClick={() => bulk("delete")}>{t("jobs.delete")}</Button></div>}</div>}
       {data.jobs.length ? <div className="task-list">{data.jobs.map(job => {
         const percent = taskPercent(job);
         const key = taskKey(job);
-        return <div className="task" key={key} data-state={job.state} data-task-id={job.repair_id ? undefined : job.id} data-repair-task-id={job.repair_id}><div className="task-main"><input type="checkbox" aria-label={t("jobs.select", { id: job.repair_id?.slice(0, 8) || String(job.id) })} checked={allSelected || selected.has(key)} disabled={busy} onChange={event => { setAllSelected(false); setSelected(old => { const value = allSelected ? new Set(data.jobs.map(taskKey)) : new Set(old); event.target.checked ? value.add(key) : value.delete(key); return value; }); }} /><div className="task-description"><div className="task-title"><strong>{kind(job.kind)} <span>#{job.repair_id?.slice(0, 8) || job.id}</span></strong><Badge status={job.state} /></div><small title={date(job.updated)}>{job.profile && `${job.profile.codec.toUpperCase()} ${job.profile.mode.toUpperCase()} · ${job.profile.codec === "mp3" && job.profile.mode === "vbr" ? `V${job.profile.quality}` : `${job.profile.bitrate} kbps`} · `}{date(job.updated)}</small></div><div className="task-actions"><Button variant="outline" size="sm" id={`task-toggle-${key}`} aria-controls={`task-details-${key}`} aria-expanded={expanded === key} onClick={() => setExpanded(expanded === key ? undefined : key)}>{expanded === key ? t("jobs.collapse") : t("jobs.details")}</Button>{eligible(job, "pause") && <Button variant="outline" size="sm" disabled={busy} onClick={() => void control("pause", [job.id])}><Pause size={14} />{t("jobs.pause")}</Button>}{eligible(job, "resume") && <Button variant="outline" size="sm" disabled={busy} onClick={() => void control("resume", [job.id])}><Play size={14} />{t("jobs.resume")}</Button>}{(eligible(job, "stop") || job.stopping) && <Button variant="outline" size="sm" disabled={busy || job.stopping} onClick={() => void control("stop", [key])}><Square size={14} />{t(job.stopping ? "repairTasks.stopping" : "jobs.stop")}</Button>}{eligible(job, "retry") && <Button variant="outline" size="sm" disabled={busy} onClick={() => void control("retry", [job.id])}>{t("jobs.retry")}</Button>}<Button className="task-delete" variant="ghost" size="sm" aria-label={t("jobs.delete")} disabled={busy || !job.can_delete} onClick={() => void control("delete", [key])}><Trash2 size={14} /><span className="task-delete-label">{t("jobs.delete")}</span></Button></div></div>
+        return <div className="task" key={key} data-state={job.state} data-task-id={job.repair_id ? undefined : job.id} data-repair-task-id={job.repair_id}><div className="task-main"><input type="checkbox" aria-label={t("jobs.select", { id: job.repair_id?.slice(0, 8) || String(job.id) })} checked={allSelected || selected.has(key)} disabled={busy} onChange={event => { setAllSelected(false); setSelected(old => { const value = allSelected ? new Set(data.jobs.map(taskKey)) : new Set(old); event.target.checked ? value.add(key) : value.delete(key); return value; }); }} /><div className="task-description"><div className="task-title"><strong>{kind(job.kind)} <span>#{job.repair_id?.slice(0, 8) || job.id}</span></strong><Badge status={job.state} /></div><small title={date(job.updated)}>{job.profile && `${job.profile.codec.toUpperCase()} ${job.profile.mode.toUpperCase()} · ${job.profile.codec === "mp3" && job.profile.mode === "vbr" ? `V${job.profile.quality}` : `${job.profile.bitrate} kbps`} · `}{date(job.updated)}</small></div><div className="task-actions"><Button variant="outline" size="sm" id={`task-toggle-${key}`} aria-controls={`task-details-${key}`} aria-expanded={expanded === key} onClick={() => expandTask(expanded === key ? undefined : key)}>{expanded === key ? t("jobs.collapse") : t("jobs.details")}</Button>{eligible(job, "pause") && <Button variant="outline" size="sm" disabled={busy} onClick={() => void control("pause", [job.id])}><Pause size={14} />{t("jobs.pause")}</Button>}{eligible(job, "resume") && <Button variant="outline" size="sm" disabled={busy} onClick={() => void control("resume", [job.id])}><Play size={14} />{t("jobs.resume")}</Button>}{(eligible(job, "stop") || job.stopping) && <Button variant="outline" size="sm" disabled={busy || job.stopping} onClick={() => void control("stop", [key])}><Square size={14} />{t(job.stopping ? "repairTasks.stopping" : "jobs.stop")}</Button>}{eligible(job, "retry") && <Button variant="outline" size="sm" disabled={busy} onClick={() => void control("retry", [job.id])}>{t("jobs.retry")}</Button>}<Button className="task-delete" variant="ghost" size="sm" aria-label={t("jobs.delete")} disabled={busy || !job.can_delete} onClick={() => void control("delete", [key])}><Trash2 size={14} /><span className="task-delete-label">{t("jobs.delete")}</span></Button></div></div>
           <div className="task-progress"><div className="task-progress-label"><span>{job.counts.total ? t("jobs.queueProgress", { done: job.counts.done, total: job.counts.total, pending: job.counts.pending, running: job.counts.running, failed: job.counts.failed }) : job.scan?.total ? t("jobs.files", { done: job.scan.processed, total: job.scan.total }) : t(job.state === "success" ? "jobs.completed" : job.state === "failed" ? "jobs.failedHint" : "jobs.waiting")}{job.counts.cancelled > 0 && ` · ${t("jobs.cancelledCount", { count: job.counts.cancelled })}`}</span><div className="task-current">{job.current.map((activity, index) => <ActivityView key={index} activity={activity} />)}<span className="task-percent">{percent}%</span></div></div><div className="task-meter" role="progressbar" aria-label={t("jobs.progress", { id: job.repair_id?.slice(0, 8) || String(job.id) })} aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent}><span style={{ width: `${percent}%` }} /></div>{job.repair_id && job.counts.done > 0 && <p className="repair-warning">{t("repairTasks.imported")}</p>}{job.state === "paused" && <p>{t("jobs.pausedHint")}</p>}{job.state === "stopped" && <p>{t("jobs.stoppedHint")}</p>}</div>
           {job.state === "failed" && <p className="task-failure">{errorMessage(job.log || t("jobs.failedHint"))}</p>}
           {job.waiting_reason && <div className="task-waiting" role="status"><Clock3 size={17} /><div>{errorMessage(job.waiting_reason)}{job.retry_at && <small>{t("jobs.waitingUntil", { date: date(job.retry_at) })}</small>}</div></div>}
           {expanded === key && <section id={`task-details-${key}`} className="task-expanded" role="region" aria-label={`${t("jobs.details")} · ${kind(job.kind)} #${job.repair_id?.slice(0, 8) || job.id}`} onKeyDown={event => {
-            if (event.key === "Escape") { event.stopPropagation(); setExpanded(undefined); document.getElementById(`task-toggle-${key}`)?.focus(); }
+            if (event.key === "Escape") { event.stopPropagation(); expandTask(undefined); document.getElementById(`task-toggle-${key}`)?.focus(); }
           }}>{job.repair_id ? <RepairTaskDetails job={job} /> : <TaskDetails job={job} notify={notify} />}</section>}
         </div>;
       })}</div> : <Empty title={t("jobs.empty")}><Button asChild variant="outline"><a href="/library">{t("overview.viewLibrary")}</a></Button></Empty>}
@@ -269,6 +293,11 @@ function SettingsPage({ me, notify, logout, notification }: { me: Me; notify: No
     window.addEventListener("route-changed", change); window.addEventListener("popstate", change);
     return () => { window.removeEventListener("route-changed", change); window.removeEventListener("popstate", change); };
   }, []);
+  function chooseSection(next: string) {
+    if (next === section) return;
+    history.pushState(null, "", `/settings?section=${next}`);
+    setSection(next);
+  }
   const sections = [
     { id: "library", label: t("settings.tabLibrary"), icon: FolderOpen },
     { id: "encoding", label: t("settings.tabEncoding"), icon: Waves },
@@ -305,7 +334,7 @@ function SettingsPage({ me, notify, logout, notification }: { me: Me; notify: No
       const current = buttons.indexOf(document.activeElement as HTMLButtonElement);
       const next = event.key === "Home" ? 0 : event.key === "End" ? buttons.length - 1 : ["ArrowRight", "ArrowDown"].includes(event.key) ? (current + 1) % buttons.length : ["ArrowLeft", "ArrowUp"].includes(event.key) ? (current + buttons.length - 1) % buttons.length : -1;
       if (next >= 0) { event.preventDefault(); buttons[next].focus(); buttons[next].click(); }
-    }}>{sections.map(item => <button key={item.id} id={`settings-tab-${item.id}`} role="tab" aria-selected={section === item.id} aria-controls={`settings-${item.id}`} tabIndex={section === item.id ? 0 : -1} onClick={() => setSection(item.id)}><item.icon size={17} /><span>{item.label}</span><ChevronRight size={14} /></button>)}</nav>
+    }}>{sections.map(item => <button key={item.id} id={`settings-tab-${item.id}`} role="tab" aria-selected={section === item.id} aria-controls={`settings-${item.id}`} tabIndex={section === item.id ? 0 : -1} onClick={() => chooseSection(item.id)}><item.icon size={17} /><span>{item.label}</span><ChevronRight size={14} /></button>)}</nav>
     <div className="settings-content" role="tabpanel" id={`settings-${section}`} aria-labelledby={`settings-tab-${section}`}>
     <div hidden={section !== "security"}><div className="account-summary"><div><strong>{me.username}</strong><small>{me.method === "oidc" ? t("app.oidcAdmin") : t("app.localAdmin")}</small></div><Button type="button" variant="outline" onClick={() => void logout()}>{t("app.logout")}</Button></div><PasswordForm notify={notify} disabled={me.method !== "local"} /></div>
     <div hidden={section !== "lyrics"}>{lyricsVisited && <LyricsSettings notify={notify} notification={notification} />}</div>
@@ -314,7 +343,7 @@ function SettingsPage({ me, notify, logout, notification }: { me: Me; notify: No
       const invalid = event.currentTarget.querySelector<HTMLInputElement | HTMLSelectElement>(":invalid");
       if (invalid) {
         const target = invalid.closest<HTMLElement>("[data-settings-section]")?.dataset.settingsSection;
-        if (target) flushSync(() => setSection(target));
+        if (target) flushSync(() => chooseSection(target));
         invalid.reportValidity(); invalid.focus(); return;
       }
       void save(event);

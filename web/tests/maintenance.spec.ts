@@ -50,7 +50,7 @@ test("quality decisions require an ignore reason and can be reopened", async ({ 
   await quality.getByRole("button", { name: "Save decision", exact: true }).click();
   await expect(quality.getByRole("button", { name: "Identical source file hashes 2", exact: true })).toBeEnabled();
   expect(writes).toBe(2);
-  await quality.getByLabel("Reason / note", { exact: true }).focus();
+  await quality.getByRole("textbox", { name: "Reason / note", exact: true }).focus();
   await page.keyboard.press("Escape");
   await expect(quality.locator(".quality-decisions")).not.toHaveAttribute("open", "");
   await expect(quality.locator(".quality-decisions > summary")).toBeFocused();

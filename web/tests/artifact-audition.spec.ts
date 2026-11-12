@@ -189,6 +189,8 @@ test("individual lyric lines keep repeats and translations while editing and aud
   await editor.getByRole("button", { name: "保存输出歌词", exact: true }).click();
   await expect.poll(() => writes.length).toBe(1);
   expect(writes[0]).toEqual({ token: "edit", text: expected, delay_ms: 0 });
+  await expect(editor).toHaveCount(0);
+  await expect(page.locator(".artifact-audition")).toHaveAttribute("aria-busy", "false");
   await page.keyboard.press("Escape");
   await expect(page.locator(".artifact-audition")).toHaveCount(0);
   await expect(edit).toBeFocused();

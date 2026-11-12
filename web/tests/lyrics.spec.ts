@@ -43,15 +43,22 @@ test("incremental filling shows pending and skipped counts and succeeds when no 
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
 });
 
-test("lyrics settings save thresholds, retain drafts and offer output-only inspection", async ({ page }) => {
+test("lyrics settings save thresholds, retain drafts and offer output-only inspection and conversion", async ({ page }) => {
   await page.addInitScript(() => localStorage.setItem("musicforge.language", "en"));
   await page.route("**/api/auth/me", route => route.fulfill({ json: { initialized: true, authenticated: true, username: "admin", method: "local", csrf: "test", oidc: false, version: "test" } }));
   await page.route("**/api/settings", route => route.fulfill({ json: { settings, configured: { webhook: false, nav_password: false, oidc_secret: false }, public_url: "", allowed_origins: [] } }));
   let options = { auto_search: false, min_score: 96, providers: [...defaultProviders] };
+  let report = { state: "idle", mode: "fill", total: 0, processed: 0, found: 0, not_found: 0, failed: 0, replaced: 0, unchanged: 0, stopping: false };
   const saves: unknown[] = [], batches: unknown[] = [];
-  await page.route("**/api/lyrics", route => route.fulfill({ json: { options, report: { state: "idle", total: 0, processed: 0, found: 0, not_found: 0, failed: 0, stopping: false } } }));
+  await page.route("**/api/lyrics", route => route.fulfill({ json: { options, report } }));
   await page.route("**/api/lyrics/options", route => { expect(route.request().headers()["x-csrf-token"]).toBe("test"); options = route.request().postDataJSON(); saves.push(options); return route.fulfill({ json: options }); });
-  await page.route("**/api/lyrics/search", route => { batches.push(route.request().postDataJSON()); return route.fulfill({ status: 202, json: { selected: 1 } }); });
+  await page.route("**/api/lyrics/search", route => {
+    expect(route.request().headers()["x-csrf-token"]).toBe("test");
+    const body = route.request().postDataJSON();
+    batches.push(body);
+    if (body.simplify_traditional) report = { ...report, state: "running", mode: "simplify", total: 3, processed: 1, found: 1, replaced: 1 };
+    return route.fulfill({ status: 202, json: { selected: 1 } });
+  });
   await page.goto("/settings?section=lyrics");
   await expect(page.getByRole("tab", { name: "Lyrics", exact: true })).toHaveAttribute("aria-selected", "true");
   const score = page.getByLabel("Minimum score for automatic matching", { exact: true });
@@ -100,6 +107,19 @@ test("lyrics settings save thresholds, retain drafts and offer output-only inspe
   await page.getByRole("button", { name: "Identify existing lyric scripts", exact: true }).click();
   await expect.poll(() => batches.length).toBe(1);
   expect(batches[0]).toEqual({ all: true, refresh: false, inspect_only: true });
+  const convert = page.getByRole("button", { name: "Batch convert to simplified", exact: true });
+  await convert.focus();
+  await page.keyboard.press("Enter");
+  await expect.poll(() => batches.length).toBe(2);
+  expect(batches[1]).toEqual({ all: true, refresh: false, simplify_traditional: true });
+  await expect(convert).toBeDisabled();
+  const progress = page.getByRole("status", { name: "Current lyrics batch", exact: true });
+  await expect(progress).toContainText("Converting lyrics to simplified");
+  await expect(page.locator(".toast")).toContainText("Lyric conversion started");
+  report = { ...report, state: "complete", processed: 3, found: 3, unchanged: 2 };
+  await expect(progress).toContainText("Lyric conversion complete");
+  await expect(progress).toContainText("converted 1 · skipped 2 · failed 0");
+  await expect(convert).toBeEnabled();
   await page.reload();
   await expect(score).toHaveValue("90");
   await expect(sources.getByRole("checkbox", { name: "AMLL TTML DB", exact: true })).toBeChecked();
@@ -111,6 +131,8 @@ test("lyrics settings save thresholds, retain drafts and offer output-only inspe
   await setPreference(page, "theme", "dark");
   await page.setViewportSize({ width: 320, height: 844 });
   await expect(page.getByRole("tab", { name: "歌词设置", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "批量繁转简", exact: true })).toBeVisible();
+  await expect(page.getByRole("status", { name: "本次补齐进度", exact: true })).toContainText("已转换 1 · 跳过 2 · 失败 0");
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
   await page.screenshot({ path: "test-results/lyrics-settings-mobile-zh-CN.png", fullPage: true });
   const checkedSources = page.locator(".lyrics-provider-options input[type=checkbox]:checked");
@@ -197,9 +219,13 @@ test("traditional script filter supports cross-page batch replacement and shared
   await expect(page.locator(".track-table tbody > tr")).toHaveCount(50);
   await selectLibraryPage(page);
   await page.getByRole("button", { name: "Select all 60 matching tracks", exact: true }).click();
-  await page.getByRole("button", { name: "Replace traditional with simplified", exact: true }).click();
+  await page.getByRole("button", { name: "Convert selected to simplified", exact: true }).click();
   await expect.poll(() => batches.length).toBe(1);
-  expect(batches[0]).toEqual({ ids: Array.from({ length: 60 }, (_, index) => index + 1), refresh: false, replace_traditional: true });
+  expect(batches[0]).toEqual({ ids: Array.from({ length: 60 }, (_, index) => index + 1), refresh: false, simplify_traditional: true });
+  await page.locator(".selection-bar").screenshot({ path: "test-results/lyrics-selection-convert-desktop-en.png", animations: "disabled" });
+  await page.getByRole("button", { name: "Replace traditional with simplified", exact: true }).click();
+  await expect.poll(() => batches.length).toBe(2);
+  expect(batches[1]).toEqual({ ids: Array.from({ length: 60 }, (_, index) => index + 1), refresh: false, replace_traditional: true });
   await page.getByRole("button", { name: "Clear selection", exact: true }).click();
   await openLibraryOptions(page);
   await filter.selectOption("simplified");

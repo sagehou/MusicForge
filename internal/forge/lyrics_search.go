@@ -22,12 +22,13 @@ type lyricsOptions struct {
 }
 
 type lyricsBatchOptions struct {
-	Refresh            bool     `json:"refresh"`
-	ReplaceTraditional bool     `json:"replace_traditional,omitempty"`
-	InspectOnly        bool     `json:"inspect_only,omitempty"`
-	MinScore           int      `json:"-"`
-	Providers          []string `json:"-"`
-	OperationBatch     string   `json:"-"`
+	Refresh             bool     `json:"refresh"`
+	ReplaceTraditional  bool     `json:"replace_traditional,omitempty"`
+	SimplifyTraditional bool     `json:"simplify_traditional,omitempty"`
+	InspectOnly         bool     `json:"inspect_only,omitempty"`
+	MinScore            int      `json:"-"`
+	Providers           []string `json:"-"`
+	OperationBatch      string   `json:"-"`
 }
 
 type LyricsStatus struct {
@@ -217,6 +218,10 @@ func (a *App) requestLyrics(w http.ResponseWriter, r *http.Request) {
 		apiError(w, 400, errors.New("Lyrics inspection cannot search or replace files"))
 		return
 	}
+	if body.SimplifyTraditional && (body.Refresh || body.ReplaceTraditional || body.InspectOnly) {
+		apiError(w, 400, errors.New("Lyrics conversion cannot be combined with search or inspection"))
+		return
+	}
 	if len(body.IDs) > 10000 || (!body.All && len(body.IDs) == 0) {
 		apiError(w, 400, errors.New("Select between 1 and 10000 tracks, or all artifacts"))
 		return
@@ -388,7 +393,7 @@ func (a *App) startLyricsLocked(s Settings, sources []Source, batch lyricsBatchO
 		}
 	}
 	skipped := 0
-	if !batch.Refresh && !batch.ReplaceTraditional && !batch.InspectOnly {
+	if !batch.Refresh && !batch.ReplaceTraditional && !batch.SimplifyTraditional && !batch.InspectOnly {
 		if err = a.annotateLyricsStatuses(a.ioContext, sources); err != nil {
 			return 0, false
 		}
@@ -412,6 +417,9 @@ func (a *App) startLyricsLocked(s Settings, sources []Source, batch lyricsBatchO
 	}
 	if batch.InspectOnly {
 		mode = "inspect"
+	}
+	if batch.SimplifyTraditional {
+		mode = "simplify"
 	}
 	record := &lyricsBatch{Version: 1, Source: s.Source, Output: s.Output, Options: batch,
 		Report: lyricsReport{State: "running", Total: len(sources), Mode: mode, Skipped: skipped}}
@@ -446,7 +454,7 @@ func (a *App) startLyricsLocked(s Settings, sources []Source, batch lyricsBatchO
 		defer a.lyricsWG.Done()
 		defer cancel()
 		for index, source := range sources {
-			if (batch.Refresh || batch.ReplaceTraditional) && index%1000 == 0 {
+			if (batch.Refresh || batch.ReplaceTraditional || batch.SimplifyTraditional) && index%1000 == 0 {
 				batch.OperationBatch = randomToken()
 			}
 			if ctx.Err() != nil {
@@ -465,6 +473,8 @@ func (a *App) startLyricsLocked(s Settings, sources []Source, batch lyricsBatchO
 				if inspectErr != nil {
 					status.State, status.Error = "failed", inspectErr.Error()
 				}
+			} else if batch.SimplifyTraditional {
+				status = a.simplifyLyrics(ctx, s, source.ID, batch.OperationBatch)
 			} else {
 				status = a.maintainLyrics(ctx, s, source.ID, batch)
 			}
@@ -475,17 +485,17 @@ func (a *App) startLyricsLocked(s Settings, sources []Source, batch lyricsBatchO
 			if !published {
 				status.Checked = time.Now().Unix()
 			}
-			if !batch.InspectOnly && !published {
+			if !batch.InspectOnly && !batch.SimplifyTraditional && !published {
 				if err := a.saveUnpublishedLyricsStatus(ctx, source.ID, status); err != nil {
 					status.State, status.Error = "failed", err.Error()
 				}
 			}
 			a.lyricsMu.Lock()
 			report.Processed++
-			if batch.ReplaceTraditional {
+			if batch.ReplaceTraditional || batch.SimplifyTraditional {
 				if status.replaced {
 					report.Replaced++
-				} else {
+				} else if !batch.SimplifyTraditional || status.State != "failed" {
 					report.Unchanged++
 				}
 			}

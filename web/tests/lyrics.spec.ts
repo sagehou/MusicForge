@@ -115,7 +115,7 @@ test("lyrics settings save thresholds, retain drafts and offer output-only inspe
   await expect(convert).toBeDisabled();
   const progress = page.getByRole("status", { name: "Current lyrics batch", exact: true });
   await expect(progress).toContainText("Converting lyrics to simplified");
-  await expect(page.locator(".toast")).toContainText("Lyric conversion started");
+  await expect(page.locator(".lyrics-settings-page .toast")).toContainText("Lyric conversion started");
   report = { ...report, state: "complete", processed: 3, found: 3, unchanged: 2 };
   await expect(progress).toContainText("Lyric conversion complete");
   await expect(progress).toContainText("converted 1 · skipped 2 · failed 0");

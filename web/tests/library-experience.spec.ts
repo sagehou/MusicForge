@@ -189,6 +189,7 @@ test("aligned records show all songs with shared filters, pagination, batch lyri
   await expect(page.locator(".inline-details")).toHaveCount(0);
   await expect(first.getByRole("button", { name: "Choose lyrics", exact: true })).toBeVisible();
   await expect(first.getByRole("button", { name: "Search again", exact: true })).toBeVisible();
+  await expect(first.getByRole("button", { name: "Edit lyrics", exact: true })).toBeVisible();
   await expect(first.locator(".lyrics-details")).not.toHaveAttribute("open", "");
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.screenshot({ path: "test-results/all-songs-1440-light-en.png", animations: "disabled" });
@@ -230,6 +231,7 @@ test("aligned records show all songs with shared filters, pagination, batch lyri
     const phonePicker = first.getByRole("link", { name: "选择歌词（在新标签页打开）", exact: true });
     await expect(phonePicker).toBeVisible();
     await expect(phonePicker).toHaveAttribute("target", "_blank");
+    await expect(first.getByRole("button", { name: "编辑歌词", exact: true })).toBeVisible();
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
     expect(await page.locator(".table-scroll").evaluate(element => element.scrollWidth <= element.clientWidth + 1)).toBe(true);
     await page.screenshot({ path: `test-results/all-songs-320-${theme}-zh.png`, fullPage: true });

@@ -151,14 +151,14 @@ function LyricsProviderOptions({ providers, disabled, change }: { providers: Onl
   </fieldset>;
 }
 
-export function LyricsTrack({ source, notify, onChoose, pickerHref, expanded = false, disabled = false }: { source: Source; notify: Notice; onChoose: () => void; pickerHref: string; expanded?: boolean; disabled?: boolean }) {
+export function LyricsTrack({ source, notify, onChoose, onEdit, pickerHref, expanded = false, editing = false, disabled = false }: { source: Source; notify: Notice; onChoose: () => void; onEdit: () => void; pickerHref: string; expanded?: boolean; editing?: boolean; disabled?: boolean }) {
   const { t, errorMessage } = useI18n();
   if (!source.output_present || !source.output) return null;
   const state = lyricsMatchState(source) || "unchecked";
   const provider = source.lyrics?.provider || source.lyrics?.additional_provider || source.lyrics?.community_provider;
   const attempts = [...(source.lyrics?.attempts || []), ...(source.lyrics?.additional_attempts || []), ...(source.lyrics?.community_attempts || [])].sort((a, b) => onlineProviders.findIndex(provider => provider === a.provider) - onlineProviders.findIndex(provider => provider === b.provider));
   return <div className="lyrics-track" data-state={state}>
-    <span className="lyrics-state">{t(`lyrics.state.${state}`)}{source.lyrics_script && !source.lyrics?.instrumental && <small className="lyrics-script"> · {t(`lyrics.script.${source.lyrics_script}`)}</small>}</span>
+    <div className="lyrics-track-label"><span className="lyrics-state">{t(`lyrics.state.${state}`)}{source.lyrics_script && !source.lyrics?.instrumental && <small className="lyrics-script"> · {t(`lyrics.script.${source.lyrics_script}`)}</small>}</span><Button type="button" variant="ghost" size="sm" className="lyrics-edit-action" id={`lyrics-edit-trigger-${source.id}`} aria-expanded={editing} aria-controls={editing ? `audition-${source.id}` : undefined} disabled={disabled} onClick={onEdit}>{t("lyricsEdit.open")}</Button></div>
     <div className="lyrics-actions">
       <LyricsSearchButton ids={[source.id]} refresh compact iconOnly disabled={disabled} label="lyrics.searchAgain" notify={notify} />
       <Button type="button" variant="outline" size="sm" className="lyrics-action lyrics-choose-inline" id={`track-lyrics-trigger-${source.id}`} aria-label={t("lyrics.choose")} title={t("lyrics.choose")} aria-expanded={expanded} aria-controls={expanded ? `track-lyrics-${source.id}` : undefined} disabled={disabled} onClick={onChoose}><FileMusic size={15} /></Button>

@@ -834,6 +834,7 @@
   "gain.state.complete": "已完成",
   "gain.state.stopped": "已停止",
   "gain.state.idle": "未开始",
+  "lyricsEdit.open": "编辑歌词",
   "lyricsEdit.title": "编辑歌词／时间轴",
   "lyricsAssociation.title": "已有歌词关联",
   "lyricsAssociation.review": "检查已有歌词关联",

@@ -876,6 +876,7 @@
   "gain.state.complete": "Complete",
   "gain.state.stopped": "Stopped",
   "gain.state.idle": "Idle",
+  "lyricsEdit.open": "Edit lyrics",
   "lyricsEdit.title": "Edit lyrics / timing",
   "lyricsAssociation.title": "Existing lyric association",
   "lyricsAssociation.review": "Review existing lyric association",

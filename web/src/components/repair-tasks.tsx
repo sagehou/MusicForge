@@ -1,3 +1,4 @@
+import { InfoHint } from "./info-hint";
 import { useState } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useI18n } from "../i18n";
@@ -16,7 +17,7 @@ export function RepairTaskDetails({ job }: { job: Job }) {
   }
   return <div className="task-details">
     <dl className="task-facts"><div><dt>{t("jobs.scope")}</dt><dd>{t("jobs.selectedTracks")}</dd></div><div><dt>{t("jobs.created")}</dt><dd>{date(job.created)}</dd></div><div><dt>{t("jobs.updated")}</dt><dd>{date(job.updated)}</dd></div></dl>
-    <p>{t("repairTasks.description")}</p>
+    <InfoHint>{t("repairTasks.description")}</InfoHint>
     <div className="task-result-heading"><h3>{t("jobs.trackResults")}</h3><label className="check-field"><input type="checkbox" checked={onlyFailed} onChange={event => { setOnlyFailed(event.target.checked); setOffset(0); }} />{t("jobs.onlyFailed")}</label></div>
     <ResourceWarning error={error} retry={retry} />
     {!data ? <Loading error={error} retry={retry} /> : <>

@@ -28,13 +28,6 @@ export async function openLibraryOptions(page: Page) {
   if (!await menu.evaluate(node => (node as HTMLDetailsElement).open)) await menu.locator(":scope > summary").click();
 }
 
-export async function openLibraryTools(page: Page) {
-  const menu = page.locator(".page-tools");
-  if (!await menu.locator(":scope > summary").isVisible()) await openLibraryOptions(page);
-  if (!await menu.getAttribute("open").then(value => value !== null)) await menu.locator(":scope > summary").click();
-  await expect(menu).toHaveAttribute("open", "");
-}
-
 export async function selectLibraryPage(page: Page) {
   await page.locator('.library-selection input[type="checkbox"]').check();
 }

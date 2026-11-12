@@ -138,7 +138,7 @@ export function Overview({ notify, navigate }: { notify: Notice; navigate: (path
           <Button variant="ghost" size="sm" onClick={() => navigate("/jobs")}>{t("overview.allJobs")}<ArrowRight size={14} /></Button>
         </div>
         <ResourceWarning error={jobs.error} retry={jobs.retry} />
-        {!jobs.data ? <Loading error={jobs.error} retry={jobs.retry} /> : jobs.data.jobs.length ? <div className="job-list">{[...jobs.data.jobs].sort((a, b) => Number(b.state === "running") - Number(a.state === "running")).map(job => <button className="job-row" data-state={job.state} key={job.repair_id || job.id} onClick={() => navigate("/jobs")}>
+        {!jobs.data ? <Loading error={jobs.error} retry={jobs.retry} /> : jobs.data.jobs.length ? <div className="job-list">{[...jobs.data.jobs].sort((a, b) => Number(b.state === "running") - Number(a.state === "running")).map(job => <button className="job-row" data-state={job.state} key={job.repair_id || job.id} onClick={() => navigate(`/jobs?task=${encodeURIComponent(job.repair_id || job.id)}`)}>
           <div>
             <strong>{kind(job.kind)} #{job.repair_id?.slice(0, 8) || job.id}</strong>
             <small>{job.current[0]?.title || job.current[0]?.path || date(job.updated)}{job.counts.total > 0 && ` · ${number(job.counts.done)} / ${number(job.counts.total)}`}</small>
@@ -151,7 +151,7 @@ export function Overview({ notify, navigate }: { notify: Notice; navigate: (path
         <section className="panel lyrics-summary">
           <div className="section-heading">
             <h2><FileMusic size={16} />{t("lyrics.title")}</h2>
-            <Button variant="ghost" size="sm" onClick={() => navigate("/settings?section=lyrics")}>{t("lyrics.settings")}<ArrowRight size={13} /></Button>
+            <Button variant="ghost" size="sm" onClick={() => navigate("/library?view=tracks#lyrics-maintenance")}>{t("lyrics.manage")}<ArrowRight size={13} /></Button>
           </div>
           <ResourceWarning error={library.error} retry={library.retry} />
           <div className="lyrics-overview">

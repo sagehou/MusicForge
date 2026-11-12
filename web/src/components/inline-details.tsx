@@ -17,7 +17,7 @@ export function InlineDetails({ id, title, subtitle, children, close, returnFocu
     latest.current.close();
     requestAnimationFrame(() => {
       const trigger = document.getElementById(returnFocusID);
-      const target = trigger?.getClientRects().length ? trigger : document.querySelector<HTMLElement>(`a[data-lyrics-trigger="${returnFocusID}"]`) || document.getElementById("library-title");
+      const target = trigger?.getClientRects().length ? trigger : document.getElementById("library-title");
       target?.focus();
     });
   }

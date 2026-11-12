@@ -30,8 +30,7 @@ test("output tags require a scoped preview and retain drafts on conflicts", asyn
     return route.fulfill({ json: idle });
   });
   await page.getByLabel("Select Track 1", { exact: true }).check();
-  await page.locator("#maintenance-workbench > summary").click();
-  await page.locator(".library-tool > summary").filter({ hasText: "Correct output tags" }).click();
+  await page.getByRole("button", { name: "Edit tags", exact: true }).click();
   const editor = page.getByRole("region", { name: "Correct output tags", exact: true });
   await editor.getByRole("checkbox", { name: "Title", exact: true }).check();
   await editor.getByRole("textbox", { name: "Title", exact: true }).fill("Corrected");
@@ -46,6 +45,9 @@ test("output tags require a scoped preview and retain drafts on conflicts", asyn
   await expect(editor.getByRole("alert")).toContainText("preview the changes again");
   await expect(editor.getByRole("textbox", { name: "Title", exact: true })).toHaveValue("Corrected");
   expect(writes).toBe(1);
+  await page.keyboard.press("Escape");
+  await expect(editor).toHaveCount(0);
+  await expect(page.locator("#tags-selected-trigger")).toBeFocused();
 });
 
 test("playlists preview broken paths, save mappings and refresh output extensions", async ({ page }) => {
@@ -58,8 +60,7 @@ test("playlists preview broken paths, save mappings and refresh output extension
     return route.fulfill({ json: saved ? [{ id: "playlist-id", name: "Favorites", count: 2 }] : [] });
   });
   await page.route("**/api/playlists/playlist-id", route => route.fulfill({ json: { ...result, id: "playlist-id", content: "#EXTM3U\n./Artist/Album/01.mp3\n" } }));
-  await page.locator("#maintenance-workbench > summary").click();
-  await page.locator(".library-tool > summary").filter({ hasText: "Playlists" }).click();
+  await page.getByRole("button", { name: "Playlists", exact: true }).click();
   const editor = page.getByRole("region", { name: "Playlists", exact: true });
   await editor.getByLabel("Playlist name", { exact: true }).fill("Favorites");
   await editor.getByLabel("Imported playlist directory relative to the source root", { exact: true }).fill("Artist/Album");
@@ -91,8 +92,7 @@ test("fingerprint candidates only select tracks for human review", async ({ page
     expect(route.request().method()).toBe("GET");
     return route.fulfill({ json: compared ? { ...idle, state: "complete", total: 2, processed: 2, updated: 2, groups: [[1, 2]] } : idle });
   });
-  await page.locator("#maintenance-workbench > summary").click();
-  await page.locator(".library-tool > summary").filter({ hasText: "Acoustic duplicate candidates" }).click();
+  await page.getByRole("button", { name: "Find duplicates", exact: true }).click();
   const tool = page.getByRole("region", { name: "Acoustic duplicate candidates", exact: true });
   await tool.getByRole("button", { name: "Compare current scope", exact: true }).click();
   await expect(tool).toContainText("Candidate groups in this scope: 1");
@@ -129,13 +129,24 @@ test("lyrics history compares revisions before an explicit restore save", async 
 test("online cover preview shows dimensions and requires a separate save", async ({ page }) => {
   await mock(page);
   let writes = 0;
+  let finishSave!: () => void;
+  const saving = new Promise<void>(resolve => { finishSave = resolve; });
   const image = await page.evaluate(() => { const canvas = document.createElement("canvas"); canvas.width = 64; canvas.height = 32; const ctx = canvas.getContext("2d")!; ctx.fillStyle = "#7a4caa"; ctx.fillRect(0, 0, 64, 32); return canvas.toDataURL("image/jpeg").split(",")[1]; });
-  await page.route("**/api/library/1/artwork/edit", route => {
+  await page.route("**/api/library/1/artwork/edit", async route => {
     if (route.request().method() === "GET") return route.fulfill({ json: { token: "cover", override: false } });
-    writes++; expect(route.request().postDataJSON().token).toBe("cover"); return route.fulfill({ json: { ok: true } });
+    writes++; expect(route.request().postDataJSON().token).toBe("cover");
+    await saving;
+    return route.fulfill({ json: { ok: true } });
   });
   await page.route("**/api/library/1/artwork/search", route => { expect(route.request().postDataJSON()).toEqual({ query: "Artist Album" }); return route.fulfill({ json: { candidates: [{ id: "release", title: "Album", artist: "Artist", country: "GB", date: "2026", source: "MusicBrainz / Cover Art Archive", url: "https://musicbrainz.org/release/release" }] } }); });
   await page.route("**/api/library/1/artwork/preview?release=release", route => route.fulfill({ json: { image, width: 64, height: 32, source: "MusicBrainz / Cover Art Archive", url: "https://musicbrainz.org/release/release" } }));
+  await page.goto("/library?view=albums&artist=Artist&album=Artist%2FAlbum");
+  await page.getByRole("button", { name: "Correct output cover", exact: true }).click();
+  await expect(page.locator(".artwork-editor")).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(page.locator(".artwork-editor")).toHaveCount(0);
+  await expect(page.locator("#album-artwork-trigger")).toBeFocused();
+  await page.goto("/library?view=tracks");
   await page.getByRole("button", { name: "View details for Track 1", exact: true }).click();
   await page.getByRole("button", { name: "Correct output cover", exact: true }).click();
   const editor = page.getByRole("region", { name: "Correct output cover", exact: true });
@@ -147,4 +158,10 @@ test("online cover preview shows dimensions and requires a separate save", async
   expect(writes).toBe(0);
   await editor.getByRole("button", { name: "Save output cover", exact: true }).click();
   await expect.poll(() => writes).toBe(1);
+  await expect(editor.getByRole("button", { name: "Close panel", exact: true })).toBeDisabled();
+  await page.keyboard.press("Escape");
+  await expect(editor).toBeVisible();
+  finishSave();
+  await expect(editor).toHaveCount(0);
+  await expect(page.locator("#track-title-1")).toBeFocused();
 });

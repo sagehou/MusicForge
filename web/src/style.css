@@ -1344,6 +1344,9 @@ input:not([type="checkbox"], [type="radio"]):focus-visible, select:focus-visible
   box-shadow: var(--shadow-card);
 }
 .album-summary .cover { box-shadow: 0 6px 18px rgba(0, 0, 0, .10); border: 1px solid var(--line); border-radius: var(--radius-artwork); }
+.album-cover-edit { position: relative; min-width: 0; text-align: left; border-radius: var(--radius-artwork); }
+.album-cover-edit > span:last-child { position: absolute; bottom: 0; inset-inline: 0; padding: 5px; border-radius: 0 0 var(--radius-artwork) var(--radius-artwork); background: rgb(0 0 0 / .7); color: #fff; text-align: center; font-size: 12px; }
+.album-cover-edit:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 .album-summary h2 { font-size: 22px; line-height: 1.3; margin-top: 6px; font-weight: 600; letter-spacing: -.015em; }
 .album-summary p { color: var(--muted); font-size: 14px; margin-top: 4px; font-weight: 500; }
 .album-summary .ui-button { padding-left: 6px; padding-right: 8px; margin-left: -6px; color: var(--muted); }
@@ -1495,11 +1498,6 @@ input:not([type="checkbox"], [type="radio"]):focus-visible, select:focus-visible
 .library-options-body .layout-control { align-self: flex-start; }
 .library-options-body .layout-control button { width: 36px; padding: 4px 8px; }
 .library-options-body select { width: 100%; max-width: none; font-size: 12.5px; }
-.library-options-body .page-tools { position: relative; }
-.library-options-body .page-tools > summary { display: flex; align-items: center; width: auto; padding: 5px 8px; gap: 8px; border: 1px solid var(--line); border-radius: var(--radius-control); background: var(--subtle); color: var(--ink); font-size: 12px; }
-.library-options-body .page-tools > summary::after { content: attr(aria-label); }
-.library-options-body .tools-popover { position: static; width: 100%; min-width: 0; max-width: none; padding: 6px 0 0; border: 0; box-shadow: none; display: grid; gap: 4px; background: transparent; }
-.library-options-body .tools-popover > .ui-button { width: 100%; justify-content: flex-start; }
 
 .active-filters { flex-basis: 100%; order: 4; display: flex; align-items: center; flex-wrap: wrap; gap: 6px; padding-top: 4px; }
 .active-filters button { display: inline-flex; align-items: center; gap: 5px; border: 1px solid color-mix(in srgb, var(--accent) 25%, var(--line)); border-radius: var(--radius-badge); padding: 2px 9px; color: var(--accent); background: var(--accent-soft); font-size: 12px; line-height: 20px; min-height: 26px; }
@@ -1509,6 +1507,10 @@ input:not([type="checkbox"], [type="radio"]):focus-visible, select:focus-visible
 /* Library Maintenance Strip & Lidarr Comparison */
 .library-maintenance { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 270px), 1fr)); align-items: start; gap: 10px; margin: 0 0 16px; }
 .library-maintenance > * { min-width: 0; }
+.library-tool-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; min-width: 0; padding-bottom: 8px; }
+.library-tool-actions > * { flex-shrink: 0; }
+.library-tool-actions:has(.maintenance-report) > .build-preview { flex: 1 0 100%; min-width: 0; }
+.library-tool-actions .ui-button { white-space: nowrap; }
 .library-comparison, .maintenance-workbench, .library-maintenance > .lyrics-panel {
   border: 1px solid var(--glass-border);
   border-radius: 10px;
@@ -1546,9 +1548,9 @@ input:not([type="checkbox"], [type="radio"]):focus-visible, select:focus-visible
 .lyrics-library-summary > strong { font-size: 12.5px; font-weight: 600; }
 .lyrics-library-summary p { margin: 4px 0; font-size: 12px; color: var(--muted); }
 .lyrics-body > .lyrics-quick-actions { margin: 0; gap: 6px; flex-wrap: nowrap; }
+.lyrics-panel:not(:has(.lyrics-settings[open])) .lyrics-quick-actions { display: none; }
+.lyrics-panel:has(.lyrics-settings[open]) .lyrics-quick-actions { flex-basis: 100%; flex-wrap: wrap; margin-top: 12px; }
 .lyrics-quick-actions .lyrics-action { min-height: 28px; padding: 3px 8px; }
-.lyrics-settings-link { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; color: var(--muted); border-radius: var(--radius-control); }
-.lyrics-settings-link:hover { color: var(--ink); background: var(--hover); }
 .lyrics-global-progress { font-size: 12px; color: var(--accent); }
 .lyrics-panel:not(:has(.lyrics-settings[open])) .lyrics-body:not([data-running="true"]) > [role="status"] { display: none; }
 .lyrics-body > [role="status"] { flex-basis: 100%; padding-top: 8px; border-top: 1px solid var(--line); font-size: 12px; }
@@ -1823,7 +1825,6 @@ table { width: 100%; border-collapse: collapse; text-align: left; }
   box-shadow: none;
   white-space: nowrap;
 }
-.track-lyrics .lyrics-actions .lyrics-choose-page { display: none; }
 .lyrics-actions .lyrics-action:hover:not(:disabled), .lyrics-details > summary:hover { color: var(--accent); background: var(--accent-soft); }
 .lyrics-details { position: relative; }
 .lyrics-details > summary { list-style: none; margin: 0; cursor: pointer; }
@@ -2367,9 +2368,6 @@ input[role="switch"]:checked::after { transform: translateX(20px); background: v
 .lyrics-threshold { display: flex; align-items: end; flex-wrap: wrap; gap: 12px; }
 .lyrics-threshold input { width: 110px; }
 .lyrics-settings-page { display: grid; gap: 16px; }
-.lyrics-batch-settings .lyrics-body { display: grid; gap: 8px; }
-.lyrics-batch-settings .lyrics-body > .actions { margin: 0; flex-wrap: wrap; }
-.lyrics-batch-settings .lyrics-quick-actions .lyrics-action { width: auto; }
 
 /* Toasts, Auth & Dialogs */
 .toast {
@@ -2532,8 +2530,6 @@ input[role="switch"]:checked::after { transform: translateX(20px); background: v
   .library-toolbar-box:has(> .library-navigation:empty) > .search { grid-column: 1; grid-row: 1; max-width: none; }
   .library-toolbar-box > .active-filters { grid-column: 1 / -1; }
   .library-options > summary { width: 40px; height: 40px; }
-  .track-lyrics .lyrics-actions .lyrics-choose-inline { display: none; }
-  .track-lyrics .lyrics-actions .lyrics-choose-page { display: inline-flex; }
   .lyrics-picker-results { grid-template-columns: minmax(0, 1fr); }
   .lyrics-search-pane { grid-row: 1; }
   .lyrics-preview-pane { grid-column: 1; grid-row: 3; position: static; }
@@ -2777,11 +2773,11 @@ input[role="switch"]:checked::after { transform: translateX(20px); background: v
 .lyric-edit-number { min-width: 2ch; color: var(--muted); font-variant-numeric: tabular-nums; }
 .artwork-editor-preview img { width: 180px; max-width: 100%; max-height: 240px; object-fit: contain; margin-bottom: 12px; border-radius: var(--radius-artwork); }
 
-.library-tools { display: grid; gap: 8px; min-width: 0; }
+.library-tools { min-width: 0; margin-block: 12px; }
 .library-tool, .edit-history, .cover-search { min-width: 0; border-top: 1px solid var(--line); padding-top: 12px; margin-top: 12px; }
 .library-tool > summary, .edit-history > summary, .cover-search > summary { display: flex; align-items: center; gap: 8px; cursor: pointer; font-weight: 600; padding-block: 8px; }
 .library-tool > summary:focus-visible, .edit-history > summary:focus-visible, .cover-search > summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-.library-tool .field, .edit-history .field, .cover-search .field { margin-block: 12px; min-width: 0; }
+.library-tool .field, .library-tools .field, .edit-history .field, .cover-search .field { margin-block: 12px; min-width: 0; }
 .tag-editor-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 16px; }
 .tool-table-scroll { overflow: auto; max-height: 360px; margin-block: 12px; }
 .tool-table { width: 100%; border-collapse: collapse; font-size: var(--font-size-small); }
@@ -2815,6 +2811,7 @@ input[role="switch"]:checked::after { transform: translateX(20px); background: v
   .lyrics-editor { padding: 10px; }
   .lyrics-editor input[type="number"] { width: 90px; }
   .maintenance-workbench .ui-button, .maintenance-upload, .lyrics-editor .ui-button, .artwork-editor .ui-button { min-height: 40px; }
+  .library-tools .ui-button, .library-tool-actions .ui-button, .lyrics-quick-actions .ui-button { min-height: 40px; }
 }
 @media (forced-colors: active) {
   input[type="checkbox"]:not([role="switch"]), input[type="radio"] { appearance: auto; }

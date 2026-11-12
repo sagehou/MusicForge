@@ -175,8 +175,8 @@ test("aligned records show all songs with shared filters, pagination, batch lyri
   await openLibraryOptions(page);
   await page.getByLabel("Filter by lyrics status", { exact: true }).selectOption("not_found");
   await expect(rows).toHaveCount(2);
-  await expect(page.getByRole("group", { name: "Active filters", exact: true })).toContainText("No synchronized match");
-  await page.getByRole("button", { name: "Remove filter: No synchronized match", exact: true }).click();
+  await expect(page.getByRole("group", { name: "Active filters", exact: true })).toContainText("No match");
+  await page.getByRole("button", { name: "Remove filter: No match", exact: true }).click();
   await expect(page.getByLabel("Filter by lyrics status", { exact: true })).toHaveValue("all");
   await expect(rows).toHaveCount(50);
   await openLibraryOptions(page);

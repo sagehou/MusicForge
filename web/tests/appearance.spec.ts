@@ -1,6 +1,6 @@
 import { routeLibrary } from "./library-fixture";
 import { test, expect, type Page } from "@playwright/test";
-import { openAccount, openLibraryOptions, setPreference } from "./preferences";
+import { openAccount, setPreference } from "./preferences";
 
 const settings = { enabled: true, source: "/music/source", output: "/music/output", encoding: { codec: "opus", mode: "vbr", bitrate: 192, quality: 2 }, concurrency: 1, scan_minutes: 60, lidarr_prefix: "", nav_url: "", nav_user: "", nav_library: 1, oidc_issuer: "", oidc_client_id: "" };
 async function setup(page: Page) {
@@ -158,14 +158,15 @@ test("partial selection, keyboard focus and settings switches stay usable", asyn
   await setup(page);
   await page.goto("/library?view=tracks");
   const first = page.getByLabel("Select Song 1", { exact: true });
-  await openLibraryOptions(page);
   const all = page.getByLabel("Select current page", { exact: true });
+  await expect(all).toBeVisible();
   await first.check();
   await expect(first).toBeChecked();
   await expect(page.locator(".track-table tr.selected")).toHaveCount(1);
   expect(await all.evaluate(element => (element as HTMLInputElement).indeterminate)).toBe(true);
-  await page.locator(".library-options > summary").press("Escape");
   await first.focus();
+  await page.keyboard.press("Tab");
+  await page.keyboard.press("Shift+Tab");
   await expect(first).toBeFocused();
   expect(await first.evaluate(element => getComputedStyle(element).outlineStyle)).not.toBe("none");
   expect(await first.evaluate(element => parseFloat(getComputedStyle(element).outlineWidth))).toBeGreaterThan(0);

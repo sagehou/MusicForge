@@ -225,7 +225,7 @@ test("filtered failed tracks can be selected across pages and repaired with one 
   await expect(repair).toHaveCount(0); expect(starts).toBe(1);
   await setPreference(page, "language", "zh-CN");
   await selectLibraryPage(page);
-  await page.getByRole("button", { name: "选择筛选结果中的全部 65 首曲目", exact: true }).click();
+  await page.getByRole("button", { name: "全选筛选结果（65 首）", exact: true }).click();
   await expect(page.getByRole("button", { name: "尽力修复所选曲目（60 首）", exact: true })).toBeVisible();
   await page.setViewportSize({ width: 320, height: 900 });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);

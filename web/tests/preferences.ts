@@ -36,7 +36,5 @@ export async function openLibraryTools(page: Page) {
 }
 
 export async function selectLibraryPage(page: Page) {
-  await openLibraryOptions(page);
   await page.locator('.library-selection input[type="checkbox"]').check();
-  await page.locator('.library-selection input[type="checkbox"]').press("Escape");
 }

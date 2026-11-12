@@ -304,6 +304,13 @@ def main():
         edit = api(edit_path)
         shifted = api(edit_path, "PUT", {"token": edit["token"], "text": edit["text"], "delay_ms": 250})
         assert "[00:00.250]" in shifted["text"]
+        matched = next(row for row in api("/api/library") if row["id"] == lyrics_track["id"])["lyrics"]
+        api("/api/lyrics/search", "POST", {"ids": [lyrics_track["id"]], "simplify_traditional": True})
+        conversion = wait_for(lambda: api("/api/lyrics")["report"], lambda row: row["state"] == "complete", "output lyric conversion")
+        assert conversion["mode"] == "simplify" and conversion["replaced"] == 1 and conversion["failed"] == 0, conversion
+        assert api(edit_path)["text"] == "[00:00.250]爱这风云\n", "conversion changed lyric timing"
+        assert next(row for row in api("/api/library") if row["id"] == lyrics_track["id"])["lyrics"] == matched, "conversion changed matching provenance"
+        assert (ROOT / "source/Album/01.lrc").read_text(encoding="utf-8") == "[00:00.00]愛這風雲\n", "conversion changed source lyrics"
         cover_path = f"/api/library/{lyrics_track['id']}/artwork/edit"
         cover_choice = api(cover_path)
         api(cover_path, "PUT", {"token": cover_choice["token"], "image": base64.b64encode(cover).decode()})
@@ -434,9 +441,9 @@ def main():
                         "duration": 0 if provider == "amll" else 2}}]}
                 db.execute("INSERT INTO meta(key,value) VALUES(?,?)",
                            ("lyrics-search:" + str(online_track["id"]) + ":" + suffix * 64, json.dumps(community_search)))
-            batch = {"version": 1, "source": "/music/source", "output": "/music/output", "options": {"refresh": False},
-                     "remaining": [{"id": lyrics_track["id"], "path": lyrics_track["path"]}], "report": {"state": "stopped", "mode": "fill", "total": 2,
-                     "processed": 1, "found": 1, "not_found": 0, "failed": 0}}
+            batch = {"version": 1, "source": "/music/source", "output": "/music/output", "options": {"refresh": False, "simplify_traditional": True},
+                     "remaining": [{"id": lyrics_track["id"], "path": lyrics_track["path"]}], "report": {"state": "stopped", "mode": "simplify", "total": 2,
+                     "processed": 1, "found": 1, "replaced": 1, "not_found": 0, "failed": 0}}
             db.execute("INSERT INTO meta(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
                        ("lyrics:batch", json.dumps(batch)))
         expected = snapshot()
@@ -473,8 +480,9 @@ def main():
                     assert api("/api/lyrics")["options"] == {"auto_search": False, "min_score": 98, "providers": lyric_providers}, "older option/Stop writer lost lyrics settings"
                     report = api("/api/lyrics")["report"]
                     assert report["state"] == "stopped" and report["resumable"] and report["remaining"] == 1 and report["processed"] == 1, "lyric batch continuation lost through rollback"
+                    assert report["mode"] == "simplify" and report["replaced"] == 1, "lyric conversion progress lost through rollback"
                     restored_track = next(row for row in api("/api/library") if row["path"] == "Album/01.flac")
-                    assert restored_track.get("lyrics_script") == "traditional", "older writer lost script classification"
+                    assert restored_track.get("lyrics_script") == "simplified", "older writer lost script classification"
                     restored_lyrics = next(row for row in api("/api/library") if row["path"] == "Album/01.flac").get("lyrics")
                     assert restored_lyrics and restored_lyrics["state"] == "ready" and restored_lyrics["provider"] == "source", "older writer lost optional lyrics annotation"
                     restored_instrumental = next(row for row in api("/api/library") if row["id"] == instrumental_track["id"]).get("lyrics")
@@ -536,7 +544,7 @@ def main():
             assert library_record(restored) == library_record(row), "candidate cannot reopen older worker's completed artifact"
             stop()
             pending_checks.append({"release": version, "pending_verify_then_old_worker_build": "passed", "source_hash": expected_hash})
-        Path(".ci/rollback-evidence.json").write_text(json.dumps({"architecture": os.environ["ARCH"], "schema": 2, "source_format_replacement": "passed", "instrumental_placeholder": "passed", "additional_lyrics_provider": "passed", "community_lyrics_provider": "passed", "output_maintenance": "passed", "maintenance_review_and_undo": "passed", "lyrics_batch_continuation": "passed", "stopped_backup_restore": "passed", "checks": evidence, "pending_verification_checks": pending_checks}, indent=2) + "\n")
+        Path(".ci/rollback-evidence.json").write_text(json.dumps({"architecture": os.environ["ARCH"], "schema": 2, "source_format_replacement": "passed", "instrumental_placeholder": "passed", "additional_lyrics_provider": "passed", "community_lyrics_provider": "passed", "output_maintenance": "passed", "maintenance_review_and_undo": "passed", "lyrics_batch_continuation": "passed", "lyric_script_conversion": "passed", "stopped_backup_restore": "passed", "checks": evidence, "pending_verification_checks": pending_checks}, indent=2) + "\n")
     finally:
         subprocess.run(["docker", "rm", "-f", NAME], capture_output=True)
 

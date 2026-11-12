@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { ArrowDown, ArrowUp, Check, ChevronLeft, ChevronRight, ExternalLink, FileMusic, Info, Music2, Search, Settings2, Square, Play } from "lucide-react";
+import { ArrowDown, ArrowUp, Check, ChevronLeft, ChevronRight, ExternalLink, FileMusic, Info, Languages, Music2, Search, Settings2, Square, Play } from "lucide-react";
 import { api } from "../api";
 import { useI18n, type MessageKey } from "../i18n";
 import type { LyricsProvider, Source } from "../types";
@@ -12,7 +12,7 @@ import { LyricsProviderDiagnostics } from "./lyrics-provider-diagnostics";
 
 type LyricsResponse = {
   options: { auto_search: boolean; min_score: number; providers?: OnlineProvider[] };
-  report: { state: "idle" | "running" | "complete" | "stopped"; total: number; processed: number; found: number; not_found: number; failed: number; needs_review?: number; current?: string; error?: string; stopping: boolean; mode?: "fill" | "replace" | "inspect"; replaced?: number; unchanged?: number; skipped?: number; remaining?: number; resumable?: boolean };
+  report: { state: "idle" | "running" | "complete" | "stopped"; total: number; processed: number; found: number; not_found: number; failed: number; needs_review?: number; current?: string; error?: string; stopping: boolean; mode?: "fill" | "replace" | "inspect" | "simplify"; replaced?: number; unchanged?: number; skipped?: number; remaining?: number; resumable?: boolean };
 };
 
 export const lyricsMatchStates = ["ready", "unchecked", "not_found", "instrumental", "needs_review", "failed"] as const;
@@ -24,8 +24,8 @@ export function lyricsMatchState(source: Source): LyricsMatchState | undefined {
   return source.lyrics?.state || "unchecked";
 }
 
-export function LyricsSearchButton({ ids, getIDs, all = false, refresh = false, replaceTraditional = false, inspectOnly = false, disabled = false, compact = false, iconOnly = false, label, notify, onStarted }: {
-  ids?: number[]; getIDs?: () => Promise<number[]>; all?: boolean; refresh?: boolean; replaceTraditional?: boolean; inspectOnly?: boolean; disabled?: boolean; compact?: boolean; iconOnly?: boolean; label: MessageKey; notify: Notice; onStarted?: () => void;
+export function LyricsSearchButton({ ids, getIDs, all = false, refresh = false, replaceTraditional = false, simplifyTraditional = false, inspectOnly = false, disabled = false, compact = false, iconOnly = false, label, notify, onStarted }: {
+  ids?: number[]; getIDs?: () => Promise<number[]>; all?: boolean; refresh?: boolean; replaceTraditional?: boolean; simplifyTraditional?: boolean; inspectOnly?: boolean; disabled?: boolean; compact?: boolean; iconOnly?: boolean; label: MessageKey; notify: Notice; onStarted?: () => void;
 }) {
   const { t } = useI18n();
   const [busy, setBusy] = useState(false);
@@ -33,12 +33,12 @@ export function LyricsSearchButton({ ids, getIDs, all = false, refresh = false, 
     setBusy(true);
     try {
       const selectedIDs = getIDs ? await getIDs() : ids;
-      const result = await api<{ selected: number; skipped?: number }>("/lyrics/search", "POST", { ...(all ? { all: true } : { ids: selectedIDs }), refresh, ...(replaceTraditional ? { replace_traditional: true } : {}), ...(inspectOnly ? { inspect_only: true } : {}) });
-      notify(result.selected === 0 ? "lyrics.nothingPending" : "lyrics.started"); onStarted?.();
+      const result = await api<{ selected: number; skipped?: number }>("/lyrics/search", "POST", { ...(all ? { all: true } : { ids: selectedIDs }), refresh, ...(replaceTraditional ? { replace_traditional: true } : {}), ...(simplifyTraditional ? { simplify_traditional: true } : {}), ...(inspectOnly ? { inspect_only: true } : {}) });
+      notify(result.selected === 0 ? "lyrics.nothingPending" : simplifyTraditional ? "lyrics.simplifyStarted" : "lyrics.started"); onStarted?.();
     } catch (err) { notify(err as Error, true); }
     finally { setBusy(false); }
   }
-  return <Button type="button" variant="outline" size="sm" className={compact ? "lyrics-action" : undefined} aria-label={t(label)} title={t(label)} disabled={disabled || busy || !all && !getIDs && !ids?.length} onClick={() => void search()}><Search size={13} />{!iconOnly && t(compact ? "lyrics.searchShort" : label)}</Button>;
+  return <Button type="button" variant="outline" size="sm" className={compact ? "lyrics-action" : undefined} aria-label={t(label)} title={t(label)} disabled={disabled || busy || !all && !getIDs && !ids?.length} onClick={() => void search()}>{simplifyTraditional ? <Languages size={13} /> : <Search size={13} />}{!iconOnly && t(compact ? "lyrics.searchShort" : label)}</Button>;
 }
 
 export function LyricsMaintenance({ inventory, scopeQuery, scope, notify }: { inventory: LyricsInventory; scopeQuery: string; scope?: "album" | "artist"; notify: Notice }) {
@@ -71,7 +71,7 @@ function LyricsControls({ notify, settings = false, getIDs, disabled = false, la
   }
   async function resume() {
     setBusy(true);
-    try { const result = await api<{ selected: number }>("/lyrics/resume", "POST"); resource.retry(); notify(result.selected ? "lyrics.started" : "lyrics.nothingPending"); }
+    try { const result = await api<{ selected: number }>("/lyrics/resume", "POST"); resource.retry(); notify(result.selected ? report.mode === "simplify" ? "lyrics.simplifyStarted" : "lyrics.started" : "lyrics.nothingPending"); }
     catch (err) { notify(err as Error, true); } finally { setBusy(false); }
   }
   return <div className="lyrics-body" data-running={running}>
@@ -79,14 +79,15 @@ function LyricsControls({ notify, settings = false, getIDs, disabled = false, la
       <LyricsSearchButton all={!getIDs} getIDs={getIDs} compact={!settings && !getIDs} iconOnly={!settings && !getIDs} label={label} notify={notify} disabled={disabled || busy || running} onStarted={resource.retry} />
       {!getIDs && report.resumable && <Button type="button" size="sm" variant="outline" disabled={busy || running} onClick={() => void resume()}><Play size={13} />{t("lyrics.resume", { count: report.remaining ?? 0 })}</Button>}
       {settings && <LyricsSearchButton all inspectOnly label="lyrics.inspect" notify={notify} disabled={busy || running} onStarted={resource.retry} />}
+      {settings && <LyricsSearchButton all simplifyTraditional label="lyrics.simplifyAll" notify={notify} disabled={busy || running} onStarted={resource.retry} />}
       {running && !getIDs && <Button className="lyrics-action" variant="outline" size="sm" aria-label={t(report.stopping ? "lyrics.stopping" : "lyrics.stop")} disabled={busy || report.stopping} onClick={() => void stop()}><Square size={13} /></Button>}
       {!settings && <a className="lyrics-settings-link" href="/settings?section=lyrics" aria-label={t("lyrics.settings")} title={t("lyrics.settings")}><Settings2 size={14} /></a>}
     </div>
     <ResourceWarning error={resource.error} retry={resource.retry} />
     {running && !!getIDs && <a className="lyrics-global-progress" href="/settings?section=lyrics">{t("lyrics.globalProgress")}</a>}
     {!getIDs && report.state !== "idle" && <div role="status" aria-label={t("lyrics.batchProgress")} aria-live="polite">
-      <strong>{t(report.total === 0 && report.skipped ? "lyrics.nothingPending" : report.mode === "inspect" ? `lyrics.inspectReport.${report.state}` : report.mode === "replace" ? `lyrics.replaceReport.${report.state}` : `lyrics.report.${report.state}`)}</strong>
-      {report.total > 0 && <p>{report.mode === "replace" ? t("lyrics.replaceProgress", { done: report.processed, total: report.total, replaced: report.replaced ?? 0, unchanged: report.unchanged ?? 0, failed: report.failed }) : report.mode === "inspect" ? t("lyrics.inspectProgress", { done: report.processed, total: report.total, found: report.found, failed: report.failed }) : t("lyrics.progress", { done: report.processed, total: report.total, found: report.found, missing: report.not_found, failed: report.failed, review: report.needs_review ?? 0 })}</p>}
+      <strong>{t(report.total === 0 && report.skipped ? "lyrics.nothingPending" : report.mode === "simplify" ? `lyrics.simplifyReport.${report.state}` : report.mode === "inspect" ? `lyrics.inspectReport.${report.state}` : report.mode === "replace" ? `lyrics.replaceReport.${report.state}` : `lyrics.report.${report.state}`)}</strong>
+      {report.total > 0 && <p>{report.mode === "simplify" ? t("lyrics.simplifyProgress", { done: report.processed, total: report.total, converted: report.replaced ?? 0, unchanged: report.unchanged ?? 0, failed: report.failed }) : report.mode === "replace" ? t("lyrics.replaceProgress", { done: report.processed, total: report.total, replaced: report.replaced ?? 0, unchanged: report.unchanged ?? 0, failed: report.failed }) : report.mode === "inspect" ? t("lyrics.inspectProgress", { done: report.processed, total: report.total, found: report.found, failed: report.failed }) : t("lyrics.progress", { done: report.processed, total: report.total, found: report.found, missing: report.not_found, failed: report.failed, review: report.needs_review ?? 0 })}</p>}
       {(report.skipped ?? 0) > 0 && <small>{t("lyrics.skipped", { count: report.skipped ?? 0 })}</small>}
       {report.resumable && <p>{t("lyrics.resumeHint")}</p>}
       {report.current && <code>{report.current}</code>}
@@ -123,7 +124,7 @@ export function LyricsSettings({ notify, notification }: { notify: Notice; notif
 
       <div className="settings-save" data-dirty={dirty}>{notification}<span>{t(dirty ? "settings.unsaved" : "settings.savedIn")}</span><Button type="button" variant="ghost" disabled={busy || !dirty} onClick={() => setDraft(undefined)}>{t("settings.discard")}</Button><Button type="submit" form="lyrics-options-form" disabled={busy || !dirty}><Check size={16} />{t("settings.save")}</Button></div>
     </form>
-    <section className="panel settings-panel lyrics-batch-settings"><div className="settings-title"><Search /><div><h2>{t("lyrics.batchTitle")}</h2><InfoHint><p>{t("lyrics.batchHint")}</p><p>{t("lyrics.inspectHint")}</p><p>{t("lyrics.replaceHint")}</p></InfoHint></div></div><LyricsControls notify={notify} settings /><div className="actions"><Button asChild variant="outline" size="sm"><a href="/library?view=tracks&lyrics_script=traditional">{t("lyrics.filterTraditional")}</a></Button></div></section>
+    <section className="panel settings-panel lyrics-batch-settings"><div className="settings-title"><Search /><div><h2>{t("lyrics.batchTitle")}</h2><InfoHint><p>{t("lyrics.batchHint")}</p><p>{t("lyrics.inspectHint")}</p><p>{t("lyrics.simplifyHint")}</p><p>{t("lyrics.replaceHint")}</p></InfoHint></div></div><LyricsControls notify={notify} settings /><div className="actions"><Button asChild variant="outline" size="sm"><a href="/library?view=tracks&lyrics_script=traditional">{t("lyrics.filterTraditional")}</a></Button></div></section>
     <LyricsProviderDiagnostics notify={notify} />
   </div>;
 }

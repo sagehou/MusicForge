@@ -7,8 +7,8 @@ import (
 )
 
 // OpenCC ver.1.4.2 dictionaries; provenance and Apache-2.0 license are in
-// THIRD_PARTY_NOTICES.md. Keep this metadata comparison separate from the
-// conservative script hints and conflict checks on actual lyric text.
+// THIRD_PARTY_NOTICES.md. Metadata comparison and explicit lyric conversion
+// share these tables; script hints and candidate conflict checks stay separate.
 //
 //go:embed lyricsdata/opencc/TSCharacters.txt
 var lyricsTraditionalCharacters string
@@ -16,7 +16,7 @@ var lyricsTraditionalCharacters string
 //go:embed lyricsdata/opencc/TSPhrases.txt
 var lyricsTraditionalPhrases string
 
-var lyricsMetadataSimplifier = func() *strings.Replacer {
+var lyricsSimplifier = func() *strings.Replacer {
 	entries := map[string]string{}
 	for _, dictionary := range []string{lyricsTraditionalCharacters, lyricsTraditionalPhrases} {
 		for _, line := range strings.Split(dictionary, "\n") {
@@ -48,7 +48,7 @@ var lyricsMetadataSimplifier = func() *strings.Replacer {
 }()
 
 func normalizeLyricsMetadata(text string) string {
-	return lyricsMetadataSimplifier.Replace(foldLyricsWidth(text))
+	return lyricsSimplifier.Replace(foldLyricsWidth(text))
 }
 
 // These explicit stage names supplement aliases returned by providers. Never

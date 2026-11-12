@@ -1800,6 +1800,8 @@ table { width: 100%; border-collapse: collapse; text-align: left; }
 
 /* Track Lyrics Column: Clean Aligned Controls */
 .track-lyrics .lyrics-track { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 0; }
+.lyrics-track-label { display: grid; justify-items: start; gap: 2px; min-width: 0; }
+.track-lyrics .lyrics-edit-action { height: 24px; min-height: 24px; padding: 2px 4px; color: var(--accent); font-size: 12px; }
 .lyrics-state { display: block; font-size: 12px; font-weight: 500; color: var(--muted); line-height: 1.4; }
 .lyrics-track[data-state="ready"] .lyrics-state { color: var(--muted); }
 .lyrics-track[data-state="needs_review"] .lyrics-state { color: var(--warning); }
@@ -1905,6 +1907,7 @@ table { width: 100%; border-collapse: collapse; text-align: left; }
 .artifact-audition .detail-content { padding: 14px 16px; }
 
 .audition-body { display: grid; grid-template-columns: minmax(240px, 340px) minmax(280px, 1fr); gap: 20px; align-items: center; }
+.audition-body[data-editing="true"] { align-items: start; }
 .audition-body > audio { display: none; }
 .audition-playback {
   display: grid;
@@ -2624,6 +2627,8 @@ input[role="switch"]:checked::after { transform: translateX(20px); background: v
   .track-lyrics .lyrics-track { justify-content: space-between; flex-wrap: nowrap; }
   .track-lyrics .lyrics-state { min-width: 0; }
   .track-lyrics .lyrics-actions .lyrics-action, .lyrics-details > summary { width: 40px; min-height: 40px; height: 40px; }
+  .lyrics-track-label { display: flex; align-items: center; gap: 4px; }
+  .track-lyrics .lyrics-edit-action { flex: 0 0 40px; width: 40px; height: 40px; min-height: 40px; white-space: normal; }
   .album-tracks-heading { gap: 8px; padding: 10px 12px; background: transparent; }
   .album-tracks-heading h3 { flex: 1; }
   .album-tracks-heading > .ui-button { order: 1; font-size: 11px; }

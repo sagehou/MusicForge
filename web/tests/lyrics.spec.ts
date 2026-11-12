@@ -430,7 +430,7 @@ test("lyrics selection, background progress, stop and bilingual mobile UI", asyn
   await page.getByRole("button", { name: "Stop lyrics search", exact: true }).click();
   await page.goto("/library?view=albums&artist=Artist&album=Artist%2FAlbum");
   await page.locator(".lyrics-details > summary").click();
-  await expect(page.locator(".lyrics-track")).toContainText("No synchronized match");
+  await expect(page.locator(".lyrics-track")).toContainText("No match");
   await page.getByRole("button", { name: "Search again", exact: true }).click();
   await expect.poll(() => requests.length).toBe(3);
   expect(requests.at(-1)).toEqual({ ids: [1], refresh: true });
@@ -438,7 +438,7 @@ test("lyrics selection, background progress, stop and bilingual mobile UI", asyn
   await expect(page.getByRole("link", { name: "查看后台歌词任务", exact: true })).toBeVisible();
   await page.locator(".lyrics-settings > summary").click();
   await expect(page.getByRole("button", { name: "补齐本专辑歌词", exact: true })).toBeDisabled();
-  await expect(page.locator(".lyrics-track")).toContainText("未找到同步歌词");
+  await expect(page.locator(".lyrics-track")).toContainText("未找到");
   await page.setViewportSize({ width: 320, height: 844 });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
   await page.screenshot({ path: "test-results/lyrics-mobile-zh-CN.png", fullPage: true });

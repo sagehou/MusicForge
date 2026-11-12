@@ -67,6 +67,7 @@ test("inline audition plays actual audio, seeks and follows lyrics without scrol
   page.on("request", request => { if (request.url().includes("/api/") && request.method() !== "GET") writes.push(request.url()); });
   await page.goto("/library?view=tracks");
   await expect(page.getByRole("button", { name: "Audition Unbuilt", exact: true })).toHaveCount(0);
+  await expect(page.locator("#lyrics-edit-trigger-93")).toHaveCount(0);
   await page.getByRole("button", { name: "Audition Nightfall", exact: true }).click();
   const panel = page.locator(".artifact-audition");
   const audio = panel.locator("audio");
@@ -153,9 +154,14 @@ test("individual lyric lines keep repeats and translations while editing and aud
   });
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.goto("/library?view=tracks");
-  await page.getByRole("button", { name: "Audition Nightfall", exact: true }).click();
-  await page.getByRole("button", { name: "Edit lyrics / timing", exact: true }).click();
+  const edit = page.locator("#lyrics-edit-trigger-91");
+  await expect(edit).toHaveText("Edit lyrics");
+  await page.screenshot({ path: "test-results/lyrics-edit-entry-desktop-light-en.png", animations: "disabled" });
+  await edit.focus(); await edit.press("Enter");
   const editor = page.locator(".lyrics-editor"), audio = page.locator(".artifact-audition audio");
+  await expect(editor.getByLabel("LRC text", { exact: true })).toHaveValue(draft);
+  await expect(edit).toHaveAttribute("aria-expanded", "true");
+  expect(await audio.evaluate(node => (node as HTMLAudioElement).paused)).toBe(true);
   await editor.locator(".lyric-line-editor > summary").click();
   await editor.getByRole("button", { name: "Line 1 100 ms later", exact: true }).click();
   const time = editor.getByLabel("Line 1 time (seconds)", { exact: true });
@@ -183,6 +189,9 @@ test("individual lyric lines keep repeats and translations while editing and aud
   await editor.getByRole("button", { name: "保存输出歌词", exact: true }).click();
   await expect.poll(() => writes.length).toBe(1);
   expect(writes[0]).toEqual({ token: "edit", text: expected, delay_ms: 0 });
+  await page.keyboard.press("Escape");
+  await expect(page.locator(".artifact-audition")).toHaveCount(0);
+  await expect(edit).toBeFocused();
 });
 
 test("existing lyrics require explicit association review and retain the preview on conflicts", async ({ page }) => {
@@ -296,6 +305,7 @@ test.describe("phone audition", () => {
     const errors: string[] = [];
     page.on("pageerror", error => errors.push(error.message));
     await mockAudition(page);
+    await page.route("**/api/library/91/lyrics/edit", route => route.fulfill({ json: { token: "edit", text: lrc } }));
     await page.emulateMedia({ reducedMotion: "reduce" });
     await page.goto(view === "album" ? "/library?view=albums&artist=River&album=River%2FNight" : "/library?view=tracks");
     await setPreference(page, "language", "zh-CN");
@@ -303,7 +313,7 @@ test.describe("phone audition", () => {
     const row = page.locator(".track-row").first();
     const search = page.getByLabel('搜索音乐库', { exact: true });
     expect(await search.evaluate(element => parseFloat(getComputedStyle(element).fontSize))).toBeGreaterThanOrEqual(16);
-    for (const button of await row.locator('.track-audition-trigger, .lyrics-action:visible, .lyrics-details > summary:visible').all()) {
+    for (const button of await row.locator('.track-audition-trigger, .lyrics-edit-action, .lyrics-action:visible, .lyrics-details > summary:visible').all()) {
       const box = (await button.boundingBox())!;
       expect(box.width).toBeGreaterThanOrEqual(40);
       expect(box.height).toBeGreaterThanOrEqual(40);
@@ -312,6 +322,16 @@ test.describe("phone audition", () => {
     for (const text of ["24 bit / 96 kHz", "894 kbps", "25 MiB", "5 MiB"]) await expect(row).toContainText(text);
     expect((await row.boundingBox())!.height).toBeLessThanOrEqual(230);
     await page.screenshot({ path: `test-results/audition-phone-${view}-${browserName}-library-dark-zh.png`, animations: "disabled" });
+    const edit = row.getByRole("button", { name: "编辑歌词", exact: true });
+    await expect(edit).toBeVisible();
+    await edit.tap();
+    await expect(page.locator(".lyrics-editor").getByLabel("LRC 文本", { exact: true })).toHaveValue(lrc);
+    expect(await page.locator(".artifact-audition audio").evaluate(node => (node as HTMLAudioElement).paused)).toBe(true);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
+    await page.screenshot({ path: `test-results/lyrics-edit-entry-phone-${view}-${browserName}-dark-zh.png`, animations: "disabled" });
+    await page.keyboard.press("Escape");
+    await expect(page.locator(".artifact-audition")).toHaveCount(0);
+    await expect(edit).toBeFocused();
     await page.getByRole("button", { name: "试听 Nightfall", exact: true }).tap();
     const panel = page.locator(".artifact-audition");
     await expect(panel.locator("audio")).toHaveAttribute("src", /audition\/audio/);

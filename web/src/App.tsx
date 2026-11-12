@@ -232,7 +232,7 @@ function Jobs({ notify }: { notify: Notice }) {
     return job.can_delete;
   }
   function clearSelection() { setSelected(new Set()); setAllSelected(false); }
-  function paginate(next: number) { setOffset(next); setExpanded(undefined); if (!allSelected) setSelected(new Set()); }
+  function paginate(next: number) { setOffset(next); expandTask(undefined); if (!allSelected) setSelected(new Set()); }
   async function control(action: Action, ids?: (number | string)[], matching = false) {
     if (action === "stop" && !window.confirm(t("jobs.stopConfirm")) || action === "delete" && !window.confirm(t("jobs.deleteConfirm"))) return;
     setBusy(true);
@@ -257,7 +257,7 @@ function Jobs({ notify }: { notify: Notice }) {
     <PageHeading><div><h1>{t("jobs.title")}</h1></div></PageHeading>
     <MaintenanceProgress notify={notify} />
     <MaintenanceFailures notify={notify} refresh={retryResource} />
-    {!data ? <Loading error={error} retry={retryResource} /> : <div className="panel jobs-panel"><div className="table-toolbar"><div className="filter-tabs">{["all", "pending", "running", "paused", "success", "failed", "stopped"].map(state => <button key={state} className={filter === state ? "active" : ""} aria-pressed={filter === state} onClick={() => { setFilter(state); setOffset(0); clearSelection(); setExpanded(undefined); }}>{state === "all" ? t("jobs.all") : status(state)}</button>)}</div><Button variant="outline" disabled={busy} onClick={() => void control("retry")}><RefreshCw size={16} />{t("jobs.retryAll")}</Button><InfoHint>{t("jobs.bulkHint")}</InfoHint></div>
+    {!data ? <Loading error={error} retry={retryResource} /> : <div className="panel jobs-panel"><div className="table-toolbar"><div className="filter-tabs">{["all", "pending", "running", "paused", "success", "failed", "stopped"].map(state => <button key={state} className={filter === state ? "active" : ""} aria-pressed={filter === state} onClick={() => { setFilter(state); setOffset(0); clearSelection(); expandTask(undefined); }}>{state === "all" ? t("jobs.all") : status(state)}</button>)}</div><Button variant="outline" disabled={busy} onClick={() => void control("retry")}><RefreshCw size={16} />{t("jobs.retryAll")}</Button><InfoHint>{t("jobs.bulkHint")}</InfoHint></div>
       {data.jobs.length > 0 && <div className="library-selection-toolbar jobs-selection-toolbar"><div className="library-selection"><label className="check-field"><input type="checkbox" checked={pageChecked} ref={node => { if (node) node.indeterminate = !pageChecked && chosen.length > 0; }} disabled={busy} onChange={event => { setAllSelected(false); setSelected(event.target.checked ? new Set(data.jobs.map(taskKey)) : new Set()); }} /><span>{t("jobs.selectPage")}</span></label><Button variant="ghost" size="sm" disabled={busy || allSelected} onClick={() => { setAllSelected(true); setSelected(new Set()); }}>{t("jobs.selectMatching", { count: data.total })}</Button>{selectedCount > 0 && <Button variant="ghost" size="sm" disabled={busy} onClick={clearSelection}>{t("library.clearSelection")}</Button>}</div>
       {selectedCount > 0 && <div className="selection-bar"><span>{t(allSelected ? "jobs.allSelected" : "library.selected", { count: selectedCount })}</span><Button size="sm" disabled={busy || !canBulk("pause")} onClick={() => bulk("pause")}>{t("jobs.pause")}</Button><Button size="sm" disabled={busy || !canBulk("resume")} onClick={() => bulk("resume")}>{t("jobs.resume")}</Button><Button size="sm" variant="outline" disabled={busy || !canBulk("stop")} onClick={() => bulk("stop")}>{t("jobs.stop")}</Button><Button size="sm" variant="outline" disabled={busy || !canBulk("retry")} onClick={() => bulk("retry")}>{t("jobs.retry")}</Button><Button size="sm" variant="destructive" disabled={busy || !canBulk("delete")} onClick={() => bulk("delete")}>{t("jobs.delete")}</Button></div>}</div>}
       {data.jobs.length ? <div className="task-list">{data.jobs.map(job => {
@@ -268,7 +268,7 @@ function Jobs({ notify }: { notify: Notice }) {
           {job.state === "failed" && <p className="task-failure">{errorMessage(job.log || t("jobs.failedHint"))}</p>}
           {job.waiting_reason && <div className="task-waiting" role="status"><Clock3 size={17} /><div>{errorMessage(job.waiting_reason)}{job.retry_at && <small>{t("jobs.waitingUntil", { date: date(job.retry_at) })}</small>}</div></div>}
           {expanded === key && <section id={`task-details-${key}`} className="task-expanded" role="region" aria-label={`${t("jobs.details")} · ${kind(job.kind)} #${job.repair_id?.slice(0, 8) || job.id}`} onKeyDown={event => {
-            if (event.key === "Escape") { event.stopPropagation(); expandTask(undefined); document.getElementById(`task-toggle-${key}`)?.focus(); }
+            if (event.key === "Escape" && !event.defaultPrevented && !(event.target as Element).closest("details[open]")) { event.preventDefault(); expandTask(undefined); document.getElementById(`task-toggle-${key}`)?.focus(); }
           }}>{job.repair_id ? <RepairTaskDetails job={job} /> : <TaskDetails job={job} notify={notify} />}</section>}
         </div>;
       })}</div> : <Empty title={t("jobs.empty")}><Button asChild variant="outline"><a href="/library">{t("overview.viewLibrary")}</a></Button></Empty>}

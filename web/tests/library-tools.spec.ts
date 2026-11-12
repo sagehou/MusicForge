@@ -158,7 +158,7 @@ test("online cover preview shows dimensions and requires a separate save", async
   expect(writes).toBe(0);
   await editor.getByRole("button", { name: "Save output cover", exact: true }).click();
   await expect.poll(() => writes).toBe(1);
-  await expect(editor.getByRole("button", { name: "Close", exact: true })).toBeDisabled();
+  await expect(editor.getByRole("button", { name: "Close panel", exact: true })).toBeDisabled();
   await page.keyboard.press("Escape");
   await expect(editor).toBeVisible();
   finishSave();

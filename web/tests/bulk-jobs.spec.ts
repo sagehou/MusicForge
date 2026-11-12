@@ -45,11 +45,20 @@ test("task details expand in the page with keyboard access, result filters and p
   await setPreference(page, "theme", "light");
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
   await page.screenshot({ path: "test-results/task-details-inline-390-light-en.png", fullPage: true, animations: "disabled" });
+  await details.locator(".task-diagnostic summary").focus();
+  await page.keyboard.press("Escape");
+  await expect(details.locator(".task-diagnostic")).not.toHaveAttribute("open", "");
+  await expect(details.locator(".task-diagnostic summary")).toBeFocused();
+  await expect(details).toBeVisible();
   await details.getByRole("button", { name: "Previous results page", exact: true }).focus();
   await page.keyboard.press("Escape");
   await expect(details).toHaveCount(0);
   await expect(page).not.toHaveURL(/task=/);
   await expect(task.getByRole("button", { name: "Details", exact: true })).toBeFocused();
+  await toggle.click();
+  await page.locator(".panel .filter-tabs").getByRole("button", { name: "Failed", exact: true }).click();
+  await expect(page).not.toHaveURL(/task=/);
+  await expect(details).toHaveCount(0);
 });
 
 test("jobs support page and filtered selection, mixed states and accurate bulk results", async ({ page }) => {
@@ -66,6 +75,7 @@ test("jobs support page and filtered selection, mixed states and accurate bulk r
     const offset = Number(query.get("offset"));
     return route.fulfill({ json: { jobs: filtered.slice(offset, offset + 100), total: filtered.length } });
   });
+  await page.route("**/api/jobs/1/items?*", route => route.fulfill({ json: { items: [], total: 0 } }));
   const requests: Record<string, unknown>[] = [];
   let changed = 98;
   await page.route("**/api/jobs/control", route => {
@@ -87,7 +97,10 @@ test("jobs support page and filtered selection, mixed states and accurate bulk r
   await expect(page.locator(".toast")).toContainText("Queued failed work in 98 tasks for retry");
 
   await pageSelection.check();
+  await page.locator("#task-toggle-1").click();
+  await expect(page).toHaveURL(/task=1/);
   await page.getByRole("button", { name: "Next jobs page", exact: true }).click();
+  await expect(page).not.toHaveURL(/task=/);
   await expect(page.getByRole("checkbox", { name: "Select task 101", exact: true })).not.toBeChecked();
   await expect(page.locator(".selection-hint")).toHaveCount(0);
   await page.getByRole("button", { name: "Select all 205 matching tasks", exact: true }).click();

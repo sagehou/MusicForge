@@ -165,6 +165,8 @@ test("partial selection, keyboard focus and settings switches stay usable", asyn
   await expect(page.locator(".track-table tr.selected")).toHaveCount(1);
   expect(await all.evaluate(element => (element as HTMLInputElement).indeterminate)).toBe(true);
   await first.focus();
+  await page.keyboard.press("Tab");
+  await page.keyboard.press("Shift+Tab");
   await expect(first).toBeFocused();
   expect(await first.evaluate(element => getComputedStyle(element).outlineStyle)).not.toBe("none");
   expect(await first.evaluate(element => parseFloat(getComputedStyle(element).outlineWidth))).toBeGreaterThan(0);

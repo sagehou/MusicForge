@@ -185,6 +185,61 @@ test("individual lyric lines keep repeats and translations while editing and aud
   expect(writes[0]).toEqual({ token: "edit", text: expected, delay_ms: 0 });
 });
 
+test("existing lyrics require explicit association review and retain the preview on conflicts", async ({ page }) => {
+  await mockAudition(page);
+  const original = "[ti:愛這風雲]\n[00:01.000]愛這風雲 Love!\n";
+  let associated = false, reviews = 0;
+  const writes: unknown[] = [];
+  await page.route("**/api/library/91/audition", route => route.fulfill({ json: { audio_url: "/api/library/91/audition/audio?v=fixture", format: ".opus", size: 1280044, lyrics: "", lyrics_state: "unavailable" } }));
+  await page.route("**/api/library/91/lyrics/edit", route => {
+    expect(route.request().method()).toBe("GET");
+    return route.fulfill(associated ? { json: { token: "edit", text: original } } : { status: 409, json: { error: "Invalid lyrics ownership annotation" } });
+  });
+  await page.route("**/api/library/91/lyrics/association", route => {
+    if (route.request().method() === "GET") { reviews++; return route.fulfill({ json: { path: "River/Night/01.lrc", text: original, fingerprint: `review-${reviews}`, required: !associated } }); }
+    expect(route.request().headers()["x-csrf-token"]).toBe("test");
+    writes.push(route.request().postDataJSON());
+    if (writes.length === 1) return route.fulfill({ status: 409, json: { error: "Lyrics or song changed after association review; review again" } });
+    associated = true;
+    return route.fulfill({ json: { text: original } });
+  });
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.goto("/library?view=tracks");
+  await page.getByRole("button", { name: "Audition Nightfall", exact: true }).click();
+  await page.getByRole("button", { name: "Edit lyrics / timing", exact: true }).click();
+  const editor = page.locator(".lyrics-editor");
+  await expect(editor.getByRole("alert")).toContainText("Invalid lyrics ownership annotation");
+  await editor.getByRole("button", { name: "Review existing lyric association", exact: true }).focus();
+  await page.keyboard.press("Enter");
+  const preview = editor.getByRole("region", { name: "Existing lyric association", exact: true });
+  await expect(preview.getByLabel("Existing output LRC", { exact: true })).toHaveValue(original);
+  await expect(preview.getByLabel("Existing output LRC", { exact: true })).toHaveJSProperty("readOnly", true);
+  expect(writes).toEqual([]);
+  await editor.screenshot({ path: "test-results/lyrics-association-desktop-light-en.png", animations: "disabled" });
+  await preview.getByRole("button", { name: "Cancel association review", exact: true }).click();
+  await expect(preview).toHaveCount(0);
+  expect(writes).toEqual([]);
+  await editor.getByRole("button", { name: "Review existing lyric association", exact: true }).click();
+  await preview.getByRole("button", { name: "Confirm lyrics belong to this song", exact: true }).click();
+  await expect(editor.getByRole("alert")).toContainText("review again");
+  await expect(editor.getByRole("alert").getByRole("button")).toHaveCount(0);
+  await expect(preview.getByLabel("Existing output LRC", { exact: true })).toHaveValue(original);
+  await setPreference(page, "theme", "dark"); await setPreference(page, "language", "zh-CN");
+  await page.setViewportSize({ width: 320, height: 844 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
+  await editor.screenshot({ path: "test-results/lyrics-association-mobile-dark-zh-CN.png", animations: "disabled" });
+  await editor.getByRole("button", { name: "检查已有歌词关联", exact: true }).click();
+  await editor.getByRole("button", { name: "确认歌词属于这首歌", exact: true }).focus();
+  await page.keyboard.press("Enter");
+  await expect(editor).toHaveCount(0);
+  expect(writes).toEqual([{ fingerprint: "review-2" }, { fingerprint: "review-3" }]);
+  await expect(page.locator(".audition-lyrics")).toContainText("愛這風雲 Love!");
+  await page.getByRole("button", { name: "编辑歌词／时间轴", exact: true }).click();
+  await editor.getByRole("button", { name: "检查已有歌词关联", exact: true }).click();
+  await expect(editor.getByRole("status")).toContainText("歌词已关联到当前歌曲");
+  await expect(editor.getByRole("button", { name: "确认歌词属于这首歌", exact: true })).toHaveCount(0);
+});
+
 test("switching, collapsing, other details and navigation release the previous audio", async ({ page }) => {
   await mockAudition(page);
   await page.goto("/library?view=tracks");

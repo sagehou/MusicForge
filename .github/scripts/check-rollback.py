@@ -299,6 +299,16 @@ def main():
         assert preview["original"] == "[00:00.00]纯音乐，请欣赏\n", "instrumental preview differs from the local placeholder"
         confirmed = api(instrumental_base, "PUT", choice)
         assert confirmed["state"] == "ready" and confirmed["instrumental"] and confirmed["provider"] == "source", "manual instrumental result is not backward-compatible ready state"
+        association_path = f"/api/library/{lyrics_track['id']}/lyrics/association"
+        association_file = (ROOT / "output" / lyrics_track["output"]).with_suffix(".lrc")
+        existing_lrc = "\ufeff[00:00.00]愛這風雲\r\n".encode("utf-8")
+        association_file.write_bytes(existing_lrc)
+        association_mtime = association_file.stat().st_mtime_ns
+        association = api(association_path)
+        assert association["required"] and association["text"].encode("utf-8") == existing_lrc, "association preview lost existing text"
+        api(association_path, "PUT", {"fingerprint": association["fingerprint"]})
+        assert association_file.read_bytes() == existing_lrc and association_file.stat().st_mtime_ns == association_mtime, "association rewrote the output LRC"
+        assert not api(association_path)["required"], "association did not bind the current song"
         # Exercise real optional maintenance state before older readers/writers.
         edit_path = f"/api/library/{lyrics_track['id']}/lyrics/edit"
         edit = api(edit_path)
@@ -544,7 +554,7 @@ def main():
             assert library_record(restored) == library_record(row), "candidate cannot reopen older worker's completed artifact"
             stop()
             pending_checks.append({"release": version, "pending_verify_then_old_worker_build": "passed", "source_hash": expected_hash})
-        Path(".ci/rollback-evidence.json").write_text(json.dumps({"architecture": os.environ["ARCH"], "schema": 2, "source_format_replacement": "passed", "instrumental_placeholder": "passed", "additional_lyrics_provider": "passed", "community_lyrics_provider": "passed", "output_maintenance": "passed", "maintenance_review_and_undo": "passed", "lyrics_batch_continuation": "passed", "lyric_script_conversion": "passed", "stopped_backup_restore": "passed", "checks": evidence, "pending_verification_checks": pending_checks}, indent=2) + "\n")
+        Path(".ci/rollback-evidence.json").write_text(json.dumps({"architecture": os.environ["ARCH"], "schema": 2, "source_format_replacement": "passed", "instrumental_placeholder": "passed", "additional_lyrics_provider": "passed", "community_lyrics_provider": "passed", "output_maintenance": "passed", "maintenance_review_and_undo": "passed", "lyrics_batch_continuation": "passed", "lyric_script_conversion": "passed", "lyric_association": "passed", "stopped_backup_restore": "passed", "checks": evidence, "pending_verification_checks": pending_checks}, indent=2) + "\n")
     finally:
         subprocess.run(["docker", "rm", "-f", NAME], capture_output=True)
 

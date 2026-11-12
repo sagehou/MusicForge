@@ -34,6 +34,23 @@ func (a *App) captureLyricsTarget(ctx context.Context, id int64, outputOnly ...b
 		return
 	}
 	defer a.files.Unlock()
+	target, err = a.captureLyricsArtifact(ctx, id, len(outputOnly) > 0 && outputOnly[0])
+	if err != nil {
+		return
+	}
+	var text string
+	target.File, text, target.FilePresent, err = a.readLyricsFile(ctx, target.Settings, lyricsRel(target.Source.Output))
+	if target.FilePresent {
+		target.FileSignature = digest(text)
+		target.FileScript = lyricsScript(text)
+		target.Instrumental = text == instrumentalLRC
+	}
+	return
+}
+
+// Caller holds files. Association review shares the audio checks, but reads
+// the output LRC separately so unregistered files require explicit confirmation.
+func (a *App) captureLyricsArtifact(ctx context.Context, id int64, outputOnly bool) (target lyricsTarget, err error) {
 	target.Settings, err = a.settingsContext(ctx)
 	if err != nil {
 		return
@@ -42,7 +59,7 @@ func (a *App) captureLyricsTarget(ctx context.Context, id int64, outputOnly ...b
 		err = errors.New("Enable the library before searching for lyrics")
 		return
 	}
-	target.OutputOnly = len(outputOnly) > 0 && outputOnly[0]
+	target.OutputOnly = outputOnly
 	if target.OutputOnly {
 		err = a.verifyOutputStorage(ctx, target.Settings)
 	} else {
@@ -75,13 +92,6 @@ func (a *App) captureLyricsTarget(ctx context.Context, id int64, outputOnly ...b
 	if info, statErr := os.Lstat(path); statErr != nil || !info.Mode().IsRegular() {
 		err = errors.New("Playable artifact is no longer available")
 		return
-	}
-	var text string
-	target.File, text, target.FilePresent, err = a.readLyricsFile(ctx, target.Settings, lyricsRel(source.Output))
-	if target.FilePresent {
-		target.FileSignature = digest(text)
-		target.FileScript = lyricsScript(text)
-		target.Instrumental = text == instrumentalLRC
 	}
 	return
 }

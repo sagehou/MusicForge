@@ -5,6 +5,9 @@ import { useI18n } from "../i18n";
 import { audioTime, editLyricRow, lyricRows, lyricsTimeline, shiftLyrics, type LyricRow } from "../lyrics-timeline";
 import { Button } from "./ui/button";
 import { EditHistory } from "./edit-history";
+import { InfoHint } from "./info-hint";
+
+type LyricsAssociation = { path: string; text: string; fingerprint: string; required: boolean };
 
 export function LyricsEditor({ id, position, audition, canAudition, preview, saved, close }: { id: number; position: number; audition: (time: number) => void; canAudition: boolean; preview: (text: string) => void; saved: (text: string) => void; close: () => void }) {
   const { t, errorMessage } = useI18n();
@@ -16,6 +19,7 @@ export function LyricsEditor({ id, position, audition, canAudition, preview, sav
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<Error>();
   const [attempt, setAttempt] = useState(0);
+  const [association, setAssociation] = useState<LyricsAssociation>();
   const cues = useMemo(() => lyricsTimeline(text), [text]);
   const timedText = useMemo(() => shiftLyrics(text, delay), [text, delay]);
   const rows = useMemo(() => lyricRows(timedText), [timedText]);
@@ -24,13 +28,28 @@ export function LyricsEditor({ id, position, audition, canAudition, preview, sav
   }
   useEffect(() => {
     const controller = new AbortController();
-    setToken(""); setError(undefined);
+    setToken(""); setError(undefined); setAssociation(undefined);
     void api<{ token: string; text: string }>(`/library/${id}/lyrics/edit`, "GET", undefined, controller.signal).then(value => {
       if (!controller.signal.aborted) { setToken(value.token); setText(value.text); setInitial(value.text); setDelay(0); }
     }).catch((err: Error) => { if (!controller.signal.aborted) setError(err); });
     return () => controller.abort();
   }, [id, attempt]);
-  useEffect(() => { if (token) preview(shiftLyrics(text, delay)); }, [text, delay, token, preview]);
+  useEffect(() => { if (association) preview(association.text); else if (token) preview(shiftLyrics(text, delay)); }, [text, delay, token, association, preview]);
+  async function reviewAssociation() {
+    setBusy(true); setError(undefined);
+    try { setAssociation(await api<LyricsAssociation>(`/library/${id}/lyrics/association`)); }
+    catch (err) { setError(err as Error); }
+    finally { setBusy(false); }
+  }
+  async function associate() {
+    if (!association) return;
+    setBusy(true); setError(undefined);
+    try {
+      const result = await api<{ text: string }>(`/library/${id}/lyrics/association`, "PUT", { fingerprint: association.fingerprint });
+      saved(result.text);
+    } catch (err) { setError(err as Error); }
+    finally { setBusy(false); }
+  }
   async function save() {
     setBusy(true); setError(undefined);
     try {
@@ -48,10 +67,16 @@ export function LyricsEditor({ id, position, audition, canAudition, preview, sav
     } catch (err) { setError(err as Error); }
   }
   return <section className="lyrics-editor" aria-label={t("lyricsEdit.title")}>
-    <div className="section-heading"><h3>{t("lyricsEdit.title")}</h3><Button variant="ghost" size="icon" disabled={busy} aria-label={t("lyricsEdit.cancel")} onClick={close}><X size={16} /></Button></div>
-    <p>{t("lyricsEdit.hint")}</p>
-    {error && <div role="alert" className="error-box"><p>{errorMessage(error.message)}</p>{!token && <Button size="sm" variant="outline" onClick={() => setAttempt(value => value + 1)}>{t("audition.reload")}</Button>}</div>}
-    {!token && !error ? <Loader2 size={18} className="animate-spin" /> : token && <>
+    <div className="section-heading"><div className="actions"><h3>{t("lyricsEdit.title")}</h3><InfoHint>{t("lyricsEdit.hint")}</InfoHint></div><Button variant="ghost" size="icon" disabled={busy} aria-label={t("lyricsEdit.cancel")} onClick={close}><X size={16} /></Button></div>
+    <div className="actions"><Button size="sm" variant="outline" disabled={busy || !!token && (text !== initial || delay !== 0)} onClick={() => void reviewAssociation()}>{t("lyricsAssociation.review")}</Button><InfoHint>{t("lyricsAssociation.hint")}</InfoHint></div>
+    {error && <div role="alert" className="error-box"><p>{errorMessage(error.message)}</p>{!token && !association && <Button size="sm" variant="outline" onClick={() => setAttempt(value => value + 1)}>{t("audition.reload")}</Button>}</div>}
+    {association && <div className="maintenance-report" role="region" aria-label={t("lyricsAssociation.title")}>
+      <code>{association.path}</code>
+      <label className="field"><span className="field-label">{t("lyricsAssociation.preview")}</span><textarea readOnly dir="auto" rows={7} aria-label={t("lyricsAssociation.preview")} value={association.text} /></label>
+      {!association.required && <p role="status">{t("lyricsAssociation.current")}</p>}
+      <div className="actions">{association.required && <Button size="sm" disabled={busy} onClick={() => void associate()}>{t("lyricsAssociation.confirm")}</Button>}<Button size="sm" variant="ghost" disabled={busy} onClick={() => { setAssociation(undefined); preview(initial); if (!token) setAttempt(value => value + 1); }}>{t("lyricsAssociation.cancel")}</Button></div>
+    </div>}
+    {!token && !error && !association ? <Loader2 size={18} className="animate-spin" /> : !association && token && <>
       <label className="field"><span className="field-label">{t("lyricsEdit.text")}</span><textarea aria-label={t("lyricsEdit.text")} dir="auto" rows={7} disabled={busy} value={text} onChange={event => { setText(event.target.value); setAnchor(0); }} /></label>
       <details className="lyric-line-editor">
         <summary>{t("lyricsEdit.lines")}</summary>

@@ -96,6 +96,7 @@
   "jobs.all": "全部",
   "jobs.collapse": "收起",
   "jobs.details": "详情",
+  "jobs.groupCount": "本页 {count} 项",
   "jobs.retry": "重试",
   "jobs.logs": "任务日志",
   "jobs.completed": "任务成功完成。",

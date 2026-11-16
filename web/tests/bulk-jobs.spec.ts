@@ -1,8 +1,81 @@
 import { setPreference } from "./preferences";
 import { test, expect } from "@playwright/test";
+import type { Job } from "../src/types";
 
 test.beforeEach(async ({ page }) => {
   await page.route("**/api/maintenance/progress", route => route.fulfill({ json: { reports: [], cooldowns: [] } }));
+});
+
+test("task types collapse by default and reveal failures without losing manual or linked access", async ({ page }) => {
+  await page.addInitScript(() => { localStorage.setItem("musicforge.language", "en"); localStorage.setItem("musicforge.theme", "light"); });
+  await page.route("**/api/auth/me", route => route.fulfill({ json: { initialized: true, authenticated: true, username: "admin", method: "local", csrf: "test" } }));
+  const jobs: Job[] = ([[5, "move", "success"], [4, "refresh", "success"], [3, "scan", "failed"], [2, "refresh", "success"], [1, "convert", "running"]] as const).map(([id, kind, state]) => ({
+    id, kind, state, attempts: 0, progress: state === "success" ? 1 : 0,
+    created: 1800000000, updated: 1800000000, args: {}, log: state === "failed" ? "Source read failed" : "",
+    counts: { total: 0, done: 0, failed: 0, pending: 0, running: 0, cancelled: 0 }, current: [], scope: [], can_delete: state !== "running",
+  }));
+  let polls = 0, itemReads = 0;
+  await page.route("**/api/jobs?*", route => { polls++; return route.fulfill({ json: { jobs, total: jobs.length } }); });
+  await page.route("**/api/jobs/5/items?*", route => { itemReads++; return route.fulfill({ json: { items: [], total: 0 } }); });
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.goto("/jobs");
+  const refresh = page.locator('.task-group[data-kind="refresh"]');
+  const scan = page.locator('.task-group[data-kind="scan"]');
+  const convert = page.locator('.task-group[data-kind="convert"]');
+  const move = page.locator('.task-group[data-kind="move"]');
+  await expect(page.locator(".task-group")).toHaveCount(4);
+  await expect(refresh).toHaveJSProperty("open", false);
+  await expect(refresh.locator("summary")).toContainText("2 on this page");
+  await expect(refresh.locator(".task")).toHaveCount(2);
+  await expect(page.locator('[data-task-id="4"]')).toBeHidden();
+  await expect(convert).toHaveJSProperty("open", false);
+  await expect(convert.locator("summary .badge-running")).toHaveText("Running 1");
+  await expect(scan).toHaveJSProperty("open", true);
+  await expect(scan.locator("summary .badge-failed")).toHaveText("Failed 1");
+  await expect(scan.locator(".task-failure")).toBeVisible();
+  await expect(move).toHaveJSProperty("open", false);
+  expect(itemReads).toBe(0);
+  await page.getByRole("checkbox", { name: "Select this page", exact: true }).check();
+  await expect(refresh.locator('.task input[type="checkbox"]')).toHaveCount(2);
+  for (const checkbox of await refresh.locator('.task input[type="checkbox"]').all()) await expect(checkbox).toBeChecked();
+  await expect(page.locator(".selection-bar")).toContainText("Selected: 5");
+  await page.getByRole("button", { name: "Clear selection", exact: true }).click();
+  await refresh.locator("summary").focus();
+  await page.keyboard.press("Enter");
+  await expect(page.locator('[data-task-id="4"]')).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(refresh).toHaveJSProperty("open", false);
+  await expect(refresh.locator("summary")).toBeFocused();
+  await scan.locator("summary").click();
+  const previousPolls = polls;
+  await expect.poll(() => polls).toBeGreaterThan(previousPolls);
+  await expect(scan).toHaveJSProperty("open", false);
+  await expect(refresh).toHaveJSProperty("open", false);
+
+  jobs[1].state = "failed"; jobs[1].log = "Navidrome refresh failed";
+  await expect(refresh).toHaveJSProperty("open", true);
+  await expect(refresh.locator(".task-failure")).toHaveText("Navidrome refresh failed");
+  await expect(convert).toHaveJSProperty("open", false);
+  await refresh.locator("summary").click();
+  jobs[3].state = "failed"; jobs[3].log = "Another refresh failed";
+  await expect(refresh).toHaveJSProperty("open", true);
+  await expect(refresh.locator("summary .badge-failed")).toHaveText("Failed 2");
+  await page.setViewportSize({ width: 320, height: 844 });
+  await setPreference(page, "language", "zh-CN");
+  await setPreference(page, "theme", "dark");
+  await expect(refresh.locator("summary")).toContainText("本页 2 项");
+  await expect(refresh.locator("summary .badge-failed")).toHaveText("失败 2");
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
+
+  await page.goto("/jobs?task=5");
+  await expect(move).toHaveJSProperty("open", true);
+  await expect(move.getByRole("region")).toBeVisible();
+  await expect(move.locator("#task-toggle-5")).toBeFocused();
+  await move.getByRole("region").getByRole("checkbox").focus();
+  await page.keyboard.press("Escape");
+  await expect(move.getByRole("region")).toHaveCount(0);
+  await expect(move).toHaveJSProperty("open", true);
+  await expect(move.locator("#task-toggle-5")).toBeFocused();
 });
 
 test("task details expand in the page with keyboard access, result filters and pagination", async ({ page }) => {

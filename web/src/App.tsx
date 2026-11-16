@@ -203,6 +203,22 @@ function TaskDetails({ job, notify }: { job: Job; notify: Notice }) {
 
 function taskFromURL(): number | string | undefined { const value = new URLSearchParams(location.search).get("task"); return value ? /^\d+$/.test(value) ? Number(value) : value : undefined; }
 
+function TaskGroup({ jobKind, jobs, expanded, children }: { jobKind: string; jobs: Job[]; expanded: number | string | undefined; children: ReactNode }) {
+  const { t, kind, status } = useI18n();
+  const group = useRef<HTMLDetailsElement>(null);
+  const failures = jobs.filter(job => job.state === "failed").map(job => job.repair_id || job.id).sort().join(",");
+  useEffect(() => {
+    if (group.current && (failures || expanded !== undefined)) group.current.open = true;
+  }, [failures, expanded]);
+  return <details ref={group} className="task-group" data-kind={jobKind}>
+    <summary><ChevronRight size={16} aria-hidden="true" /><strong>{kind(jobKind)}</strong><span className="task-group-count">{t("jobs.groupCount", { count: jobs.length })}</span><span className="task-group-states">{["running", "pending", "paused", "failed"].map(state => {
+      const count = jobs.filter(job => job.state === state).length;
+      return count > 0 && <span key={state} className={`badge badge-${state}`}><span aria-hidden="true" />{status(state)} {count}</span>;
+    })}</span></summary>
+    <div className="task-list">{children}</div>
+  </details>;
+}
+
 function Jobs({ notify }: { notify: Notice }) {
   const { t, status, kind, date, errorMessage } = useI18n();
   const [offset, setOffset] = useState(0); const [filter, setFilter] = useState("all"); const [expanded, setExpanded] = useState<number | string | undefined>(taskFromURL); const [selected, setSelected] = useState<Set<number | string>>(new Set()); const [busy, setBusy] = useState(false); const [allSelected, setAllSelected] = useState(false);
@@ -252,6 +268,11 @@ function Jobs({ notify }: { notify: Notice }) {
     return selectedCount > 0 && states[action].includes(filter);
   }
   function bulk(action: Action) { void control(action, allSelected ? undefined : chosen.filter(job => eligible(job, action)).map(taskKey), allSelected); }
+  const groups = new Map<string, Job[]>();
+  for (const job of data?.jobs || []) {
+    const group = groups.get(job.kind);
+    if (group) group.push(job); else groups.set(job.kind, [job]);
+  }
   return <>
     {data && <ResourceWarning error={error} retry={retryResource} />}
     <PageHeading><div><h1>{t("jobs.title")}</h1></div></PageHeading>
@@ -260,7 +281,7 @@ function Jobs({ notify }: { notify: Notice }) {
     {!data ? <Loading error={error} retry={retryResource} /> : <div className="panel jobs-panel"><div className="table-toolbar"><div className="filter-tabs">{["all", "pending", "running", "paused", "success", "failed", "stopped"].map(state => <button key={state} className={filter === state ? "active" : ""} aria-pressed={filter === state} onClick={() => { setFilter(state); setOffset(0); clearSelection(); expandTask(undefined); }}>{state === "all" ? t("jobs.all") : status(state)}</button>)}</div><Button variant="outline" disabled={busy} onClick={() => void control("retry")}><RefreshCw size={16} />{t("jobs.retryAll")}</Button><InfoHint>{t("jobs.bulkHint")}</InfoHint></div>
       {data.jobs.length > 0 && <div className="library-selection-toolbar jobs-selection-toolbar"><div className="library-selection"><label className="check-field"><input type="checkbox" checked={pageChecked} ref={node => { if (node) node.indeterminate = !pageChecked && chosen.length > 0; }} disabled={busy} onChange={event => { setAllSelected(false); setSelected(event.target.checked ? new Set(data.jobs.map(taskKey)) : new Set()); }} /><span>{t("jobs.selectPage")}</span></label><Button variant="ghost" size="sm" disabled={busy || allSelected} onClick={() => { setAllSelected(true); setSelected(new Set()); }}>{t("jobs.selectMatching", { count: data.total })}</Button>{selectedCount > 0 && <Button variant="ghost" size="sm" disabled={busy} onClick={clearSelection}>{t("library.clearSelection")}</Button>}</div>
       {selectedCount > 0 && <div className="selection-bar"><span>{t(allSelected ? "jobs.allSelected" : "library.selected", { count: selectedCount })}</span><Button size="sm" disabled={busy || !canBulk("pause")} onClick={() => bulk("pause")}>{t("jobs.pause")}</Button><Button size="sm" disabled={busy || !canBulk("resume")} onClick={() => bulk("resume")}>{t("jobs.resume")}</Button><Button size="sm" variant="outline" disabled={busy || !canBulk("stop")} onClick={() => bulk("stop")}>{t("jobs.stop")}</Button><Button size="sm" variant="outline" disabled={busy || !canBulk("retry")} onClick={() => bulk("retry")}>{t("jobs.retry")}</Button><Button size="sm" variant="destructive" disabled={busy || !canBulk("delete")} onClick={() => bulk("delete")}>{t("jobs.delete")}</Button></div>}</div>}
-      {data.jobs.length ? <div className="task-list">{data.jobs.map(job => {
+      {data.jobs.length ? <div className="task-groups">{Array.from(groups, ([jobKind, jobs]) => <TaskGroup key={jobKind} jobKind={jobKind} jobs={jobs} expanded={jobs.some(job => taskKey(job) === expanded) ? expanded : undefined}>{jobs.map(job => {
         const percent = taskPercent(job);
         const key = taskKey(job);
         return <div className="task" key={key} data-state={job.state} data-task-id={job.repair_id ? undefined : job.id} data-repair-task-id={job.repair_id}><div className="task-main"><input type="checkbox" aria-label={t("jobs.select", { id: job.repair_id?.slice(0, 8) || String(job.id) })} checked={allSelected || selected.has(key)} disabled={busy} onChange={event => { setAllSelected(false); setSelected(old => { const value = allSelected ? new Set(data.jobs.map(taskKey)) : new Set(old); event.target.checked ? value.add(key) : value.delete(key); return value; }); }} /><div className="task-description"><div className="task-title"><strong>{kind(job.kind)} <span>#{job.repair_id?.slice(0, 8) || job.id}</span></strong><Badge status={job.state} /></div><small title={date(job.updated)}>{job.profile && `${job.profile.codec.toUpperCase()} ${job.profile.mode.toUpperCase()} · ${job.profile.codec === "mp3" && job.profile.mode === "vbr" ? `V${job.profile.quality}` : `${job.profile.bitrate} kbps`} · `}{date(job.updated)}</small></div><div className="task-actions"><Button variant="outline" size="sm" id={`task-toggle-${key}`} aria-controls={`task-details-${key}`} aria-expanded={expanded === key} onClick={() => expandTask(expanded === key ? undefined : key)}>{expanded === key ? t("jobs.collapse") : t("jobs.details")}</Button>{eligible(job, "pause") && <Button variant="outline" size="sm" disabled={busy} onClick={() => void control("pause", [job.id])}><Pause size={14} />{t("jobs.pause")}</Button>}{eligible(job, "resume") && <Button variant="outline" size="sm" disabled={busy} onClick={() => void control("resume", [job.id])}><Play size={14} />{t("jobs.resume")}</Button>}{(eligible(job, "stop") || job.stopping) && <Button variant="outline" size="sm" disabled={busy || job.stopping} onClick={() => void control("stop", [key])}><Square size={14} />{t(job.stopping ? "repairTasks.stopping" : "jobs.stop")}</Button>}{eligible(job, "retry") && <Button variant="outline" size="sm" disabled={busy} onClick={() => void control("retry", [job.id])}>{t("jobs.retry")}</Button>}<Button className="task-delete" variant="ghost" size="sm" aria-label={t("jobs.delete")} disabled={busy || !job.can_delete} onClick={() => void control("delete", [key])}><Trash2 size={14} /><span className="task-delete-label">{t("jobs.delete")}</span></Button></div></div>
@@ -268,10 +289,10 @@ function Jobs({ notify }: { notify: Notice }) {
           {job.state === "failed" && <p className="task-failure">{errorMessage(job.log || t("jobs.failedHint"))}</p>}
           {job.waiting_reason && <div className="task-waiting" role="status"><Clock3 size={17} /><div>{errorMessage(job.waiting_reason)}{job.retry_at && <small>{t("jobs.waitingUntil", { date: date(job.retry_at) })}</small>}</div></div>}
           {expanded === key && <section id={`task-details-${key}`} className="task-expanded" role="region" aria-label={`${t("jobs.details")} · ${kind(job.kind)} #${job.repair_id?.slice(0, 8) || job.id}`} onKeyDown={event => {
-            if (event.key === "Escape" && !event.defaultPrevented && !(event.target as Element).closest("details[open]")) { event.preventDefault(); expandTask(undefined); document.getElementById(`task-toggle-${key}`)?.focus(); }
+            if (event.key === "Escape" && !event.defaultPrevented && !(event.target as Element).closest(".task-expanded details[open]")) { event.preventDefault(); expandTask(undefined); document.getElementById(`task-toggle-${key}`)?.focus(); }
           }}>{job.repair_id ? <RepairTaskDetails job={job} /> : <TaskDetails job={job} notify={notify} />}</section>}
         </div>;
-      })}</div> : <Empty title={t("jobs.empty")}><Button asChild variant="outline"><a href="/library">{t("overview.viewLibrary")}</a></Button></Empty>}
+      })}</TaskGroup>)}</div> : <Empty title={t("jobs.empty")}><Button asChild variant="outline"><a href="/library">{t("overview.viewLibrary")}</a></Button></Empty>}
       <div className="pagination"><span>{t("jobs.total", { count: data.total })}</span><Button variant="ghost" size="icon" aria-label={t("jobs.previous")} disabled={offset === 0} onClick={() => paginate(Math.max(0, offset - 100))}><ChevronLeft size={16} /></Button><Button variant="ghost" size="icon" aria-label={t("jobs.next")} disabled={offset + 100 >= data.total} onClick={() => paginate(offset + 100)}><ChevronRight size={16} /></Button></div>
     </div>}
   </>;

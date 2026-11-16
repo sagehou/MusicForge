@@ -153,6 +153,10 @@ test("bilingual setup, real incremental build, state preservation and login", as
   await setPreference(page, "language", "zh-CN");
   await page.getByRole("link", { name: "任务", exact: true }).click();
   await expect(page.getByRole("heading", { name: "后台任务" })).toBeVisible();
+  await expect(page.locator(".task-group").first()).toBeVisible();
+  for (const group of await page.locator(".task-group").all()) {
+    if (!await group.evaluate(node => (node as HTMLDetailsElement).open)) await group.locator(":scope > summary").click();
+  }
   await page.getByRole("button", { name: "详情", exact: true }).first().click();
   await expect(page.getByText("任务日志", { exact: true })).toBeVisible();
   const rawLog = await page.locator(".task-outcome").textContent();
@@ -343,6 +347,8 @@ async function exerciseTaskQueue(page: import("@playwright/test").Page, root: st
     await page.getByRole("link", { name: "Jobs", exact: true }).click();
     const task = page.locator(`[data-task-id="${id}"]`);
     await expect(task).toHaveCount(1);
+    const group = page.locator('.task-group[data-kind="scan"]');
+    if (!await group.evaluate(node => (node as HTMLDetailsElement).open)) await group.locator(":scope > summary").click();
     await expect(task.locator(".task-activity")).toContainText("Queue Track 1");
     await expect.poll(async () => (await read()).find(job => job.id === id)?.current.some(activity => activity.phase === "convert" && activity.percent > 0)).toBe(true);
     await task.getByRole("button", { name: "Pause", exact: true }).click();

@@ -268,6 +268,9 @@ for (const width of [1440, 390]) {
     }
     await page.getByRole("link", { name: "任务", exact: true }).click();
     await expect(page.locator(".task")).toHaveCount(5);
+    for (const group of await page.locator(".task-group").all()) {
+      if (!await group.evaluate(node => (node as HTMLDetailsElement).open)) await group.locator(":scope > summary").click();
+    }
     await expect(page.locator('.task[data-state="running"] .task-activity > strong')).toHaveText(history[0].current.map(activity => activity.title));
     await expect(page.locator('.task[data-state="running"] [role="progressbar"]')).toHaveAttribute("aria-valuenow", "44");
     await expect(page.locator('.task[data-state="success"] .badge > span[aria-hidden="true"]')).toHaveCount(1);
@@ -304,6 +307,9 @@ for (const width of [1440, 390]) {
       await expect(page.locator('.task')).toHaveCount(0);
       await filters.getByRole('button', { name: '全部', exact: true }).click();
       await expect(page.locator('.task')).toHaveCount(5);
+      for (const group of await page.locator(".task-group").all()) {
+        if (!await group.evaluate(node => (node as HTMLDetailsElement).open)) await group.locator(":scope > summary").click();
+      }
       for (const task of await page.locator('.task:not([data-state="running"])').all()) {
         const badge = await task.locator(".task-title > .badge").boundingBox();
         const progress = await task.locator(".task-progress").boundingBox();
@@ -339,6 +345,7 @@ for (const width of [1440, 390]) {
       }));
       await page.route("**/api/jobs?*", route => route.fulfill({ json: { jobs: refreshes, total: refreshes.length } }));
       await page.reload();
+      await page.locator('.task-group[data-kind="refresh"] > summary').click();
       for (const [screenWidth, theme, language] of [[390, "light", "zh-CN"], [320, "dark", "en"]] as const) {
         await page.setViewportSize({ width: screenWidth, height: 844 });
         await setPreference(page, "theme", theme);

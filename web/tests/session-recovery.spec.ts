@@ -63,6 +63,7 @@ test("HTML proxy 401 and generic 500 preserve the task page and identify the fai
   }], total: 1 } }));
   await page.route("**/api/repair-tasks?*", route => route.fulfill({ json: { tasks: [], total: 0 } }));
   await page.goto("/jobs");
+  await page.locator('.task-group[data-kind="scan"] > summary').click();
   await expect(page.locator(".task-activity")).toContainText("Still readable");
   status = 401;
   await expect(page.getByRole("alert")).toContainText("HTTP 401");

@@ -96,6 +96,7 @@
   "jobs.all": "All",
   "jobs.collapse": "Collapse",
   "jobs.details": "Details",
+  "jobs.groupCount": "{count} on this page",
   "jobs.retry": "Retry",
   "jobs.logs": "Job logs",
   "jobs.completed": "Job completed successfully.",

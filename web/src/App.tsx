@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent, type MouseEvent, type ReactNode } from "react";
 import { flushSync } from "react-dom";
-import { Activity, ArrowRight, Check, ChevronLeft, ChevronRight, Clock3, Disc3, FolderOpen, LayoutDashboard, Loader2, PanelLeftClose, PanelLeftOpen, Pause, Play, RefreshCw, Settings as SettingsIcon, ShieldCheck, Square, Trash2, Waves, X } from "lucide-react";
+import { Activity, ArrowRight, Check, ChevronLeft, ChevronRight, Clock3, Disc3, FileMusic, FolderOpen, LayoutDashboard, Loader2, PanelLeftClose, PanelLeftOpen, Pause, Play, RefreshCw, Settings as SettingsIcon, ShieldCheck, Square, Trash2, Waves, X } from "lucide-react";
 import { Button } from "./components/ui/button";
 import { api, loadSession, setCSRF } from "./api";
 import type { Activity as JobActivity, Encoding, Job, Me, Settings, TaskItem, MaintenanceOptions } from "./types";

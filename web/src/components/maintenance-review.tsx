@@ -1,28 +1,30 @@
 import { InfoHint } from "./info-hint";
 import { useEffect, useMemo, useState } from "react";
-import { ClipboardCheck, HardDrive, History, Loader2, Wrench } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { api } from "../api";
 import { useI18n } from "../i18n";
 import { libraryQuality, qualityKinds, type QualityKind } from "../library-quality";
 import type { Source } from "../types";
 import { Button } from "./ui/button";
 import { ResourceWarning, useResource, type Notice } from "./resource";
-import { ToolSection, ToolStatus, useTool } from "./library-tools";
+import { ToolStatus, useTool } from "./library-tools";
+
+const reviewKinds = qualityKinds.filter(kind => kind !== "lyrics" && kind !== "covers");
 
 type Decision = { id: number; kind: QualityKind; state: "todo" | "ignored"; reason: string; updated: number };
 
-export function QualityReview({ sources, selected, select, notify }: { sources: Source[]; selected: Source[]; select: (ids: number[]) => void; notify: Notice }) {
+export function QualityReview({ sources, select, notify }: { sources: Source[]; select: (ids: number[]) => void; notify: Notice }) {
   const { t, number } = useI18n();
   const saved = useResource<Decision[]>("/maintenance/issues");
   const quality = useMemo(() => libraryQuality(sources), [sources]);
-  const [kind, setKind] = useState<QualityKind>("metadata");
+  const [kind, setKind] = useState<QualityKind>(() => reviewKinds.find(issue => quality[issue].length > 0) || "metadata");
   const [state, setState] = useState<"open" | "todo" | "ignored">("todo");
   const [reason, setReason] = useState("");
   const [busy, setBusy] = useState(false);
   const [showIgnored, setShowIgnored] = useState(false);
   const revision = JSON.stringify(sources.map(source => [source.id, source.path, source.hash, source.output, source.present, source.output_present, source.artist, source.album, source.title, source.track, source.disc, source.metadata, source.duration, source.error, source.possibly_damaged, source.artwork_url, source.lyrics?.state]));
   useEffect(() => { saved.retry(); }, [revision]);
-  const selectedIDs = new Set(selected.map(source => source.id));
+  const [selectedIDs, setSelectedIDs] = useState<Set<number>>(new Set());
   const decisions = useMemo(() => new Map((saved.data || []).map(item => [`${item.kind}:${item.id}`, item] as const)), [saved.data]);
   const decision = (id: number, issue: QualityKind) => decisions.get(`${issue}:${id}`);
   const visible = quality[kind].filter(source => showIgnored || decision(source.id, kind)?.state !== "ignored");
@@ -34,20 +36,32 @@ export function QualityReview({ sources, selected, select, notify }: { sources: 
     catch (err) { notify(err as Error, true); }
     finally { setBusy(false); }
   }
-  return <section aria-label={t("quality.title")}><h3>{t("quality.title")}</h3><InfoHint>{t("quality.hint")}</InfoHint><ResourceWarning error={saved.error} retry={saved.retry} /><div className="quality-grid">{qualityKinds.map(issue => {
-    const active = quality[issue].filter(source => decision(source.id, issue)?.state !== "ignored");
-    return <Button key={issue} variant="outline" size="sm" disabled={!active.length} onClick={() => { setKind(issue); select(active.map(source => source.id)); }}><span>{t(`quality.${issue}`)}</span><strong>{number(active.length)}</strong></Button>;
-  })}</div><p className="audition-note">{t("quality.caution")}</p>
-    <details className="quality-decisions"><summary><ClipboardCheck size={15} />{t("review.title")}</summary><div className="comparison-body"><InfoHint>{t("review.hint")}</InfoHint><label className="field"><span className="field-label">{t("review.kind")}</span><select value={kind} onChange={event => setKind(event.target.value as QualityKind)}>{qualityKinds.map(issue => <option key={issue} value={issue}>{t(`quality.${issue}`)}</option>)}</select></label><label className="check-field"><input type="checkbox" checked={showIgnored} onChange={event => setShowIgnored(event.target.checked)} />{t("review.showIgnored", { count: ignored })}</label>
-      <div className="actions"><Button size="sm" variant="outline" disabled={!visible.length} onClick={() => select(visible.map(source => source.id))}>{t("review.select")}</Button><p>{t("review.selection", { count: chosen.length })}</p></div>
-      <label className="field"><span className="field-label">{t("review.state")}</span><select value={state} disabled={busy} onChange={event => setState(event.target.value as typeof state)}><option value="todo">{t("review.todo")}</option><option value="ignored">{t("review.ignored")}</option><option value="open">{t("review.open")}</option></select></label><label className="field"><span className="field-label">{t("review.reason")}</span><textarea rows={2} maxLength={1000} value={reason} disabled={busy} onChange={event => setReason(event.target.value)} /></label><Button size="sm" disabled={busy || !chosen.length || chosen.length > 1000 || state === "ignored" && !reason.trim()} onClick={() => void save()}>{t("review.save")}</Button>
-      {visible.length > 0 && <ul className="review-issues">{visible.slice(0, 100).map(source => { const item = decision(source.id, kind); return <li key={source.id}><strong>{source.title || source.path}</strong> · {t(item?.state === "ignored" ? "review.ignored" : item?.state === "todo" ? "review.todo" : "review.open")}{item?.reason && <p>{item.reason}</p>}</li>; })}</ul>}{visible.length > 100 && <p>{t("review.truncated")}</p>}
-    </div></details></section>;
+  return <section aria-label={t("quality.title")}>
+    <div className="section-heading"><h3>{t("quality.title")}</h3><InfoHint><p>{t("quality.hint")}</p><p>{t("quality.caution")}</p></InfoHint></div>
+    <ResourceWarning error={saved.error} retry={saved.retry} />
+    <div className="quality-grid" role="group" aria-label={t("review.kind")}>{reviewKinds.map(issue => {
+      const active = quality[issue].filter(source => decision(source.id, issue)?.state !== "ignored");
+      return <Button key={issue} variant="outline" size="sm" disabled={busy} aria-pressed={kind === issue} onClick={() => { setKind(issue); setSelectedIDs(new Set()); }}><span>{t(`quality.${issue}`)}</span><strong>{number(active.length)}</strong></Button>;
+    })}</div>
+    <label className="check-field"><input type="checkbox" disabled={busy} checked={showIgnored} onChange={event => setShowIgnored(event.target.checked)} />{t("review.showIgnored", { count: ignored })}</label>
+    {visible.length ? <>
+      <div className="actions quality-selection"><Button size="sm" variant="outline" disabled={busy} onClick={() => setSelectedIDs(new Set(visible.map(source => source.id)))}>{t("review.select")}</Button><span>{t("review.selection", { count: chosen.length })}</span></div>
+      <ul className="review-issues">{visible.slice(0, 100).map(source => {
+        const item = decision(source.id, kind);
+        return <li key={source.id}><div className="review-issue-row"><label className="check-field"><input type="checkbox" disabled={busy} checked={selectedIDs.has(source.id)} onChange={event => setSelectedIDs(old => { const next = new Set(old); if (event.target.checked) next.add(source.id); else next.delete(source.id); return next; })} /><strong dir="auto">{source.title || source.path}</strong></label><span>{t(item?.state === "ignored" ? "review.ignored" : item?.state === "todo" ? "review.todo" : "review.open")}</span><Button size="sm" variant="ghost" disabled={busy} onClick={() => select([source.id])}>{t("workbench.viewTrack")}</Button></div>{item?.reason && <p>{item.reason}</p>}</li>;
+      })}</ul>
+      {visible.length > 100 && <p>{t("review.truncated")}</p>}
+      {chosen.length > 0 && <section className="quality-decisions"><div className="section-heading"><h4>{t("review.title")}</h4><InfoHint>{t("review.hint")}</InfoHint></div>
+        <div className="quality-decision-fields"><label className="field"><span className="field-label">{t("review.state")}</span><select value={state} disabled={busy} onChange={event => setState(event.target.value as typeof state)}><option value="todo">{t("review.todo")}</option><option value="ignored">{t("review.ignored")}</option><option value="open">{t("review.open")}</option></select></label><label className="field"><span className="field-label">{t("review.reason")}</span><textarea rows={2} maxLength={1000} value={reason} disabled={busy} onChange={event => setReason(event.target.value)} /></label></div>
+        <Button size="sm" disabled={busy || chosen.length > 1000 || state === "ignored" && !reason.trim()} onClick={() => void save()}>{t("review.save")}</Button>
+      </section>}
+    </> : <div className="content-maintenance-empty"><p>{t("workbench.noIssues")}</p><Button size="sm" variant="outline" onClick={saved.retry}>{t("operations.refresh")}</Button></div>}
+  </section>;
 }
 
 type Suggestion = { id: number; title: string; path: string; kind: "build" | "lyrics" | "gain" };
 
-function RepairSuggestions({ sources, select, notify }: { sources: Source[]; select: (ids: number[]) => void; notify: Notice }) {
+export function RepairSuggestions({ sources, select, notify }: { sources: Source[]; select: (ids: number[]) => void; notify: Notice }) {
   const { t, errorMessage } = useI18n();
   const [preview, setPreview] = useState<Suggestion[]>();
   const [chosen, setChosen] = useState<Set<number>>(new Set());
@@ -84,13 +98,13 @@ function RepairSuggestions({ sources, select, notify }: { sources: Source[]; sel
   }
   return <section aria-label={t("suggestions.title")}><InfoHint>{t("suggestions.hint")}</InfoHint><Button size="sm" variant="outline" disabled={busy} onClick={review}>{t("suggestions.preview")}</Button>{preview && <div className="maintenance-report"><p>{t("suggestions.count", { count: preview.length })}</p><InfoHint>{t("suggestions.confirmHint")}</InfoHint>{preview.length <= 1000 && <label className="check-field"><input type="checkbox" disabled={busy || !preview.length} checked={preview.length > 0 && chosen.size === preview.length} onChange={event => setChosen(new Set(event.target.checked ? preview.map(item => item.id) : []))} />{t("suggestions.selectAll")}</label>}
     <ul className="review-issues">{preview.slice(0, 1000).map(item => <li key={item.id}><label className="check-field"><input type="checkbox" disabled={busy} checked={chosen.has(item.id)} onChange={event => setChosen(old => { const next = new Set(old); if (event.target.checked) next.add(item.id); else next.delete(item.id); return next; })} /><span><strong>{item.title || item.path}</strong> · {t(`suggestions.${item.kind}`)}</span></label><code>{item.path}</code></li>)}</ul>{preview.length > 1000 && <p>{t("suggestions.limit")}</p>}<div className="actions"><Button size="sm" disabled={busy || !chosen.size} onClick={() => void apply()}>{busy && <Loader2 size={14} className="animate-spin" />}{t("suggestions.apply", { count: chosen.size })}</Button><Button size="sm" variant="outline" disabled={!chosen.size} onClick={() => select([...chosen])}>{t("suggestions.selectTracks")}</Button></div>
-    </div>}{results.map(result => <p key={result.kind} role={result.error ? "alert" : "status"}>{t(`suggestions.${result.kind}`)} · {result.count}: {result.error ? errorMessage(result.error) : t("suggestions.queued")}</p>)}<p>{t("suggestions.manual")}</p></section>;
+    </div>}{results.map(result => <p key={result.kind} role={result.error ? "alert" : "status"}>{t(`suggestions.${result.kind}`)} · {result.count}: {result.error ? errorMessage(result.error) : t("suggestions.queued")}</p>)}<InfoHint>{t("suggestions.manual")}</InfoHint></section>;
 }
 
 type OperationItem = { id: number; path: string; output: string; state: "prepared" | "applied" | "failed" | "interrupted" | "undone"; error?: string; undoable: boolean; before?: Record<string, string>; after?: Record<string, string>; before_hash?: string; after_hash?: string };
 type Operation = { id: string; kind: "tags" | "lyrics" | "artwork"; created: number; items: OperationItem[] };
 
-function OperationLog({ notify }: { notify: Notice }) {
+export function OperationLog({ notify }: { notify: Notice }) {
   const { t, locale, errorMessage } = useI18n();
   const undo = useTool("undo");
   const operations = useResource<Operation[]>("/maintenance/operations", undo.running);
@@ -128,7 +142,7 @@ type Space = { path: string; free_bytes: number; total_bytes: number; empty: boo
 type Health = { source: string; output: string; config: string; online: boolean; checked_at?: number; message: string; tracks: number; outputs: number; output_bytes: number; staging_bytes: number; staging_limit_bytes: number };
 type Migration = { source: string; output: Space; source_bytes: number; output_bytes: number; paths_applied: boolean };
 
-function StorageHealth({ sources, selected, notify }: { sources: Source[]; selected: Source[]; notify: Notice }) {
+export function StorageHealth({ sources, selected, notify }: { sources: Source[]; selected: Source[]; notify: Notice }) {
   const { t, number, date, errorMessage } = useI18n();
   const health = useResource<Health>("/maintenance/storage/health", 10000);
   const verification = useTool("storage");
@@ -150,9 +164,4 @@ function StorageHealth({ sources, selected, notify }: { sources: Source[]; selec
   return <section aria-label={t("storage.title")}><InfoHint>{t("storage.hint")}</InfoHint><ResourceWarning error={health.error || verification.error} retry={() => { health.retry(); verification.retry(); }} />{health.data && <div className="maintenance-report"><p role="status">{health.data.online ? t("storage.online") : errorMessage(health.data.message)}</p>{health.data.checked_at ? <p>{t("storage.lastChecked", { time: date(health.data.checked_at) })}</p> : null}<dl><dt>{t("storage.source")}</dt><dd><code>{health.data.source}</code></dd><dt>{t("storage.output")}</dt><dd><code>{health.data.output}</code></dd><dt>{t("storage.config")}</dt><dd><code>{health.data.config}</code></dd><dt>{t("storage.indexed")}</dt><dd>{health.data.tracks} / {health.data.outputs} · {number(health.data.output_bytes)} B</dd><dt>{t("storage.staging")}</dt><dd>{number(health.data.staging_bytes)} / {number(health.data.staging_limit_bytes)} B</dd></dl></div>}<div className="actions"><Button size="sm" variant="outline" disabled={busy} onClick={() => void action("check")}>{t("storage.check")}</Button><Button size="sm" variant="outline" disabled={busy || verification.running || !outputs.length || outputs.length > 1000} onClick={() => void action("verify")}>{t("storage.verify", { count: outputs.length })}</Button></div>{spaces && <ul>{Object.entries(spaces).map(([key, value]) => <li key={key}><strong>{t(key === "ownership_error" ? "storage.ownership" : key === "source" ? "storage.source" : key === "output" ? "storage.output" : key === "config" ? "storage.config" : "storage.staging")}</strong>: {typeof value === "string" ? errorMessage(value) : value.error ? errorMessage(value.error) : "free_bytes" in value ? t("storage.space", { free: number(value.free_bytes), total: number(value.total_bytes) }) : t("storage.online")}</li>)}</ul>}<ToolStatus kind="storage" report={verification.data} retry={verification.retry} notify={notify} />
     <details className="migration-guide"><summary>{t("migration.title")}</summary><div className="comparison-body"><InfoHint>{t("migration.hint")}</InfoHint><label className="field"><span className="field-label">{t("migration.source")}</span><input value={source} disabled={busy} onChange={event => { setSource(event.target.value); setPlan(undefined); }} /></label><label className="field"><span className="field-label">{t("migration.output")}</span><input value={output} disabled={busy} onChange={event => { setOutput(event.target.value); setPlan(undefined); }} /></label><Button size="sm" variant="outline" disabled={busy || !source || !output} onClick={() => void action("migration")}>{t("migration.preview")}</Button>{plan && <div className="maintenance-report"><p>{t("migration.checked")}</p><code>{plan.source}</code><p><code>{plan.output.path}</code></p><p>{t("migration.size", { source: number(plan.source_bytes), output: number(plan.output_bytes), free: number(plan.output.free_bytes) })}</p><p>{plan.output.empty ? t("migration.empty") : t("migration.owned")}</p><ol>{(["pause", "backup", "copy", "mount", "verify", "resume"] as const).map(step => <li key={step}>{t(`migration.${step}`)}</li>)}</ol><p>{t("migration.restore")}</p><a href="/settings?section=library">{t("migration.settings")}</a></div>}</div></details>
   </section>;
-}
-
-export function MaintenanceReview({ sources, selected, select, notify }: { sources: Source[]; selected: Source[]; select: (ids: number[]) => void; notify: Notice }) {
-  const { t } = useI18n();
-  return <div className="library-tools"><ToolSection title={t("suggestions.title")} icon={<Wrench size={16} />}><RepairSuggestions sources={sources} select={select} notify={notify} /></ToolSection><ToolSection title={t("operations.title")} icon={<History size={16} />}><OperationLog notify={notify} /></ToolSection><ToolSection title={t("storage.title")} icon={<HardDrive size={16} />}><StorageHealth sources={sources} selected={selected} notify={notify} /></ToolSection></div>;
 }

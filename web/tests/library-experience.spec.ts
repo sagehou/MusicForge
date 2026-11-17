@@ -126,7 +126,6 @@ test("album and artist lyrics actions use all playable tracks in their scope, in
   await page.route("**/api/lyrics", route => route.fulfill({ json: { options: { auto_search: false }, report: { state: running ? "running" : "idle", total: 63, processed: 1, found: 1, not_found: 0, failed: 0, stopping: false } } }));
   await page.goto("/library?view=albums&artist=River+Ensemble&album=River+Ensemble%2FNight+Studies");
   await expect(page.locator(".track-table tbody > tr")).toHaveCount(50);
-  await expect(page.locator(".lyrics-settings")).toContainText("0 / 63");
   await page.getByLabel("Search library", { exact: true }).fill("Song 01");
   await expect(page.locator(".track-table tbody > tr")).toHaveCount(1);
   await expect(page).toHaveURL(/q=Song\+01/);
@@ -134,6 +133,15 @@ test("album and artist lyrics actions use all playable tracks in their scope, in
   await expect(page.getByLabel("Search library", { exact: true })).toHaveValue("Song 01");
   await expect(page.getByRole("button", { name: "Fill lyrics for all artifacts", exact: true })).toHaveCount(0);
   await openLyricsMaintenance(page);
+  await expect(page.locator(".lyrics-settings")).toContainText("0 / 63");
+  const pending = page.locator("#workbench-panel-lyrics .content-maintenance");
+  await expect(pending.locator(".content-maintenance-list > li")).toHaveCount(20);
+  await pending.getByRole("button", { name: "Next page", exact: true }).click();
+  await expect(pending.locator(".content-maintenance-list > li").first()).toContainText("Song 21");
+  await pending.getByLabel("Find a track", { exact: true }).fill("Song 63");
+  await expect(pending.locator(".content-maintenance-list > li")).toHaveCount(1);
+  await expect(pending).toContainText("Song 63");
+  await pending.getByLabel("Find a track", { exact: true }).fill("");
   await page.getByRole("button", { name: "Fill album lyrics", exact: true }).click();
   await expect.poll(() => searches.length).toBe(1);
   expect(searches[0]).toEqual({ ids: album.slice(0, 63).map(source => source.id), refresh: false });

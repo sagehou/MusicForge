@@ -165,12 +165,7 @@ test("online cover preview shows dimensions and requires a separate save", async
   await page.getByRole("button", { name: "Correct output cover", exact: true }).click();
   const editor = page.getByRole("region", { name: "Correct output cover", exact: true });
   await expect(page.locator(".track-expanded-row .artwork-editor")).toBeVisible();
-  await editor.locator(".cover-search > summary").click();
-  await editor.getByLabel("Artist / album search", { exact: true }).focus();
-  await page.keyboard.press("Escape");
-  await expect(editor.locator(".cover-search")).not.toHaveAttribute("open", "");
-  await expect(editor).toBeVisible();
-  await editor.locator(".cover-search > summary").click();
+  await expect(editor.getByLabel("Artist / album search", { exact: true })).toBeVisible();
   await editor.getByRole("button", { name: "Search cover candidates", exact: true }).click();
   await editor.getByRole("button", { name: "Preview this cover", exact: true }).click();
   await expect(editor).toContainText("64 × 32 px");

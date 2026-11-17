@@ -1,6 +1,6 @@
 import { routeLibrary } from "./library-fixture";
 import { test, expect, type Locator, type Page } from "@playwright/test";
-import { setPreference } from "./preferences";
+import { openWorkbench, setPreference } from "./preferences";
 import type { Source } from "../src/types";
 
 test.beforeEach(async ({ page }) => {
@@ -69,10 +69,11 @@ test("browse and organize share filters, selection and drafts without starting m
   await expect(page.locator(".selection-bar")).toContainText("Selected: 1");
   await expect(page.getByLabel("Search library", { exact: true })).toHaveValue("Song 01");
   await expect(page).toHaveURL(/lyrics=needs_review/);
-  await page.locator("#maintenance-workbench > summary").click();
+  await openWorkbench(page, "covers");
   await browse.click();
   await organize.click();
-  await expect(page.locator("#maintenance-workbench")).toHaveJSProperty("open", true);
+  await expect(page.locator("#workbench-covers")).toHaveAttribute("aria-pressed", "true");
+  await expect(page.locator("#workbench-panel-covers")).toBeVisible();
   await page.screenshot({ path: "test-results/workspace-organize-desktop-light.png", animations: "disabled" });
   await page.evaluate(() => history.replaceState(null, "", `${location.pathname}${location.search}#maintenance-workbench`));
   await browse.click();

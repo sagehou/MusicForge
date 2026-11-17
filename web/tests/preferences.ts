@@ -41,8 +41,12 @@ export async function openSelectionActions(page: Page) {
   }), { message: "Expanded selection actions must fit inside their disclosure" }).toBeLessThanOrEqual(1);
 }
 
+export async function openWorkbench(page: Page, view: "lyrics" | "covers" | "issues" | "loudness" | "suggestions" | "history" | "storage" = "lyrics") {
+  if (!await page.locator("#maintenance-workbench").isVisible()) await page.locator(".library-workspace-modes > button").nth(1).click();
+  await page.locator(`#workbench-${view}`).click();
+  await expect(page.locator(`#workbench-panel-${view}`)).toBeVisible();
+}
+
 export async function openLyricsMaintenance(page: Page) {
-  const panel = page.locator(".lyrics-settings");
-  if (!await panel.isVisible()) await page.locator(".library-workspace-modes > button").nth(1).click();
-  if (!await panel.evaluate(node => (node as HTMLDetailsElement).open)) await panel.locator(":scope > summary").click();
+  await openWorkbench(page, "lyrics");
 }

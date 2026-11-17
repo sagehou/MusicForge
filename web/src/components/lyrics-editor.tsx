@@ -9,7 +9,7 @@ import { InfoHint } from "./info-hint";
 
 type LyricsAssociation = { path: string; text: string; fingerprint: string; required: boolean };
 
-export function LyricsEditor({ id, position, audition, canAudition, preview, saved, close, onBusyChange }: { id: number; position: number; audition: (time: number) => void; canAudition: boolean; preview: (text: string) => void; saved: (text: string) => void; close: () => void; onBusyChange: (busy: boolean) => void }) {
+export function LyricsEditor({ id, position, audition, canAudition, preview, saved, close, onBusyChange, embedded = false }: { id: number; position: number; audition: (time: number) => void; canAudition: boolean; preview: (text: string) => void; saved: (text: string) => void; close: () => void; onBusyChange: (busy: boolean) => void; embedded?: boolean }) {
   const { t, errorMessage } = useI18n();
   const [token, setToken] = useState("");
   const [text, setText] = useState("");
@@ -68,7 +68,7 @@ export function LyricsEditor({ id, position, audition, canAudition, preview, sav
     } catch (err) { setError(err as Error); }
   }
   return <section className="lyrics-editor" aria-label={t("lyricsEdit.title")}>
-    <div className="section-heading"><div className="actions"><h3>{t("lyricsEdit.title")}</h3><InfoHint>{t("lyricsEdit.hint")}</InfoHint></div><Button variant="ghost" size="icon" disabled={busy} aria-label={t("lyricsEdit.cancel")} onClick={close}><X size={16} /></Button></div>
+    {embedded ? <InfoHint>{t("lyricsEdit.hint")}</InfoHint> : <div className="section-heading"><div className="actions"><h3>{t("lyricsEdit.title")}</h3><InfoHint>{t("lyricsEdit.hint")}</InfoHint></div><Button variant="ghost" size="icon" disabled={busy} aria-label={t("lyricsEdit.cancel")} onClick={close}><X size={16} /></Button></div>}
     <div className="actions"><Button size="sm" variant="outline" disabled={busy || !!token && (text !== initial || delay !== 0)} onClick={() => void reviewAssociation()}>{t("lyricsAssociation.review")}</Button><InfoHint>{t("lyricsAssociation.hint")}</InfoHint></div>
     {error && <div role="alert" className="error-box"><p>{errorMessage(error.message)}</p>{!token && !association && <Button size="sm" variant="outline" onClick={() => setAttempt(value => value + 1)}>{t("audition.reload")}</Button>}</div>}
     {association && <div className="maintenance-report" role="region" aria-label={t("lyricsAssociation.title")}>
@@ -97,8 +97,8 @@ export function LyricsEditor({ id, position, audition, canAudition, preview, sav
       </details>
       <div className="actions"><label className="maintenance-upload"><Upload size={14} />{t("lyricsEdit.import")}<input type="file" accept=".lrc,text/plain" disabled={busy} onChange={event => { void upload(event.target.files?.[0]); event.target.value = ""; }} /></label><Button size="sm" variant="ghost" disabled={busy} onClick={() => { setText(initial); setDelay(0); setAnchor(0); }}><RotateCcw size={14} />{t("lyricsEdit.reset")}</Button></div>
       <div className="field"><span className="field-label">{t("lyricsEdit.delay")}</span><div className="actions"><Button size="sm" variant="outline" disabled={busy || delay <= -3600000} onClick={() => setDelay(value => Math.max(-3600000, value - 100))}>−100 ms</Button><input aria-label={t("lyricsEdit.delay")} type="number" min={-3600000} max={3600000} step={1} disabled={busy} value={delay} onChange={event => setDelay(Math.max(-3600000, Math.min(3600000, Math.round(Number(event.target.value)))))} /><Button size="sm" variant="outline" disabled={busy || delay >= 3600000} onClick={() => setDelay(value => Math.min(3600000, value + 100))}>+100 ms</Button></div></div>
-      <label className="field"><span className="field-label">{t("lyricsEdit.anchor")}</span><select disabled={busy || !cues.length} value={Math.min(anchor, Math.max(0, cues.length - 1))} onChange={event => setAnchor(Number(event.target.value))}>{cues.map((cue, index) => <option key={cue.time} value={index}>{audioTime(cue.time)} · {cue.text.slice(0, 80)}</option>)}</select></label>
-      <div className="actions"><Button size="sm" variant="outline" disabled={busy || !cues[anchor]} onClick={() => setDelay(Math.max(-3600000, Math.min(3600000, Math.round((position - cues[anchor].time) * 1000))))}>{t("lyricsEdit.align", { time: audioTime(position) })}</Button><Button size="sm" disabled={busy || !cues.length || text === initial && delay === 0} onClick={() => void save()}>{busy ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}{t("lyricsEdit.save")}</Button></div>
+      {canAudition && <label className="field"><span className="field-label">{t("lyricsEdit.anchor")}</span><select disabled={busy || !cues.length} value={Math.min(anchor, Math.max(0, cues.length - 1))} onChange={event => setAnchor(Number(event.target.value))}>{cues.map((cue, index) => <option key={cue.time} value={index}>{audioTime(cue.time)} · {cue.text.slice(0, 80)}</option>)}</select></label>}
+      <div className="actions">{canAudition && <Button size="sm" variant="outline" disabled={busy || !cues[anchor]} onClick={() => setDelay(Math.max(-3600000, Math.min(3600000, Math.round((position - cues[anchor].time) * 1000))))}>{t("lyricsEdit.align", { time: audioTime(position) })}</Button>}<Button size="sm" disabled={busy || !cues.length || text === initial && delay === 0} onClick={() => void save()}>{busy ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}{t("lyricsEdit.save")}</Button></div>
       <EditHistory id={id} kind="lyrics" disabled={busy} restore={content => { setText(content.text || ""); setDelay(0); setAnchor(0); }} />
     </>}
   </section>;

@@ -17,7 +17,7 @@ import { LibraryTools, type LibraryTool } from "./library-tools";
 import { PageHeading } from "./page-heading";
 import { InfoHint } from "./info-hint";
 import { SavedLibraryViews } from "./saved-library-views";
-import { LyricsMaintenance, LyricsPicker, LyricsSearchButton, LyricsTrack, lyricsMatchStates, type LyricsMatchState } from "./lyrics";
+import { LyricsPicker, LyricsSearchButton, LyricsTrack, lyricsMatchStates, type LyricsMatchState } from "./lyrics";
 
 type Scope = { view: "artists" | "albums" | "tracks"; artist?: string; album?: string };
 type Density = "compact" | "standard" | "large";
@@ -347,7 +347,7 @@ export function Library({ notify }: { notify: Notice }) {
   }
   function reviewTracks(ids: number[]) {
     if (editorBusy) return;
-    clearDetails(); setSelected(new Set(ids)); navigate({ ...scope, view: "tracks" }); setFilter("all"); setLyricsFilter("all"); setScriptFilter("all"); setQuery(""); setOffset(0);
+    clearDetails(); setSelected(new Set(ids)); navigate({ ...scope, view: "tracks" }); changeMode(false); setFilter("all"); setLyricsFilter("all"); setScriptFilter("all"); setQuery(""); setOffset(0);
   }
   function changePage(next: number) { if (!editorBusy) { clearDetails(); setOffset(next); } }
   function adjacent(id: number, direction: number, lyrics = false) {
@@ -472,8 +472,7 @@ export function Library({ notify }: { notify: Notice }) {
     </div>
     {tool && tool.kind !== "tags" && <LibraryTools key={tool.kind} tool={tool.kind} scopeQuery={scopeParams.toString()} selected={chosen} select={reviewTracks} notify={notify} close={() => setTool(undefined)} returnFocusID={tool.trigger} onBusyChange={setEditorBusy} />}
     <div className="library-maintenance">
-      <LyricsMaintenance inventory={data.lyrics} scopeQuery={scopeParams.toString()} scope={isAlbum ? "album" : scope.artist ? "artist" : undefined} notify={notify} />
-      <MaintenanceWorkbench scopeQuery={scopeParams.toString()} attention={data.attention} selected={chosen} notify={notify} select={reviewTracks} />
+      <MaintenanceWorkbench active={organizing} scopeQuery={scopeParams.toString()} scope={isAlbum ? "album" : scope.artist ? "artist" : undefined} inventory={data.lyrics} attention={data.attention} selected={chosen} notify={notify} select={reviewTracks} busy={editorBusy} onBusyChange={setEditorBusy} openEditor={clearDetails} />
       {!scope.artist && !isAlbum && <LibraryComparison counts={data.counts} notify={notify} />}
     </div>
     </div>

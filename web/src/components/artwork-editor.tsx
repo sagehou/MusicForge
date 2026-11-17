@@ -9,7 +9,7 @@ import { ArtworkSearch, artworkFile } from "./artwork-search";
 import { InlineDetails } from "./inline-details";
 import { InfoHint } from "./info-hint";
 
-export function ArtworkEditor({ source, saved, close, returnFocusID, onBusyChange }: { source: Source; saved: () => void; close: () => void; returnFocusID: string; onBusyChange: (busy: boolean) => void }) {
+export function ArtworkEditor({ source, saved, close, returnFocusID, onBusyChange, panelID = `artwork-editor-${source.id}` }: { source: Source; saved: () => void; close: () => void; returnFocusID: string; panelID?: string; onBusyChange: (busy: boolean) => void }) {
   const { t, errorMessage } = useI18n();
   const [data, setData] = useState<{ token: string; override: boolean }>();
   const [file, setFile] = useState<File>();
@@ -58,7 +58,7 @@ export function ArtworkEditor({ source, saved, close, returnFocusID, onBusyChang
     catch (err) { setError(err as Error); }
     finally { setBusy(false); }
   }
-  return <InlineDetails className="artwork-editor" id={`artwork-editor-${source.id}`} title={t("coverEdit.title")} subtitle={source.album || source.path} close={close} returnFocusID={returnFocusID} busy={busy || searching || processing}>
+  return <InlineDetails className="artwork-editor" id={panelID} title={t("coverEdit.title")} subtitle={source.album || source.path} close={close} returnFocusID={returnFocusID} busy={busy || searching || processing}>
     <InfoHint>{t("coverEdit.hint", { path: source.path.split("/").slice(0, -1).join("/") || "." })} {t("coverEdit.limit")}</InfoHint>
     {error && <div role="alert" className="error-box"><p>{errorMessage(error.message)}</p>{!data && <Button size="sm" variant="outline" onClick={() => setAttempt(value => value + 1)}>{t("audition.reload")}</Button>}</div>}
     {!data && !error && <Loader2 size={18} className="animate-spin" />}

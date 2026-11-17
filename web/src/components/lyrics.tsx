@@ -44,24 +44,17 @@ export function LyricsSearchButton({ ids, getIDs, all = false, refresh = false, 
 
 export function LyricsMaintenance({ inventory, scopeQuery, scope, notify }: { inventory: LyricsInventory; scopeQuery: string; scope?: "album" | "artist"; notify: Notice }) {
   const { t } = useI18n();
-  const details = useRef<HTMLDetailsElement>(null);
-  useEffect(() => {
-    let frame = 0;
-    const reveal = () => { if (location.hash === "#lyrics-maintenance" && details.current) { details.current.open = true; cancelAnimationFrame(frame); frame = requestAnimationFrame(() => details.current?.scrollIntoView({ block: "nearest" })); } };
-    reveal(); window.addEventListener("route-changed", reveal); window.addEventListener("popstate", reveal);
-    return () => { cancelAnimationFrame(frame); window.removeEventListener("route-changed", reveal); window.removeEventListener("popstate", reveal); };
-  }, []);
   const coverage = scope === "album" ? "lyrics.albumCoverage" : scope === "artist" ? "lyrics.artistCoverage" : "lyrics.coverage";
   const getIDs = scope ? async () => (await api<{ ids: number[] }>("/library/selection", "POST", { query: scopeQuery, ids_only: true, playable: true })).ids : undefined;
   return <section className="library-comparison lyrics-panel" id="lyrics-maintenance">
-    <details ref={details} className="lyrics-settings" onKeyDown={event => { if (event.key === "Escape" && event.currentTarget.open && !event.defaultPrevented && (event.target as Element).closest("details[open]") === event.currentTarget) { event.preventDefault(); event.currentTarget.open = false; event.currentTarget.querySelector("summary")?.focus(); } }}><summary><FileMusic size={18} /><span>{t("lyrics.manage")}</span><small className="maintenance-count" aria-label={t(coverage, { done: inventory.checked, total: inventory.total })}>{inventory.checked} / {inventory.total}</small><ChevronRight size={16} /></summary>
+    <div className="lyrics-settings"><div className="section-heading"><h3>{t("lyrics.manage")}</h3><small className="maintenance-count" aria-label={t(coverage, { done: inventory.checked, total: inventory.total })}>{inventory.checked} / {inventory.total}</small></div>
       <section className="lyrics-library-summary" aria-label={t(scope === "album" ? "lyrics.albumStatus" : scope === "artist" ? "lyrics.artistStatus" : "lyrics.libraryStatus")}>
         <strong>{t(coverage, { done: inventory.checked, total: inventory.total })}</strong>
         <p>{t("lyrics.inventory", { found: inventory.counts.ready, missing: inventory.counts.not_found, instrumental: inventory.counts.instrumental, review: inventory.counts.needs_review, failed: inventory.counts.failed, unchecked: inventory.counts.unchecked })}</p>
         <InfoHint>{t("lyrics.inventoryHint")}</InfoHint>
       </section>
       <LyricsControls notify={notify} disabled={!!scope && inventory.total === 0} getIDs={getIDs} label={scope === "album" ? "lyrics.searchAlbum" : scope === "artist" ? "lyrics.searchArtist" : "lyrics.searchAll"} />
-    </details>
+    </div>
   </section>;
 }
 
@@ -198,7 +191,7 @@ function candidateDuration(value: number) {
   return seconds > 0 ? `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}` : "—";
 }
 
-export function LyricsPicker({ source, notify, close, saved, previous, next, onBusyChange, standalone = false }: { source: Source; notify: Notice; close: () => void; saved: () => void; previous?: () => void; next?: () => void; onBusyChange: (busy: boolean) => void; standalone?: boolean }) {
+export function LyricsPicker({ source, notify, close, saved, previous, next, onBusyChange, standalone = false, returnFocusID = `track-lyrics-trigger-${source.id}`, panelID = `track-lyrics-${source.id}` }: { source: Source; notify: Notice; close: () => void; saved: () => void; previous?: () => void; next?: () => void; onBusyChange: (busy: boolean) => void; standalone?: boolean; returnFocusID?: string; panelID?: string }) {
   const { t, errorMessage, locale } = useI18n();
   const options = useResource<LyricsResponse>("/lyrics");
   const providers = useMemo(() => options.data?.options.providers ?? [...defaultOnlineProviders], [options.data?.options.providers]);
@@ -303,7 +296,7 @@ export function LyricsPicker({ source, notify, close, saved, previous, next, onB
       notify("lyrics.saved"); saved(); setSavedSelection(true);
       if (advance && next) next(); else if (!standalone && !previous && !next) {
         close();
-        requestAnimationFrame(() => (document.getElementById(`track-lyrics-trigger-${source.id}`) || document.getElementById("library-title"))?.focus());
+        requestAnimationFrame(() => (document.getElementById(returnFocusID) || document.getElementById("library-title"))?.focus());
       }
     } catch (err) { setPreviewError((err as Error).message); }
     finally { setSaving(false); onBusyChange(false); }
@@ -316,7 +309,7 @@ export function LyricsPicker({ source, notify, close, saved, previous, next, onB
   useEffect(() => {
     if (autoSelect.current && !restoring && !loading && !selected && recommended?.token) void choose({ token: recommended.token, candidate: recommended.candidate });
   }, [restoring, loading, selected, recommended, choose]);
-  return <InlineDetails id={`track-lyrics-${source.id}`} returnFocusID={`track-lyrics-trigger-${source.id}`} className="lyrics-picker" title={t("lyrics.choose")} subtitle={`${source.title} · ${source.artist}${source.duration ? ` · ${t("lyrics.targetDuration", { seconds: source.duration })}` : ""}`} close={close} closeLabel={t("lyrics.close")} busy={saving} actions={<><Button type="button" variant="ghost" size="icon" aria-label={t("library.previousTrack")} title={t("library.previousTrack")} disabled={saving || !previous} onClick={previous}><ChevronLeft size={17} /></Button><Button type="button" variant="ghost" size="icon" aria-label={t("library.nextTrack")} title={t("library.nextTrack")} disabled={saving || !next} onClick={next}><ChevronRight size={17} /></Button></>}>
+  return <InlineDetails id={panelID} returnFocusID={returnFocusID} className="lyrics-picker" title={t("lyrics.choose")} subtitle={`${source.title} · ${source.artist}${source.duration ? ` · ${t("lyrics.targetDuration", { seconds: source.duration })}` : ""}`} close={close} closeLabel={t("lyrics.close")} busy={saving} actions={<><Button type="button" variant="ghost" size="icon" aria-label={t("library.previousTrack")} title={t("library.previousTrack")} disabled={saving || !previous} onClick={previous}><ChevronLeft size={17} /></Button><Button type="button" variant="ghost" size="icon" aria-label={t("library.nextTrack")} title={t("library.nextTrack")} disabled={saving || !next} onClick={next}><ChevronRight size={17} /></Button></>}>
     <div className="lyrics-picker-results"><div className="lyrics-search-pane">
 
     <ResourceWarning error={options.error} retry={options.retry} />

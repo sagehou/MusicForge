@@ -1,12 +1,15 @@
-import { useEffect, useState } from "react";
-import { ChevronRight, ClipboardList, Loader2, Play, RefreshCw, Square, X } from "lucide-react";
+import { useEffect, useState, type ReactNode } from "react";
+import { ClipboardList, Loader2, Play, RefreshCw, Square, X } from "lucide-react";
 import { api } from "../api";
 import { useI18n } from "../i18n";
 import type { Encoding, LoudnessReport, Source } from "../types";
 import { Button } from "./ui/button";
 import { Loading, ResourceWarning, useResource, type Notice } from "./resource";
-import { MaintenanceReview, QualityReview } from "./maintenance-review";
+import { OperationLog, QualityReview, RepairSuggestions, StorageHealth } from "./maintenance-review";
 import { InfoHint } from "./info-hint";
+import { LyricsMaintenance } from "./lyrics";
+import { ContentMaintenance } from "./content-maintenance";
+import type { LyricsInventory } from "../library-data";
 
 export function storageSize(bytes: number, locale: string) {
   const unit = Math.min(4, Math.floor(Math.log2(Math.max(bytes, 1)) / 10));
@@ -51,29 +54,57 @@ export function BuildPreview({ selection, notify, currentScope = false }: { sele
   </div>;
 }
 
-export function MaintenanceWorkbench({ scopeQuery, attention, selected, select, notify }: { scopeQuery: string; attention: number; selected: Source[]; select: (ids: number[]) => void; notify: Notice }) {
+type WorkbenchView = "issues" | "lyrics" | "covers" | "loudness" | "suggestions" | "history" | "storage";
+const workbenchViews: WorkbenchView[] = ["lyrics", "covers", "issues", "loudness", "suggestions", "history", "storage"];
+function initialWorkbenchView(): WorkbenchView { return location.hash === "#maintenance-workbench" ? "issues" : "lyrics"; }
+
+export function MaintenanceWorkbench({ active, scopeQuery, scope, inventory, attention, selected, select, notify, busy, onBusyChange, openEditor }: {
+  active: boolean; scopeQuery: string; scope?: "album" | "artist"; inventory: LyricsInventory; attention: number;
+  selected: Source[]; select: (ids: number[]) => void; notify: Notice; busy: boolean;
+  onBusyChange: (busy: boolean) => void; openEditor: () => void;
+}) {
   const { t, number } = useI18n();
-  const [open, setOpen] = useState(() => location.hash === "#maintenance-workbench");
-  const [visited, setVisited] = useState(open);
-  return <details className="maintenance-workbench" id="maintenance-workbench" open={open} onToggle={event => { setOpen(event.currentTarget.open); if (event.currentTarget.open) setVisited(true); }} onKeyDown={event => { if (event.key === "Escape" && event.currentTarget.open && !event.defaultPrevented && (event.target as Element).closest("details[open]") === event.currentTarget) { event.preventDefault(); setOpen(false); event.currentTarget.querySelector("summary")?.focus(); } }}>
-    <summary><ClipboardList size={18} /><span>{t("maintenance.title")}</span><small className="quality-count">{number(attention)}</small><ChevronRight size={16} /></summary>
-    {visited && <WorkbenchContent scopeQuery={scopeQuery} selected={selected} select={select} notify={notify} />}
-  </details>;
+  const [visited, setVisited] = useState(active);
+  const [view, setView] = useState<WorkbenchView>(initialWorkbenchView);
+  const [views, setViews] = useState<Set<WorkbenchView>>(() => new Set([initialWorkbenchView()]));
+  useEffect(() => { if (active) setVisited(true); }, [active]);
+  function change(next: WorkbenchView) {
+    if (busy) return;
+    setView(next); setViews(old => new Set([...old, next]));
+  }
+  useEffect(() => {
+    const reveal = () => { if (location.hash === "#lyrics-maintenance") change("lyrics"); };
+    window.addEventListener("route-changed", reveal); window.addEventListener("popstate", reveal);
+    return () => { window.removeEventListener("route-changed", reveal); window.removeEventListener("popstate", reveal); };
+  }, [busy]);
+  return <section className="maintenance-workbench" id="maintenance-workbench" aria-labelledby="workbench-heading">
+    <div className="section-heading"><div className="actions"><h2 id="workbench-heading">{t("maintenance.title")}</h2><small className="quality-count">{number(attention)}</small><InfoHint>{t("maintenance.hint")}</InfoHint></div><Button asChild size="sm" variant="ghost"><a href="/jobs#maintenance-progress">{t("progress.open")}</a></Button></div>
+    <div className="workbench-navigation" role="group" aria-label={t("workbench.navigation")}>{workbenchViews.map(item => <Button key={item} id={`workbench-${item}`} variant="ghost" size="sm" aria-pressed={view === item} aria-controls={`workbench-panel-${item}`} disabled={busy} onClick={() => change(item)}>{t(`workbench.${item}`)}</Button>)}</div>
+    {visited && <WorkbenchContent scopeQuery={scopeQuery} scope={scope} inventory={inventory} selected={selected} select={select} notify={notify} view={view} views={views} busy={busy} onBusyChange={onBusyChange} openEditor={openEditor} />}
+  </section>;
 }
 
-function WorkbenchContent({ scopeQuery, selected, select, notify }: { scopeQuery: string; selected: Source[]; select: (ids: number[]) => void; notify: Notice }) {
+function WorkbenchContent({ scopeQuery, scope, inventory, selected, select, notify, view, views, busy, onBusyChange, openEditor }: {
+  scopeQuery: string; scope?: "album" | "artist"; inventory: LyricsInventory; selected: Source[]; select: (ids: number[]) => void;
+  notify: Notice; view: WorkbenchView; views: Set<WorkbenchView>; busy: boolean;
+  onBusyChange: (busy: boolean) => void; openEditor: () => void;
+}) {
   const { t } = useI18n();
   const resource = useResource<Source[]>(`/library/scope?${scopeQuery}`, true);
   if (!resource.data) return <Loading error={resource.error} retry={resource.retry} />;
   const sources = resource.data;
-  return <div className="comparison-body">
+  function panel(name: WorkbenchView, children: ReactNode) {
+    return <div key={name} id={`workbench-panel-${name}`} className="workbench-panel" hidden={view !== name}>{views.has(name) && children}</div>;
+  }
+  return <div className="workbench-content">
     <ResourceWarning error={resource.error} retry={resource.retry} />
-    <InfoHint>{t("maintenance.hint")}</InfoHint>
-    <p><a href="/jobs#maintenance-progress">{t("progress.open")}</a></p>
-    <div className="maintenance-actions"><BuildPreview selection={{ ids: sources.map(source => source.id) }} currentScope notify={notify} /><a href="/settings?section=encoding">{t("maintenance.scheduleLink")}</a></div>
-    <QualityReview sources={sources} selected={selected} select={select} notify={notify} />
-    <LoudnessMaintenance selected={selected} sources={sources} notify={notify} />
-    <MaintenanceReview sources={sources} selected={selected} select={select} notify={notify} />
+    {panel("lyrics", <><LyricsMaintenance inventory={inventory} scopeQuery={scopeQuery} scope={scope} notify={notify} /><ContentMaintenance kind="lyrics" sources={sources} notify={notify} refresh={resource.retry} busy={busy} onBusyChange={onBusyChange} openEditor={openEditor} /></>)}
+    {panel("covers", <ContentMaintenance kind="covers" sources={sources} notify={notify} refresh={resource.retry} busy={busy} onBusyChange={onBusyChange} openEditor={openEditor} />)}
+    {panel("issues", <QualityReview sources={sources} select={select} notify={notify} />)}
+    {panel("loudness", <LoudnessMaintenance selected={selected} sources={sources} notify={notify} />)}
+    {panel("suggestions", <><div className="maintenance-actions"><BuildPreview selection={{ ids: sources.map(source => source.id) }} currentScope notify={notify} /><a href="/settings?section=encoding">{t("maintenance.scheduleLink")}</a></div><RepairSuggestions sources={sources} select={select} notify={notify} /></>)}
+    {panel("history", <OperationLog notify={notify} />)}
+    {panel("storage", <StorageHealth sources={sources} selected={selected} notify={notify} />)}
   </div>;
 }
 

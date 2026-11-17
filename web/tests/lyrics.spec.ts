@@ -127,7 +127,8 @@ test("lyrics settings save thresholds, retain drafts and offer output-only inspe
   await routeLibrary(page, route => route.fulfill({ json: [1, 2, 3].map(id => ({ id, title: `Song ${id}`, artist: "Artist", album: "Album", path: `Artist/Album/${id}.flac`, present: true, output: `Artist/Album/${id}.opus`, output_present: true, status: "ready", error: "", size: 123, metadata: {} })) }));
   await page.getByRole("link", { name: "管理歌词", exact: true }).click();
   await expect(page).toHaveURL(/library\?view=tracks#lyrics-maintenance/);
-  await expect(page.locator(".lyrics-settings")).toHaveAttribute("open", "");
+  await expect(page.locator(".lyrics-settings")).toBeVisible();
+  await expect(page.locator("#workbench-lyrics")).toHaveAttribute("aria-pressed", "true");
   await setPreference(page, "language", "en");
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.getByRole("button", { name: "Identify existing lyric scripts", exact: true }).click();

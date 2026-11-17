@@ -25,6 +25,7 @@ async function setup(page: Page) {
 }
 
 async function expectCompactSongHeader(panel: Locator) {
+  await panel.evaluate(element => Promise.all(element.getAnimations().map(animation => animation.finished)));
   const header = panel.locator(".detail-heading");
   const heading = (await header.locator("h2").boundingBox())!;
   const song = (await header.locator("p").boundingBox())!;

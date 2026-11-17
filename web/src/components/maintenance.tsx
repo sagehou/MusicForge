@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { ClipboardList, Loader2, Play, RefreshCw, Square, X } from "lucide-react";
 import { api } from "../api";
 import { useI18n } from "../i18n";
@@ -64,10 +64,12 @@ export function MaintenanceWorkbench({ active, scopeQuery, scope, inventory, att
   onBusyChange: (busy: boolean) => void; openEditor: () => void;
 }) {
   const { t, number } = useI18n();
+  const workbench = useRef<HTMLElement>(null);
   const [visited, setVisited] = useState(active);
   const [view, setView] = useState<WorkbenchView>(initialWorkbenchView);
   const [views, setViews] = useState<Set<WorkbenchView>>(() => new Set([initialWorkbenchView()]));
   useEffect(() => { if (active) setVisited(true); }, [active]);
+  useEffect(() => { workbench.current?.querySelectorAll("audio").forEach(audio => audio.pause()); }, [active, view]);
   function change(next: WorkbenchView) {
     if (busy) return;
     setView(next); setViews(old => new Set([...old, next]));
@@ -79,7 +81,7 @@ export function MaintenanceWorkbench({ active, scopeQuery, scope, inventory, att
   }, [busy]);
   const contentScope = new URLSearchParams(scopeQuery);
   contentScope.delete("locale");
-  return <section className="maintenance-workbench" id="maintenance-workbench" aria-labelledby="workbench-heading">
+  return <section ref={workbench} className="maintenance-workbench" id="maintenance-workbench" aria-labelledby="workbench-heading">
     <div className="section-heading"><div className="actions"><h2 id="workbench-heading">{t("maintenance.title")}</h2><small className="quality-count">{number(attention)}</small><InfoHint>{t("maintenance.hint")}</InfoHint></div><Button asChild size="sm" variant="ghost"><a href="/jobs#maintenance-progress">{t("progress.open")}</a></Button></div>
     <div className="workbench-navigation" role="group" aria-label={t("workbench.navigation")}>{workbenchViews.map(item => <Button key={item} id={`workbench-${item}`} variant="ghost" size="sm" aria-pressed={view === item} aria-controls={`workbench-panel-${item}`} disabled={busy} onClick={() => change(item)}>{t(`workbench.${item}`)}</Button>)}</div>
     {visited && <WorkbenchContent key={contentScope.toString()} scopeQuery={scopeQuery} scope={scope} inventory={inventory} selected={selected} select={select} notify={notify} view={view} views={views} busy={busy} onBusyChange={onBusyChange} openEditor={openEditor} />}

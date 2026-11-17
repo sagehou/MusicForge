@@ -2,7 +2,7 @@ import { routeLibrary } from "./library-fixture";
 import { test, expect, type Locator, type Page } from "@playwright/test";
 import { activeLyric, lyricsTimeline } from "../src/lyrics-timeline";
 import type { Source } from "../src/types";
-import { setPreference } from "./preferences";
+import { openWorkbench, setPreference } from "./preferences";
 
 const sources: Source[] = [
   { id: 91, title: "Nightfall", artist: "River Ensemble", album: "Night Studies", path: "River/Night/01.flac", track: 1, disc: 1, duration: 180, present: true, output: "River/Night/01.opus", output_present: true, status: "ready", error: "", size: 26214400, source_bitrate: 894000, output_size: 5242880, source_audio: { codec: "flac", sample_rate: 96000, bit_depth: 24, channels: 2 }, lyrics: { state: "ready", output: "River/Night/01.opus", signature: "audio", checked: 1 }, metadata: {} },
@@ -78,6 +78,26 @@ test("candidate review loads output audio on request, retries and stops on colla
   await expect.poll(() => audio.evaluate(node => (node as HTMLAudioElement).paused)).toBe(true);
   await review.getByRole("button", { name: "Close lyrics selection", exact: true }).click();
   await expect(page.locator("audio")).toHaveCount(0);
+  await openWorkbench(page, "lyrics");
+  const maintenance = page.locator("#workbench-panel-lyrics .content-maintenance");
+  await maintenance.getByRole("button", { name: "All 2", exact: true }).click();
+  await page.locator("#maintenance-search-91").click();
+  const picker = page.locator("#maintenance-picker-91");
+  await picker.getByLabel("Title or artist", { exact: true }).fill("Retained audition draft");
+  await picker.locator(".candidate-audition > summary").click();
+  const previewAudio = picker.locator("audio");
+  await expect.poll(() => previewAudio.evaluate(node => (node as HTMLAudioElement).duration)).toBe(80);
+  await previewAudio.evaluate(node => (node as HTMLAudioElement).play());
+  await openWorkbench(page, "covers");
+  await expect.poll(() => previewAudio.evaluate(node => (node as HTMLAudioElement).paused)).toBe(true);
+  await expect(picker).toBeHidden();
+  await openWorkbench(page, "lyrics");
+  await expect(picker.getByLabel("Title or artist", { exact: true })).toHaveValue("Retained audition draft");
+  await previewAudio.evaluate(node => (node as HTMLAudioElement).play());
+  await page.getByRole("button", { name: "Browse", exact: true }).click();
+  await expect.poll(() => previewAudio.evaluate(node => (node as HTMLAudioElement).paused)).toBe(true);
+  await openWorkbench(page, "lyrics");
+  await expect(picker.getByLabel("Title or artist", { exact: true })).toHaveValue("Retained audition draft");
 });
 
 test("LRC timeline respects offsets, repeats, translations, blanks and seeking boundaries", () => {

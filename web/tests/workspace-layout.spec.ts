@@ -286,12 +286,14 @@ test("album rows expose useful audio facts and toggle song and lyric details dir
     if (width <= 600) {
       await expect(facts.locator(".track-spec-chip")).toBeVisible();
       for (const fact of await facts.locator(".track-bitrate, .track-fact-sizes").all()) await expect(fact).toBeHidden();
-      expect((await row.boundingBox())!.height).toBeLessThanOrEqual(116);
+      // The narrowest screen wraps the edit action below the readable lyric state.
+      expect((await row.boundingBox())!.height).toBeLessThanOrEqual(width === 320 ? 140 : 116);
+      expect(await row.locator(".lyrics-state").evaluate(element => element.getBoundingClientRect().height <= 2 * parseFloat(getComputedStyle(element).lineHeight) + 1)).toBe(true);
       const titleBox = (await row.locator(".track-name").boundingBox())!;
       const durationBox = (await row.locator(".track-duration").boundingBox())!;
       expect(titleBox.x + titleBox.width).toBeLessThanOrEqual(durationBox.x);
-      for (const control of await row.locator(".track-audition-trigger, .lyrics-action:visible, .lyrics-details > summary").all()) {
-        expect((await control.boundingBox())!.height).toBeGreaterThanOrEqual(40);
+      for (const control of await row.locator(".track-audition-trigger, .lyrics-edit-action, .lyrics-action:visible, .lyrics-details > summary").all()) {
+        expect((await control.boundingBox())!.height).toBeGreaterThanOrEqual(44);
       }
       await row.getByRole("checkbox").check();
       await expect(row).toHaveClass(/selected/);

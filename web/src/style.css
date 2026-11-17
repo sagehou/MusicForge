@@ -2532,6 +2532,7 @@ input[role="switch"]:checked::after { transform: translateX(20px); background: v
   .auth-card input { font-size: 1rem; min-height: 36px; }
   .custom-color .color-hex { width: 104px; }
   .track-title-line .track-audition-trigger { width: 40px; height: 40px; min-height: 40px; }
+  .track-table:not(.album-track-table) .track-row { padding-block: 9px; }
   .track-title-line { grid-template-columns: 40px minmax(0, 1fr); gap: 8px; }
   .album-track-table .track-title-line { grid-template-columns: 40px minmax(0, 1fr) 36px; }
   .track-byline { margin-inline-start: 76px; }
@@ -2567,8 +2568,9 @@ input[role="switch"]:checked::after { transform: translateX(20px); background: v
   .album-track-table .track-output > .badge { white-space: normal; }
   .album-track-table .track-output > .badge-ready { border: 0; padding: 0; background: transparent; font-size: 0.75rem; }
   .album-track-table td.track-lyrics { flex: 1 1 0; }
-  .album-track-table .lyrics-track { gap: 6px; }
-  .album-track-table .lyrics-state { font-size: 0.75rem; overflow-wrap: anywhere; }
+  .album-track-table .lyrics-track { gap: 4px; flex-wrap: wrap; }
+  .album-track-table .lyrics-track-label { flex: 1 1 4.5rem; min-width: 4.5rem; flex-wrap: wrap; }
+  .album-track-table .lyrics-state { flex-shrink: 0; font-size: 0.75rem; overflow-wrap: anywhere; }
   .album-track-table .track-row[data-expanded="false"] .lyrics-script { display: none; }
   .detail-heading { padding: 8px; }
   .track-details .detail-heading { padding: 5px 4px; }
@@ -2742,6 +2744,7 @@ input[role="switch"]:checked::after { transform: translateX(20px); background: v
   .detail-heading .ui-button, .track-title-line .track-audition-trigger,
   .track-lyrics .lyrics-actions .lyrics-action, .lyrics-details > summary,
   .track-lyrics .lyrics-edit-action, .info-hint > summary, .checkbox-target { width: 44px; min-width: 44px; height: 44px; }
+  .track-lyrics .lyrics-edit-action { height: auto; }
   .page-heading .ui-button, .detail-heading .ui-button { flex-shrink: 0; }
   .appearance-controls select, .palette-menu > summary, .palette-presets button { min-height: 44px; }
   input:not([type="checkbox"], [type="radio"], [type="range"]), select, textarea { min-height: 44px; font-size: 1rem; }

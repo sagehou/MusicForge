@@ -197,6 +197,8 @@ func TestSourceFormatReplacementPreservesOutputAndRetries(t *testing.T) {
 	}{
 		{"mp3", "libmp3lame", "flac", "flac", "scan"},
 		{"mp3", "libmp3lame", "flac", "flac", "retry"},
+		{"mp3", "libmp3lame", "flac", "flac", "cached-binding"},
+		{"mp3", "libmp3lame", "flac", "flac", "cached-ready"},
 		{"m4a", "aac", "flac", "flac", "rebuild"},
 		{"wav", "pcm_s24le", "m4a", "alac", "missing-output"},
 		{"flac", "flac", "MP3", "libmp3lame", "scan"},
@@ -208,7 +210,11 @@ func TestSourceFormatReplacementPreservesOutputAndRetries(t *testing.T) {
 			entry := fixture.entry
 			a, s := testApp(t)
 			ctx := context.Background()
-			oldRel, newRel := "Artist/Album/01."+fixture.oldExt, "Artist/Album/01."+fixture.newExt
+			stem := "Artist/Album/01"
+			if strings.HasPrefix(entry, "cached-") {
+				stem = "G.E.M. 鄧紫棋/18… (2009)/G.E.M. 鄧紫棋 - 18… - 01 - All About U"
+			}
+			oldRel, newRel := stem+"."+fixture.oldExt, stem+"."+fixture.newExt
 			oldPath := makeAudioSource(t, a, s, oldRel, "Original", fixture.oldCodec, false)
 			if err := a.scan(ctx, ScanRequest{}); err != nil {
 				t.Fatal(err)
@@ -228,7 +234,7 @@ func TestSourceFormatReplacementPreservesOutputAndRetries(t *testing.T) {
 				t.Fatal(err)
 			}
 			makeAudioSource(t, a, s, newRel, "Replaced", fixture.newCodec, false)
-			if entry == "scan" || entry == "missing-output" {
+			if entry == "scan" || entry == "missing-output" || strings.HasPrefix(entry, "cached-") {
 				if err = os.Remove(oldPath); err != nil {
 					t.Fatal(err)
 				}
@@ -245,6 +251,38 @@ func TestSourceFormatReplacementPreservesOutputAndRetries(t *testing.T) {
 			j, err := a.claim(true)
 			if err != nil {
 				t.Fatal(err)
+			}
+			if strings.HasPrefix(entry, "cached-") {
+				// Historical successor bookkeeping may refer to a path still owned
+				// by the deleted source; it must not bypass ownership transfer.
+				built := original.BuiltHash
+				if entry == "cached-ready" {
+					built, err = fileHash(ctx, filepath.Join(s.Source, newRel))
+					if err != nil {
+						t.Fatal(err)
+					}
+				}
+				if _, err = a.db.Exec("UPDATE sources SET output=?,output_present=1,built_hash=?,built_profile=? WHERE rel=?", original.Output, built, original.BuiltProfile, newRel); err != nil {
+					t.Fatal(err)
+				}
+				if entry == "cached-ready" {
+					if _, err = a.db.Exec("UPDATE sources SET hash=? WHERE rel=?", built, newRel); err != nil {
+						t.Fatal(err)
+					}
+					if err = a.completeJob(j, "success", 0, 1, "", 0); err != nil {
+						t.Fatal(err)
+					}
+					current, readErr := a.sourceRel(newRel)
+					if readErr != nil {
+						t.Fatal(readErr)
+					}
+					if _, err = a.queueBuildTask(current, s.Encoding, false, true, 0); err != nil {
+						t.Fatal(err)
+					}
+					if j, err = a.claim(true); err != nil {
+						t.Fatal(err)
+					}
+				}
 			}
 			if entry == "retry" || entry == "rebuild" {
 				// Reproduce an already failed conflict, then remove the old source.

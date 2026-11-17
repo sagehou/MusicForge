@@ -699,8 +699,15 @@ func (a *App) rebuild(w http.ResponseWriter, r *http.Request) {
 	respond(w, 202, map[string]any{"queued": count, "job_id": task})
 }
 func (a *App) requestDelete(w http.ResponseWriter, r *http.Request) {
-	var body selection
+	var body struct {
+		selection
+		Artifacts bool `json:"artifacts"`
+	}
 	if !decode(w, r, &body) {
+		return
+	}
+	if body.Artifacts {
+		a.requestArtifactDelete(w, r, body.selection)
 		return
 	}
 	list, err := a.allSources()

@@ -62,7 +62,10 @@
   "notice.copyFailed": "Copy failed. Enter a secret of your choice instead.",
   "notice.refresh": "Navidrome refresh queued",
   "notice.password": "Password updated; other sessions have been revoked",
-  "library.deleteSelectedConfirm": "Permanently delete expired artifacts among the selected tracks?",
+  "library.deleteSelectedConfirm": {
+    "one": "Permanently delete the selected artifact and its managed lyrics? Source files are kept. Later scans may rebuild artifacts whose sources still exist.",
+    "other": "Permanently delete all {count} selected artifacts and their managed lyrics? Source files are kept. Later scans may rebuild artifacts whose sources still exist."
+  },
   "library.verify": "Verify library",
   "library.scan": "Scan library",
   "library.expiredHint": "The source files were deleted. Navidrome removes these tracks after you delete their artifacts.",
@@ -73,7 +76,7 @@
   "library.allStatuses": "All statuses",
   "library.startRebuild": "Start rebuild",
   "library.buildSelected": "Build selected",
-  "library.deleteSelected": "Delete selected expired artifacts",
+  "library.deleteSelected": "Delete selected artifacts",
   "library.moreActions": "More actions",
   "library.clearSelection": "Clear selection",
   "library.selectPage": "Select current page",
@@ -199,7 +202,7 @@
   "kind.scan": "Scan & convert queue",
   "kind.convert": "Build audio queue",
   "kind.move": "Move artifacts",
-  "kind.delete": "Delete expired artifacts",
+  "kind.delete": "Delete artifacts",
   "kind.upgrade": "Clean up replaced artifacts",
   "kind.refresh": "Refresh Navidrome",
   "library.description": {

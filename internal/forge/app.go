@@ -437,7 +437,7 @@ func (a *App) execute(ctx context.Context, j Job) error {
 		if err := json.Unmarshal(j.Args, &r); err != nil {
 			return err
 		}
-		return a.deleteExpiredContext(ctx, r.IDs)
+		return a.deleteTaskContext(ctx, j, r.IDs)
 	case "upgrade":
 		var r UpgradeRequest
 		if err := json.Unmarshal(j.Args, &r); err != nil {

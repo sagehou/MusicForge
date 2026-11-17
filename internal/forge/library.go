@@ -742,7 +742,7 @@ func (a *App) owned(rel string, id int64) error {
 		return fmt.Errorf("refusing unregistered output %q: %w", rel, err)
 	}
 	if kind != "audio" || owner != id {
-		return fmt.Errorf("output path conflict: %q is owned by source %q; rename the conflicting source before retrying", rel, sourcePath)
+		return fmt.Errorf("output path conflict: %q is owned by source %q; remove the obsolete source and retry, or use distinct source filenames; registered artifacts can be deleted from Library", rel, sourcePath)
 	}
 	return nil
 }
@@ -777,7 +777,7 @@ func (a *App) targetAvailable(s Settings, rel string, id int64) error {
 // Keep the new source ID so existing build requests remain retryable.
 // The caller holds files and has recovered pending promotions.
 func (a *App) inheritReplacedOutput(ctx context.Context, s Settings, source Source, target string) (Source, error) {
-	if source.Hash == "" || source.Output != "" || source.BuiltHash != "" {
+	if source.Hash == "" || source.Output != "" && source.Output != target {
 		return source, nil
 	}
 	var owner int64
@@ -1055,7 +1055,7 @@ func (a *App) buildStaged(ctx context.Context, j Job, r BuildRequest, staged *st
 	// Old automatic retries may finish against a manually accepted import.
 	// A fresh strict rebuild, and its failed retries, still decode the source.
 	rebuildDamaged := source.PossiblyDamaged && (j.Attempts == 0 || source.Error != "")
-	if !r.Move && !rebuildDamaged && source.OutputPresent && source.Output == target && source.BuiltHash == r.Hash && source.BuiltProfile == r.Profile.Fingerprint() {
+	if !r.Move && !rebuildDamaged && source.OutputPresent && source.Output == target && source.BuiltHash == r.Hash && source.BuiltProfile == r.Profile.Fingerprint() && a.owned(target, source.ID) == nil {
 		path, pathErr := safePath(s.Output, target)
 		if pathErr != nil {
 			a.files.Unlock()
@@ -1615,6 +1615,9 @@ func (a *App) removeOwned(s Settings, rel string, id int64) error {
 		return err
 	}
 	if _, err = tx.Exec("UPDATE sources SET output='',output_present=0,built_hash='',built_profile='' WHERE id=? AND output=?", id, rel); err != nil {
+		return err
+	}
+	if _, err = tx.Exec("DELETE FROM meta WHERE key IN ('lyrics-status:'||?,'lyrics-script:'||?) AND NOT EXISTS(SELECT 1 FROM managed WHERE source_id=? AND kind='audio')", id, id, id); err != nil {
 		return err
 	}
 	if _, err = tx.Exec(markDirtySQL, filepath.ToSlash(filepath.Dir(rel)), time.Now().UnixNano()); err != nil {

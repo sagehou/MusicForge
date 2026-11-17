@@ -367,6 +367,8 @@ def main():
         values.update(enabled=False, nav_url="https://navidrome.example.test", nav_user="admin", nav_password="ci-nav-secret",
                       oidc_issuer="https://issuer.example.test", oidc_client_id="client", oidc_secret="ci-oidc-secret")
         save_settings(api, values)
+        manual_delete = api("/api/library/delete", "POST", {"ids": [lyrics_track["id"]], "artifacts": True})["job_id"]
+        api("/api/jobs/control", "POST", {"action": "pause", "ids": [manual_delete]})
         stop()
         stopped = seed_refresh()
         api, _ = start(CANDIDATE)
@@ -472,6 +474,8 @@ def main():
                     verify_lyrics_options(api, version, lyric_providers)
                 verify(api, tracks, pending, stopped)
                 if actual_image == CANDIDATE:
+                    deletion = next(job for job in api("/api/jobs?state=all")["jobs"] if job["id"] == manual_delete)
+                    assert deletion["kind"] == "delete" and deletion["args"] == {"ids": [lyrics_track["id"]]} and deletion["state"] == "paused", "manual deletion lost compatible job semantics"
                     corrected = next(row for row in api("/api/library") if row["id"] == lyrics_track["id"])
                     assert corrected["output_tags"]["title"] == "Output-only correction", "output tag correction lost"
                     assert len(api(f"/api/library/{lyrics_track['id']}/history?kind=lyrics")["entries"]) >= 2, "history lost through rollback"
@@ -554,7 +558,19 @@ def main():
             assert library_record(restored) == library_record(row), "candidate cannot reopen older worker's completed artifact"
             stop()
             pending_checks.append({"release": version, "pending_verify_then_old_worker_build": "passed", "source_hash": expected_hash})
-        Path(".ci/rollback-evidence.json").write_text(json.dumps({"architecture": os.environ["ARCH"], "schema": 2, "source_format_replacement": "passed", "instrumental_placeholder": "passed", "additional_lyrics_provider": "passed", "community_lyrics_provider": "passed", "output_maintenance": "passed", "maintenance_review_and_undo": "passed", "lyrics_batch_continuation": "passed", "lyric_script_conversion": "passed", "lyric_association": "passed", "stopped_backup_restore": "passed", "checks": evidence, "pending_verification_checks": pending_checks}, indent=2) + "\n")
+        api, _ = start(CANDIDATE)
+        selected = next(row for row in api("/api/library") if row["id"] == lyrics_track["id"])
+        source_bytes = (ROOT / "source" / selected["path"]).read_bytes()
+        values = api("/api/settings")["settings"]
+        values.update(enabled=True, nav_url="")
+        save_settings(api, values)
+        api("/api/jobs/control", "POST", {"action": "resume", "ids": [manual_delete]})
+        wait_for(lambda: api("/api/jobs?state=all")["jobs"], lambda jobs: any(job["id"] == manual_delete and job["state"] == "success" for job in jobs), "manual artifact deletion after rollback")
+        assert not (ROOT / "output" / selected["output"]).exists(), "selected healthy artifact was retained"
+        assert not (ROOT / "output" / Path(selected["output"]).with_suffix(".lrc")).exists(), "selected managed lyrics were retained"
+        assert (ROOT / "source" / selected["path"]).read_bytes() == source_bytes, "manual artifact deletion changed the source"
+        stop()
+        Path(".ci/rollback-evidence.json").write_text(json.dumps({"architecture": os.environ["ARCH"], "schema": 2, "source_format_replacement": "passed", "manual_artifact_delete": "passed", "instrumental_placeholder": "passed", "additional_lyrics_provider": "passed", "community_lyrics_provider": "passed", "output_maintenance": "passed", "maintenance_review_and_undo": "passed", "lyrics_batch_continuation": "passed", "lyric_script_conversion": "passed", "lyric_association": "passed", "stopped_backup_restore": "passed", "checks": evidence, "pending_verification_checks": pending_checks}, indent=2) + "\n")
     finally:
         subprocess.run(["docker", "rm", "-f", NAME], capture_output=True)
 

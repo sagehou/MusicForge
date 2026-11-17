@@ -711,6 +711,9 @@ func (a *App) changeTasksMatching(action string, chosen selection, filter, failu
 				}
 				result, err = tx.Exec("UPDATE jobs SET state='pending',attempts=0,progress=0,not_before=0,log='',updated=? WHERE id=? AND NOT EXISTS(SELECT 1 FROM jobs active WHERE active.dedup=jobs.dedup AND active.state IN ('pending','running'))", time.Now().Unix(), m.id)
 			case "delete":
+				if _, err = tx.Exec("DELETE FROM meta WHERE key='artifact-delete:'||(SELECT dedup FROM jobs WHERE id=?)", m.id); err != nil {
+					return 0, err
+				}
 				if _, err = tx.Exec("DELETE FROM meta WHERE key IN (?,?,?)", taskMemberKey(m.id), taskProgressKey(m.id), "scan-followup:"+strconv.FormatInt(m.id, 10)); err != nil {
 					return 0, err
 				}

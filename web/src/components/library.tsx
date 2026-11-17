@@ -290,7 +290,7 @@ export function Library({ notify }: { notify: Notice }) {
   const shown = rows;
   const visibleGroups = groups;
   const pageIDs = showingTracks ? shown.map(source => source.id) : visibleGroups.flatMap(group => group.ids || []);
-  const selectedExpired = chosen.filter(source => !source.present && source.output).length;
+  const selectedArtifacts = chosen.filter(source => source.output);
   const expired = data.counts.expired;
   const removable = data.counts.removable;
   const selectedRemovable = chosen.filter(source => !source.present && !source.output && !source.output_present);
@@ -300,8 +300,8 @@ export function Library({ notify }: { notify: Notice }) {
   const albumDuration = data.scope.duration;
   const discs = data.scope.discs;
   function deleteSelected(all: boolean) {
-    if (window.confirm(all ? t("library.deleteAllConfirm", { count: expired }) : t("library.deleteSelectedConfirm"))) {
-      void action("/library/delete", { all, ids: [...selected] }, "notice.delete");
+    if (window.confirm(all ? t("library.deleteAllConfirm", { count: expired }) : t("library.deleteSelectedConfirm", { count: selectedArtifacts.length }))) {
+      void action("/library/delete", all ? { all: true } : { ids: selectedArtifacts.map(source => source.id), artifacts: true }, "notice.delete");
     }
   }
   async function forget(ids: number[], all = false) {
@@ -483,7 +483,7 @@ export function Library({ notify }: { notify: Notice }) {
         <Button size="sm" variant="outline" disabled={busy} onClick={() => void action("/library/rebuild", { ids: [...selected] }, "notice.selectedBuild")}><RefreshCw size={14} />{t("library.buildSelected")}</Button><LyricsSearchButton ids={chosen.filter(source => source.output && source.output_present).map(source => source.id)} label="lyrics.searchSelected" notify={notify} disabled={busy} />
         <Button size="sm" variant="ghost" onClick={() => setSelected(new Set())}><X size={14} />{t("library.clearSelection")}</Button>
         <details className="selection-more"><summary><MoreHorizontal size={16} />{t("library.moreActions")}</summary><div className="selection-more-body actions">
-          <BuildPreview selection={{ ids: [...selected] }} notify={notify} /><LyricsSearchButton ids={chosen.filter(source => source.output && source.output_present).map(source => source.id)} simplifyTraditional label="lyrics.simplifySelected" notify={notify} disabled={busy} />{chosen.some(source => source.lyrics_script === "traditional" && source.output_present) && <LyricsSearchButton ids={chosen.filter(source => source.lyrics_script === "traditional" && source.output_present).map(source => source.id)} replaceTraditional label="lyrics.replaceSelected" notify={notify} disabled={busy} />}<BatchRepairButton sources={chosen} notify={notify} disabled={busy} refresh={() => { setSelected(new Set()); retry(); }} /><Button size="sm" variant="destructive" disabled={busy || selectedExpired === 0} onClick={() => deleteSelected(false)}><Trash2 size={14} />{t("library.deleteSelected")}</Button>{selectedRemovable.length > 0 && <Button size="sm" variant="outline" disabled={busy} onClick={() => void forget(selectedRemovable.map(source => source.id))}><Trash2 size={14} />{t("library.forgetSelected", { count: selectedRemovable.length })}</Button>}
+          <BuildPreview selection={{ ids: [...selected] }} notify={notify} /><LyricsSearchButton ids={chosen.filter(source => source.output && source.output_present).map(source => source.id)} simplifyTraditional label="lyrics.simplifySelected" notify={notify} disabled={busy} />{chosen.some(source => source.lyrics_script === "traditional" && source.output_present) && <LyricsSearchButton ids={chosen.filter(source => source.lyrics_script === "traditional" && source.output_present).map(source => source.id)} replaceTraditional label="lyrics.replaceSelected" notify={notify} disabled={busy} />}<BatchRepairButton sources={chosen} notify={notify} disabled={busy} refresh={() => { setSelected(new Set()); retry(); }} /><Button size="sm" variant="destructive" disabled={busy || selectionPending || selectedArtifacts.length === 0} onClick={() => deleteSelected(false)}><Trash2 size={14} />{t("library.deleteSelected")}</Button>{selectedRemovable.length > 0 && <Button size="sm" variant="outline" disabled={busy} onClick={() => void forget(selectedRemovable.map(source => source.id))}><Trash2 size={14} />{t("library.forgetSelected", { count: selectedRemovable.length })}</Button>}
         </div></details>
       </div>}
       </div>

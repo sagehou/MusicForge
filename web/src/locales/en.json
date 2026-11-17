@@ -63,7 +63,7 @@
   "notice.refresh": "Navidrome refresh queued",
   "notice.password": "Password updated; other sessions have been revoked",
   "library.deleteSelectedConfirm": {
-    "one": "Permanently delete the selected artifact and its managed lyrics? Source files are kept. Later scans may rebuild artifacts whose sources still exist.",
+    "one": "Permanently delete the {count} selected artifact and its managed lyrics? Source files are kept. Later scans may rebuild artifacts whose sources still exist.",
     "other": "Permanently delete all {count} selected artifacts and their managed lyrics? Source files are kept. Later scans may rebuild artifacts whose sources still exist."
   },
   "library.verify": "Verify library",

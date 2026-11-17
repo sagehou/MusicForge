@@ -26,8 +26,10 @@ export function Overview({ notify }: { notify: Notice }) {
   }
   if (!data) return <><PageHeading><div><h1>{t("app.overview")}</h1></div></PageHeading><Loading error={error} retry={retry} /></>;
   const storageUnchecked = data.enabled && data.storage_checked_at === 0;
-  const percent = data.source_count ? Math.max(0, Math.min(100, Math.round(data.ready_count / data.source_count * 100))) : 0;
-  const percentLabel = new Intl.NumberFormat(locale, { style: "percent" }).format(percent / 100);
+  const allReady = data.source_count > 0 && data.ready_count >= data.source_count;
+  const percent = data.source_count ? Math.max(0, Math.min(100, data.ready_count / data.source_count * 100)) : 0;
+  const displayPercent = percent > 99 && !allReady ? Math.floor(percent * 10) / 10 : Math.round(percent);
+  const percentLabel = new Intl.NumberFormat(locale, { style: "percent", maximumFractionDigits: 1 }).format(displayPercent / 100);
   const encoding = config.data?.settings.encoding;
   const profile = encoding ? `${encoding.mode.toUpperCase()} · ${encoding.codec === "mp3" && encoding.mode === "vbr" ? `V${encoding.quality}` : `${number(encoding.bitrate)} kbps`}` : "—";
   const playable = library.data?.filter(source => source.output_present && source.output);
@@ -91,9 +93,9 @@ export function Overview({ notify }: { notify: Notice }) {
               {active.length > 0 ? (
                 <Badge status="running" />
               ) : (
-                <span className={`readiness-status-badge ${percent === 100 ? "is-ready" : ""}`}>
-                  {percent === 100 ? <Check size={13} aria-hidden="true" /> : <Clock3 size={13} aria-hidden="true" />}
-                  {percent === 100 ? t("overview.allReady") : t("overview.inProgress")}
+                <span className={`readiness-status-badge ${allReady ? "is-ready" : ""}`}>
+                  {allReady ? <Check size={13} aria-hidden="true" /> : <Clock3 size={13} aria-hidden="true" />}
+                  {allReady ? t("overview.allReady") : t("overview.inProgress")}
                 </span>
               )}
             </div>
@@ -107,7 +109,7 @@ export function Overview({ notify }: { notify: Notice }) {
             </div>
             <AudioLines size={18} className="pipeline-glyph is-ready" aria-hidden="true" />
           </div>
-          <div className="hero-completion" role="progressbar" aria-label={t("overview.complete")} aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent}><span style={{ width: `${percent}%` }} /></div>
+          <progress className="hero-completion" aria-label={t("overview.complete")} aria-valuetext={percentLabel} max={100} value={percent} />
         </div>
         {tracks.length > 0 ? <div className="build-tracks">
           <h2>{t("overview.recentBuilds")}</h2>

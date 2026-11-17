@@ -763,8 +763,10 @@ input:not([type="checkbox"], [type="radio"]):focus-visible, select:focus-visible
 }
 
 /* Build completion */
-.hero-completion { flex: 1 0 100%; height: 5px; border-radius: var(--radius-pill); background: var(--subtle); overflow: hidden; }
-.hero-completion > span { display: block; height: 100%; background: var(--accent-fill); border-radius: inherit; transition: width 400ms var(--ease); }
+.hero-completion { appearance: none; border: 0 solid; flex: 1 0 100%; width: 100%; height: 5px; border-radius: var(--radius-pill); background: var(--subtle); overflow: clip; transition: inline-size 400ms var(--ease); }
+.hero-completion::-webkit-progress-bar { background: transparent; }
+.hero-completion::-webkit-progress-value { background: var(--progress-fill, var(--accent-fill)); border-radius: var(--radius-pill); transition: inherit; }
+.hero-completion::-moz-progress-bar { background: var(--progress-fill, var(--accent-fill)); border-radius: var(--radius-pill); transition: inherit; }
 
 /* Encoding profile */
 .audio-pipeline-visual {
@@ -2763,7 +2765,8 @@ input[role="switch"]:checked::after { transform: translateX(20px); background: v
 }
 @media (forced-colors: active) {
   :focus-visible { outline-color: Highlight; }
-  .hero-completion > span, .task-meter > span { background: Highlight; forced-color-adjust: none; }
+  .hero-completion { --progress-fill: Highlight; background: Canvas; forced-color-adjust: none; }
+  .task-meter > span { background: Highlight; forced-color-adjust: none; }
   input[type="checkbox"]:not([role="switch"]), input[type="radio"] { appearance: auto; }
   input[type="checkbox"]:not([role="switch"])::after, input[type="radio"]::after { display: none; }
   .audition-controls input[type="range"]::-webkit-slider-runnable-track { background: CanvasText; forced-color-adjust: none; }

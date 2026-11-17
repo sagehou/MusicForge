@@ -40,7 +40,7 @@ export function ContentMaintenance({ kind, sources, notify, refresh, onBusyChang
     const trigger = editor?.trigger;
     setEditor(undefined);
     requestAnimationFrame(() => {
-      const target = trigger && document.getElementById(trigger);
+      const target = trigger ? document.getElementById(trigger) : null;
       (target?.getClientRects().length ? target : document.getElementById(`maintenance-${kind}-heading`))?.focus({ preventScroll: true });
     });
   }

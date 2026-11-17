@@ -319,8 +319,8 @@ test("lyrics filters compose with audio status and library coverage survives new
   }
 
   await page.goto("/library?view=artists");
-  await expect(page.locator(".maintenance-count")).toHaveText("6 / 7");
   await openLyricsMaintenance(page);
+  await expect(page.locator(".maintenance-count")).toHaveText("6 / 7");
   const inventory = page.locator(".lyrics-library-summary");
   await expect(inventory).toHaveAccessibleName("Library lyrics status");
   await expect(inventory).toContainText("Library checked 6/7 tracks");

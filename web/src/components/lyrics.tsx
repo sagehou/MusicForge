@@ -47,11 +47,10 @@ export function LyricsMaintenance({ inventory, scopeQuery, scope, notify }: { in
   const coverage = scope === "album" ? "lyrics.albumCoverage" : scope === "artist" ? "lyrics.artistCoverage" : "lyrics.coverage";
   const getIDs = scope ? async () => (await api<{ ids: number[] }>("/library/selection", "POST", { query: scopeQuery, ids_only: true, playable: true })).ids : undefined;
   return <section className="library-comparison lyrics-panel" id="lyrics-maintenance">
-    <div className="lyrics-settings"><div className="section-heading"><h3>{t("lyrics.manage")}</h3><small className="maintenance-count" aria-label={t(coverage, { done: inventory.checked, total: inventory.total })}>{inventory.checked} / {inventory.total}</small></div>
+    <div className="lyrics-settings"><div className="section-heading"><h3>{t("lyrics.manage")}</h3><div className="actions"><small className="maintenance-count" aria-label={t(coverage, { done: inventory.checked, total: inventory.total })}>{inventory.checked} / {inventory.total}</small><InfoHint>{t("lyrics.inventoryHint")}</InfoHint></div></div>
       <section className="lyrics-library-summary" aria-label={t(scope === "album" ? "lyrics.albumStatus" : scope === "artist" ? "lyrics.artistStatus" : "lyrics.libraryStatus")}>
         <strong>{t(coverage, { done: inventory.checked, total: inventory.total })}</strong>
         <p>{t("lyrics.inventory", { found: inventory.counts.ready, missing: inventory.counts.not_found, instrumental: inventory.counts.instrumental, review: inventory.counts.needs_review, failed: inventory.counts.failed, unchecked: inventory.counts.unchecked })}</p>
-        <InfoHint>{t("lyrics.inventoryHint")}</InfoHint>
       </section>
       <LyricsControls notify={notify} disabled={!!scope && inventory.total === 0} getIDs={getIDs} label={scope === "album" ? "lyrics.searchAlbum" : scope === "artist" ? "lyrics.searchArtist" : "lyrics.searchAll"} />
     </div>

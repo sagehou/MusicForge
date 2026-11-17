@@ -136,7 +136,7 @@ test("album and artist lyrics actions use all playable tracks in their scope, in
   await expect(page.locator(".lyrics-settings")).toContainText("0 / 63");
   const pending = page.locator("#workbench-panel-lyrics .content-maintenance");
   await expect(pending.locator(".content-maintenance-list > li")).toHaveCount(20);
-  await pending.getByRole("button", { name: "Next page", exact: true }).click();
+  await pending.getByRole("button", { name: "Next lyrics page", exact: true }).click();
   await expect(pending.locator(".content-maintenance-list > li").first()).toContainText("Song 21");
   await pending.getByLabel("Find a track", { exact: true }).fill("Song 63");
   await expect(pending.locator(".content-maintenance-list > li")).toHaveCount(1);

@@ -314,6 +314,7 @@ test("workbench imports LRC directly and preserves drafts across categories and 
   await setPreference(page, "language", "zh-CN");
   await setPreference(page, "theme", "dark");
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
+  await expect(editor.getByLabel("LRC 文本", { exact: true })).toHaveValue("[00:02.00]Imported");
   await editor.screenshot({ path: "test-results/workbench-lyrics-edit-phone-dark-zh.png", animations: "disabled" });
 });
 

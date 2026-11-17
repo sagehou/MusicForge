@@ -68,7 +68,7 @@ export function LyricsEditor({ id, position, audition, canAudition, preview, sav
     } catch (err) { setError(err as Error); }
   }
   return <section className="lyrics-editor" aria-label={t("lyricsEdit.title")}>
-    {embedded ? <InfoHint>{t("lyricsEdit.hint")}</InfoHint> : <div className="section-heading"><div className="actions"><h3>{t("lyricsEdit.title")}</h3><InfoHint>{t("lyricsEdit.hint")}</InfoHint></div><Button variant="ghost" size="icon" disabled={busy} aria-label={t("lyricsEdit.cancel")} onClick={close}><X size={16} /></Button></div>}
+    {!embedded && <div className="section-heading"><div className="actions"><h3>{t("lyricsEdit.title")}</h3><InfoHint>{t("lyricsEdit.hint")}</InfoHint></div><Button variant="ghost" size="icon" disabled={busy} aria-label={t("lyricsEdit.cancel")} onClick={close}><X size={16} /></Button></div>}
     <div className="actions"><Button size="sm" variant="outline" disabled={busy || !!token && (text !== initial || delay !== 0)} onClick={() => void reviewAssociation()}>{t("lyricsAssociation.review")}</Button><InfoHint>{t("lyricsAssociation.hint")}</InfoHint></div>
     {error && <div role="alert" className="error-box"><p>{errorMessage(error.message)}</p>{!token && !association && <Button size="sm" variant="outline" onClick={() => setAttempt(value => value + 1)}>{t("audition.reload")}</Button>}</div>}
     {association && <div className="maintenance-report" role="region" aria-label={t("lyricsAssociation.title")}>

@@ -213,6 +213,7 @@ test("large library returns instantly from memory, revalidates with 304 and clea
     return route.fulfill({ status: 202, json: { job_id: 1 } });
   });
   await routeLibrary(page, async route => {
+    if (new URL(route.request().url()).pathname === "/api/library/scope") return route.fulfill({ json: sources });
     reads++;
     const etag = route.request().headers()["if-none-match"];
     conditionals.push(etag);

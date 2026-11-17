@@ -77,10 +77,12 @@ export function MaintenanceWorkbench({ active, scopeQuery, scope, inventory, att
     window.addEventListener("route-changed", reveal); window.addEventListener("popstate", reveal);
     return () => { window.removeEventListener("route-changed", reveal); window.removeEventListener("popstate", reveal); };
   }, [busy]);
+  const contentScope = new URLSearchParams(scopeQuery);
+  contentScope.delete("locale");
   return <section className="maintenance-workbench" id="maintenance-workbench" aria-labelledby="workbench-heading">
     <div className="section-heading"><div className="actions"><h2 id="workbench-heading">{t("maintenance.title")}</h2><small className="quality-count">{number(attention)}</small><InfoHint>{t("maintenance.hint")}</InfoHint></div><Button asChild size="sm" variant="ghost"><a href="/jobs#maintenance-progress">{t("progress.open")}</a></Button></div>
     <div className="workbench-navigation" role="group" aria-label={t("workbench.navigation")}>{workbenchViews.map(item => <Button key={item} id={`workbench-${item}`} variant="ghost" size="sm" aria-pressed={view === item} aria-controls={`workbench-panel-${item}`} disabled={busy} onClick={() => change(item)}>{t(`workbench.${item}`)}</Button>)}</div>
-    {visited && <WorkbenchContent scopeQuery={scopeQuery} scope={scope} inventory={inventory} selected={selected} select={select} notify={notify} view={view} views={views} busy={busy} onBusyChange={onBusyChange} openEditor={openEditor} />}
+    {visited && <WorkbenchContent key={contentScope.toString()} scopeQuery={scopeQuery} scope={scope} inventory={inventory} selected={selected} select={select} notify={notify} view={view} views={views} busy={busy} onBusyChange={onBusyChange} openEditor={openEditor} />}
   </section>;
 }
 
@@ -90,7 +92,7 @@ function WorkbenchContent({ scopeQuery, scope, inventory, selected, select, noti
   onBusyChange: (busy: boolean) => void; openEditor: () => void;
 }) {
   const { t } = useI18n();
-  const resource = useResource<Source[]>(`/library/scope?${scopeQuery}`, true);
+  const resource = useResource<Source[]>(`/library/scope?${scopeQuery}`, true, true);
   if (!resource.data) return <Loading error={resource.error} retry={resource.retry} />;
   const sources = resource.data;
   function panel(name: WorkbenchView, children: ReactNode) {

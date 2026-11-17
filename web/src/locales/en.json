@@ -1258,5 +1258,9 @@
   "workbench.changeCover": "Replace cover",
   "workbench.addCover": "Add cover",
   "workbench.viewTrack": "View track",
-  "workbench.noIssues": "No issues in this category."
+  "workbench.noIssues": "No issues in this category.",
+  "workbench.previousLyrics": "Previous lyrics page",
+  "workbench.nextLyrics": "Next lyrics page",
+  "workbench.previousCovers": "Previous covers page",
+  "workbench.nextCovers": "Next covers page"
 }

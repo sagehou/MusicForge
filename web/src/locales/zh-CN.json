@@ -1213,5 +1213,9 @@
   "workbench.changeCover": "替换封面",
   "workbench.addCover": "补充封面",
   "workbench.viewTrack": "查看曲目",
-  "workbench.noIssues": "此分类没有待处理问题。"
+  "workbench.noIssues": "此分类没有待处理问题。",
+  "workbench.previousLyrics": "上一页歌词曲目",
+  "workbench.nextLyrics": "下一页歌词曲目",
+  "workbench.previousCovers": "上一页专辑封面",
+  "workbench.nextCovers": "下一页专辑封面"
 }

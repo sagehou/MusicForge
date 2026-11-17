@@ -2533,6 +2533,7 @@ input[role="switch"]:checked::after { transform: translateX(20px); background: v
   .custom-color .color-hex { width: 104px; }
   .track-title-line .track-audition-trigger { width: 40px; height: 40px; min-height: 40px; }
   .track-table:not(.album-track-table) .track-row { padding-block: 9px; }
+  .track-table .track-expanded-row { padding-inline: 4px; }
   .track-title-line { grid-template-columns: 40px minmax(0, 1fr); gap: 8px; }
   .album-track-table .track-title-line { grid-template-columns: 40px minmax(0, 1fr) 36px; }
   .track-byline { margin-inline-start: 76px; }

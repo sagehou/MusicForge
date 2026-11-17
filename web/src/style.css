@@ -2744,7 +2744,7 @@ input[role="switch"]:checked::after { transform: translateX(20px); background: v
   .detail-heading .ui-button, .track-title-line .track-audition-trigger,
   .track-lyrics .lyrics-actions .lyrics-action, .lyrics-details > summary,
   .track-lyrics .lyrics-edit-action, .info-hint > summary, .checkbox-target { width: 44px; min-width: 44px; height: 44px; }
-  .track-lyrics .lyrics-edit-action { height: auto; }
+  .track-lyrics .lyrics-edit-action { min-height: 44px; height: auto; }
   .page-heading .ui-button, .detail-heading .ui-button { flex-shrink: 0; }
   .appearance-controls select, .palette-menu > summary, .palette-presets button { min-height: 44px; }
   input:not([type="checkbox"], [type="radio"], [type="range"]), select, textarea { min-height: 44px; font-size: 1rem; }

@@ -171,8 +171,8 @@ test("observed storage state stays inside the storage card without shifting the 
   await page.setViewportSize({ width: 1440, height: 1000 });
   expect((await metrics.boundingBox())!.y).toBe(initial!.y);
   data = { ...data, online: false, enabled: false };
-  await expect(storage.getByRole("button", { name: "打开设置", exact: true })).toBeVisible({ timeout: 10000 });
-  await storage.getByRole("button", { name: "打开设置", exact: true }).click();
+  await expect(storage.getByRole("link", { name: "打开设置", exact: true })).toBeVisible({ timeout: 10000 });
+  await storage.getByRole("link", { name: "打开设置", exact: true }).click();
   await expect(page).toHaveURL(/\/settings$/);
 });
 

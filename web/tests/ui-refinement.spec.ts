@@ -233,6 +233,9 @@ test("large library returns instantly from memory, revalidates with 304 and clea
   await page.screenshot({ path: "test-results/library-skeleton.png", animations: "disabled" });
   hold = false; release!();
   await expect(page.locator(".library-group")).toHaveCount(50);
+  await expect(page.getByRole("button", { name: "Browse", exact: true })).toHaveAttribute("aria-pressed", "true");
+  await expect(page.locator(".library-comparison")).toBeHidden();
+  await page.getByRole("button", { name: "Organize", exact: true }).click();
   await expect(page.locator(".library-comparison > summary").filter({ hasText: "File counts · compare with Lidarr" })).toBeInViewport();
   await page.getByRole("link", { name: "Settings", exact: true }).click();
   await expect(page.getByLabel("Source audio directory", { exact: true })).toBeVisible();

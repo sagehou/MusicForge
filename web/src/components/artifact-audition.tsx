@@ -19,13 +19,14 @@ export function CandidateAudition({ source }: { source: Source }) {
   const [attempt, setAttempt] = useState(0);
   useEffect(() => {
     if (!open) { audio.current?.pause(); return; }
+    if (data) return;
     const controller = new AbortController();
     setError("");
     void api<Audition>(`/library/${source.id}/audition`, "GET", undefined, controller.signal)
       .then(value => { if (!controller.signal.aborted) setData(value); })
       .catch((err: Error) => { if (!controller.signal.aborted) setError(err.message); });
     return () => controller.abort();
-  }, [source.id, open, attempt]);
+  }, [source.id, open, attempt, data]);
   useEffect(() => {
     const element = audio.current;
     const stop = () => element?.pause();

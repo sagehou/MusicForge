@@ -73,7 +73,11 @@ test("browse and organize share filters, selection and drafts without starting m
   await organize.click();
   await expect(page.locator("#maintenance-workbench")).toHaveJSProperty("open", true);
   await page.screenshot({ path: "test-results/workspace-organize-desktop-light.png", animations: "disabled" });
+  await page.evaluate(() => history.replaceState(null, "", `${location.pathname}${location.search}#maintenance-workbench`));
   await browse.click();
+  await expect(page).not.toHaveURL(/mode=organize|#maintenance-workbench/);
+  await page.reload();
+  await expect(browse).toHaveAttribute("aria-pressed", "true");
   await page.setViewportSize({ width: 320, height: 844 });
   await setPreference(page, "language", "zh-CN");
   await setPreference(page, "theme", "dark");

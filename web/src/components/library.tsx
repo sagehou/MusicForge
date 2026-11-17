@@ -274,7 +274,8 @@ export function Library({ notify }: { notify: Notice }) {
     setOrganizing(next);
     const params = new URLSearchParams(location.search);
     if (next) params.set("mode", "organize"); else params.delete("mode");
-    history.replaceState(null, "", `/library?${params}${location.hash}`);
+    const hash = !next && ["#maintenance-workbench", "#library-comparison"].includes(location.hash) ? "" : location.hash;
+    history.replaceState(null, "", `/library?${params}${hash}`);
   }
   function toggle(ids: number[], checked: boolean) {
     setSelected(old => { const next = new Set(old); ids.forEach(id => checked ? next.add(id) : next.delete(id)); return next; });
@@ -392,15 +393,15 @@ export function Library({ notify }: { notify: Notice }) {
   return <>
     <ResourceWarning error={error} retry={retry} />
     <PageHeading><div className="library-page-title"><h1 id="library-title" tabIndex={-1}>{t("app.library")}</h1><span className="library-description">{t("library.trackCount", { count: data.counts.tracks })}</span><h1 className="comparison-page-title">{t("compare.title")}</h1></div>
+      <div className="library-workspace-modes" role="group" aria-label={t("library.workspace")}>
+        <Button variant="ghost" aria-pressed={!organizing} disabled={editorBusy} onClick={() => changeMode(false)}><Disc3 size={16} />{t("library.modeBrowse")}</Button>
+        <Button variant="ghost" aria-pressed={organizing} disabled={editorBusy} onClick={() => changeMode(true)}><Wrench size={16} />{t("library.modeOrganize")}</Button>
+      </div>
       <div className="actions"><Button className="comparison-close" variant="outline" size="icon" aria-label={t("compare.collapse")} title={t("compare.collapse")} onClick={() => {
         const panel = document.getElementById("library-comparison") as HTMLDetailsElement | null;
         if (panel) { panel.open = false; panel.querySelector("summary")?.focus(); }
       }} onKeyDown={event => { if (event.key === "Escape") { event.preventDefault(); event.currentTarget.click(); } }}><ArrowLeft size={18} /></Button><Button disabled={busy} onClick={() => void action("/library/scan", {}, "notice.scan")}><RefreshCw size={18} className={busy ? "animate-spin" : ""} />{t("library.scan")}</Button></div>
     </PageHeading>
-    <div className="library-workspace-modes" role="group" aria-label={t("library.workspace")}>
-      <Button variant="ghost" aria-pressed={!organizing} disabled={editorBusy} onClick={() => changeMode(false)}><Disc3 size={16} />{t("library.modeBrowse")}</Button>
-      <Button variant="ghost" aria-pressed={organizing} disabled={editorBusy} onClick={() => changeMode(true)}><Wrench size={16} />{t("library.modeOrganize")}</Button>
-    </div>
     {expired > 0 && <div className="banner amber"><Clock3 size={20} /><div><strong>{t("library.expiredCount", { count: expired })}</strong></div><InfoHint>{t("library.expiredHint")}</InfoHint><Button variant="destructive" size="sm" disabled={busy} onClick={() => deleteSelected(true)}><Trash2 size={14} />{t("library.deleteExpired")}</Button></div>}
     {removable > 0 && <div className="library-cleanup"><Trash2 size={17} /><div><strong>{t("library.removableCount", { count: removable })}</strong></div><InfoHint>{t("library.forgetHint")}</InfoHint><Button variant="outline" size="sm" disabled={busy} onClick={() => void forget([], true)}>{t("library.forgetAll")}</Button></div>}
     {(scope.artist || isAlbum) && <nav className="library-breadcrumbs" aria-label={t("library.hierarchy")}>

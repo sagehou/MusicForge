@@ -422,7 +422,7 @@ test("cover density and list preferences persist, pagination and polling retain 
   await page.goto("/library?view=albums");
   await expect(page.locator(".library-group")).toHaveCount(50);
   const columns = () => page.locator(".library-groups").evaluate(node => getComputedStyle(node).gridTemplateColumns.split(" ").length);
-  expect(await columns()).toBe(7);
+  expect(await columns()).toBe(6);
   await openLibraryOptions(page);
   await page.getByRole("group", { name: "Cover size", exact: true }).getByRole("button", { name: "Small", exact: true }).click();
   expect(await columns()).toBe(10);
@@ -511,7 +511,7 @@ test("narrow-screen filter and display menu stays usable and inside the viewport
   await page.keyboard.press("Enter");
   const density = page.getByRole("group", { name: "Cover size", exact: true });
   await expect(density).toBeVisible();
-  for (const [label, columns] of [["Small", 4], ["Medium", 3], ["Large", 2]] as const) {
+  for (const [label, columns] of [["Small", 4], ["Medium", 2], ["Large", 2]] as const) {
     await density.getByRole("button", { name: label, exact: true }).click();
     expect(await page.locator(".library-groups").evaluate(node => getComputedStyle(node).gridTemplateColumns.split(" ").length)).toBe(columns);
     await expectCoverBadgesFit(page);

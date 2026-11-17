@@ -271,7 +271,9 @@ test("existing lyrics require explicit association review and retain the preview
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
   await editor.screenshot({ path: "test-results/lyrics-association-mobile-dark-zh-CN.png", animations: "disabled" });
   await editor.getByRole("button", { name: "检查已有歌词关联", exact: true }).click();
-  await editor.getByRole("button", { name: "确认歌词属于这首歌", exact: true }).focus();
+  const confirmAssociation = editor.getByRole("button", { name: "确认歌词属于这首歌", exact: true });
+  await expect(confirmAssociation).toBeEnabled();
+  await confirmAssociation.focus();
   await page.keyboard.press("Enter");
   await expect(editor).toHaveCount(0);
   expect(writes).toEqual([{ fingerprint: "review-2" }, { fingerprint: "review-3" }]);

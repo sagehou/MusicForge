@@ -139,6 +139,9 @@ test("presets and custom colors persist, retain contrast and stay synchronized w
   await expect(panel).toHaveAccessibleName("歌曲详情");
   await expect(page.locator(".page-heading .palette-label")).toHaveText("Spotify");
   await page.keyboard.press("Escape");
+  await expect(panel).toBeVisible();
+  await panel.locator("h2").focus();
+  await page.keyboard.press("Escape");
   await expect(panel).toHaveCount(0);
   await expect(page.locator(".page-heading .palette-label")).toHaveText("Spotify");
   const second = await context.newPage();

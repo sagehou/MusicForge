@@ -26,10 +26,13 @@ export function InlineDetails({ id, title, subtitle, children, close, returnFocu
   useEffect(() => {
     const frame = requestAnimationFrame(() => {
       heading.current?.focus({ preventScroll: true });
-      panel.current?.scrollIntoView({ block: "nearest" });
+      heading.current?.scrollIntoView({ block: "nearest" });
     });
     return () => cancelAnimationFrame(frame);
   }, [returnFocusID]);
+  useEffect(() => {
+    if (!busy && document.activeElement === document.body && panel.current?.getClientRects().length) heading.current?.focus({ preventScroll: true });
+  }, [busy]);
   return <section ref={panel} id={id} role="region" className={`inline-details ${className}`} aria-labelledby={headingID} aria-busy={busy} onKeyDown={event => {
     const target = event.target as Element;
     if (event.key === "Escape" && !event.defaultPrevented && target.closest(".inline-details") === event.currentTarget && !event.currentTarget.contains(target.closest("details[open]")) && !event.currentTarget.closest("[inert]")) {

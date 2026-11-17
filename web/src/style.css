@@ -1402,11 +1402,9 @@ input:not([type="checkbox"], [type="radio"]):focus-visible, select:focus-visible
 .library-selection .check-field { margin: 0; font-size: 0.8125rem; }
 .library-selection > span { margin-inline-start: auto; }
 .library-selection-toolbar:has(> .selection-bar) > .library-selection { flex-grow: 0; }
-.library-selection-toolbar > .selection-bar { flex: 1 1 auto; min-width: 0; flex-wrap: wrap; border: 0; padding: 0; margin: 0; background: transparent; backdrop-filter: none; -webkit-backdrop-filter: none; box-shadow: none; }
+.library-selection-toolbar > .selection-bar { flex: 1 1 0; min-width: 0; flex-wrap: wrap; border: 0; padding: 0; margin: 0; background: transparent; backdrop-filter: none; -webkit-backdrop-filter: none; box-shadow: none; }
 .library-selection-toolbar > .selection-bar > * { flex-shrink: 0; }
 .library-selection-toolbar .ui-button { max-width: 100%; white-space: normal; }
-.library-selection-toolbar:has(.maintenance-report) { flex-wrap: wrap; }
-.library-selection-toolbar > .selection-bar:has(.maintenance-report) { flex: 1 1 100%; min-width: 0; flex-wrap: wrap; white-space: normal; }
 .selection-more { min-width: 0; flex-basis: 100%; }
 .selection-more > summary { display: inline-flex; align-items: center; gap: 6px; min-height: 32px; padding: 4px 10px; border: 1px solid var(--line); border-radius: var(--radius-control); font-size: var(--font-size-small); cursor: pointer; list-style: none; }
 .selection-more > summary::-webkit-details-marker { display: none; }
@@ -1470,16 +1468,16 @@ input:not([type="checkbox"], [type="radio"]):focus-visible, select:focus-visible
 
 /* Library tools stay in the page when expanded. */
 @supports (interpolate-size: allow-keywords) and selector(details::details-content) {
-  :is(.maintenance-workbench, .lyrics-settings, #library-comparison, .selection-more, .task-group)::details-content {
+  :is(.maintenance-workbench, .lyrics-settings, #library-comparison, .selection-more)::details-content {
     interpolate-size: allow-keywords;
     block-size: auto;
     overflow: clip;
     contain: layout;
   }
-  :is(.maintenance-workbench, .lyrics-settings, #library-comparison, .selection-more, .task-group):not([open])::details-content { block-size: 0; }
-  :is(.maintenance-workbench, .lyrics-settings, #library-comparison, .selection-more, .task-group)[open]:has(.info-hint[open], .lyrics-details[open])::details-content { overflow: visible; }
+  :is(.maintenance-workbench, .lyrics-settings, #library-comparison, .selection-more):not([open])::details-content { block-size: 0; }
+  :is(.maintenance-workbench, .lyrics-settings, #library-comparison, .selection-more)[open]:has(.info-hint[open], .lyrics-details[open])::details-content { overflow: visible; }
   @media (prefers-reduced-motion: no-preference) {
-    :is(.maintenance-workbench, .lyrics-settings, #library-comparison, .selection-more, .task-group)::details-content {
+    :is(.maintenance-workbench, .lyrics-settings, #library-comparison, .selection-more)::details-content {
       transition: block-size 180ms var(--ease), content-visibility 180ms allow-discrete;
     }
   }

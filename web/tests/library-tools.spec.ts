@@ -48,6 +48,11 @@ test("output tags require a scoped preview and retain drafts on conflicts", asyn
   await page.keyboard.press("Escape");
   await expect(editor).toHaveCount(0);
   await expect(page.locator("#tags-selected-trigger")).toBeFocused();
+  await page.getByRole("button", { name: "View details for Track 1", exact: true }).click();
+  await page.locator(".track-details").getByRole("button", { name: "Edit tags", exact: true }).click();
+  await expect(page.locator(".track-expanded-row").getByRole("region", { name: "Correct output tags", exact: true })).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(page.locator("#track-title-1")).toBeFocused();
 });
 
 test("playlists preview broken paths, save mappings and refresh output extensions", async ({ page }) => {
@@ -64,6 +69,13 @@ test("playlists preview broken paths, save mappings and refresh output extension
   await page.getByRole("button", { name: "Playlists", exact: true }).click();
   const editor = page.getByRole("region", { name: "Playlists", exact: true });
   await editor.getByLabel("Playlist name", { exact: true }).fill("Favorites");
+  await page.getByRole("button", { name: "Browse", exact: true }).click();
+  await expect(editor).toBeHidden();
+  await page.getByRole("button", { name: "Organize", exact: true }).click();
+  await expect(editor.getByLabel("Playlist name", { exact: true })).toHaveValue("Favorites");
+  await page.getByLabel("Search library", { exact: true }).focus();
+  await page.keyboard.press("Escape");
+  await expect(editor).toBeVisible();
   await editor.getByLabel("Imported playlist directory relative to the source root", { exact: true }).fill("Artist/Album");
   await editor.getByLabel("M3U paths", { exact: true }).fill("01.flac\nmissing.flac");
   await editor.getByRole("button", { name: "Preview path mapping", exact: true }).click();
@@ -152,12 +164,21 @@ test("online cover preview shows dimensions and requires a separate save", async
   await page.getByRole("button", { name: "View details for Track 1", exact: true }).click();
   await page.getByRole("button", { name: "Correct output cover", exact: true }).click();
   const editor = page.getByRole("region", { name: "Correct output cover", exact: true });
+  await expect(page.locator(".track-expanded-row .artwork-editor")).toBeVisible();
+  await editor.locator(".cover-search > summary").click();
+  await editor.getByLabel("Artist / album search", { exact: true }).focus();
+  await page.keyboard.press("Escape");
+  await expect(editor.locator(".cover-search")).not.toHaveAttribute("open", "");
+  await expect(editor).toBeVisible();
   await editor.locator(".cover-search > summary").click();
   await editor.getByRole("button", { name: "Search cover candidates", exact: true }).click();
   await editor.getByRole("button", { name: "Preview this cover", exact: true }).click();
   await expect(editor).toContainText("64 × 32 px");
   await expect(editor.getByRole("img", { name: "Output cover preview", exact: true })).toBeVisible();
   expect(writes).toBe(0);
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
+  await page.screenshot({ path: "test-results/library-tools-cover-inline-phone.png", animations: "disabled" });
   await editor.getByRole("button", { name: "Save output cover", exact: true }).click();
   await expect.poll(() => writes).toBe(1);
   await expect(editor.getByRole("button", { name: "Close panel", exact: true })).toBeDisabled();

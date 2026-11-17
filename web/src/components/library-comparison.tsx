@@ -17,18 +17,17 @@ type Report = {
 
 export function LibraryComparison({ counts, notify }: { counts: LibraryCounts; notify: Notice }) {
   const { t, number } = useI18n();
-  const [open, setOpen] = useState(false);
+  const [visited, setVisited] = useState(false);
   return <details id="library-comparison" className="library-comparison" onToggle={event => {
-    setOpen(event.currentTarget.open);
-    if (event.currentTarget.open) document.querySelector<HTMLButtonElement>(".comparison-close")?.focus();
+    if (event.currentTarget.open) setVisited(true);
   }} onKeyDown={event => {
     if (event.key === "Escape" && event.currentTarget.open && !event.defaultPrevented && (event.target as Element).closest("details[open]") === event.currentTarget) {
       event.preventDefault(); event.currentTarget.open = false; event.currentTarget.querySelector("summary")?.focus();
     }
   }}>
-    <summary title={t(open ? "compare.collapse" : "compare.title")}><ListChecks size={18} /><span>{t(open ? "compare.collapse" : "compare.title")}</span><ChevronRight size={16} /></summary>
+    <summary><ListChecks size={18} /><span>{t("compare.title")}</span><ChevronRight size={16} /></summary>
 
-    {open && <LidarrComparison notify={notify} />}
+    {visited && <LidarrComparison notify={notify} />}
     <div className="comparison-local-notes"><p className="comparison-counts">{t("compare.localCounts", {
       sources: number(counts.present), expired: number(counts.deleted),
       outputs: number(counts.outputs), failed: number(counts.failed),

@@ -1,5 +1,5 @@
 import { routeLibrary } from "./library-fixture";
-import { selectLibraryPage, openLibraryOptions, setPreference } from "./preferences";
+import { selectLibraryPage, openLibraryOptions, openSelectionActions, setPreference } from "./preferences";
 import { test, expect } from "@playwright/test";
 
 test.beforeEach(async ({ page }) => {
@@ -220,6 +220,7 @@ test("filtered failed tracks can be selected across pages and repaired with one 
   await page.locator(".library-options-body select").first().selectOption("failed");
   await selectLibraryPage(page);
   await page.getByRole("button", { name: "Select all 65 matching tracks", exact: true }).click();
+  await openSelectionActions(page);
   const repair = page.getByRole("button", { name: "Best-effort repair selected (60)", exact: true });
   page.once("dialog", async dialog => { expect(dialog.message()).toContain("60 selected tracks"); expect(dialog.message()).toContain("existing outputs will not be replaced"); await dialog.dismiss(); });
   await repair.click(); expect(starts).toBe(0);
@@ -230,6 +231,7 @@ test("filtered failed tracks can be selected across pages and repaired with one 
   await setPreference(page, "language", "zh-CN");
   await selectLibraryPage(page);
   await page.getByRole("button", { name: "全选筛选结果（65 首）", exact: true }).click();
+  await openSelectionActions(page);
   await expect(page.getByRole("button", { name: "尽力修复所选曲目（60 首）", exact: true })).toBeVisible();
   await page.setViewportSize({ width: 320, height: 900 });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);

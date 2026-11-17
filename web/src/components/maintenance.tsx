@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ClipboardList, Loader2, Play, RefreshCw, Square, X } from "lucide-react";
+import { ChevronRight, ClipboardList, Loader2, Play, RefreshCw, Square, X } from "lucide-react";
 import { api } from "../api";
 import { useI18n } from "../i18n";
 import type { Encoding, LoudnessReport, Source } from "../types";
@@ -51,29 +51,26 @@ export function BuildPreview({ selection, notify, currentScope = false }: { sele
   </div>;
 }
 
-export function MaintenanceWorkbench({ scopeQuery, attention, selected, select, notify, comparisonAvailable }: { scopeQuery: string; attention: number; selected: Source[]; select: (ids: number[]) => void; notify: Notice; comparisonAvailable: boolean }) {
+export function MaintenanceWorkbench({ scopeQuery, attention, selected, select, notify }: { scopeQuery: string; attention: number; selected: Source[]; select: (ids: number[]) => void; notify: Notice }) {
   const { t, number } = useI18n();
   const [open, setOpen] = useState(() => location.hash === "#maintenance-workbench");
-  return <details className="maintenance-workbench" id="maintenance-workbench" open={open} onToggle={event => setOpen(event.currentTarget.open)} onKeyDown={event => { if (event.key === "Escape" && event.currentTarget.open && !event.defaultPrevented && (event.target as Element).closest("details[open]") === event.currentTarget) { event.preventDefault(); setOpen(false); event.currentTarget.querySelector("summary")?.focus(); } }}>
-    <summary><ClipboardList size={18} /><span>{t("maintenance.title")}</span><small className="quality-count">{number(attention)}</small></summary>
-    {open && <WorkbenchContent scopeQuery={scopeQuery} selected={selected} select={select} notify={notify} comparisonAvailable={comparisonAvailable} />}
+  const [visited, setVisited] = useState(open);
+  return <details className="maintenance-workbench" id="maintenance-workbench" open={open} onToggle={event => { setOpen(event.currentTarget.open); if (event.currentTarget.open) setVisited(true); }} onKeyDown={event => { if (event.key === "Escape" && event.currentTarget.open && !event.defaultPrevented && (event.target as Element).closest("details[open]") === event.currentTarget) { event.preventDefault(); setOpen(false); event.currentTarget.querySelector("summary")?.focus(); } }}>
+    <summary><ClipboardList size={18} /><span>{t("maintenance.title")}</span><small className="quality-count">{number(attention)}</small><ChevronRight size={16} /></summary>
+    {visited && <WorkbenchContent scopeQuery={scopeQuery} selected={selected} select={select} notify={notify} />}
   </details>;
 }
 
-function WorkbenchContent({ scopeQuery, selected, select, notify, comparisonAvailable }: { scopeQuery: string; selected: Source[]; select: (ids: number[]) => void; notify: Notice; comparisonAvailable: boolean }) {
+function WorkbenchContent({ scopeQuery, selected, select, notify }: { scopeQuery: string; selected: Source[]; select: (ids: number[]) => void; notify: Notice }) {
   const { t } = useI18n();
   const resource = useResource<Source[]>(`/library/scope?${scopeQuery}`, true);
-  function reveal(selector: string) {
-    const element = document.querySelector<HTMLDetailsElement>(selector);
-    if (element) { element.open = true; element.scrollIntoView({ block: "nearest", behavior: "smooth" }); element.querySelector("summary")?.focus(); }
-  }
   if (!resource.data) return <Loading error={resource.error} retry={resource.retry} />;
   const sources = resource.data;
   return <div className="comparison-body">
     <ResourceWarning error={resource.error} retry={resource.retry} />
     <InfoHint>{t("maintenance.hint")}</InfoHint>
     <p><a href="/jobs#maintenance-progress">{t("progress.open")}</a></p>
-    <div className="maintenance-actions"><BuildPreview selection={{ ids: sources.map(source => source.id) }} currentScope notify={notify} />{selected.length > 0 && <BuildPreview selection={{ ids: selected.map(source => source.id) }} notify={notify} />}<Button size="sm" variant="ghost" onClick={() => reveal(".lyrics-panel > details")}>{t("lyrics.title")}</Button>{comparisonAvailable && <Button size="sm" variant="ghost" onClick={() => reveal("#library-comparison")}>{t("compare.heading")}</Button>}<a href="/settings?section=encoding">{t("maintenance.scheduleLink")}</a></div>
+    <div className="maintenance-actions"><BuildPreview selection={{ ids: sources.map(source => source.id) }} currentScope notify={notify} /><a href="/settings?section=encoding">{t("maintenance.scheduleLink")}</a></div>
     <QualityReview sources={sources} selected={selected} select={select} notify={notify} />
     <LoudnessMaintenance selected={selected} sources={sources} notify={notify} />
     <MaintenanceReview sources={sources} selected={selected} select={select} notify={notify} />

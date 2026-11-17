@@ -1,5 +1,5 @@
 import { routeLibrary } from "./library-fixture";
-import { selectLibraryPage, openLibraryOptions, setPreference } from "./preferences";
+import { selectLibraryPage, openLibraryOptions, openLyricsMaintenance, setPreference } from "./preferences";
 import { test, expect, type Page } from "@playwright/test";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
@@ -133,7 +133,7 @@ test("album and artist lyrics actions use all playable tracks in their scope, in
   await page.reload();
   await expect(page.getByLabel("Search library", { exact: true })).toHaveValue("Song 01");
   await expect(page.getByRole("button", { name: "Fill lyrics for all artifacts", exact: true })).toHaveCount(0);
-  await page.locator(".lyrics-settings > summary").click();
+  await openLyricsMaintenance(page);
   await page.getByRole("button", { name: "Fill album lyrics", exact: true }).click();
   await expect.poll(() => searches.length).toBe(1);
   expect(searches[0]).toEqual({ ids: album.slice(0, 63).map(source => source.id), refresh: false });
@@ -142,17 +142,17 @@ test("album and artist lyrics actions use all playable tracks in their scope, in
   await expect.poll(() => searches.length).toBe(2);
   expect(searches[1]).toEqual({ ids: [100], refresh: false });
   await page.goto("/library?view=albums&artist=River+Ensemble");
-  await page.locator(".lyrics-settings > summary").click();
+  await openLyricsMaintenance(page);
   await page.getByRole("button", { name: "Fill artist lyrics", exact: true }).click();
   await expect.poll(() => searches.length).toBe(3);
   expect(searches[2]).toEqual({ ids: [otherAlbum.id, ...album.slice(0, 63).map(source => source.id)], refresh: false });
   await page.goto("/library?view=albums&artist=River+Ensemble&album=missing");
-  await page.locator(".lyrics-settings > summary").click();
+  await openLyricsMaintenance(page);
   await expect(page.getByRole("button", { name: "Fill album lyrics", exact: true })).toBeDisabled();
   expect(searches).toHaveLength(3);
   running = true;
   await page.goto("/library?view=albums&artist=River+Ensemble&album=River+Ensemble%2FNight+Studies");
-  await page.locator(".lyrics-settings > summary").click();
+  await openLyricsMaintenance(page);
   await expect(page.getByRole("button", { name: "Fill album lyrics", exact: true })).toBeDisabled();
   await expect(page.getByRole("link", { name: "View background lyrics task", exact: true })).toHaveAttribute("href", "/library?view=tracks#lyrics-maintenance");
   await expect(page.getByRole("button", { name: "Stop lyrics search", exact: true })).toBeEnabled();
@@ -166,7 +166,7 @@ test("aligned records show all songs with shared filters, pagination, batch lyri
   await mockLibrary(page, library);
   await page.route("**/api/lyrics/search", route => { searches.push(route.request().postDataJSON()); return route.fulfill({ status: 202, json: { selected: 2 } }); });
   await page.goto("/library");
-  await page.locator(".lyrics-settings > summary").click();
+  await openLyricsMaintenance(page);
   await expect(page.getByRole("button", { name: "Fill lyrics for all artifacts", exact: true })).toBeVisible();
   await page.getByRole("button", { name: /^All songs/ }).click();
   await expect(page).toHaveURL(/view=tracks/);

@@ -233,8 +233,7 @@ test("phone pages retain real content, readable facts and inline song details in
     for (const text of ["3:21", "24 bit / 96 kHz", "894 kbps", "25 MiB", "5 MiB"]) await expect(facts).toContainText(text);
     for (const value of await facts.locator("dd").all()) await expect(value).toBeVisible();
     expect(await facts.evaluate(element => element.scrollWidth <= element.clientWidth + 1)).toBe(true);
-    const lyricsTitle = await page.locator(".lyrics-settings > summary").boundingBox();
-    expect(lyricsTitle!.height).toBeLessThanOrEqual(40);
+    await expect(page.locator(".library-organize")).toBeHidden();
     expect(await page.locator(".lyrics-state").first().evaluate(element => element.scrollHeight <= element.clientHeight + 1)).toBe(true);
     await setPreference(page, "theme", theme);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);

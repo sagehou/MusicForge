@@ -1,4 +1,4 @@
-import { openLibraryOptions, setPreference, openAccount } from "./preferences";
+import { openLibraryOptions, openSelectionActions, setPreference, openAccount } from "./preferences";
 import { test, expect } from "@playwright/test";
 import { readFileSync, unlinkSync, writeFileSync, utimesSync, mkdirSync, existsSync } from "node:fs";
 import { join } from "node:path";
@@ -109,6 +109,7 @@ test("bilingual setup, real incremental build, state preservation and login", as
   await expect(page.getByText("Selected: 1", { exact: true })).toBeVisible();
   await expect(page.getByRole("table").getByText("Ready", { exact: true })).toBeVisible();
   await expect(page.locator(".library-description")).toHaveText("1 track");
+  await openSelectionActions(page);
   await expect(page.getByRole("button", { name: "Delete selected expired artifacts", exact: true })).toBeDisabled();
   const sourcePath = join(root, "source/Artist/Album/01.flac");
   const sourceBytes = readFileSync(sourcePath);
@@ -118,6 +119,7 @@ test("bilingual setup, real incremental build, state preservation and login", as
   await page.getByLabel("Filter by status", { exact: true }).selectOption("expired");
   await expect(page.getByText("Source deleted", { exact: true })).toBeVisible({ timeout: 30000 });
   await page.getByLabel("Select CI Track", { exact: true }).check();
+  await openSelectionActions(page);
   let confirmation = page.waitForEvent("dialog");
   let clicking = page.getByRole("button", { name: "Delete selected expired artifacts", exact: true }).click();
   let dialog = await confirmation;

@@ -74,6 +74,7 @@
   "library.startRebuild": "Start rebuild",
   "library.buildSelected": "Build selected",
   "library.deleteSelected": "Delete selected expired artifacts",
+  "library.moreActions": "More actions",
   "library.clearSelection": "Clear selection",
   "library.selectPage": "Select current page",
   "library.trackFile": "Track / File",

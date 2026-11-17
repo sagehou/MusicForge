@@ -46,21 +46,22 @@ export function LyricsMaintenance({ inventory, scopeQuery, scope, notify }: { in
   const { t } = useI18n();
   const details = useRef<HTMLDetailsElement>(null);
   useEffect(() => {
-    const reveal = () => { if (location.hash === "#lyrics-maintenance" && details.current) { details.current.open = true; details.current.scrollIntoView({ block: "nearest" }); } };
+    let frame = 0;
+    const reveal = () => { if (location.hash === "#lyrics-maintenance" && details.current) { details.current.open = true; cancelAnimationFrame(frame); frame = requestAnimationFrame(() => details.current?.scrollIntoView({ block: "nearest" })); } };
     reveal(); window.addEventListener("route-changed", reveal); window.addEventListener("popstate", reveal);
-    return () => { window.removeEventListener("route-changed", reveal); window.removeEventListener("popstate", reveal); };
+    return () => { cancelAnimationFrame(frame); window.removeEventListener("route-changed", reveal); window.removeEventListener("popstate", reveal); };
   }, []);
   const coverage = scope === "album" ? "lyrics.albumCoverage" : scope === "artist" ? "lyrics.artistCoverage" : "lyrics.coverage";
   const getIDs = scope ? async () => (await api<{ ids: number[] }>("/library/selection", "POST", { query: scopeQuery, ids_only: true, playable: true })).ids : undefined;
   return <section className="library-comparison lyrics-panel" id="lyrics-maintenance">
-    <details ref={details} className="lyrics-settings" onKeyDown={event => { if (event.key === "Escape" && event.currentTarget.open && !event.defaultPrevented) { event.preventDefault(); event.currentTarget.open = false; event.currentTarget.querySelector("summary")?.focus(); } }}><summary><FileMusic size={18} /><span>{t("lyrics.manage")}</span><small className="maintenance-count" aria-label={t(coverage, { done: inventory.checked, total: inventory.total })}>{inventory.checked} / {inventory.total}</small><ChevronRight size={16} /></summary>
+    <details ref={details} className="lyrics-settings" onKeyDown={event => { if (event.key === "Escape" && event.currentTarget.open && !event.defaultPrevented && (event.target as Element).closest("details[open]") === event.currentTarget) { event.preventDefault(); event.currentTarget.open = false; event.currentTarget.querySelector("summary")?.focus(); } }}><summary><FileMusic size={18} /><span>{t("lyrics.manage")}</span><small className="maintenance-count" aria-label={t(coverage, { done: inventory.checked, total: inventory.total })}>{inventory.checked} / {inventory.total}</small><ChevronRight size={16} /></summary>
       <section className="lyrics-library-summary" aria-label={t(scope === "album" ? "lyrics.albumStatus" : scope === "artist" ? "lyrics.artistStatus" : "lyrics.libraryStatus")}>
         <strong>{t(coverage, { done: inventory.checked, total: inventory.total })}</strong>
         <p>{t("lyrics.inventory", { found: inventory.counts.ready, missing: inventory.counts.not_found, instrumental: inventory.counts.instrumental, review: inventory.counts.needs_review, failed: inventory.counts.failed, unchecked: inventory.counts.unchecked })}</p>
         <InfoHint>{t("lyrics.inventoryHint")}</InfoHint>
       </section>
+      <LyricsControls notify={notify} disabled={!!scope && inventory.total === 0} getIDs={getIDs} label={scope === "album" ? "lyrics.searchAlbum" : scope === "artist" ? "lyrics.searchArtist" : "lyrics.searchAll"} />
     </details>
-    <LyricsControls notify={notify} disabled={!!scope && inventory.total === 0} getIDs={getIDs} label={scope === "album" ? "lyrics.searchAlbum" : scope === "artist" ? "lyrics.searchArtist" : "lyrics.searchAll"} />
   </section>;
 }
 

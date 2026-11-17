@@ -1,6 +1,6 @@
 import { useDeferredValue, useEffect, useRef, useState, Fragment, memo } from "react";
 import { flushSync } from "react-dom";
-import { ArrowLeft, ChevronLeft, ChevronRight, Clock3, Copy, Info, Disc3, Fingerprint, Grid2X2, ListMusic, Tags, List, Play, RefreshCw, Search, ShieldCheck, SlidersHorizontal, Trash2, Wrench, X } from "lucide-react";
+import { ArrowLeft, ChevronLeft, ChevronRight, Clock3, Copy, Info, Disc3, Fingerprint, Grid2X2, ListMusic, MoreHorizontal, Tags, List, Play, RefreshCw, Search, ShieldCheck, SlidersHorizontal, Trash2, Wrench, X } from "lucide-react";
 import { api } from "../api";
 import { useI18n, type MessageKey } from "../i18n";
 import type { Source } from "../types";
@@ -38,7 +38,7 @@ function lyricsPageTrack() {
   return Number.isSafeInteger(value) && value > 0 ? value : undefined;
 }
 function organizingLibrary() {
-  return new URLSearchParams(location.search).get("mode") === "organize" || ["#maintenance-workbench", "#library-comparison"].includes(location.hash);
+  return new URLSearchParams(location.search).get("mode") === "organize" || ["#maintenance-workbench", "#library-comparison", "#lyrics-maintenance"].includes(location.hash);
 }
 function duration(seconds: number) {
   if (!seconds) return "--";
@@ -168,7 +168,7 @@ export function Library({ notify }: { notify: Notice }) {
   if (scope.album !== undefined) scopeParams.set("album", scope.album);
   const request = new URLSearchParams(filters);
   request.set("offset", String(offset));
-  const anchor = lyricsID ?? detailID ?? auditionID ?? coverID;
+  const anchor = lyricsID ?? detailID ?? auditionID ?? coverID ?? tool?.sources?.[0]?.id;
   if (anchor) request.set("anchor", String(anchor));
   const { data, error, retry, pending } = useResource<LibraryPage>(`/library/browse?${request}`, true, true);
   const busy = working || pending || selectionPending;
@@ -274,7 +274,7 @@ export function Library({ notify }: { notify: Notice }) {
     setOrganizing(next);
     const params = new URLSearchParams(location.search);
     if (next) params.set("mode", "organize"); else params.delete("mode");
-    const hash = !next && ["#maintenance-workbench", "#library-comparison"].includes(location.hash) ? "" : location.hash;
+    const hash = !next && ["#maintenance-workbench", "#library-comparison", "#lyrics-maintenance"].includes(location.hash) ? "" : location.hash;
     history.replaceState(null, "", `/library?${params}${hash}`);
   }
   function toggle(ids: number[], checked: boolean) {
@@ -392,15 +392,12 @@ export function Library({ notify }: { notify: Notice }) {
   }
   return <>
     <ResourceWarning error={error} retry={retry} />
-    <PageHeading><div className="library-page-title"><h1 id="library-title" tabIndex={-1}>{t("app.library")}</h1><span className="library-description">{t("library.trackCount", { count: data.counts.tracks })}</span><h1 className="comparison-page-title">{t("compare.title")}</h1></div>
+    <PageHeading><div className="library-page-title"><h1 id="library-title" tabIndex={-1}>{t("app.library")}</h1><span className="library-description">{t("library.trackCount", { count: data.counts.tracks })}</span></div>
       <div className="library-workspace-modes" role="group" aria-label={t("library.workspace")}>
         <Button variant="ghost" aria-pressed={!organizing} disabled={editorBusy} onClick={() => changeMode(false)}><Disc3 size={16} />{t("library.modeBrowse")}</Button>
         <Button variant="ghost" aria-pressed={organizing} disabled={editorBusy} onClick={() => changeMode(true)}><Wrench size={16} />{t("library.modeOrganize")}</Button>
       </div>
-      <div className="actions"><Button className="comparison-close" variant="outline" size="icon" aria-label={t("compare.collapse")} title={t("compare.collapse")} onClick={() => {
-        const panel = document.getElementById("library-comparison") as HTMLDetailsElement | null;
-        if (panel) { panel.open = false; panel.querySelector("summary")?.focus(); }
-      }} onKeyDown={event => { if (event.key === "Escape") { event.preventDefault(); event.currentTarget.click(); } }}><ArrowLeft size={18} /></Button><Button disabled={busy} onClick={() => void action("/library/scan", {}, "notice.scan")}><RefreshCw size={18} className={busy ? "animate-spin" : ""} />{t("library.scan")}</Button></div>
+      <div className="actions"><Button disabled={busy} onClick={() => void action("/library/scan", {}, "notice.scan")}><RefreshCw size={18} className={busy ? "animate-spin" : ""} />{t("library.scan")}</Button></div>
     </PageHeading>
     {expired > 0 && <div className="banner amber"><Clock3 size={20} /><div><strong>{t("library.expiredCount", { count: expired })}</strong></div><InfoHint>{t("library.expiredHint")}</InfoHint><Button variant="destructive" size="sm" disabled={busy} onClick={() => deleteSelected(true)}><Trash2 size={14} />{t("library.deleteExpired")}</Button></div>}
     {removable > 0 && <div className="library-cleanup"><Trash2 size={17} /><div><strong>{t("library.removableCount", { count: removable })}</strong></div><InfoHint>{t("library.forgetHint")}</InfoHint><Button variant="outline" size="sm" disabled={busy} onClick={() => void forget([], true)}>{t("library.forgetAll")}</Button></div>}
@@ -418,6 +415,7 @@ export function Library({ notify }: { notify: Notice }) {
         </div>
       </div>
     </section>}
+    {coverID && coverTrigger === "album-artwork-trigger" && known.has(coverID) && <ArtworkEditor key={coverID} source={known.get(coverID)!} saved={retry} close={() => setCoverID(undefined)} returnFocusID={coverTrigger} onBusyChange={setEditorBusy} />}
     <section className={`library-surface ${isAlbum ? "album-library" : ""}`} aria-busy={pending}>
       <div className="library-toolbar-box">
       <div className="library-navigation">{!scope.artist && <div className="segmented" role="group" aria-label={t("library.browse")}>
@@ -471,22 +469,25 @@ export function Library({ notify }: { notify: Notice }) {
       <Button id="playlist-tool-trigger" size="sm" variant="ghost" disabled={editorBusy} onClick={() => openTool("playlist", "playlist-tool-trigger")}><ListMusic size={15} />{t("playlist.title")}</Button>
       <Button id="fingerprints-tool-trigger" size="sm" variant="ghost" disabled={editorBusy} onClick={() => openTool("fingerprints", "fingerprints-tool-trigger")}><Fingerprint size={15} />{t("fingerprint.open")}</Button>
       <Button size="sm" variant="ghost" disabled={busy || editorBusy} onClick={() => void action("/library/scan", { verify: true }, "notice.verify")}><ShieldCheck size={15} />{t("library.verify")}</Button>
-      <BuildPreview selection={{ all: true }} notify={notify} />
     </div>
+    {tool && tool.kind !== "tags" && <LibraryTools key={tool.kind} tool={tool.kind} scopeQuery={scopeParams.toString()} selected={chosen} select={reviewTracks} notify={notify} close={() => setTool(undefined)} returnFocusID={tool.trigger} onBusyChange={setEditorBusy} />}
     <div className="library-maintenance">
-      <MaintenanceWorkbench comparisonAvailable={!scope.artist && !isAlbum} scopeQuery={scopeParams.toString()} attention={data.attention} selected={chosen} notify={notify} select={reviewTracks} />
+      <LyricsMaintenance inventory={data.lyrics} scopeQuery={scopeParams.toString()} scope={isAlbum ? "album" : scope.artist ? "artist" : undefined} notify={notify} />
+      <MaintenanceWorkbench scopeQuery={scopeParams.toString()} attention={data.attention} selected={chosen} notify={notify} select={reviewTracks} />
       {!scope.artist && !isAlbum && <LibraryComparison counts={data.counts} notify={notify} />}
     </div>
     </div>
-    <div className="library-maintenance library-lyrics-strip">
-      <LyricsMaintenance inventory={data.lyrics} scopeQuery={scopeParams.toString()} scope={isAlbum ? "album" : scope.artist ? "artist" : undefined} notify={notify} />
-    </div>
-      {coverID && known.has(coverID) && <ArtworkEditor key={coverID} source={known.get(coverID)!} saved={retry} close={() => setCoverID(undefined)} returnFocusID={coverTrigger} onBusyChange={setEditorBusy} />}
       <div className="library-selection-toolbar">
       {count > 0 && <div className="library-selection"><label className="check-field"><input type="checkbox" aria-label={t("library.selectPage")} checked={pageIDs.length > 0 && pageIDs.every(id => selected.has(id))} ref={node => { if (node) node.indeterminate = pageIDs.some(id => selected.has(id)) && !pageIDs.every(id => selected.has(id)); }} disabled={busy} onChange={event => toggle(pageIDs, event.target.checked)} /><span>{t("library.selectPage")}</span></label>{data.matched > pageIDs.length && <Button type="button" size="sm" variant="ghost" disabled={busy} onClick={() => void selectMatching()}>{t("library.selectMatching", { count: data.matched })}</Button>}<span>{t(showingTracks ? "library.trackCount" : showingArtists ? "library.artistCount" : "library.albumCount", { count })}</span></div>}
-      {selected.size > 0 && <div className="selection-bar" aria-busy={selectionPending}><span>{t("library.selected", { count: selected.size })}</span><Button id="tags-selected-trigger" size="sm" variant="outline" disabled={busy || editorBusy || !chosen.some(source => source.output_present)} onClick={() => openTool("tags", "tags-selected-trigger")}><Tags size={14} />{t("tags.open")}</Button><Button id="playlist-selected-trigger" size="sm" variant="outline" disabled={busy || editorBusy} onClick={() => openTool("playlist", "playlist-selected-trigger")}><ListMusic size={14} />{t("playlist.create")}</Button><BuildPreview selection={{ ids: [...selected] }} notify={notify} /><Button size="sm" variant="outline" disabled={busy} onClick={() => void action("/library/rebuild", { ids: [...selected] }, "notice.selectedBuild")}><RefreshCw size={14} />{t("library.buildSelected")}</Button><LyricsSearchButton ids={chosen.filter(source => source.output && source.output_present).map(source => source.id)} label="lyrics.searchSelected" notify={notify} disabled={busy} /><LyricsSearchButton ids={chosen.filter(source => source.output && source.output_present).map(source => source.id)} simplifyTraditional label="lyrics.simplifySelected" notify={notify} disabled={busy} />{chosen.some(source => source.lyrics_script === "traditional" && source.output_present) && <LyricsSearchButton ids={chosen.filter(source => source.lyrics_script === "traditional" && source.output_present).map(source => source.id)} replaceTraditional label="lyrics.replaceSelected" notify={notify} disabled={busy} />}<BatchRepairButton sources={chosen} notify={notify} disabled={busy} refresh={() => { setSelected(new Set()); retry(); }} /><Button size="sm" variant="destructive" disabled={busy || selectedExpired === 0} onClick={() => deleteSelected(false)}><Trash2 size={14} />{t("library.deleteSelected")}</Button>{selectedRemovable.length > 0 && <Button size="sm" variant="outline" disabled={busy} onClick={() => void forget(selectedRemovable.map(source => source.id))}><Trash2 size={14} />{t("library.forgetSelected", { count: selectedRemovable.length })}</Button>}<Button size="sm" variant="ghost" onClick={() => setSelected(new Set())}><X size={14} />{t("library.clearSelection")}</Button></div>}
+      {selected.size > 0 && <div className="selection-bar" aria-busy={selectionPending}><span>{t("library.selected", { count: selected.size })}</span><Button id="tags-selected-trigger" size="sm" variant="outline" disabled={busy || editorBusy || !chosen.some(source => source.output_present)} onClick={() => openTool("tags", "tags-selected-trigger")}><Tags size={14} />{t("tags.open")}</Button>
+        <Button size="sm" variant="outline" disabled={busy} onClick={() => void action("/library/rebuild", { ids: [...selected] }, "notice.selectedBuild")}><RefreshCw size={14} />{t("library.buildSelected")}</Button><LyricsSearchButton ids={chosen.filter(source => source.output && source.output_present).map(source => source.id)} label="lyrics.searchSelected" notify={notify} disabled={busy} />
+        <Button size="sm" variant="ghost" onClick={() => setSelected(new Set())}><X size={14} />{t("library.clearSelection")}</Button>
+        <details className="selection-more"><summary><MoreHorizontal size={16} />{t("library.moreActions")}</summary><div className="selection-more-body actions">
+          <BuildPreview selection={{ ids: [...selected] }} notify={notify} /><LyricsSearchButton ids={chosen.filter(source => source.output && source.output_present).map(source => source.id)} simplifyTraditional label="lyrics.simplifySelected" notify={notify} disabled={busy} />{chosen.some(source => source.lyrics_script === "traditional" && source.output_present) && <LyricsSearchButton ids={chosen.filter(source => source.lyrics_script === "traditional" && source.output_present).map(source => source.id)} replaceTraditional label="lyrics.replaceSelected" notify={notify} disabled={busy} />}<BatchRepairButton sources={chosen} notify={notify} disabled={busy} refresh={() => { setSelected(new Set()); retry(); }} /><Button size="sm" variant="destructive" disabled={busy || selectedExpired === 0} onClick={() => deleteSelected(false)}><Trash2 size={14} />{t("library.deleteSelected")}</Button>{selectedRemovable.length > 0 && <Button size="sm" variant="outline" disabled={busy} onClick={() => void forget(selectedRemovable.map(source => source.id))}><Trash2 size={14} />{t("library.forgetSelected", { count: selectedRemovable.length })}</Button>}
+        </div></details>
+      </div>}
       </div>
-      {tool && <LibraryTools key={tool.kind} tool={tool.kind} scopeQuery={scopeParams.toString()} selected={tool.sources ?? chosen} select={reviewTracks} notify={notify} close={() => setTool(undefined)} returnFocusID={tool.trigger} onBusyChange={setEditorBusy} />}
+      {tool?.kind === "tags" && !tool.sources && <LibraryTools key={tool.kind} tool={tool.kind} scopeQuery={scopeParams.toString()} selected={chosen} select={reviewTracks} notify={notify} close={() => setTool(undefined)} returnFocusID={tool.trigger} onBusyChange={setEditorBusy} />}
       {count > 0 ? <>
         {!showingTracks ? <div className={`library-groups library-${layout}`} data-density={density}>{layout === "list" && <div className="library-list-header" aria-hidden="true"><span>#</span><span>{t("library.coverColumn")}</span><span>{t(showingArtists ? "library.artists" : "library.albumArtistColumn")}</span><span>{t("library.tracksDurationColumn")}</span><span>{t("library.sourceAudio")}</span><span>{t("library.outputColumn")}</span><span>{t("lyrics.title")}</span><span>{t("library.statusColumn")}</span></div>}{visibleGroups.map(group => {
           const ready = group.ready;
@@ -508,13 +509,18 @@ export function Library({ notify }: { notify: Notice }) {
         })}</div> : <div className={`table-scroll ${isAlbum ? "album-tracks" : ""}`}>{isAlbum && <div className="album-tracks-heading"><h3>{t("library.albumTracks")}</h3><span>{t("library.trackCount", { count: data.matched })}</span></div>}<table className={`track-table ${isAlbum ? "album-track-table" : ""}`}>{isAlbum && <colgroup><col className="album-select-column" /><col /><col className="album-status-column" /><col className="album-lyrics-column" /></colgroup>}<thead><tr><th aria-label={t("library.selectedTracks")} /><th className="track-title-column">{t("library.trackFile")}</th>{!isAlbum && <><th className="track-duration-column">{t("library.duration")}</th><th className="track-audio-column">{t("library.audioColumn")}</th><th className="track-size-column">{t("library.sizesColumn")}</th></>}<th className="track-status-column">{t("library.artifact")}</th><th className="track-lyrics-column">{t("lyrics.title")}</th></tr></thead><tbody>{shown.map((source, index) => {
           const disc = source.disc || 1;
           const heading = isAlbum && discs.length > 1 && (index === 0 || disc !== (shown[index - 1].disc || 1));
-          return <Fragment key={source.id}>{heading && <tr className="disc-heading"><th colSpan={trackColumns} scope="rowgroup"><Disc3 size={15} />{t("library.disc", { number: disc })}</th></tr>}<tr className={`track-row ${selected.has(source.id) ? "selected" : ""}`} data-expanded={detailID === source.id || lyricsID === source.id || auditionID === source.id}>
+          const editingCover = coverID === source.id && coverTrigger !== "album-artwork-trigger";
+          const editingTags = tool?.kind === "tags" && tool.sources?.[0]?.id === source.id;
+          const expanded = detailID === source.id || lyricsID === source.id || auditionID === source.id || editingCover || editingTags;
+          return <Fragment key={source.id}>{heading && <tr className="disc-heading"><th colSpan={trackColumns} scope="rowgroup"><Disc3 size={15} />{t("library.disc", { number: disc })}</th></tr>}<tr className={`track-row ${selected.has(source.id) ? "selected" : ""}`} data-expanded={expanded}>
             <td><label className="checkbox-target"><input type="checkbox" aria-label={t("library.selectTrack", { title: source.title || source.path })} checked={selected.has(source.id)} disabled={busy} onChange={event => toggle([source.id], event.target.checked)} /></label></td>
             <td className="track-title"><div className="track-cell"><div><div className="track-title-line"><button id={`track-title-${source.id}`} className="track-open" title={source.title || source.path.split("/").pop() || source.path} aria-expanded={detailID === source.id} aria-controls={detailID === source.id ? `track-details-${source.id}` : undefined} disabled={editorBusy} aria-label={t("library.openDetails", { title: source.title || source.path })} onClick={() => openDetails(source.id)}><strong dir="auto">{source.track ? <span className="track-index">{String(source.track).padStart(2, "0")}. </span> : null}<span className="track-name">{source.title || source.path.split("/").pop()}</span></strong><ChevronRight className="track-expand-icon" size={14} aria-hidden="true" /></button>{source.output_present && source.output && <Button id={`audition-trigger-${source.id}`} className="track-audition-trigger" size="icon" variant="ghost" aria-label={t("audition.open", { title: source.title || source.output.split("/").pop() || "" })} title={t("audition.title")} aria-expanded={auditionID === source.id && !auditionEditing} aria-controls={auditionID === source.id && !auditionEditing ? `audition-${source.id}` : undefined} disabled={editorBusy} onClick={() => openAudition(source.id)}><Play size={18} /></Button>}{isAlbum && <span className="track-duration">{duration(source.duration || 0)}</span>}</div>{isAlbum ? <>{source.artist && source.artist !== album?.artist && <small className="track-byline" dir="auto" title={source.artist}>{source.artist}</small>}<TrackFacts source={source} compact /></> : <small className="track-byline" dir="auto" title={`${source.artist || t("library.unknownArtist")} · ${source.album || t("library.unknownAlbum")}`}>{source.artist || t("library.unknownArtist")} · {source.album || t("library.unknownAlbum")}</small>}{!source.present && <small className="source-missing">{t("library.sourceDeleted")}</small>}</div></div></td>
             {!isAlbum && <td className="track-facts-cell" colSpan={3}><TrackFacts source={source} /></td>}
             <td className="track-output"><Badge status={source.status} />{source.output_present && source.status !== "ready" && source.status !== "possibly_damaged" && <small>{t("library.stillPlayable")}</small>}<RepairControls source={source} notify={notify} refresh={retry} compact />{!source.present && !source.output && !source.output_present && <Button className="forget-record" size="icon" variant="ghost" aria-label={t("library.forgetRecord")} title={t("library.forgetRecord")} disabled={busy} onClick={() => void forget([source.id])}><Trash2 size={15} /></Button>}{source.error && <Button variant="ghost" size="icon" aria-label={t("library.errorDetails")} title={t("library.errorDetails")} disabled={editorBusy} onClick={() => openDetails(source.id)}><Info size={15} /></Button>}</td>
             <td className="track-lyrics"><LyricsTrack source={source} notify={notify} onChoose={() => openLyrics(source.id)} onEdit={() => openAudition(source.id, true)} expanded={lyricsID === source.id} editing={auditionID === source.id && auditionEditing} disabled={editorBusy} /></td>
-          </tr>{(detailID === source.id || lyricsID === source.id || auditionID === source.id) && <tr className="track-expanded-row"><td colSpan={trackColumns}>
+          </tr>{expanded && <tr className="track-expanded-row"><td colSpan={trackColumns}>
+            {editingCover && <ArtworkEditor key={source.id} source={source} saved={retry} close={() => setCoverID(undefined)} returnFocusID={coverTrigger} onBusyChange={setEditorBusy} />}
+            {editingTags && tool && <LibraryTools tool="tags" scopeQuery={scopeParams.toString()} selected={tool.sources!} select={reviewTracks} notify={notify} close={() => setTool(undefined)} returnFocusID={tool.trigger} onBusyChange={setEditorBusy} />}
             {detailID === source.id && <InlineDetails className="track-details" id={`track-details-${source.id}`} returnFocusID={`track-title-${source.id}`} title={t("library.fileDetails")} subtitle={source.title || source.path} close={clearDetails} actions={<><Button variant="ghost" size="icon" aria-label={t("library.previousTrack")} title={t("library.previousTrack")} disabled={!adjacent(source.id, -1)} onClick={() => step(adjacent(source.id, -1))}><ChevronLeft size={17} /></Button><Button variant="ghost" size="icon" aria-label={t("library.nextTrack")} title={t("library.nextTrack")} disabled={!adjacent(source.id, 1)} onClick={() => step(adjacent(source.id, 1))}><ChevronRight size={17} /></Button></>}><div className="actions track-detail-actions"><Button size="sm" variant="outline" disabled={editorBusy || !source.output_present} onClick={() => openTool("tags", `track-title-${source.id}`, [source])}><Tags size={14} />{t("tags.open")}</Button><Button size="sm" variant="outline" disabled={editorBusy} onClick={() => openArtwork(source.id, `track-title-${source.id}`)}>{t("coverEdit.title")}</Button></div><TrackDetails source={source} notify={notify} /></InlineDetails>}
             {lyricsID === source.id && <LyricsPicker onBusyChange={setEditorBusy} key={`${source.id}:${source.output}`} source={source} notify={notify} close={clearDetails} saved={retry} previous={adjacent(source.id, -1, true) ? () => step(adjacent(source.id, -1, true), true) : undefined} next={adjacent(source.id, 1, true) ? () => step(adjacent(source.id, 1, true), true) : undefined} />}
             {auditionID === source.id && source.output_present && source.output && <ArtifactAudition key={`${source.id}:${source.output}:${auditionEditing}`} source={source} close={clearDetails} editLyrics={auditionEditing} onBusyChange={setEditorBusy} />}

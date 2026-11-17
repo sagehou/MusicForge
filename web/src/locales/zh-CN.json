@@ -74,6 +74,7 @@
   "library.startRebuild": "启动待重建",
   "library.buildSelected": "构建所选",
   "library.deleteSelected": "删除所选过期产物",
+  "library.moreActions": "更多操作",
   "library.clearSelection": "取消选择",
   "library.selectPage": "全选本页",
   "library.trackFile": "歌曲 / 文件",

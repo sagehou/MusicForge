@@ -1,5 +1,5 @@
 import { routeLibrary } from "./library-fixture";
-import { selectLibraryPage, setPreference } from "./preferences";
+import { selectLibraryPage, openSelectionActions, setPreference } from "./preferences";
 import { test, expect, type Page } from "@playwright/test";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
@@ -68,6 +68,7 @@ test("missing records have confirmed individual, selected and all cleanup with p
   const retained = page.locator("tbody tr").filter({ hasText: "Track 2" });
   await expect(retained.getByRole("button", { name: "Remove record", exact: true })).toHaveCount(0);
   await selectLibraryPage(page);
+  await openSelectionActions(page);
   await page.getByRole("button", { name: "Remove 3 selected records", exact: true }).click();
   expect(requests).toHaveLength(0);
   expect(dialogs[0]).toContain("Files and job history are kept");
@@ -112,7 +113,7 @@ test("sidebar collapse persists and icon navigation stays accessible across lang
   await page.getByRole("button", { name: "展开侧栏", exact: true }).click();
   await expect.poll(async () => (await page.locator(".sidebar").boundingBox())?.width).toBe(232);
   await page.setViewportSize({ width: 1440, height: 540 });
-  const lastShortcut = page.locator(".sidebar-shortcuts a").last();
+  const lastShortcut = page.locator("#main-navigation a").last();
   await lastShortcut.scrollIntoViewIfNeeded();
   await expect(lastShortcut).toBeInViewport();
   await expect(page.locator(".sidebar .brand")).toBeInViewport();

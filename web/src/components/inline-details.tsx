@@ -9,6 +9,7 @@ export function InlineDetails({ id, title, subtitle, children, close, returnFocu
 }) {
   const { t } = useI18n();
   const headingID = useId();
+  const panel = useRef<HTMLElement>(null);
   const heading = useRef<HTMLHeadingElement>(null);
   const latest = useRef({ close, busy });
   latest.current = { close, busy };
@@ -18,23 +19,23 @@ export function InlineDetails({ id, title, subtitle, children, close, returnFocu
     requestAnimationFrame(() => {
       const trigger = document.getElementById(returnFocusID);
       const target = trigger?.getClientRects().length ? trigger : document.getElementById("library-title");
-      target?.focus();
+      target?.focus({ preventScroll: true });
+      target?.scrollIntoView({ block: "nearest" });
     });
   }
   useEffect(() => {
     const frame = requestAnimationFrame(() => {
       heading.current?.focus({ preventScroll: true });
-      heading.current?.scrollIntoView({ block: "nearest" });
+      panel.current?.scrollIntoView({ block: "nearest" });
     });
-    const escape = (event: KeyboardEvent) => {
-      if (event.key === "Escape" && !event.defaultPrevented && !heading.current?.closest("[inert]")) {
-        event.preventDefault(); collapse();
-      }
-    };
-    document.addEventListener("keydown", escape);
-    return () => { cancelAnimationFrame(frame); document.removeEventListener("keydown", escape); };
+    return () => cancelAnimationFrame(frame);
   }, [returnFocusID]);
-  return <section id={id} role="region" className={`inline-details ${className}`} aria-labelledby={headingID} aria-busy={busy}>
+  return <section ref={panel} id={id} role="region" className={`inline-details ${className}`} aria-labelledby={headingID} aria-busy={busy} onKeyDown={event => {
+    const target = event.target as Element;
+    if (event.key === "Escape" && !event.defaultPrevented && target.closest(".inline-details") === event.currentTarget && !event.currentTarget.contains(target.closest("details[open]")) && !event.currentTarget.closest("[inert]")) {
+      event.preventDefault(); collapse();
+    }
+  }}>
     <header className="detail-heading"><div className="detail-titlebar"><div><h2 id={headingID} ref={heading} tabIndex={-1}>{title}</h2>{subtitle && <p dir="auto">{subtitle}</p>}</div><div className="actions">{actions}<Button type="button" variant="ghost" size="icon" aria-label={closeLabel || t("app.close")} title={closeLabel || t("app.close")} disabled={busy} onClick={collapse}><X size={18} /></Button></div></div></header>
     <div className="detail-content">{children}</div>
   </section>;

@@ -1,5 +1,5 @@
 import { routeLibrary } from "./library-fixture";
-import { selectLibraryPage, openLibraryOptions, setPreference } from "./preferences";
+import { selectLibraryPage, openLibraryOptions, openLyricsMaintenance, openSelectionActions, setPreference } from "./preferences";
 import { test, expect } from "@playwright/test";
 import type { Source } from "../src/types";
 
@@ -25,7 +25,7 @@ test("incremental filling shows pending and skipped counts and succeeds when no 
     return route.fulfill({ status: 202, json: { selected: pending, skipped: 1 } });
   });
   await page.goto("/library?view=tracks");
-  await page.locator(".lyrics-panel > .lyrics-settings > summary").click();
+  await openLyricsMaintenance(page);
   await page.getByRole("button", { name: "Fill lyrics for all artifacts", exact: true }).click();
   const progress = page.getByRole("status", { name: "Current lyrics batch", exact: true });
   await expect(progress).toContainText("No lyrics need filling.");
@@ -237,6 +237,7 @@ test("traditional script filter supports cross-page batch replacement and shared
   await expect(page.locator(".selection-bar")).toContainText("Selected: 50");
   await page.getByRole("button", { name: "Select all 60 matching tracks", exact: true }).click();
   await expect(page.locator(".selection-bar")).toContainText("Selected: 60");
+  await openSelectionActions(page);
   await page.getByRole("button", { name: "Convert selected to simplified", exact: true }).click();
   await expect.poll(() => batches.length).toBe(1);
   expect(batches[0]).toEqual({ ids: Array.from({ length: 60 }, (_, index) => index + 1), refresh: false, simplify_traditional: true });
@@ -318,7 +319,7 @@ test("lyrics filters compose with audio status and library coverage survives new
 
   await page.goto("/library?view=artists");
   await expect(page.locator(".maintenance-count")).toHaveText("6 / 7");
-  await page.locator(".lyrics-panel > .lyrics-settings > summary").click();
+  await openLyricsMaintenance(page);
   const inventory = page.locator(".lyrics-library-summary");
   await expect(inventory).toHaveAccessibleName("Library lyrics status");
   await expect(inventory).toContainText("Library checked 6/7 tracks");
@@ -382,7 +383,7 @@ test("lyrics filters compose with audio status and library coverage survives new
 
   report = { ...report, state: "idle", total: 0, processed: 0, found: 0 };
   await page.reload();
-  await page.locator(".lyrics-panel > .lyrics-settings > summary").click();
+  await openLyricsMaintenance(page);
   await expect(inventory).toContainText("Album checked 6/7 tracks");
   await expect(page.getByRole("status", { name: "Current lyrics batch", exact: true })).toHaveCount(0);
   sources[0].output_present = false;
@@ -427,8 +428,8 @@ test("lyrics selection, background progress, stop and bilingual mobile UI", asyn
   await page.getByRole("button", { name: "Fill lyrics for selected artifacts", exact: true }).click();
   await expect.poll(() => requests.length).toBe(1);
   expect(requests).toEqual([{ ids: [1], refresh: false }]);
+  await openLyricsMaintenance(page);
   await expect(page.getByRole("link", { name: "View background lyrics task", exact: true })).toBeVisible();
-  await page.locator(".lyrics-settings > summary").click();
   await expect(page.getByRole("button", { name: "Fill album lyrics", exact: true })).toBeDisabled();
   await expect(page.getByRole("button", { name: "Stop lyrics search", exact: true })).toBeEnabled();
   await expect(page.getByLabel("Automatically fill lyrics for new and existing artifacts", { exact: true })).toHaveCount(0);
@@ -448,8 +449,8 @@ test("lyrics selection, background progress, stop and bilingual mobile UI", asyn
   await expect.poll(() => requests.length).toBe(3);
   expect(requests.at(-1)).toEqual({ ids: [1], refresh: true });
   await setPreference(page, "language", "zh-CN");
+  await openLyricsMaintenance(page);
   await expect(page.getByRole("link", { name: "查看后台歌词任务", exact: true })).toBeVisible();
-  await page.locator(".lyrics-settings > summary").click();
   await expect(page.getByRole("button", { name: "补齐本专辑歌词", exact: true })).toBeDisabled();
   await expect(page.locator(".lyrics-track")).toContainText("未找到");
   await page.setViewportSize({ width: 320, height: 844 });

@@ -1,6 +1,6 @@
 import { routeLibrary } from "./library-fixture";
 import { test, expect, type Page } from "@playwright/test";
-import { openAccount, setPreference } from "./preferences";
+import { openAccount, openLibraryOptions, setPreference } from "./preferences";
 
 const settings = { enabled: true, source: "/music/source", output: "/music/output", encoding: { codec: "opus", mode: "vbr", bitrate: 192, quality: 2 }, concurrency: 1, scan_minutes: 60, lidarr_prefix: "", nav_url: "", nav_user: "", nav_library: 1, oidc_issuer: "", oidc_client_id: "" };
 async function setup(page: Page) {
@@ -65,23 +65,26 @@ test("default albums, compact headings and the text account link retain settings
   await trigger.click();
   await expect(page.locator(".brand-version")).toHaveText("test");
   await page.screenshot({ path: "test-results/appearance-default-albums.png", animations: "disabled" });
-  const shortcuts = page.getByRole("navigation", { name: "Workspace shortcuts", exact: true });
-  await expect(shortcuts.getByRole("link")).toHaveCount(7);
+  await expect(page.locator("#main-navigation a")).toHaveCount(4);
+  await expect(page.locator(".sidebar-shortcuts")).toHaveCount(0);
   for (const [label, view] of [["All songs", "tracks"], ["All artists", "artists"], ["Albums", "albums"]]) {
-    await shortcuts.getByRole("link", { name: label, exact: true }).click();
+    const control = page.getByRole("button", { name: new RegExp(`^${label}`) });
+    await control.click();
     await expect(page).toHaveURL(new RegExp(`view=${view}`));
-    await expect(page.getByRole("button", { name: new RegExp(`^${label}`) })).toHaveAttribute("aria-pressed", "true");
+    await expect(control).toHaveAttribute("aria-pressed", "true");
   }
-  await shortcuts.getByRole("link", { name: "Review lyrics", exact: true }).click();
-  await expect(page).toHaveURL(/view=tracks&lyrics=needs_review/);
+  await page.getByRole("button", { name: /^All songs/ }).click();
+  await openLibraryOptions(page);
+  await page.getByLabel("Filter by lyrics status", { exact: true }).selectOption("needs_review");
+  await expect(page).toHaveURL(/lyrics=needs_review/);
   await openAccount(page);
   await expect(page).toHaveURL(/section=security/);
   await expect(page.locator(".account-summary")).toContainText("admin");
   await expect(page.getByLabel("Current password", { exact: true })).toBeVisible();
   await page.getByRole("tab", { name: "Library", exact: true }).click();
   await page.getByLabel("Source audio directory", { exact: true }).fill("/keep-this-draft");
-  for (const [label, section, tab] of [["Encoding profile", "encoding", "Encoding"], ["Lyrics settings", "lyrics", "Lyrics"], ["Integrations", "integrations", "Integrations"]]) {
-    await shortcuts.getByRole("link", { name: label, exact: true }).click();
+  for (const [section, tab] of [["encoding", "Encoding"], ["lyrics", "Lyrics"], ["integrations", "Integrations"]]) {
+    await page.getByRole("tab", { name: tab, exact: true }).click();
     await expect(page).toHaveURL(new RegExp(`section=${section}`));
     await expect(page.getByRole("tab", { name: tab, exact: true })).toHaveAttribute("aria-selected", "true");
   }
@@ -173,9 +176,20 @@ test("partial selection, keyboard focus and settings switches stay usable", asyn
   await expect(first).toBeFocused();
   expect(await first.evaluate(element => getComputedStyle(element).outlineStyle)).not.toBe("none");
   expect(await first.evaluate(element => parseFloat(getComputedStyle(element).outlineWidth))).toBeGreaterThan(0);
-  const controls = [all, toolbar.getByText("2 tracks", { exact: true }), page.getByRole("button", { name: "Preview selected build", exact: true }), page.getByRole("button", { name: "Clear selection", exact: true })];
+  const controls = [all, toolbar.getByText("2 tracks", { exact: true }), page.getByRole("button", { name: "Build selected", exact: true }), page.getByRole("button", { name: "Clear selection", exact: true })];
   const centers = await Promise.all(controls.map(async control => { const box = (await control.boundingBox())!; return box.y + box.height / 2; }));
   expect(Math.max(...centers) - Math.min(...centers)).toBeLessThan(2);
+  const more = page.locator(".selection-more > summary");
+  const moreBefore = (await more.boundingBox())!;
+  await expect(page.getByRole("button", { name: "Preview selected build", exact: true })).toBeHidden();
+  await more.press("Enter");
+  await expect(page.getByRole("button", { name: "Preview selected build", exact: true })).toBeVisible();
+  const moreAfter = (await more.boundingBox())!;
+  expect(Math.abs(moreBefore.x - moreAfter.x) + Math.abs(moreBefore.y - moreAfter.y)).toBeLessThan(2);
+  await page.screenshot({ path: "test-results/library-toolbar-more-desktop-en.png", animations: "disabled" });
+  await more.press("Escape");
+  await expect(more).toBeFocused();
+  await expect(page.locator(".selection-more")).toHaveJSProperty("open", false);
   await page.screenshot({ path: "test-results/appearance-selected-controls.png", animations: "disabled" });
   await setPreference(page, "language", "zh-CN");
   await setPreference(page, "theme", "dark");
@@ -189,6 +203,10 @@ test("partial selection, keyboard focus and settings switches stay usable", asyn
   await expect(selectPage).toBeInViewport();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
   await page.screenshot({ path: "test-results/library-toolbar-selected-mobile-zh-CN.png", animations: "disabled" });
+  await more.press("Enter");
+  await expect(page.getByRole("button", { name: "预览所选构建", exact: true })).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
+  await page.screenshot({ path: "test-results/library-toolbar-more-phone-dark-zh-CN.png", animations: "disabled" });
   await page.getByLabel("选择 Song 1", { exact: true }).uncheck();
   await expect(page.locator(".selection-bar")).toHaveCount(0);
   await expect(selectPage).not.toBeChecked();

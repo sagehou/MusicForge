@@ -31,3 +31,14 @@ export async function openLibraryOptions(page: Page) {
 export async function selectLibraryPage(page: Page) {
   await page.locator('.library-selection input[type="checkbox"]').check();
 }
+
+export async function openSelectionActions(page: Page) {
+  const menu = page.locator(".selection-more");
+  if (!await menu.evaluate(node => (node as HTMLDetailsElement).open)) await menu.locator(":scope > summary").click();
+}
+
+export async function openLyricsMaintenance(page: Page) {
+  const panel = page.locator(".lyrics-settings");
+  if (!await panel.isVisible()) await page.locator(".library-workspace-modes > button").nth(1).click();
+  if (!await panel.evaluate(node => (node as HTMLDetailsElement).open)) await panel.locator(":scope > summary").click();
+}

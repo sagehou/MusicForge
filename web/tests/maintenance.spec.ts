@@ -166,6 +166,10 @@ test("maintenance workbench previews before queueing and preserves scope on phon
   const workbench = page.locator("#maintenance-workbench");
   await workbench.getByRole("button", { name: "Preview current scope", exact: true }).click();
   await expect(workbench.getByRole("region", { name: "Build preview" })).toContainText("1 tracks need building · 1 skipped");
+  await workbench.locator(":scope > summary").click();
+  await expect(workbench.getByRole("region", { name: "Build preview" })).toBeHidden();
+  await workbench.locator(":scope > summary").click();
+  await expect(workbench.getByRole("region", { name: "Build preview" })).toContainText("1 tracks need building · 1 skipped");
   expect(builds).toBe(0);
   await page.screenshot({ path: "test-results/maintenance-desktop.png", animations: "disabled" });
   await workbench.getByRole("button", { name: "Start this build", exact: true }).click();

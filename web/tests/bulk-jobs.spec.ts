@@ -6,7 +6,7 @@ test.beforeEach(async ({ page }) => {
   await page.route("**/api/maintenance/progress", route => route.fulfill({ json: { reports: [], cooldowns: [] } }));
 });
 
-test("task types collapse by default and reveal failures without losing manual or linked access", async ({ page }) => {
+test("active and failed task groups open while history preserves manual and linked access", async ({ page }) => {
   await page.addInitScript(() => { localStorage.setItem("musicforge.language", "en"); localStorage.setItem("musicforge.theme", "light"); });
   await page.route("**/api/auth/me", route => route.fulfill({ json: { initialized: true, authenticated: true, username: "admin", method: "local", csrf: "test" } }));
   const jobs: Job[] = ([[5, "move", "success"], [4, "refresh", "success"], [3, "scan", "failed"], [2, "refresh", "success"], [1, "convert", "running"]] as const).map(([id, kind, state]) => ({
@@ -28,7 +28,7 @@ test("task types collapse by default and reveal failures without losing manual o
   await expect(refresh.locator("summary")).toContainText("2 on this page");
   await expect(refresh.locator(".task")).toHaveCount(2);
   await expect(page.locator('[data-task-id="4"]')).toBeHidden();
-  await expect(convert).toHaveJSProperty("open", false);
+  await expect(convert).toHaveJSProperty("open", true);
   await expect(convert.locator("summary .badge-running")).toHaveText("Running 1");
   await expect(scan).toHaveJSProperty("open", true);
   await expect(scan.locator("summary .badge-failed")).toHaveText("Failed 1");
@@ -47,6 +47,7 @@ test("task types collapse by default and reveal failures without losing manual o
   await expect(refresh).toHaveJSProperty("open", false);
   await expect(refresh.locator("summary")).toBeFocused();
   await scan.locator("summary").click();
+  await convert.locator("summary").click();
   const previousPolls = polls;
   await expect.poll(() => polls).toBeGreaterThan(previousPolls);
   await expect(scan).toHaveJSProperty("open", false);

@@ -36,6 +36,7 @@ test("settings sections preserve drafts, reveal invalid controls, discard and sa
     }
   }
   await page.getByLabel("Source audio directory", { exact: true }).fill("/retained/source");
+  await expect(page.getByRole("tab", { name: "Library", exact: true })).toHaveAccessibleDescription("Unsaved changes");
   await page.evaluate(() => Reflect.set(window, "navigationSentinel", true));
   const modifiedLinks = await page.locator('.account-link').evaluate(link => ["ctrlKey", "metaKey", "shiftKey", "altKey"].map(modifier => {
     let prevented = false;
@@ -59,6 +60,7 @@ test("settings sections preserve drafts, reveal invalid controls, discard and sa
   await page.goForward();
   await expect(page.getByRole("tab", { name: "Encoding", exact: true })).toHaveAttribute("aria-selected", "true");
   await page.getByLabel("Concurrent conversions", { exact: true }).fill("17");
+  await expect(page.getByRole("tab", { name: "Encoding", exact: true })).toHaveAccessibleDescription("Unsaved changes");
   await page.getByRole("tab", { name: "Account & security", exact: true }).click();
   await page.getByRole("button", { name: "Save settings", exact: true }).click();
   await expect(page.getByRole("tab", { name: "Library", exact: true })).toHaveAttribute("aria-selected", "true");
@@ -85,6 +87,7 @@ test("settings sections preserve drafts, reveal invalid controls, discard and sa
   await page.getByRole("button", { name: "放弃修改", exact: true }).click();
   await expect(page.getByLabel("音频源目录", { exact: true })).toHaveValue(settings.source);
   await expect(page.getByRole("button", { name: "保存设置", exact: true })).toBeDisabled();
+  await expect(page.locator(".settings-dirty-marker")).toHaveCount(0);
   await page.getByRole("tab", { name: "集成", exact: true }).click();
   await expect(page.getByLabel("Webhook 独立密钥", { exact: true })).toHaveValue("");
   await setPreference(page, "language", "en");

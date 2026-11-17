@@ -12,7 +12,7 @@ import type { Dashboard, Job, Settings, Source } from "../types";
 import { Badge, Empty, Loading, ResourceWarning, useResource, type Notice } from "./resource";
 import { Button } from "./ui/button";
 
-export function Overview({ notify, navigate }: { notify: Notice; navigate: (path: string) => void }) {
+export function Overview({ notify }: { notify: Notice }) {
   const { t, kind, date, number, errorMessage, locale } = useI18n();
   const { data, error, retry } = useResource<Dashboard>("/dashboard", true);
   const jobs = useResource<{ jobs: Job[] }>("/jobs?limit=5&include_repairs=true", true);
@@ -62,10 +62,7 @@ export function Overview({ notify, navigate }: { notify: Notice; navigate: (path
         <h1>{t("app.overview")}</h1>
       </div>
       <div className="actions hero-actions">
-        <Button variant="outline" onClick={() => navigate("/library")}>
-          {t("overview.viewLibrary")}
-          <ArrowRight size={15} />
-        </Button>
+        <Button asChild><a href="/library">{t("overview.viewLibrary")}<ArrowRight size={15} /></a></Button>
         <Button variant="outline" onClick={() => void scan()} disabled={busy || !data.enabled}>
           <RefreshCw size={15} className={busy ? "animate-spin" : ""} />
           {t("overview.scan")}
@@ -74,7 +71,7 @@ export function Overview({ notify, navigate }: { notify: Notice; navigate: (path
     </PageHeading>
     <div className="overview-summary">
       <div className="metrics overview-metrics">
-        {metrics.map(metric => <button className="metric" data-tone={metric.tone} key={metric.label} onClick={() => navigate(metric.path)}>
+        {metrics.map(metric => <a className="metric" data-tone={metric.tone} key={metric.label} href={metric.path}>
           <div className="metric-header">
             <span className="metric-icon"><metric.icon size={13} /></span>
             <span className="metric-label">{metric.label}</span>
@@ -83,7 +80,7 @@ export function Overview({ notify, navigate }: { notify: Notice; navigate: (path
             <strong>{number(metric.value)}</strong>
             {metric.track ? <small>{`/ ${metric.track}`}</small> : null}
           </div>
-        </button>)}
+        </a>)}
       </div>
       <section className="readiness-panel">
         <div className="readiness-header">
@@ -95,13 +92,12 @@ export function Overview({ notify, navigate }: { notify: Notice; navigate: (path
                 <Badge status="running" />
               ) : (
                 <span className={`readiness-status-badge ${percent === 100 ? "is-ready" : ""}`}>
-                  <span className="readiness-status-dot" />
+                  {percent === 100 ? <Check size={13} aria-hidden="true" /> : <Clock3 size={13} aria-hidden="true" />}
                   {percent === 100 ? t("overview.allReady") : t("overview.inProgress")}
                 </span>
               )}
             </div>
           </div>
-          <div className="hero-completion sr-only" role="progressbar" aria-label={t("overview.complete")} aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent} />
           <div className="audio-pipeline-visual">
             <Disc3 size={18} className="pipeline-glyph" aria-hidden="true" />
             <div className="pipeline-flow">
@@ -111,6 +107,7 @@ export function Overview({ notify, navigate }: { notify: Notice; navigate: (path
             </div>
             <AudioLines size={18} className="pipeline-glyph is-ready" aria-hidden="true" />
           </div>
+          <div className="hero-completion" role="progressbar" aria-label={t("overview.complete")} aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent}><span style={{ width: `${percent}%` }} /></div>
         </div>
         {tracks.length > 0 ? <div className="build-tracks">
           <h2>{t("overview.recentBuilds")}</h2>
@@ -128,30 +125,30 @@ export function Overview({ notify, navigate }: { notify: Notice; navigate: (path
               {job && activity && <strong className="active-track-percent">{number(Math.round(activity.phase === "convert" ? activity.percent : taskPercent(job)))}%</strong>}
             </div>;
           })}</div>
-        </div> : <Empty title={t("overview.noBuilds")}><Button variant="outline" onClick={() => navigate("/library")}>{t("overview.viewLibrary")}</Button></Empty>}
+        </div> : <Empty title={t("overview.noBuilds")}><Button asChild variant="outline"><a href="/library">{t("overview.viewLibrary")}</a></Button></Empty>}
       </section>
     </div>
     <div className="overview-workspace">
       <section className="panel recent-panel">
         <div className="section-heading">
           <h2>{t("overview.recent")}</h2>
-          <Button variant="ghost" size="sm" onClick={() => navigate("/jobs")}>{t("overview.allJobs")}<ArrowRight size={14} /></Button>
+          <Button asChild variant="ghost" size="sm"><a href="/jobs">{t("overview.allJobs")}<ArrowRight size={14} /></a></Button>
         </div>
         <ResourceWarning error={jobs.error} retry={jobs.retry} />
-        {!jobs.data ? <Loading error={jobs.error} retry={jobs.retry} /> : jobs.data.jobs.length ? <div className="job-list">{[...jobs.data.jobs].sort((a, b) => Number(b.state === "running") - Number(a.state === "running")).map(job => <button className="job-row" data-state={job.state} key={job.repair_id || job.id} onClick={() => navigate(`/jobs?task=${encodeURIComponent(job.repair_id || job.id)}`)}>
+        {!jobs.data ? <Loading error={jobs.error} retry={jobs.retry} /> : jobs.data.jobs.length ? <div className="job-list">{[...jobs.data.jobs].sort((a, b) => Number(b.state === "running") - Number(a.state === "running")).map(job => <a className="job-row" data-state={job.state} key={job.repair_id || job.id} href={`/jobs?task=${encodeURIComponent(job.repair_id || job.id)}`}>
           <div>
             <strong>{kind(job.kind)} #{job.repair_id?.slice(0, 8) || job.id}</strong>
             <small>{job.current[0]?.title || job.current[0]?.path || date(job.updated)}{job.counts.total > 0 && ` · ${number(job.counts.done)} / ${number(job.counts.total)}`}</small>
           </div>
           <Badge status={job.state} />
           <ArrowRight className="recent-arrow" size={14} />
-        </button>)}</div> : <Empty title={t("overview.noJobs")}><Button variant="outline" onClick={() => navigate("/library")}>{t("overview.viewLibrary")}</Button></Empty>}
+        </a>)}</div> : <Empty title={t("overview.noJobs")}><Button asChild variant="outline"><a href="/library">{t("overview.viewLibrary")}</a></Button></Empty>}
       </section>
       <aside className="overview-side">
         <section className="panel lyrics-summary">
           <div className="section-heading">
             <h2><FileMusic size={16} />{t("lyrics.title")}</h2>
-            <Button variant="ghost" size="sm" onClick={() => navigate("/library?view=tracks#lyrics-maintenance")}>{t("lyrics.manage")}<ArrowRight size={13} /></Button>
+            <Button asChild variant="ghost" size="sm"><a href="/library?view=tracks#lyrics-maintenance">{t("lyrics.manage")}<ArrowRight size={13} /></a></Button>
           </div>
           <ResourceWarning error={library.error} retry={library.retry} />
           <div className="lyrics-overview">
@@ -161,12 +158,12 @@ export function Overview({ notify, navigate }: { notify: Notice; navigate: (path
             </div>
             {lyricIssues && lyricIssues.length > 0 && <div className="lyrics-breakdown">{lyricIssues.map(item => {
               const Glyph = stateGlyph[item.state];
-              return <button className="lyrics-state-row" key={item.state} onClick={() => navigate(`/library?view=tracks&lyrics=${item.state}`)}>
+              return <a className="lyrics-state-row" key={item.state} href={`/library?view=tracks&lyrics=${item.state}`}>
                 <Glyph size={14} data-tone={item.state} aria-hidden="true" />
                 <span className="lyrics-state-label">{t(`lyrics.state.${item.state}`)}</span>
                 <strong>{number(item.count)}</strong>
                 <ArrowRight size={13} className="lyrics-arrow" aria-hidden="true" />
-              </button>;
+              </a>;
             })}</div>}
           </div>
         </section>
@@ -193,7 +190,7 @@ export function Overview({ notify, navigate }: { notify: Notice; navigate: (path
           <div className="storage-status" data-online={data.online} role="status" aria-live="polite">{!data.online && <>
             <div className="storage-status-header">
               <strong>{t(storageUnchecked ? "overview.unchecked" : data.enabled ? "overview.offline" : "overview.configure")}</strong>
-              <Button variant="ghost" size="sm" onClick={() => navigate("/settings")}>{t("overview.openSettings")}<ArrowRight size={13} /></Button>
+              <Button asChild variant="ghost" size="sm"><a href="/settings">{t("overview.openSettings")}<ArrowRight size={13} /></a></Button>
             </div>
             <p>{errorMessage(data.storage_message)}</p>
           </>}</div>
@@ -204,11 +201,11 @@ export function Overview({ notify, navigate }: { notify: Notice; navigate: (path
             {attentionCount === 0 && <span className="attention-clean-badge"><Check size={12} /> {t("overview.allGood")}</span>}
           </div>
           <div className="attention-list">
-            {attention.map(item => <button key={item.state} onClick={() => navigate(`/library?view=tracks&status=${item.state}`)}>
+            {attention.map(item => <a key={item.state} href={`/library?view=tracks&status=${item.state}`}>
               <Badge status={item.state} />
               <strong>{number(item.count)}</strong>
               <ArrowRight size={14} />
-            </button>)}
+            </a>)}
           </div>
         </section>
       </aside>

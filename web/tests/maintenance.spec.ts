@@ -33,7 +33,7 @@ test("quality decisions require an ignore reason and can be reopened", async ({ 
     }
     return route.fulfill({ json: decisions });
   });
-  await page.goto("/library?view=tracks");
+  await page.goto("/library?view=tracks&mode=organize");
   await page.locator("#maintenance-workbench > summary").click();
   const quality = page.getByRole("region", { name: "Library quality report", exact: true });
   await quality.getByRole("button", { name: "Identical source file hashes 2", exact: true }).click();
@@ -70,7 +70,7 @@ test("maintenance suggestions preview exact groups and retain failed selections"
     writes.push({ path, ids: route.request().postDataJSON().ids });
     return route.fulfill(path === "/lyrics/search" ? { status: 409, json: { error: "Lyrics maintenance is already running" } } : { status: 202, json: { ok: true } });
   });
-  await page.goto("/library"); await page.locator("#maintenance-workbench > summary").click();
+  await page.goto("/library?mode=organize"); await page.locator("#maintenance-workbench > summary").click();
   await page.locator(".library-tool > summary").filter({ hasText: "Maintenance suggestions" }).click();
   const review = page.getByRole("region", { name: "Maintenance suggestions", exact: true });
   await review.getByRole("button", { name: "Preview maintenance suggestions", exact: true }).click();
@@ -90,7 +90,7 @@ test("operation snapshots precede explicit undo and conflicts stay visible", asy
   await page.route("**/api/maintenance/operations/operation/snapshot?*", route => route.fulfill({ json: { text: new URL(route.request().url()).searchParams.get("side") === "before" ? "[00:01]Original" : "[00:02]New" } }));
   await page.route("**/api/maintenance/operations/operation/undo", route => { expect(route.request().postDataJSON()).toEqual({ items: [0] }); writes++; return route.fulfill({ status: 202, json: { ok: true } }); });
   await page.route("**/api/maintenance/undo", route => route.fulfill({ json: writes ? { state: "complete", total: 1, processed: 1, updated: 0, failed: 1, skipped: 0, issues: [{ id: 1, error: "Maintenance undo conflict: lyrics changed; current file preserved" }] } : { state: "idle" } }));
-  await page.goto("/library"); await page.locator("#maintenance-workbench > summary").click();
+  await page.goto("/library?mode=organize"); await page.locator("#maintenance-workbench > summary").click();
   await page.locator(".library-tool > summary").filter({ hasText: "Operation records and undo" }).click();
   const log = page.getByRole("region", { name: "Operation records and undo", exact: true });
   await log.getByRole("button", { name: "Review operation", exact: true }).click();
@@ -114,7 +114,7 @@ test("storage checks and migration previews keep settings unchanged on desktop a
   await page.route("**/api/maintenance/storage", route => route.fulfill({ json: verifies ? { state: "complete", total: 1, processed: 1, updated: 1, failed: 0, skipped: 0 } : { state: "idle" } }));
   await page.route("**/api/maintenance/migration/preview", route => { expect(route.request().postDataJSON()).toEqual({ source: "/new/source", output: "/new/output" }); previews++; return route.fulfill({ json: { source: "/new/source", output: space, source_bytes: 1000000, output_bytes: 12345, paths_applied: false } }); });
   await page.setViewportSize({ width: 1440, height: 1000 });
-  await page.goto("/library"); await page.locator("#maintenance-workbench > summary").click();
+  await page.goto("/library?mode=organize"); await page.locator("#maintenance-workbench > summary").click();
   await page.locator(".library-tool > summary").filter({ hasText: "Storage health" }).click();
   const storage = page.getByRole("region", { name: "Storage health", exact: true });
   await expect(storage).toContainText("/music/output"); expect(checks + previews + verifies + settingsWrites).toBe(0);
@@ -161,7 +161,7 @@ test("maintenance workbench previews before queueing and preserves scope on phon
   });
   await page.route("**/api/library/rebuild", route => { builds++; expect(route.request().postDataJSON()).toEqual({ ids: [1, 2] }); return route.fulfill({ json: { ok: true } }); });
   await page.setViewportSize({ width: 1440, height: 1000 });
-  await page.goto("/library");
+  await page.goto("/library?mode=organize");
   await page.locator("#maintenance-workbench > summary").click();
   const workbench = page.locator("#maintenance-workbench");
   await workbench.getByRole("button", { name: "Preview current scope", exact: true }).click();
@@ -183,7 +183,7 @@ test("maintenance workbench previews before queueing and preserves scope on phon
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
   await page.screenshot({ path: "test-results/maintenance-phone-dark.png", animations: "disabled" });
-  await page.goto("/library?view=albums&artist=Artist&album=Artist%2FAlbum");
+  await page.goto("/library?view=albums&artist=Artist&album=Artist%2FAlbum&mode=organize");
   await page.locator("#maintenance-workbench > summary").click();
   await expect(page.locator("#library-comparison")).toHaveCount(0);
   await expect(page.locator("#maintenance-workbench").getByRole("button", { name: "Compare with Lidarr", exact: true })).toHaveCount(0);
@@ -230,7 +230,7 @@ test("lyric editor previews imports and preserves drafts after publication confl
     saved = true;
     return route.fulfill({ status: 409, json: { error: "LRC changed during publication; file preserved" } });
   });
-  await page.goto("/library?view=tracks");
+  await page.goto("/library?view=tracks&mode=organize");
   await page.getByRole("button", { name: "Audition First track", exact: true }).click();
   await page.getByRole("button", { name: "Edit lyrics / timing", exact: true }).click();
   const editor = page.getByRole("region", { name: "Edit lyrics / timing", exact: true });
@@ -252,7 +252,7 @@ test("output cover correction previews a crop and sends an owned replacement exp
     expect(body.token).toBe("cover-token"); expect(Buffer.from(body.image, "base64").subarray(0, 2)).toEqual(Buffer.from([255, 216]));
     writes++; return route.fulfill({ json: { ok: true } });
   });
-  await page.goto("/library?view=tracks");
+  await page.goto("/library?view=tracks&mode=organize");
   await page.getByRole("button", { name: "View details for First track", exact: true }).click();
   await page.getByRole("button", { name: "Correct output cover", exact: true }).click();
   const editor = page.getByRole("region", { name: "Correct output cover", exact: true });

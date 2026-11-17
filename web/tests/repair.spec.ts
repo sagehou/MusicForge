@@ -157,7 +157,7 @@ test("repair queues share the Jobs list, filters and safe controls in both langu
   await expect(page.locator(".filter-tabs")).toHaveCount(1);
   await expect(page.locator(".repair-tasks")).toHaveCount(0);
   await expect(page.locator(".task-list > .task")).toHaveCount(2);
-  await page.locator('.task-group[data-kind="repair"] > summary').click();
+  await expect(page.locator('.task-group[data-kind="repair"]')).toHaveJSProperty("open", true);
   await expect(row).toContainText("Read 12.0 / 40.0 MiB");
   await expect(row.getByRole("progressbar")).toHaveAttribute("aria-valuenow", "3");
   await expect(row.getByRole("button", { name: "Delete history", exact: true })).toBeDisabled();
@@ -166,7 +166,7 @@ test("repair queues share the Jobs list, filters and safe controls in both langu
   await expect(row).toHaveCount(0);
   await expect(page.locator(".task-list > .task")).toHaveCount(1);
   await page.locator(".filter-tabs").getByRole("button", { name: "All", exact: true }).click();
-  await page.locator('.task-group[data-kind="repair"] > summary').click();
+  await expect(page.locator('.task-group[data-kind="repair"]')).toHaveJSProperty("open", true);
   task.activity = { ...activity, phase: "convert", percent: 60 }; task.progress = .55;
   await expect(row.getByRole("progressbar")).toHaveAttribute("aria-valuenow", "55");
   page.once("dialog", dialog => dialog.dismiss());

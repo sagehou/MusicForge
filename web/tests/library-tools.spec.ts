@@ -60,6 +60,7 @@ test("playlists preview broken paths, save mappings and refresh output extension
     return route.fulfill({ json: saved ? [{ id: "playlist-id", name: "Favorites", count: 2 }] : [] });
   });
   await page.route("**/api/playlists/playlist-id", route => route.fulfill({ json: { ...result, id: "playlist-id", content: "#EXTM3U\n./Artist/Album/01.mp3\n" } }));
+  await page.getByRole("button", { name: "Organize", exact: true }).click();
   await page.getByRole("button", { name: "Playlists", exact: true }).click();
   const editor = page.getByRole("region", { name: "Playlists", exact: true });
   await editor.getByLabel("Playlist name", { exact: true }).fill("Favorites");
@@ -92,6 +93,7 @@ test("fingerprint candidates only select tracks for human review", async ({ page
     expect(route.request().method()).toBe("GET");
     return route.fulfill({ json: compared ? { ...idle, state: "complete", total: 2, processed: 2, updated: 2, groups: [[1, 2]] } : idle });
   });
+  await page.getByRole("button", { name: "Organize", exact: true }).click();
   await page.getByRole("button", { name: "Find duplicates", exact: true }).click();
   const tool = page.getByRole("region", { name: "Acoustic duplicate candidates", exact: true });
   await tool.getByRole("button", { name: "Compare current scope", exact: true }).click();

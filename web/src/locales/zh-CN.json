@@ -1177,5 +1177,11 @@
   "library.tools": "音乐库操作",
   "tags.open": "编辑标签",
   "playlist.create": "创建歌单",
-  "fingerprint.open": "查找重复歌曲"
+  "fingerprint.open": "查找重复歌曲",
+  "library.workspace": "曲库工作区",
+  "library.modeBrowse": "浏览",
+  "library.modeOrganize": "整理",
+  "lyrics.matchDetails": "{title} 的匹配详情",
+  "lyrics.previewFirst": "预览首个候选",
+  "lyrics.startSearch": "搜索候选歌词"
 }

@@ -49,6 +49,37 @@ async function expectCurrentVisible(panel: Locator) {
   })).toBe(true);
 }
 
+test("candidate review loads output audio on request, retries and stops on collapse or session expiry", async ({ page }) => {
+  await mockAudition(page);
+  let reads = 0;
+  await page.route("**/api/library/91/audition", route => {
+    reads++;
+    return reads === 1 ? route.fulfill({ status: 503, json: { error: "Output temporarily unavailable" } }) : route.fulfill({ json: { audio_url: "/api/library/91/audition/audio?v=fixture", format: ".opus", size: 1280044, lyrics: lrc, lyrics_state: "ready" } });
+  });
+  await page.route("**/api/library/91/lyrics/candidates", route => route.fulfill({ json: { query: "Nightfall", groups: [] } }));
+  await page.goto("/library?view=tracks");
+  await page.locator(".track-row").filter({ hasText: "Nightfall" }).getByRole("button", { name: "Choose lyrics", exact: true }).click();
+  const review = page.locator(".lyrics-picker");
+  const audition = review.locator(".candidate-audition");
+  await expect(review).toBeVisible();
+  expect(reads).toBe(0);
+  await audition.locator("summary").click();
+  await expect(audition.getByRole("alert")).toContainText("Output temporarily unavailable");
+  await audition.getByRole("button", { name: "Reload audition", exact: true }).click();
+  const audio = audition.locator("audio");
+  await expect.poll(() => audio.evaluate(node => (node as HTMLAudioElement).duration)).toBe(80);
+  await audio.evaluate(node => (node as HTMLAudioElement).play());
+  await expect.poll(() => audio.evaluate(node => (node as HTMLAudioElement).paused)).toBe(false);
+  await audition.locator("summary").click();
+  await expect.poll(() => audio.evaluate(node => (node as HTMLAudioElement).paused)).toBe(true);
+  await audition.locator("summary").click();
+  await audio.evaluate(node => (node as HTMLAudioElement).play());
+  await page.evaluate(() => window.dispatchEvent(new Event("session-expired")));
+  await expect.poll(() => audio.evaluate(node => (node as HTMLAudioElement).paused)).toBe(true);
+  await review.getByRole("button", { name: "Close lyrics selection", exact: true }).click();
+  await expect(page.locator("audio")).toHaveCount(0);
+});
+
 test("LRC timeline respects offsets, repeats, translations, blanks and seeking boundaries", () => {
   const cues = lyricsTimeline("\uFEFF[ti:Ignored]\n[offset:+500]\n[00:02.50][00:04:500]Repeat\n[00:02.500]译文\n[00:03.5]\n[00:99]Invalid\n[00:02.500]译文");
   expect(cues).toEqual([{ time: 2, text: "Repeat\n译文" }, { time: 3, text: "" }, { time: 4, text: "Repeat" }]);

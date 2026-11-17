@@ -29,7 +29,9 @@ function applyAppearance() {
   const dark = appearance.theme === "dark" || appearance.theme === "system" && media.matches;
   const color = appearance.palette === "custom" ? appearance.custom : presets[appearance.palette];
   const ink = contrast(color, "#ffffff") >= 4.5 ? "#ffffff" : "#000000";
-  const surface = dark ? "#17181b" : "#ffffff", canvas = dark ? "#111214" : "#fbfbfc";
+  root.dataset.theme = dark ? "dark" : "light";
+  const styles = getComputedStyle(root);
+  const surface = styles.getPropertyValue("--surface").trim(), canvas = styles.getPropertyValue("--canvas").trim();
   // Keep custom colors, adapting small text and focus rings to the page surface.
   let accent = color;
   for (let step = 1; step <= 20; step++) {
@@ -38,7 +40,6 @@ function applyAppearance() {
     if (Math.min(contrast(accent, surface), contrast(accent, canvas), contrast(accent, tint)) >= 4.6) break;
     accent = mix(color, dark ? "#ffffff" : "#000000", step / 20);
   }
-  root.dataset.theme = dark ? "dark" : "light";
   root.dataset.palette = appearance.palette;
   root.style.setProperty("--accent", accent);
   root.style.setProperty("--accent-fill", color);

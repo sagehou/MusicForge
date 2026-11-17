@@ -1,6 +1,6 @@
 # MusicForge interface
 
-MusicForge is a place to check progress and look after a music library. Keep the collection and the next useful action easy to find. The current interface uses album artwork, compact rows, rounded controls and translucent surfaces in light and dark themes.
+MusicForge is a place to check progress and look after a music library. Keep the collection and the next useful action easy to find. The interface uses warm neutral light surfaces and layered graphite dark surfaces. Album artwork and track titles lead; solid content panels, compact rows and restrained accents separate actions from status. Translucency is reserved for navigation.
 
 The implemented tokens in [style.css](web/src/style.css) are the source for colors, spacing, sizes and motion. Use current Actions screenshots to review appearance. Do not maintain a second set of pixel values or a separate HTML mockup.
 
@@ -8,18 +8,18 @@ The implemented tokens in [style.css](web/src/style.css) are the source for colo
 
 - Reuse the shared page heading, controls, inline details and existing components. Keep one title/action area per page.
 - Desktop navigation can collapse; phones use bottom navigation. Language, appearance and palette controls belong in the page heading. Account/security remains accessible in either layout.
-- Library browsing keeps hierarchy, filters, sorting and selection visible. Use real album covers; artist imagery is an album-cover mosaic. Missing artwork must not block browsing.
-- Track and task details expand next to their row. Phone lyric selection uses its existing separate tab with candidates, preview and confirmation in reach.
-- Settings keep drafts when changing sections, language or theme, and use the shared save area. Long paths and translated labels must fit without hiding actions.
+- Library has Browse and Organize modes. Both retain hierarchy, filters, sorting, selection and mounted tool drafts; the URL carries the mode. Browse shows the collection and lyric coverage, while Organize reveals library-wide tools, maintenance and file comparison. Library browsing keeps hierarchy, filters, sorting and selection visible. Use real album covers; artist imagery is an album-cover mosaic. Missing artwork must not block browsing.
+- Running, paused and failed task groups open when their attention state changes; polling respects a manual collapse. Track and task details expand next to their row. Phone lyric selection uses its existing separate tab with candidates, preview and confirmation in reach.
+- Settings keep drafts when changing sections, language or theme, mark unsaved sections with a named icon, and use the shared save area. Long paths and translated labels must fit without hiding actions.
 
 ## Controls and feedback
 
 - Use the accent for primary actions, restrained warning/error colors for problems, and text or icons as well as color to convey state.
 - Icon-only controls need a localized accessible name and a useful tooltip. Preserve visible keyboard focus, partial selection, disabled/loading states and usable touch targets.
-- Keep text contrast at least 4.5:1 for preset and custom accent colors. Theme changes preserve mounted state; invalid custom colors do not apply.
+- Use relative font sizes and growing controls; narrow screens and coarse pointers get 44px action targets. Focus uses outlines that remain visible in forced colors. Keep text contrast at least 4.5:1 for preset and custom accent colors. Theme changes preserve mounted state; invalid custom colors do not apply.
 - Temporary network failures keep loaded data visible with a retry option. Confirmed session expiry locks the page for reauthentication without losing local form drafts. Do not silently repeat failed writes.
 - Error notices stay until dismissed; success notices expire after six seconds. Keep technical diagnostics available without making them the main explanation.
-- Artwork transitions enhance navigation but never delay it. Polling must not replay entrance animations. Honor reduced-motion preferences.
+- Lyric review keeps candidates, preview and save actions together, hides match explanations in contextual info bubbles, and loads output audio only when audition is opened. Closing audition or losing the session stops playback. Artwork transitions enhance navigation but never delay it. Polling must not replay entrance animations. Honor reduced-motion preferences.
 
 ## Writing
 

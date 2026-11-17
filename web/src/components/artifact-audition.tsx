@@ -10,6 +10,43 @@ import { LyricsEditor } from "./lyrics-editor";
 
 type Audition = { audio_url: string; format: string; size: number; lyrics: string; lyrics_state: "ready" | "missing" | "unavailable" };
 
+export function CandidateAudition({ source }: { source: Source }) {
+  const { t, errorMessage } = useI18n();
+  const audio = useRef<HTMLAudioElement>(null);
+  const [open, setOpen] = useState(false);
+  const [data, setData] = useState<Audition>();
+  const [error, setError] = useState("");
+  const [attempt, setAttempt] = useState(0);
+  useEffect(() => {
+    if (!open) { audio.current?.pause(); return; }
+    const controller = new AbortController();
+    setError("");
+    void api<Audition>(`/library/${source.id}/audition`, "GET", undefined, controller.signal)
+      .then(value => { if (!controller.signal.aborted) setData(value); })
+      .catch((err: Error) => { if (!controller.signal.aborted) setError(err.message); });
+    return () => controller.abort();
+  }, [source.id, open, attempt]);
+  useEffect(() => {
+    const element = audio.current;
+    const stop = () => element?.pause();
+    const session = (event: Event) => { if (!(event as CustomEvent<{ authenticated: boolean }>).detail.authenticated) stop(); };
+    window.addEventListener("session-expired", stop);
+    window.addEventListener("session-updated", session);
+    return () => {
+      window.removeEventListener("session-expired", stop);
+      window.removeEventListener("session-updated", session);
+      element?.pause(); element?.removeAttribute("src"); element?.load();
+    };
+  }, [data]);
+  return <details className="candidate-audition" open={open} onToggle={event => setOpen(event.currentTarget.open)}>
+    <summary><Play size={14} aria-hidden="true" />{t("audition.title")}</summary>
+    {open && !data && !error && <p role="status">{t("audition.loading")}</p>}
+    {data && <audio ref={audio} src={data.audio_url} controls preload="metadata" playsInline aria-label={t("audition.title")} onError={() => setError(t("audition.failed"))} />}
+    {error && <div className="audition-error" role="alert"><p>{errorMessage(error)}</p><Button type="button" size="sm" variant="outline" onClick={() => { setData(undefined); setAttempt(value => value + 1); }}>{t("audition.reload")}</Button></div>}
+    {source.possibly_damaged && <p className="audition-warning">{t("audition.damaged")}</p>}
+  </details>;
+}
+
 export function ArtifactAudition({ source, close, editLyrics = false, onBusyChange }: { source: Source; close: () => void; editLyrics?: boolean; onBusyChange: (busy: boolean) => void }) {
   const { t } = useI18n();
   const [attempt, setAttempt] = useState(0);

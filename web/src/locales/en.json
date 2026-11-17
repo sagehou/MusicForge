@@ -1219,5 +1219,11 @@
   "library.tools": "Library actions",
   "tags.open": "Edit tags",
   "playlist.create": "Create playlist",
-  "fingerprint.open": "Find duplicates"
+  "fingerprint.open": "Find duplicates",
+  "library.workspace": "Library workspace",
+  "library.modeBrowse": "Browse",
+  "library.modeOrganize": "Organize",
+  "lyrics.matchDetails": "Match details for {title}",
+  "lyrics.previewFirst": "Preview first candidate",
+  "lyrics.startSearch": "Search for lyrics"
 }

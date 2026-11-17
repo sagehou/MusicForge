@@ -131,7 +131,7 @@ test("dashboard uses real clamped completion and functional quick actions", asyn
   await page.getByRole("button", { name: "Scan library", exact: true }).click();
   await expect.poll(() => scans.length).toBe(1);
   await expect(page.locator(".toast")).toContainText("Scan queued");
-  await page.locator(".hero-actions").getByRole("button", { name: "View library", exact: true }).click();
+  await page.locator(".hero-actions").getByRole("link", { name: "View library", exact: true }).click();
   await expect(page).toHaveURL(/\/library$/);
   data = { ...data, source_count: 0, ready_count: 0 };
   await page.goto("/");
@@ -243,7 +243,7 @@ for (const width of [1440, 390]) {
           expect(height).toBeLessThanOrEqual(56);
         }
         if (screenWidth > 1100) expect((await page.locator(".readiness-panel").boundingBox())!.height).toBeLessThan(370);
-        for (const button of await page.locator(".attention-list > button").all()) {
+        for (const button of await page.locator(".attention-list > a").all()) {
           await button.scrollIntoViewIfNeeded();
           await expect(button).toBeInViewport();
           expect(await button.evaluate(element => {
@@ -256,7 +256,7 @@ for (const width of [1440, 390]) {
       }
       await setPreference(page, "language", "zh-CN");
       await page.setViewportSize({ width, height: 900 });
-      await page.locator(".attention-list > button").nth(1).click();
+      await page.locator(".attention-list > a").nth(1).click();
       await expect(page).toHaveURL(/status=needs_rebuild/);
       for (const [index, state] of ["unchecked", "not_found", "instrumental", "needs_review", "failed"].entries()) {
         await page.getByRole("link", { name: "概览", exact: true }).click();

@@ -49,6 +49,46 @@ async function expectCompactAlbumFacts(facts: Locator, lines: number) {
   expect(await facts.evaluate(element => element.scrollWidth <= element.clientWidth + 1)).toBe(true);
 }
 
+test("browse and organize share filters, selection and drafts without starting maintenance", async ({ page }) => {
+  await setup(page);
+  const writes: string[] = [];
+  page.on("request", request => { if (request.method() !== "GET" && !request.url().includes("/selection")) writes.push(request.url()); });
+  await page.goto("/library?view=tracks&lyrics=needs_review");
+  await expect(page).toHaveTitle("Library · MusicForge");
+  const organize = page.getByRole("button", { name: "Organize", exact: true });
+  const browse = page.getByRole("button", { name: "Browse", exact: true });
+  await expect(browse).toHaveAttribute("aria-pressed", "true");
+  await expect(page.locator(".library-tool-actions")).toBeHidden();
+  await page.getByLabel("Search library", { exact: true }).fill("Song 01");
+  await page.getByLabel("Select Song 01", { exact: true }).check();
+  await organize.click();
+  await expect(page).toHaveURL(/mode=organize/);
+  await expect(organize).toHaveAttribute("aria-pressed", "true");
+  await expect(page.locator(".library-tool-actions")).toBeVisible();
+  await expect(page.locator(".selection-bar")).toContainText("Selected: 1");
+  await expect(page.getByLabel("Search library", { exact: true })).toHaveValue("Song 01");
+  await expect(page).toHaveURL(/lyrics=needs_review/);
+  await page.locator("#maintenance-workbench > summary").click();
+  await browse.click();
+  await organize.click();
+  await expect(page.locator("#maintenance-workbench")).toHaveJSProperty("open", true);
+  await page.screenshot({ path: "test-results/workspace-organize-desktop-light.png", animations: "disabled" });
+  await browse.click();
+  await page.setViewportSize({ width: 320, height: 844 });
+  await setPreference(page, "language", "zh-CN");
+  await setPreference(page, "theme", "dark");
+  await expect(page.getByLabel("搜索音乐库", { exact: true })).toHaveValue("Song 01");
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
+  await page.screenshot({ path: "test-results/workspace-browse-phone-dark.png", animations: "disabled" });
+  await page.evaluate(() => { document.documentElement.style.fontSize = "200%"; });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
+  await page.emulateMedia({ forcedColors: "active" });
+  const searchField = page.getByLabel("搜索音乐库", { exact: true });
+  await searchField.focus();
+  expect(await searchField.evaluate(element => getComputedStyle(element).outlineStyle)).not.toBe("none");
+  expect(writes).toEqual([]);
+});
+
 test("aligned records fit six tracks, and the icon rail keeps navigation and preferences usable", async ({ page }) => {
   await setup(page);
   await page.setViewportSize({ width: 1440, height: 900 });

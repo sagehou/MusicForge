@@ -13,7 +13,7 @@ test("remote read progress is bilingual and proxy errors retain a usable task pa
   await page.route("**/api/jobs?*", route => route.fulfill({ json: { jobs: [job], total: 1 } }));
   await page.route("**/api/repair-tasks?*", route => route.fulfill({ json: { tasks: [], total: 0 } }));
   await page.goto("/jobs");
-  await page.locator('.task-group[data-kind="scan"] > summary').click();
+  await expect(page.locator('.task-group[data-kind="scan"]')).toHaveJSProperty("open", true);
   await expect(page.locator(".task-activity")).toContainText("Read 12.0 / 40.0 MiB");
   await expect(page.locator(".task-activity")).toContainText("Track 36");
   await expect(page.getByRole("progressbar")).toHaveAttribute("aria-valuenow", "88");
@@ -36,7 +36,7 @@ test("completed tag indexing does not show 100 percent while a source is being s
   await page.route("**/api/jobs?*", route => route.fulfill({ json: { jobs: [job], total: 1 } }));
   await page.route("**/api/repair-tasks?*", route => route.fulfill({ json: { tasks: [], total: 0 } }));
   await page.goto("/jobs");
-  await page.locator('.task-group[data-kind="scan"] > summary').click();
+  await expect(page.locator('.task-group[data-kind="scan"]')).toHaveJSProperty("open", true);
   await expect(page.getByRole("progressbar")).toHaveAttribute("aria-valuenow", "5");
   await expect(page.locator(".task-activity")).toContainText("Still downloading");
 });

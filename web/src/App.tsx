@@ -21,7 +21,7 @@ import { taskPercent } from "./lib/utils";
 function Field({ label, hint, children, action }: { label: string; hint?: string; children: ReactNode; action?: ReactNode }) { return <div className="field"><div className={action ? "input-action" : undefined}><label className="field-label"><span>{label}</span>{children}</label>{action}</div>{hint && <InfoHint>{hint}</InfoHint>}</div>; }
 
 export function App() {
-  const { t, errorMessage } = useI18n();
+  const { t, errorMessage, locale } = useI18n();
   const [me, setMe] = useState<Me>();
   const lastMe = useRef<Me | undefined>(undefined);
   const [locked, setLocked] = useState<Me>();
@@ -29,6 +29,10 @@ export function App() {
   const [authError, setAuthError] = useState("");
   const authRequest = useRef<Promise<void> | undefined>(undefined);
   const [page, setPage] = useState(location.pathname);
+  useEffect(() => {
+    const title: MessageKey = page === "/library" ? "app.library" : page === "/jobs" ? "app.jobs" : page === "/settings" ? "app.settings" : "app.overview";
+    document.title = me?.authenticated ? `${t(title)} · MusicForge` : t("app.title");
+  }, [page, locale, me?.authenticated]);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
     try { return localStorage.getItem("musicforge.sidebar") === "collapsed"; } catch { return false; }
   });
@@ -148,7 +152,7 @@ export function App() {
       </a></div>
     </aside>
     <main className="main" id="main-content" tabIndex={-1}>
-      <div className="page-content"><ResourceWarning error={authError} retry={() => void loadMe()} />{page === "/library" ? <Library notify={notify} /> : page === "/jobs" ? <Jobs notify={notify} /> : page === "/settings" ? <SettingsPage me={me} notify={notify} logout={logout} notification={notification} /> : <Overview notify={notify} navigate={navigate} />}</div>
+      <div className="page-content"><ResourceWarning error={authError} retry={() => void loadMe()} />{page === "/library" ? <Library notify={notify} /> : page === "/jobs" ? <Jobs notify={notify} /> : page === "/settings" ? <SettingsPage me={me} notify={notify} logout={logout} notification={notification} /> : <Overview notify={notify} />}</div>
     </main>
     {page !== "/settings" && notification}
   </div>{locked && <div className="session-dialog" role="dialog" aria-modal="true" aria-label={t("auth.expired")} onKeyDown={event => {
@@ -207,9 +211,10 @@ function TaskGroup({ jobKind, jobs, expanded, children }: { jobKind: string; job
   const { t, kind, status } = useI18n();
   const group = useRef<HTMLDetailsElement>(null);
   const failures = jobs.filter(job => job.state === "failed").map(job => job.repair_id || job.id).sort().join(",");
+  const active = jobs.some(job => job.state === "running" || job.state === "paused");
   useEffect(() => {
-    if (group.current && (failures || expanded !== undefined)) group.current.open = true;
-  }, [failures, expanded]);
+    if (group.current && (failures || active || expanded !== undefined)) group.current.open = true;
+  }, [failures, active, expanded]);
   return <details ref={group} className="task-group" data-kind={jobKind}>
     <summary><ChevronRight size={16} aria-hidden="true" /><strong>{kind(jobKind)}</strong><span className="task-group-count">{t("jobs.groupCount", { count: jobs.length })}</span><span className="task-group-states">{["running", "pending", "paused", "failed"].map(state => {
       const count = jobs.filter(job => job.state === state).length;
@@ -312,6 +317,7 @@ function SettingsPage({ me, notify, logout, notification }: { me: Me; notify: No
     return () => media.removeEventListener("change", change);
   }, []);
   const [lyricsVisited, setLyricsVisited] = useState(() => settingsSection() === "lyrics");
+  const [lyricsDirty, setLyricsDirty] = useState(false);
   useEffect(() => { if (section === "lyrics") setLyricsVisited(true); }, [section]);
   useEffect(() => {
     const change = () => setSection(settingsSection());
@@ -347,6 +353,14 @@ function SettingsPage({ me, notify, logout, notification }: { me: Me; notify: No
   const lidarrDirty = normalizedLidarrURL !== (savedLidarr?.url || "") || lidarrKey !== "";
   const maintenanceDirty = JSON.stringify({ ...maintenance, notify_token: undefined }) !== JSON.stringify({ ...savedMaintenance, notify_token: undefined }) || Boolean(maintenance?.notify_token) || clearNotifyToken;
   const dirty = maintenanceDirty || lidarrDirty || JSON.stringify(settings) !== JSON.stringify(saved) || webhook !== "" || clearWebhook || unbind || clearNavPassword || clearOIDCSecret;
+  const changed = (keys: (keyof Settings)[]) => keys.some(key => JSON.stringify(settings[key]) !== JSON.stringify(saved?.[key]));
+  const sectionDirty: Record<string, boolean> = {
+    library: changed(["source", "output", "enabled", "scan_minutes"]),
+    encoding: changed(["encoding", "concurrency"]) || ["schedule_enabled", "start", "end", "timezone", "day_concurrency", "prioritize_new"].some(key => maintenance?.[key as keyof MaintenanceOptions] !== savedMaintenance?.[key as keyof MaintenanceOptions]),
+    lyrics: lyricsDirty,
+    integrations: changed(["lidarr_prefix", "nav_url", "nav_user", "nav_library", "nav_password"]) || lidarrDirty || webhook !== "" || clearWebhook || clearNavPassword || clearNotifyToken || Boolean(maintenance?.notify_token) || ["notify_url", "notify_mode", "notify_completion"].some(key => maintenance?.[key as keyof MaintenanceOptions] !== savedMaintenance?.[key as keyof MaintenanceOptions]),
+    security: changed(["oidc_issuer", "oidc_client_id", "oidc_secret"]) || unbind || clearOIDCSecret,
+  };
   function update<K extends keyof Settings>(key: K, value: Settings[K]) { setSettings(old => old && ({ ...old, [key]: value })); }
   function encoding<K extends keyof Settings["encoding"]>(key: K, value: Settings["encoding"][K]) { setSettings(old => old && ({ ...old, encoding: { ...old.encoding, [key]: value } })); }
   async function save(e: FormEvent) { e.preventDefault(); setBusy(true); try { const result = await api<{ encoding_changed: boolean }>("/settings", "PUT", { ...settings, webhook_secret: webhook, clear_webhook: clearWebhook, unbind_oidc: unbind, clear_nav_password: clearNavPassword, clear_oidc_secret: clearOIDCSecret, ...(maintenanceDirty ? { maintenance, clear_notification_token: clearNotifyToken } : {}), ...(lidarrDirty ? { lidarr_connection: { url: lidarrURL || "", api_key: lidarrKey } } : {}) }); const fresh = await api<SettingsResponse>("/settings"); setSettings(fresh.settings); setSaved(fresh.settings); setConfigured(fresh.configured); setMaintenance(fresh.maintenance ?? defaultMaintenance); setSavedMaintenance(fresh.maintenance ?? defaultMaintenance); setClearNotifyToken(false); setLidarrURL(fresh.lidarr?.url || ""); setSavedLidarr(fresh.lidarr || { url: "", key_configured: false }); setLidarrKey(""); setWebhook(""); setClearWebhook(false); setUnbind(false); setClearNavPassword(false); setClearOIDCSecret(false); notify(result.encoding_changed ? "notice.profileChanged" : "notice.saved"); } catch (err) { notify(err as Error, true); } finally { setBusy(false); } }
@@ -359,10 +373,10 @@ function SettingsPage({ me, notify, logout, notification }: { me: Me; notify: No
       const current = buttons.indexOf(document.activeElement as HTMLButtonElement);
       const next = event.key === "Home" ? 0 : event.key === "End" ? buttons.length - 1 : ["ArrowRight", "ArrowDown"].includes(event.key) ? (current + 1) % buttons.length : ["ArrowLeft", "ArrowUp"].includes(event.key) ? (current + buttons.length - 1) % buttons.length : -1;
       if (next >= 0) { event.preventDefault(); buttons[next].focus(); buttons[next].click(); }
-    }}>{sections.map(item => <button key={item.id} id={`settings-tab-${item.id}`} role="tab" aria-selected={section === item.id} aria-controls={`settings-${item.id}`} tabIndex={section === item.id ? 0 : -1} onClick={() => chooseSection(item.id)}><item.icon size={17} /><span>{item.label}</span><ChevronRight size={14} /></button>)}</nav>
+    }}>{sections.map(item => <button key={item.id} id={`settings-tab-${item.id}`} role="tab" aria-label={item.label} aria-describedby={sectionDirty[item.id] ? `settings-dirty-${item.id}` : undefined} aria-selected={section === item.id} aria-controls={`settings-${item.id}`} tabIndex={section === item.id ? 0 : -1} onClick={() => chooseSection(item.id)}><item.icon size={17} /><span>{item.label}</span>{sectionDirty[item.id] && <span id={`settings-dirty-${item.id}`} className="settings-dirty-marker" role="img" aria-label={t("settings.unsaved")} title={t("settings.unsaved")}>✎</span>}<ChevronRight size={14} /></button>)}</nav>
     <div className="settings-content" role="tabpanel" id={`settings-${section}`} aria-labelledby={`settings-tab-${section}`}>
     <div hidden={section !== "security"}><div className="account-summary"><div><strong>{me.username}</strong><small>{me.method === "oidc" ? t("app.oidcAdmin") : t("app.localAdmin")}</small></div><Button type="button" variant="outline" onClick={() => void logout()}>{t("app.logout")}</Button></div><PasswordForm notify={notify} disabled={me.method !== "local"} /></div>
-    <div hidden={section !== "lyrics"}>{lyricsVisited && <LyricsSettings notify={notify} notification={notification} />}</div>
+    <div hidden={section !== "lyrics"}>{lyricsVisited && <LyricsSettings notify={notify} notification={notification} onDirtyChange={setLyricsDirty} />}</div>
     <form hidden={section === "lyrics"} noValidate onSubmit={event => {
       event.preventDefault();
       const invalid = event.currentTarget.querySelector<HTMLInputElement | HTMLSelectElement>(":invalid");

@@ -9,6 +9,7 @@ import { Button } from "./ui/button";
 import { InfoHint } from "./info-hint";
 import { InlineDetails } from "./inline-details";
 import { LyricsProviderDiagnostics } from "./lyrics-provider-diagnostics";
+import { CandidateAudition } from "./artifact-audition";
 
 type LyricsResponse = {
   options: { auto_search: boolean; min_score: number; providers?: OnlineProvider[] };
@@ -104,7 +105,7 @@ function LyricsControls({ notify, getIDs, disabled = false, label = "lyrics.sear
   </div>;
 }
 
-export function LyricsSettings({ notify, notification }: { notify: Notice; notification: ReactNode }) {
+export function LyricsSettings({ notify, notification, onDirtyChange }: { notify: Notice; notification: ReactNode; onDirtyChange?: (dirty: boolean) => void }) {
   const { t } = useI18n();
   const resource = useResource<LyricsResponse>("/lyrics");
   const [draft, setDraft] = useState<LyricsResponse["options"] & { providers: OnlineProvider[] }>();
@@ -114,10 +115,11 @@ export function LyricsSettings({ notify, notification }: { notify: Notice; notif
     window.addEventListener("lyrics-options-changed", refresh);
     return () => window.removeEventListener("lyrics-options-changed", refresh);
   }, [resource.retry]);
-  if (!resource.data) return <Loading error={resource.error} retry={resource.retry} />;
-  const saved = { ...resource.data.options, min_score: resource.data.options.min_score ?? 96, providers: resource.data.options.providers ?? [...defaultOnlineProviders] };
+  const saved = { ...resource.data?.options, auto_search: resource.data?.options.auto_search ?? false, min_score: resource.data?.options.min_score ?? 96, providers: resource.data?.options.providers ?? [...defaultOnlineProviders] };
   const options = draft ?? saved;
   const dirty = options.auto_search !== saved.auto_search || options.min_score !== saved.min_score || JSON.stringify(options.providers) !== JSON.stringify(saved.providers);
+  useEffect(() => { onDirtyChange?.(dirty); }, [dirty, onDirtyChange]);
+  if (!resource.data) return <Loading error={resource.error} retry={resource.retry} />;
   return <div className="lyrics-settings-page">
     <ResourceWarning error={resource.error} retry={resource.retry} />
     <form id="lyrics-options-form" className="settings-form" onSubmit={event => {
@@ -325,20 +327,21 @@ export function LyricsPicker({ source, notify, close, saved, previous, next, onB
       <Button type="submit" variant="outline" disabled={!options.data || !providers.length || saving || restoring || loading || !query.trim()}><Search size={15} />{t("lyrics.findCandidates")}</Button>
       {loading && <Button type="button" variant="ghost" onClick={cancelSearch}>{t("lyrics.cancelSearch")}</Button>}
     </form>
+    <CandidateAudition source={source} />
     <details className="lyrics-guidance" open={groups.some(group => !!group.error) || undefined}><summary>{t("lyrics.recommendationInfo")}</summary><p>{t("lyrics.recommendationHint")}</p><p>{t("lyrics.cacheHint")}</p>
       <Button type="button" variant="ghost" disabled={!options.data || !providers.length || saving || restoring || loading || !query.trim()} onClick={() => void search(true)}>{t("lyrics.forceSearch")}</Button>
       {!standalone && <Button asChild type="button" variant="ghost" size="sm"><a href={saving ? undefined : (() => { const params = new URLSearchParams(location.search); params.set("lyrics_track", String(source.id)); return `/library?${params}`; })()} target="_blank" rel="noopener" aria-disabled={saving || undefined}><ExternalLink size={15} />{t("lyrics.chooseNewTab")}</a></Button>}
       <div className="lyrics-provider-status" aria-label={t("lyrics.providerStatus")}>{groups.filter(group => providers.includes(group.provider)).map(group => <fieldset key={group.provider} disabled={saving}><legend>{t(`lyrics.name.${group.provider}`)}{group.provider === providers[0] && <> <span className="provider-priority">{t("lyrics.preferredSource")}</span></>}</legend>{group.cached && <small>{t("lyrics.cached")}{group.searched ? <> · {new Date(group.searched * 1000).toLocaleString(locale)}</> : null}</small>}{group.loading && <p role="status">{t("app.loading")}</p>}{group.error && <p role="alert">{errorMessage(group.error)}</p>}{!group.loading && !group.error && group.candidates.length === 0 && <p>{t("lyrics.noCandidates")}</p>}</fieldset>)}</div></details>
     </div>
     <div className="lyrics-candidate-groups">
-    {instrumental && <label className="lyrics-candidate lyrics-instrumental" data-selected={!!selected?.instrumental}>
+    {instrumental && <div className="lyrics-candidate-row"><label className="lyrics-candidate lyrics-instrumental" data-selected={!!selected?.instrumental}>
       <input type="radio" name={`lyrics-candidate-${source.id}`} aria-label={t("lyrics.chooseInstrumental")} disabled={saving || restoring || !instrumental?.token} checked={!!selected?.instrumental} onChange={() => instrumental && instrumental.candidates[0] && void choose({ token: instrumental.token, candidate: instrumental.candidates[0], instrumental: true })} />
-      <Music2 size={18} aria-hidden="true" /><span><strong>{t("lyrics.instrumental")}</strong><small>{t("lyrics.instrumentalHint")}</small></span>
-    </label>}
-    <label className="candidate-source-filter"><span>{t("lyrics.sourceFilter")}</span><select value={providerFilter} disabled={saving} onChange={event => setProviderFilter(event.target.value)}><option value="all">{t("lyrics.allCandidates")}</option>{providers.map(provider => <option key={provider} value={provider}>{t(`lyrics.name.${provider}`)}</option>)}</select></label>{choices.filter(choice => providerFilter === "all" || choice.candidate.provider === providerFilter).map(({ token, candidate }) => <label className="lyrics-candidate" key={`${token}:${candidate.index}`} data-recommended={recommended?.token === token && recommended?.candidate.index === candidate.index} data-selected={selected?.token === token && selected?.candidate.index === candidate.index}>
+      <Music2 size={18} aria-hidden="true" /><span><strong>{t("lyrics.instrumental")}</strong></span>
+    </label><InfoHint label={t("lyrics.chooseInstrumental")}>{t("lyrics.instrumentalHint")}</InfoHint></div>}
+    <label className="candidate-source-filter"><span>{t("lyrics.sourceFilter")}</span><select value={providerFilter} disabled={saving} onChange={event => setProviderFilter(event.target.value)}><option value="all">{t("lyrics.allCandidates")}</option>{providers.map(provider => <option key={provider} value={provider}>{t(`lyrics.name.${provider}`)}</option>)}</select></label>{choices.filter(choice => providerFilter === "all" || choice.candidate.provider === providerFilter).map(({ token, candidate }) => <div className="lyrics-candidate-row" key={`${token}:${candidate.index}`}><label className="lyrics-candidate" data-recommended={recommended?.token === token && recommended?.candidate.index === candidate.index} data-selected={selected?.token === token && selected?.candidate.index === candidate.index}>
       <input type="radio" name={`lyrics-candidate-${source.id}`} aria-label={t("lyrics.previewCandidate", { title: candidate.title, artist: candidate.artist, provider: t(`lyrics.name.${candidate.provider}`) })} disabled={saving || !token} checked={!!selected && selected.token === token && selected.candidate.index === candidate.index} onChange={() => token && void choose({ token, candidate })} />
-      <span><strong dir="auto">{candidate.title}{recommended?.token === token && recommended?.candidate.index === candidate.index && <em className="lyrics-recommended">{t("lyrics.recommended")}</em>}</strong><span dir="auto">{candidate.artist} · {candidate.album || "—"} · {candidateDuration(candidate.duration)}</span><span className="candidate-source">{t(`lyrics.name.${candidate.provider}`)}</span><small className="candidate-confidence" data-high={candidate.high_confidence}>{t(candidate.high_confidence ? "lyrics.matchHigh" : "lyrics.matchReview")}{candidate.match_score !== undefined && <> · {t("lyrics.matchScore", { score: candidate.match_score })}</>}{candidate.duration_delta !== undefined && <> · {t("lyrics.durationDelta", { seconds: Math.round(candidate.duration_delta * 100) / 100 })}</>}</small>{candidate.match_reasons?.map(reason => <small key={reason}>{t(`lyrics.reason.${reason}`)}</small>)}{candidate.match_score < minScore && <small>{t("lyrics.reason.threshold", { score: minScore })}</small>}{candidate.script === "simplified" && <small className="script-chip">{t("lyrics.simplified")}</small>}{candidate.script === "traditional" && <small className="script-chip">{t("lyrics.traditional")}</small>}{candidate.translation_script === "simplified" && <small className="script-chip">{t("lyrics.simplifiedTranslation")}</small>}</span>
-    </label>)}</div>
+      <span><strong dir="auto">{candidate.title}{recommended?.token === token && recommended?.candidate.index === candidate.index && <em className="lyrics-recommended">{t("lyrics.recommended")}</em>}</strong><span dir="auto">{candidate.artist} · {candidate.album || "—"} · {candidateDuration(candidate.duration)}</span><span className="candidate-source">{t(`lyrics.name.${candidate.provider}`)}</span><small className="candidate-confidence" data-high={candidate.high_confidence}>{t(candidate.high_confidence ? "lyrics.matchHigh" : "lyrics.matchReview")}{candidate.match_score !== undefined && <> · {t("lyrics.matchScore", { score: candidate.match_score })}</>}{candidate.duration_delta !== undefined && <> · {t("lyrics.durationDelta", { seconds: Math.round(candidate.duration_delta * 100) / 100 })}</>}</small>{candidate.script === "simplified" && <small className="script-chip">{t("lyrics.simplified")}</small>}{candidate.script === "traditional" && <small className="script-chip">{t("lyrics.traditional")}</small>}{candidate.translation_script === "simplified" && <small className="script-chip">{t("lyrics.simplifiedTranslation")}</small>}</span>
+    </label>{(!!candidate.match_reasons?.length || candidate.match_score < minScore) && <InfoHint label={t("lyrics.matchDetails", { title: candidate.title })}>{candidate.match_reasons?.map(reason => <p key={reason}>{t(`lyrics.reason.${reason}`)}</p>)}{candidate.match_score < minScore && <p>{t("lyrics.reason.threshold", { score: minScore })}</p>}</InfoHint>}</div>)}</div>
     <div className="lyrics-preview-pane">
     {previewing && <p role="status">{t("lyrics.loadingPreview")}</p>}
     {previewError && <div className="repair-warning" role="alert"><p>{errorMessage(previewError)}</p><Button type="button" variant="ghost" size="sm" disabled={saving} onClick={reloadCandidates}>{t("lyrics.reloadCandidates")}</Button></div>}
@@ -360,8 +363,8 @@ export function LyricsPicker({ source, notify, close, saved, previous, next, onB
         {diagnostic.fields.map(field => <div key={field.name}><h4>{field.name}</h4><pre dir="auto">{field.text || t(field.truncated ? "lyrics.rawTruncated" : "lyrics.rawEmpty")}</pre>{field.truncated && field.text && <p>{t("lyrics.rawTruncated")}</p>}</div>)}
       </div>
     </section>}
-    {!preview && !diagnostic && !previewing && <div className="lyrics-preview-empty"><FileMusic size={24} /><h3>{t("lyrics.preview")}</h3><p>{t("lyrics.selectToPreview")}</p></div>}
-    <div className="lyrics-save">{savedSelection && <p className="saved-feedback" role="status">{t("lyrics.savedNext")}</p>}<p>{t(selected?.instrumental ? "lyrics.instrumentalSaveHint" : "lyrics.saveHint")}</p><div className="lyrics-save-actions"><Button type="button" disabled={saving || savedSelection || !preview || previewing} onClick={() => void save()}>{t(selected?.instrumental ? "lyrics.saveInstrumental" : "lyrics.saveCandidate")}</Button>{next && <Button type="button" variant="outline" disabled={saving || !preview || previewing} onClick={() => savedSelection ? next() : void save(true)}>{t(savedSelection ? "lyrics.next" : "lyrics.saveNext")}<ChevronRight size={15} /></Button>}</div></div>
+    {!preview && !diagnostic && !previewing && <div className="lyrics-preview-empty"><FileMusic size={24} /><p>{t("lyrics.selectToPreview")}</p><Button type="button" variant="outline" size="sm" disabled={saving || restoring || loading || !options.data || !providers.length || !query.trim()} onClick={() => { const choice = choices.find(choice => choice.token); if (choice?.token) void choose({ token: choice.token, candidate: choice.candidate }); else void search(); }}>{t(choices.length ? "lyrics.previewFirst" : "lyrics.startSearch")}</Button></div>}
+    <div className="lyrics-save">{savedSelection && <p className="saved-feedback" role="status">{t("lyrics.savedNext")}</p>}<div className="lyrics-save-actions"><Button type="button" variant={next ? "outline" : "default"} disabled={saving || savedSelection || !preview || previewing} onClick={() => void save()}>{t(selected?.instrumental ? "lyrics.saveInstrumental" : "lyrics.saveCandidate")}</Button>{next && <Button type="button" disabled={saving || !preview || previewing} onClick={() => savedSelection ? next() : void save(true)}>{t(savedSelection ? "lyrics.next" : "lyrics.saveNext")}<ChevronRight size={15} /></Button>}<InfoHint>{t(selected?.instrumental ? "lyrics.instrumentalSaveHint" : "lyrics.saveHint")}</InfoHint></div></div>
     </div></div>
   </InlineDetails>;
 }

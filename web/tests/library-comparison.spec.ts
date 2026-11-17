@@ -47,6 +47,7 @@ test("file comparison explains count differences and queues only selected direct
     return route.fulfill({ json: { job_id: 7 } });
   });
   await page.goto("/library");
+  await page.getByRole("button", { name: "Organize", exact: true }).click();
   await page.locator(".library-comparison > summary").filter({ hasText: "File counts · compare with Lidarr" }).click();
   const compare = page.getByRole("button", { name: "Compare file lists", exact: true });
   await expect(compare).toHaveCount(0);
@@ -68,6 +69,7 @@ test("file comparison explains count differences and queues only selected direct
   await page.getByRole("button", { name: "Save settings", exact: true }).click();
   await expect(page.getByLabel("Lidarr API key", { exact: true })).toHaveValue("");
   await page.getByRole("link", { name: "Library", exact: true }).click();
+  await page.getByRole("button", { name: "Organize", exact: true }).click();
   await page.locator(".library-comparison > summary").filter({ hasText: "File counts · compare with Lidarr" }).click();
   await expect(compare).toBeEnabled();
   await compare.click();

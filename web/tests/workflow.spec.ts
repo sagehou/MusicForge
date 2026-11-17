@@ -148,7 +148,7 @@ test("bilingual setup, real incremental build, state preservation and login", as
   await expect.poll(() => recentBuild.locator("img").evaluate((node: HTMLImageElement) => node.naturalWidth)).toBe(320);
   await page.screenshot({ path: "test-results/dashboard-zh-CN.png", fullPage: true });
   await setPreference(page, "language", "en");
-  await expect(page.getByRole("progressbar", { name: "Build completion", exact: true })).toHaveAttribute("aria-valuenow", "100");
+  await expect(page.getByRole("progressbar", { name: "Build completion", exact: true })).toHaveJSProperty("value", 100);
   await page.screenshot({ path: "test-results/dashboard-en.png", fullPage: true });
   await setPreference(page, "language", "zh-CN");
   await page.getByRole("link", { name: "任务", exact: true }).click();
@@ -191,7 +191,7 @@ test("bilingual setup, real incremental build, state preservation and login", as
   await openAccount(page);
   await expect(page.getByRole("button", { name: "退出登录", exact: true })).toBeVisible();
   await page.getByRole("link", { name: "概览", exact: true }).click();
-  await expect(page.getByRole("progressbar")).toHaveAttribute("aria-valuenow", "100");
+  await expect(page.getByRole("progressbar")).toHaveJSProperty("value", 100);
   await page.screenshot({ path: "test-results/mobile-dashboard-zh-CN.png", fullPage: true });
   await page.route("**/api/dashboard", route => route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ error: "database unavailable" }) }));
   await expect(page.getByRole("alert")).toContainText("暂时无法获取更新", { timeout: 15000 });

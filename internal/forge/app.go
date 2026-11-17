@@ -328,6 +328,8 @@ func (a *App) worker(ctx context.Context, conversion bool, slot int) {
 			if interrupted {
 				state = "pending"
 				message = "Interrupted; resumed from the beginning without consuming an attempt"
+			} else if errors.Is(err, errImportedTrackFailed) {
+				state = "failed"
 			} else if errors.As(err, &d) {
 				state = "pending"
 				wait = d.seconds

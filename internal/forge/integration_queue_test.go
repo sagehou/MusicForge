@@ -1,6 +1,7 @@
 package forge
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -12,6 +13,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 )
 
 func TestScanRequestsSurviveCoalescingAndRestart(t *testing.T) {
@@ -175,6 +177,181 @@ func TestNativeLidarrDownloadUpgradeAndStrictPayload(t *testing.T) {
 	}
 	if _, err = os.Stat(filepath.Join(s.Output, previous.Output)); !os.IsNotExist(err) {
 		t.Fatal("explicit upgrade did not remove old output", err)
+	}
+}
+
+func TestFailedLidarrTrackReleasesTaskAndTimerUntilManualRetry(t *testing.T) {
+	for _, kind := range []string{"prepare", "convert"} {
+		t.Run(kind, func(t *testing.T) {
+			a, s := testApp(t)
+			s.LidarrPrefix = "/lidarr/music"
+			s.WebhookHash = digest("integration-secret")
+			if err := a.saveSettings(s); err != nil {
+				t.Fatal(err)
+			}
+			oldPath := makeFLAC(t, a, s, "Previous/old.flac", "Old playable track", false)
+			if err := a.scan(context.Background(), ScanRequest{}); err != nil {
+				t.Fatal(err)
+			}
+			drain(t, a, true)
+			old, _ := a.sourceRel("Previous/old.flac")
+			oldOutput := filepath.Join(s.Output, old.Output)
+			oldBytes, err := os.ReadFile(oldOutput)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err = os.Remove(oldPath); err != nil {
+				t.Fatal(err)
+			}
+			makeFLAC(t, a, s, "Imported/01.flac", "Failed track", false)
+			makeFLAC(t, a, s, "Imported/02.flac", "Healthy track", false)
+			r := httptest.NewRequest("POST", "/api/webhook/lidarr", strings.NewReader(`{"eventType":"Download","isUpgrade":true,"trackFiles":[{"path":"/lidarr/music/Imported/01.flac"},{"path":"/lidarr/music/Imported/02.flac"}],"deletedFiles":[{"path":"/lidarr/music/Previous/old.flac"}]}`))
+			r.SetBasicAuth("musicforge", "integration-secret")
+			w := httptest.NewRecorder()
+			a.Handler().ServeHTTP(w, r)
+			if w.Code != 202 {
+				t.Fatal(w.Body.String())
+			}
+			root, err := a.claim(false)
+			if err != nil || root.Kind != "scan" {
+				t.Fatal(root, err)
+			}
+			if err = a.execute(context.Background(), root); err != nil {
+				t.Fatal(err)
+			}
+			if err = a.completeJob(root, "success", 0, 1, "", 0); err != nil {
+				t.Fatal(err)
+			}
+			bad, err := a.claim(true)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if kind == "convert" {
+				source, err := a.sourceRel("Imported/01.flac")
+				if err != nil {
+					t.Fatal(err)
+				}
+				source.Hash, err = a.sourceHash(context.Background(), s.Source, source.Rel, nil)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if _, err = a.db.Exec("UPDATE sources SET hash=? WHERE id=?", source.Hash, source.ID); err != nil {
+					t.Fatal(err)
+				}
+				if err = a.completeJob(bad, "success", 0, 1, "", 0); err != nil {
+					t.Fatal(err)
+				}
+				id, err := a.queueBuildTask(source, s.Encoding, false, true, root.ID)
+				if err != nil {
+					t.Fatal(err)
+				}
+				bad, err = readJob(a.reads.QueryRow("SELECT "+jobCols+" FROM jobs WHERE id=?", id))
+				if err != nil {
+					t.Fatal(err)
+				}
+			}
+			conflict := filepath.Join(s.Output, "Imported/01.opus")
+			if err = os.MkdirAll(filepath.Dir(conflict), 0755); err != nil {
+				t.Fatal(err)
+			}
+			if err = os.WriteFile(conflict, []byte("unregistered output"), 0600); err != nil {
+				t.Fatal(err)
+			}
+			failure := a.execute(context.Background(), bad)
+			if failure == nil {
+				t.Fatal("conflicting output did not fail the track")
+			}
+			if err = a.completeJob(bad, "pending", 1, 0, failure.Error(), 10); err != nil {
+				t.Fatal(err)
+			}
+			check, err := a.claim(false)
+			if err != nil || check.Kind != "upgrade" {
+				t.Fatal(check, err)
+			}
+			var waiting *deferred
+			if err = a.execute(context.Background(), check); !errors.As(err, &waiting) {
+				t.Fatal("import did not wait for an automatic track retry", err)
+			}
+			if err = a.completeJob(check, "pending", 0, 0, waiting.Error(), 0); err != nil {
+				t.Fatal(err)
+			}
+			if err = a.completeJob(bad, "failed", 3, 0, failure.Error(), 0); err != nil {
+				t.Fatal(err)
+			}
+			// Existing stuck imports must finish after an upgrade or restart too.
+			cfg, logger, assets := a.cfg, a.logger, a.assets
+			a.Close()
+			a, err = New(cfg, logger, "test", assets)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer a.Close()
+			ctx, cancel := context.WithCancel(context.Background())
+			done, converted := make(chan struct{}), make(chan struct{})
+			go func() { defer close(done); a.worker(ctx, false, 0) }()
+			go func() { defer close(converted); a.worker(ctx, true, 0) }()
+			defer func() { cancel(); <-done; <-converted }()
+			deadline := time.Now().Add(20 * time.Second)
+			for {
+				tasks, total, err := a.taskListSelected(context.Background(), "all", 10, 0, []int64{root.ID})
+				if err != nil {
+					t.Fatal(err)
+				}
+				if total == 1 && tasks[0].State == "failed" && tasks[0].CanDelete {
+					if tasks[0].Counts.Failed != 1 || tasks[0].Counts.Done != tasks[0].Counts.Total-1 || tasks[0].Counts.Pending != 0 || tasks[0].Counts.Running != 0 || tasks[0].RetryAt != 0 {
+						t.Fatal("failed import left unfinished work", tasks)
+					}
+					break
+				}
+				if time.Now().After(deadline) {
+					t.Fatal("one failed track kept the import running", tasks)
+				}
+				time.Sleep(20 * time.Millisecond)
+			}
+			cancel()
+			<-done
+			<-converted
+			check, err = readJob(a.reads.QueryRow("SELECT "+jobCols+" FROM jobs WHERE id=?", check.ID))
+			if err != nil || check.State != "failed" || check.Attempts != 0 || !strings.Contains(check.Log, "Imported/01.flac") {
+				t.Fatal("import check did not stop immediately with track diagnostics", check, err)
+			}
+			after, err := os.ReadFile(oldOutput)
+			if err != nil || !bytes.Equal(after, oldBytes) {
+				t.Fatal("failed import changed the old playable artifact", err)
+			}
+			healthy, err := os.Stat(filepath.Join(s.Output, "Imported/02.opus"))
+			if err != nil {
+				t.Fatal("failed track blocked a healthy track", err)
+			}
+			if _, err = a.scheduleScan(s, time.Now().Add(-24*time.Hour)); err != nil {
+				t.Fatal(err)
+			}
+			periodic, err := a.claim(false)
+			if err != nil || periodic.Key != "scan:periodic" || periodic.ID == root.ID {
+				t.Fatal("failed import blocked the next periodic scan", periodic, err)
+			}
+			if err = a.completeJob(periodic, "success", 0, 1, "", 0); err != nil {
+				t.Fatal(err)
+			}
+			if err = os.Remove(conflict); err != nil {
+				t.Fatal(err)
+			}
+			if changed, err := a.changeTasks("retry", selection{IDs: []int64{root.ID}}); err != nil || changed != 1 {
+				t.Fatal("failed import was not retryable", changed, err)
+			}
+			drain(t, a, true)
+			tasks, total, err := a.taskListSelected(context.Background(), "success", 10, 0, []int64{root.ID})
+			if err != nil || total != 1 || tasks[0].Counts.Done != tasks[0].Counts.Total {
+				t.Fatal("manual retry did not finish the original import", tasks, err)
+			}
+			if _, err = os.Stat(oldOutput); !os.IsNotExist(err) {
+				t.Fatal("successful retry did not clean the explicitly replaced artifact", err)
+			}
+			afterHealthy, err := os.Stat(filepath.Join(s.Output, "Imported/02.opus"))
+			if err != nil || !afterHealthy.ModTime().Equal(healthy.ModTime()) {
+				t.Fatal("manual retry rebuilt a successful track", err)
+			}
+		})
 	}
 }
 

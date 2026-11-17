@@ -151,6 +151,8 @@ func (a *App) webhook(w http.ResponseWriter, r *http.Request) {
 	respond(w, 202, map[string]int64{"job_id": id})
 }
 
+var errImportedTrackFailed = errors.New("Imported track failed; retry failed tracks to complete the import")
+
 func (a *App) finishUpgrade(ctx context.Context, r UpgradeRequest) error {
 	if err := a.lockFiles(ctx); err != nil {
 		return err
@@ -206,6 +208,21 @@ func (a *App) finishUpgrade(ctx context.Context, r UpgradeRequest) error {
 	for _, rel := range r.New {
 		source := sources[rel]
 		if !source.Present || !source.OutputPresent || source.Error != "" || source.Hash == "" || source.BuiltHash != source.Hash || source.BuiltProfile != s.Encoding.Fingerprint() {
+			var active, failed int
+			var failure string
+			err = a.reads.QueryRowContext(ctx, `SELECT coalesce(sum(state IN ('pending','running')),0),
+			 coalesce(sum(state='failed'),0),coalesce(max(CASE WHEN state='failed' THEN log END),'')
+			 FROM jobs WHERE (kind IN ('convert','move') AND json_extract(args,'$.id')=?)
+			 OR (dedup LIKE 'scan:prepare:%' AND json_extract(args,'$.dirs[0]')=?)`, source.ID, rel).Scan(&active, &failed, &failure)
+			if err != nil {
+				return err
+			}
+			if active == 0 && (failed > 0 || source.Error != "") {
+				if source.Error != "" {
+					failure = source.Error
+				}
+				return fmt.Errorf("%w: %q\n%s", errImportedTrackFailed, rel, failure)
+			}
 			return later("Waiting for all imported tracks to validate; failed tracks require manual retry", 10)
 		}
 		info, err := a.sourceStat(ctx, s.Source, rel)

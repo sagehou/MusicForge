@@ -144,6 +144,7 @@ Generate a temporary file and validate before replacement. Failed conversion pre
 - Use the event's new-file and replaced-file lists even if filenames differ.
 - Automatically delete listed old artifacts only after all new files in the event convert and validate.
 - Preserve old output after failure until a retry succeeds.
+- When an imported track has failed and has no pending or running retry, fail the import check without deleting old artifacts. Healthy tracks continue; once remaining work finishes, the task ends as failed and no longer blocks timer scans. Retrying the task also retries its import check.
 
 ### Output codec changes
 

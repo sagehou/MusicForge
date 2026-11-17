@@ -35,6 +35,10 @@ export async function selectLibraryPage(page: Page) {
 export async function openSelectionActions(page: Page) {
   const menu = page.locator(".selection-more");
   if (!await menu.evaluate(node => (node as HTMLDetailsElement).open)) await menu.locator(":scope > summary").click();
+  await expect.poll(() => menu.evaluate(element => {
+    const content = element.querySelector(".selection-more-body")!.getBoundingClientRect();
+    return content.bottom - element.getBoundingClientRect().bottom;
+  }), { message: "Expanded selection actions must fit inside their disclosure" }).toBeLessThanOrEqual(1);
 }
 
 export async function openLyricsMaintenance(page: Page) {

@@ -1,6 +1,6 @@
 import { routeLibrary } from "./library-fixture";
 import { test, expect, type Page } from "@playwright/test";
-import { openAccount, openLibraryOptions, setPreference } from "./preferences";
+import { openAccount, openLibraryOptions, openSelectionActions, setPreference } from "./preferences";
 
 const settings = { enabled: true, source: "/music/source", output: "/music/output", encoding: { codec: "opus", mode: "vbr", bitrate: 192, quality: 2 }, concurrency: 1, scan_minutes: 60, lidarr_prefix: "", nav_url: "", nav_user: "", nav_library: 1, oidc_issuer: "", oidc_client_id: "" };
 async function setup(page: Page) {
@@ -187,6 +187,7 @@ test("partial selection, keyboard focus and settings switches stay usable", asyn
   await expect(page.getByRole("button", { name: "Preview selected build", exact: true })).toBeHidden();
   await more.press("Enter");
   await expect(page.getByRole("button", { name: "Preview selected build", exact: true })).toBeVisible();
+  await openSelectionActions(page);
   const moreAfter = (await more.boundingBox())!;
   expect(Math.abs(moreBefore.x - moreAfter.x) + Math.abs(moreBefore.y - moreAfter.y)).toBeLessThan(2);
   await page.screenshot({ path: "test-results/library-toolbar-more-desktop-en.png", animations: "disabled" });
@@ -208,6 +209,7 @@ test("partial selection, keyboard focus and settings switches stay usable", asyn
   await page.screenshot({ path: "test-results/library-toolbar-selected-mobile-zh-CN.png", animations: "disabled" });
   await more.press("Enter");
   await expect(page.getByRole("button", { name: "预览所选构建", exact: true })).toBeVisible();
+  await openSelectionActions(page);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
   await page.screenshot({ path: "test-results/library-toolbar-more-phone-dark-zh-CN.png", animations: "disabled" });
   await page.getByLabel("选择 Song 1", { exact: true }).uncheck();

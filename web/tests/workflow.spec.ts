@@ -112,7 +112,6 @@ test("bilingual setup, real incremental build, state preservation and login", as
   await openSelectionActions(page);
   const deleteArtifacts = page.getByRole("button", { name: "Delete selected artifacts", exact: true });
   await expect(deleteArtifacts).toBeEnabled();
-  await page.locator(".selection-more").evaluate(element => Promise.allSettled(element.getAnimations({ subtree: true }).map(animation => animation.finished)));
   await deleteArtifacts.scrollIntoViewIfNeeded();
   await page.screenshot({ path: "test-results/delete-ready-artifact.png", animations: "disabled" });
   const sourcePath = join(root, "source/Artist/Album/01.flac");

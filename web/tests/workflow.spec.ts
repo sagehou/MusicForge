@@ -153,6 +153,7 @@ test("bilingual setup, real incremental build, state preservation and login", as
   await setPreference(page, "language", "zh-CN");
   await page.getByRole("link", { name: "任务", exact: true }).click();
   await expect(page.getByRole("heading", { name: "后台任务" })).toBeVisible();
+  await expect(page.locator(".task").first()).toHaveAttribute("data-state", "success", { timeout: 30000 });
   await expect(page.locator(".task-group").first()).toBeVisible();
   for (const group of await page.locator(".task-group").all()) {
     if (!await group.evaluate(node => (node as HTMLDetailsElement).open)) await group.locator(":scope > summary").click();

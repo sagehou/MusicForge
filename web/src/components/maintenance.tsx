@@ -83,7 +83,7 @@ export function MaintenanceWorkbench({ active, scopeQuery, scope, inventory, sel
   const contentScope = new URLSearchParams(scopeQuery);
   contentScope.delete("locale");
   return <section ref={workbench} className="maintenance-workbench" id="maintenance-workbench" aria-labelledby="workbench-heading">
-    <div className="section-heading"><div className="actions"><h2 id="workbench-heading">{t("maintenance.title")}</h2><InfoHint>{t("maintenance.hint")}</InfoHint></div><Button asChild size="sm" variant="ghost"><a href="/jobs#maintenance-progress">{t("progress.open")}</a></Button></div>
+    <div className="section-heading"><div className="actions"><h2 id="workbench-heading">{t("maintenance.title")}</h2><InfoHint label={`${t("maintenance.title")} · ${t("app.moreInfo")}`}>{t("maintenance.hint")}</InfoHint></div><Button asChild size="sm" variant="ghost"><a href="/jobs#maintenance-progress">{t("progress.open")}</a></Button></div>
     <div className="workbench-navigation" role="group" aria-label={t("workbench.navigation")}>{workbenchViews.map(item => { const Icon = workbenchIcons[item]; return <Button key={item} id={`workbench-${item}`} variant="ghost" size="sm" aria-pressed={view === item} aria-controls={`workbench-panel-${item}`} disabled={busy} onClick={() => change(item)}><Icon size={16} aria-hidden="true" />{t(`workbench.${item}`)}</Button>; })}</div>
     {visited && <WorkbenchContent key={contentScope.toString()} scopeQuery={scopeQuery} scope={scope} inventory={inventory} selected={selected} select={select} notify={notify} view={view} views={views} busy={busy} onBusyChange={onBusyChange} openEditor={openEditor} />}
   </section>;

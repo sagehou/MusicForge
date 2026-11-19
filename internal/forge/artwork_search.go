@@ -58,8 +58,16 @@ func fetchCoverData(ctx context.Context, endpoint string, limit int64) ([]byte, 
 	return readLimited(response.Body, limit)
 }
 
+type artworkSearchChoice struct {
+	Created time.Time
+	Image   string
+	Source  string
+	URL     string
+}
+
 type artworkCandidate struct {
 	ID      string `json:"id"`
+	Image   string `json:"-"`
 	Title   string `json:"title"`
 	Artist  string `json:"artist"`
 	Date    string `json:"date"`
@@ -121,7 +129,7 @@ func searchCatalogArtwork(ctx context.Context, provider, query string) ([]artwor
 				continue
 			}
 			id := strconv.FormatInt(album.ID, 10)
-			candidates = append(candidates, artworkCandidate{ID: "itunes:" + id, Title: album.Title, Artist: album.Artist, Date: strings.Split(album.Date, "T")[0], Country: album.Country, Source: "Apple Music / iTunes", URL: "https://music.apple.com/album/" + id})
+			candidates = append(candidates, artworkCandidate{ID: "itunes:" + id, Image: artworkImageURL(album.Image), Title: album.Title, Artist: album.Artist, Date: strings.Split(album.Date, "T")[0], Country: album.Country, Source: "Apple Music / iTunes", URL: "https://music.apple.com/album/" + id})
 		}
 		return candidates, nil
 	}
@@ -151,39 +159,9 @@ func searchCatalogArtwork(ctx context.Context, provider, query string) ([]artwor
 			date = time.UnixMilli(album.Date).UTC().Format("2006-01-02")
 		}
 		id := strconv.FormatInt(album.ID, 10)
-		candidates = append(candidates, artworkCandidate{ID: "netease:" + id, Title: album.Title, Artist: strings.Join(artists, ", "), Date: date, Source: "NetEase Music", URL: "https://music.163.com/album?id=" + id})
+		candidates = append(candidates, artworkCandidate{ID: "netease:" + id, Image: artworkImageURL(album.Image), Title: album.Title, Artist: strings.Join(artists, ", "), Date: date, Source: "NetEase Music", URL: "https://music.163.com/album?id=" + id})
 	}
 	return candidates, nil
-}
-
-func catalogArtworkImage(ctx context.Context, provider, id string) (string, error) {
-	if provider == "itunes" {
-		data, err := fetchCoverData(ctx, "https://itunes.apple.com/lookup?id="+id+"&entity=album", 2*1024*1024)
-		if err != nil {
-			return "", err
-		}
-		var result appleArtworkResult
-		if json.Unmarshal(data, &result) == nil {
-			for _, album := range result.Results {
-				if strconv.FormatInt(album.ID, 10) == id && artworkImageURL(album.Image) != "" {
-					return artworkImageURL(album.Image), nil
-				}
-			}
-		}
-	} else {
-		data, err := fetchCoverData(ctx, "https://music.163.com/api/album/"+id, 2*1024*1024)
-		if err != nil {
-			return "", err
-		}
-		var result struct {
-			Code  int                 `json:"code"`
-			Album neteaseArtworkAlbum `json:"album"`
-		}
-		if json.Unmarshal(data, &result) == nil && result.Code == 200 && strconv.FormatInt(result.Album.ID, 10) == id && artworkImageURL(result.Album.Image) != "" {
-			return artworkImageURL(result.Album.Image), nil
-		}
-	}
-	return "", errors.New("Cover candidate is no longer available; search again")
 }
 
 func (a *App) searchArtwork(w http.ResponseWriter, r *http.Request) {
@@ -232,6 +210,19 @@ func (a *App) searchArtwork(w http.ResponseWriter, r *http.Request) {
 			apiError(w, 502, err)
 			return
 		}
+		a.artworkMu.Lock()
+		if a.artworkCandidates == nil {
+			a.artworkCandidates = make(map[string]artworkSearchChoice)
+		}
+		for key, choice := range a.artworkCandidates {
+			if time.Since(choice.Created) > 10*time.Minute {
+				delete(a.artworkCandidates, key)
+			}
+		}
+		for _, candidate := range candidates {
+			a.artworkCandidates[strconv.FormatInt(id, 10)+":"+candidate.ID] = artworkSearchChoice{Created: time.Now(), Image: candidate.Image, Source: candidate.Source, URL: candidate.URL}
+		}
+		a.artworkMu.Unlock()
 		respond(w, 200, map[string]any{"candidates": candidates})
 		return
 	}
@@ -284,15 +275,14 @@ func (a *App) previewArtwork(w http.ResponseWriter, r *http.Request) {
 	}
 	endpoint, source, sourceURL := "https://coverartarchive.org/release/"+release+"/front-1200", "MusicBrainz / Cover Art Archive", "https://musicbrainz.org/release/"+release
 	if catalog {
-		endpoint, err = catalogArtworkImage(r.Context(), provider, catalogID)
-		if err != nil {
-			apiError(w, 502, err)
+		a.artworkMu.Lock()
+		choice, ok := a.artworkCandidates[strconv.FormatInt(id, 10)+":"+release]
+		a.artworkMu.Unlock()
+		if !ok || time.Since(choice.Created) > 10*time.Minute {
+			apiError(w, 409, errors.New("Cover candidate is no longer available; search again"))
 			return
 		}
-		source, sourceURL = "Apple Music / iTunes", "https://music.apple.com/album/"+catalogID
-		if provider == "netease" {
-			source, sourceURL = "NetEase Music", "https://music.163.com/album?id="+catalogID
-		}
+		endpoint, source, sourceURL = choice.Image, choice.Source, choice.URL
 	}
 	data, err := fetchCoverData(r.Context(), endpoint, 8*1024*1024)
 	if err != nil {

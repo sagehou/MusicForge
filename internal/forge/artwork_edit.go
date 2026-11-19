@@ -20,9 +20,10 @@ import (
 )
 
 type artworkEditState struct {
-	artworkMu       sync.Mutex
-	artworkChoices  map[string]artworkChoice
-	artworkSearched map[string]time.Time
+	artworkMu         sync.Mutex
+	artworkChoices    map[string]artworkChoice
+	artworkSearched   map[string]time.Time
+	artworkCandidates map[string]artworkSearchChoice
 }
 
 type artworkChoice struct {

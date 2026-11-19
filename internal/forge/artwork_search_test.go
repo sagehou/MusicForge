@@ -75,7 +75,7 @@ func TestOnlineCoversUseFixedProvidersWithoutPublishingPreviews(t *testing.T) {
 	}
 }
 
-func TestCatalogArtworkSourcesResolveTrustedImagesBeforePreview(t *testing.T) {
+func TestCatalogArtworkSourcesPreviewOnlyRecentTrustedSearchImages(t *testing.T) {
 	for _, provider := range []string{"itunes", "netease"} {
 		t.Run(provider, func(t *testing.T) {
 			a, s := testApp(t)
@@ -97,7 +97,7 @@ func TestCatalogArtworkSourcesResolveTrustedImagesBeforePreview(t *testing.T) {
 				var data []byte
 				switch r.URL.Host {
 				case "itunes.apple.com":
-					if r.URL.Path == "/search" && (r.URL.Query().Get("term") != "Artist Album" || r.URL.Query().Get("entity") != "album") {
+					if r.URL.Path != "/search" || r.URL.Query().Get("term") != "Artist Album" || r.URL.Query().Get("entity") != "album" {
 						t.Error("incorrect album search", r.URL)
 					}
 					data = []byte(`{"results":[{"collectionId":123,"collectionName":"Album","artistName":"Artist","artworkUrl100":"http://is1-ssl.mzstatic.com/image/thumb/art/100x100bb.jpg"},{"collectionId":456,"artworkUrl100":"https://evil.test/cover.jpg"}]}`)
@@ -108,8 +108,6 @@ func TestCatalogArtworkSourcesResolveTrustedImagesBeforePreview(t *testing.T) {
 							t.Error("incorrect album search", r.URL)
 						}
 						data = []byte(`{"code":200,"result":{"albums":[` + album + `,{"id":456,"picUrl":"https://evil.test/cover.jpg"}]}}`)
-					} else if r.URL.Path == "/api/album/123" {
-						data = []byte(`{"code":200,"album":` + album + `}`)
 					} else {
 						t.Fatal("unexpected album lookup", r.URL)
 					}
@@ -146,6 +144,10 @@ func TestCatalogArtworkSourcesResolveTrustedImagesBeforePreview(t *testing.T) {
 			w = request("GET", "/api/library/1/artwork/preview?release="+url.QueryEscape(result.Candidates[0].ID), nil)
 			if w.Code != 200 || !strings.Contains(w.Body.String(), `"width":32`) || images != 1 {
 				t.Fatal("preview failed", w.Code, w.Body.String())
+			}
+			w = request("GET", "/api/library/1/artwork/preview?release=itunes:999", nil)
+			if w.Code != 409 || images != 1 {
+				t.Fatal("preview accepted a catalog ID outside this search", w.Code, w.Body.String())
 			}
 			for _, id := range []string{"itunes:https://evil.test/a", "netease:../123", "netease:00123", "other:123"} {
 				if w = request("GET", "/api/library/1/artwork/preview?release="+url.QueryEscape(id), nil); w.Code != 400 {

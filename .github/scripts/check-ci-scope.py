@@ -18,7 +18,7 @@ import zipfile
 spec = importlib.util.spec_from_file_location("rollback_scope", Path(__file__).with_name("check-rollback-scope.py"))
 rollback = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(rollback)
-POLICY = 3
+POLICY = 4
 
 
 def git(*args):
@@ -86,19 +86,25 @@ def evidence(run):
             return json.loads(archive.read("validation-evidence.json"))
 
 
-def trusted(run, proof):
+def trusted(run, proof, *, release=False):
     if (not proof or run.get("conclusion") != "success" or run.get("event") not in ("push", "workflow_dispatch")
             or run.get("head_repository", {}).get("full_name") != os.environ["GITHUB_REPOSITORY"]
             or run.get("path") != ".github/workflows/ci.yml" or proof.get("policy") != POLICY
             or proof.get("sha") != run.get("head_sha") or proof.get("run_id") != str(run["id"])
-            or proof.get("environment") != environment() or not all(environment().values())
-            or proof.get("scope") not in ("docs", "ui", "full")):
+            or proof.get("scope") not in ("docs", "ui", "full") or not isinstance(proof.get("rollback_required"), bool)):
+        return False
+    current = environment()
+    recorded = proof.get("environment")
+    if not isinstance(recorded, dict) or not all(current.values()) or not all(recorded.get(key) for key in current):
+        return False
+    # A tag only publishes an exact main candidate; its planner doesn't rerun application checks.
+    if any(recorded[key] != value for key, value in current.items() if not release or key != "ImageVersion"):
         return False
     age = (datetime.now(timezone.utc) - datetime.fromisoformat(proof.get("covered_at", proof["created_at"]))).total_seconds()
     return 0 <= age <= 7 * 24 * 60 * 60
 
 
-def plan(result, runs):
+def plan(result, runs, *, release_sha=""):
     """The published baseline governs rollback; full CI evidence may cover inherited work."""
     scope = classify(result.get("changed_files", [])) if "changed_files" in result else "full"
     if scope == "full" and any(path.startswith(("web/src/", "web/public/")) or path == "web/index.html"
@@ -116,13 +122,18 @@ def plan(result, runs):
                     or run.get("head_repository", {}).get("full_name") != os.environ.get("GITHUB_REPOSITORY")):
                 continue
             sha = run.get("head_sha", "")
-            if not sha or subprocess.run(["git", "merge-base", "--is-ancestor", sha, "HEAD"], capture_output=True).returncode:
-                continue
-            paths = changes(sha)
-            if classify(paths) == "full":
-                continue
+            if release_sha:
+                if sha != release_sha or run.get("head_branch") != "main":
+                    continue
+                paths = []
+            else:
+                if not sha or subprocess.run(["git", "merge-base", "--is-ancestor", sha, "HEAD"], capture_output=True).returncode:
+                    continue
+                paths = changes(sha)
+                if classify(paths) == "full":
+                    continue
             proof = evidence(run)
-            if not trusted(run, proof):
+            if not trusted(run, proof, release=bool(release_sha)):
                 if proof and proof.get("environment") != result["environment"]:
                     print(f"Run {run['id']} cannot be reused: runner environment changed "
                           f"from {proof.get('environment')} to {result['environment']}", file=sys.stderr)
@@ -131,13 +142,14 @@ def plan(result, runs):
             if not paths and proof.get("baseline") == result["baseline"]:
                 result.update(scope=proof["scope"], acceptance_base=sha, reuse_run=str(run["id"]), covered_by=run["html_url"],
                               covered_at=proof.get("covered_at", proof["created_at"]))
-                return result
-            if proof["scope"] != "full":
+            elif release_sha or proof["scope"] != "full":
                 continue
-            if classify(paths) != "full":
+            else:
                 result.update(scope=classify(paths), acceptance_base=sha, covered_by=run["html_url"],
                               covered_at=proof.get("covered_at", proof["created_at"]))
-                return result
+            if proof["rollback_required"] and not result["required"]:
+                result.update(required=True, reason="required by the reused application validation")
+            return result
         except (OSError, ValueError, KeyError, TypeError, zipfile.BadZipFile, subprocess.CalledProcessError):
             continue  # No usable proof: retain all checks selected from the published release.
     return result
@@ -167,24 +179,32 @@ def record():
     proof = {"policy": POLICY, "sha": git("rev-parse", "HEAD"), "run_id": os.environ["GITHUB_RUN_ID"],
              # Compare planning runners, not the unrelated runner that aggregates results.
              "created_at": datetime.now(timezone.utc).isoformat(), "environment": result["environment"],
-             "scope": os.environ["VALIDATED_SCOPE"], "baseline": result["baseline"],
+             "scope": os.environ["VALIDATED_SCOPE"], "baseline": result["baseline"], "rollback_required": result["required"],
              "acceptance_base": result["acceptance_base"], "covered_by": result["covered_by"],
              "covered_at": result["covered_at"] or datetime.now(timezone.utc).isoformat()}
     Path(".ci/validation-evidence.json").write_text(json.dumps(proof, indent=2) + "\n")
 
 
 def main():
+    tag = os.environ.get("GITHUB_REF_NAME", "") if os.environ.get("GITHUB_REF_TYPE") == "tag" else ""
+    release_sha = git("rev-parse", "HEAD") if tag else ""
+    browser_checks = not tag and os.environ.get("MUSICFORGE_BROWSER_CHECKS") == "true"
     try:
         releases = api("/releases?per_page=100")
-        tag = os.environ.get("GITHUB_REF_NAME", "") if os.environ.get("GITHUB_REF_TYPE") == "tag" else ""
         result = rollback.compare(rollback.baseline_release(releases, tag))
     except (OSError, ValueError, KeyError, TypeError, subprocess.CalledProcessError):
         result = {"required": True, "baseline": None, "reason": "baseline lookup failed; full validation required"}
-    try:
-        runs = api("/actions/workflows/ci.yml/runs?status=success&per_page=20")["workflow_runs"]
-    except (OSError, ValueError, KeyError, TypeError):
-        runs = []
-    result = plan(result, runs)
+    runs = []
+    if not browser_checks:
+        try:
+            filters = f"&branch=main&head_sha={release_sha}" if release_sha else ""
+            runs = api("/actions/workflows/ci.yml/runs?status=success&per_page=20" + filters)["workflow_runs"]
+        except (OSError, ValueError, KeyError, TypeError):
+            pass
+    result = plan(result, runs, release_sha=release_sha)
+    if browser_checks and result["scope"] == "docs":
+        result["scope"] = "full"
+    result["browser_checks"] = browser_checks
     if os.environ.get("MUSICFORGE_EXTENDED_ROLLBACK") == "true":
         result.update(required=True, reason="manual historical rollback requested")
     Path(".ci").mkdir(exist_ok=True)
@@ -202,10 +222,15 @@ def main():
             summary.write(f"Successful evidence: {result['covered_by']}. "
                           + ("Identical source: reuse application checks.\n" if result["reuse_run"] else
                              f"Inherited work covered; inspect all changes after `{result['acceptance_base']}`.\n"))
-        else:
+        elif not tag:
             summary.write("No reusable evidence; checks are selected from the published-release diff.\n")
+        else:
+            summary.write("No successful main validation for this exact commit and published baseline. Release blocked.\n")
+        summary.write("Browser checks: **" + ("requested" if browser_checks else "not requested") + "**.\n")
         summary.write("Version tags always build and check both final native images.\n")
     print(json.dumps(result))
+    if tag and not result["reuse_run"]:
+        raise SystemExit("A tag requires successful main validation for this exact commit and published baseline.")
 
 
 if __name__ == "__main__":

@@ -20,7 +20,7 @@ ENV = {"GITHUB_REPOSITORY": "sagehou/MusicForge", "ImageOS": "ubuntu24", "ImageV
 
 
 class CIScopeTests(unittest.TestCase):
-    def test_parallel_integrations_reuse_this_runs_binary_and_remain_required(self):
+    def test_parallel_integrations_reuse_this_runs_binary_and_browser_checks_are_opt_in(self):
         workflow = Path(__file__).parents[1].joinpath("workflows/ci.yml").read_text()
         jobs = dict(re.findall(r"^  (\w+):\n((?:    .*\n|\n)+)", workflow, re.MULTILINE))
         self.assertNotIn("npm test", jobs["backend"])
@@ -39,6 +39,8 @@ class CIScopeTests(unittest.TestCase):
             self.assertIn(f"test \"${variable}\" = skipped", jobs["validate"])
         self.assertIn("test \"$RUNTIME\" = success", jobs["validate"])
         self.assertIn("test \"$RUNTIME\" = skipped", jobs["validate"])
+        for name in ("browser", "app_browser"):
+            self.assertIn("if: inputs.browser_checks &&", jobs[name])
 
     def test_release_with_skipped_ancestors_requires_all_release_gates(self):
         workflow = Path(__file__).parents[1].joinpath("workflows/ci.yml").read_text()
@@ -88,7 +90,7 @@ class CIScopeTests(unittest.TestCase):
             run = {"id": 10, "conclusion": "success", "event": "push", "path": ".github/workflows/ci.yml",
                    "head_repository": {"full_name": ENV["GITHUB_REPOSITORY"]}, "head_sha": "abc"}
             proof = {"policy": ci.POLICY, "sha": "abc", "run_id": "10", "scope": "full", "environment": ci.environment(),
-                     "created_at": datetime.now(timezone.utc).isoformat()}
+                     "rollback_required": True, "created_at": datetime.now(timezone.utc).isoformat()}
             self.assertTrue(ci.trusted(run, proof))
             for key, value in (("event", "pull_request"), ("conclusion", "failure"), ("path", ".github/workflows/other.yml"),
                                ("head_repository", {"full_name": "fork/MusicForge"})):
@@ -98,6 +100,25 @@ class CIScopeTests(unittest.TestCase):
                                ("covered_at", "2020-01-01T00:00:00+00:00"), ("environment", {}),
                                ("environment", {**ci.environment(), "ImageVersion": "another-image"})):
                 self.assertFalse(ci.trusted(run, {**proof, key: value}), key)
+
+    def test_tag_uses_only_exact_main_validation_and_preserves_rollback(self):
+        with patch.dict(os.environ, ENV):
+            result = {"required": False, "baseline": "v0.3.30", "changed_files": ["web/src/App.tsx"]}
+            run = {"id": 10, "conclusion": "success", "event": "push", "path": ".github/workflows/ci.yml",
+                   "head_repository": {"full_name": ENV["GITHUB_REPOSITORY"]}, "head_sha": "abc",
+                   "head_branch": "main", "html_url": "https://example.test/10"}
+            proof = {"policy": ci.POLICY, "sha": "abc", "run_id": "10", "scope": "full", "baseline": "v0.3.30",
+                     "rollback_required": True, "created_at": datetime.now(timezone.utc).isoformat(),
+                     "environment": {**ci.environment(), "ImageVersion": "older-planner-image"}}
+            with patch.object(ci, "evidence", return_value=proof):
+                planned = ci.plan(result.copy(), [run], release_sha="abc")
+                self.assertEqual(planned["reuse_run"], "10")
+                self.assertEqual(planned["scope"], "full")
+                self.assertTrue(planned["required"])
+                for other in ({**run, "head_branch": "feature"}, {**run, "head_sha": "older"}, {**run, "conclusion": "failure"}):
+                    self.assertEqual(ci.plan(result.copy(), [other], release_sha="abc")["reuse_run"], "")
+                proof["baseline"] = "v0.3.29"
+                self.assertEqual(ci.plan(result.copy(), [run], release_sha="abc")["reuse_run"], "")
 
     def test_git_plans_cover_unreleased_work_without_hiding_mixed_changes(self):
         previous = Path.cwd()
@@ -125,7 +146,7 @@ class CIScopeTests(unittest.TestCase):
                        "conclusion": "success", "event": "push", "path": ".github/workflows/ci.yml",
                        "head_repository": {"full_name": ENV["GITHUB_REPOSITORY"]}}
                 proof = {"policy": ci.POLICY, "sha": sha, "run_id": "10", "scope": "full", "environment": ci.environment(),
-                         "baseline": "v0.2.35", "created_at": datetime.now(timezone.utc).isoformat()}
+                         "baseline": "v0.2.35", "rollback_required": True, "created_at": datetime.now(timezone.utc).isoformat()}
                 Path("docs/design.md").write_text("Updated design\n")
                 commit("documentation")
                 with patch.object(ci, "evidence", return_value=proof):
@@ -192,6 +213,11 @@ class CIScopeTests(unittest.TestCase):
                     ci.record()
                 proof = json.loads(Path(".ci/validation-evidence.json").read_text())
                 self.assertEqual(proof["environment"], ci.environment())
+                with patch.dict(os.environ, {"GITHUB_REF_TYPE": "tag", "GITHUB_REF_NAME": "v0.3.31"}), \
+                        patch.object(ci, "api", side_effect=OSError("unavailable")), patch.object(ci, "check_documents"), \
+                        patch.object(ci, "git", return_value="abc"):
+                    with self.assertRaisesRegex(SystemExit, "requires successful main validation"):
+                        ci.main()
             finally:
                 os.chdir(previous)
 

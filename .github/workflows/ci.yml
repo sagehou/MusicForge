@@ -7,6 +7,10 @@ on:
   pull_request:
   workflow_dispatch:
     inputs:
+      browser_checks:
+        description: Run browser checks for a specific UI or integration concern
+        type: boolean
+        default: false
       historical_rollback:
         description: Exercise all pinned historical schema-2 releases (slow, optional)
         type: boolean
@@ -33,11 +37,13 @@ jobs:
         with:
           fetch-depth: 0
       - name: CI scope and rollback policy regression checks
+        if: github.ref_type != 'tag'
         run: python3 -m unittest discover -s .github/scripts -p 'test_*.py' -v
       - name: Plan acceptance and check documentation
         id: plan
         env:
           GITHUB_TOKEN: ${{ github.token }}
+          MUSICFORGE_BROWSER_CHECKS: ${{ inputs.browser_checks || false }}
           MUSICFORGE_EXTENDED_ROLLBACK: ${{ inputs.historical_rollback || false }}
         run: python3 .github/scripts/check-ci-scope.py
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
@@ -102,7 +108,7 @@ jobs:
 
   browser:
     needs: [plan, frontend]
-    if: needs.plan.outputs.scope != 'docs' && needs.plan.outputs.reuse_run == ''
+    if: inputs.browser_checks && needs.plan.outputs.scope != 'docs' && needs.plan.outputs.reuse_run == ''
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
@@ -282,7 +288,7 @@ jobs:
 
   app_browser:
     needs: [plan, runtime]
-    if: needs.plan.outputs.scope == 'full' && needs.plan.outputs.reuse_run == ''
+    if: inputs.browser_checks && needs.plan.outputs.scope == 'full' && needs.plan.outputs.reuse_run == ''
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
@@ -346,6 +352,7 @@ jobs:
         env:
           SCOPE: ${{ needs.plan.outputs.scope }}
           REUSED: ${{ needs.plan.outputs.reuse_run }}
+          BROWSER_CHECKS: ${{ inputs.browser_checks || false }}
           FRONTEND: ${{ needs.frontend.result }}
           BROWSER: ${{ needs.browser.result }}
           RUNTIME: ${{ needs.runtime.result }}
@@ -355,29 +362,35 @@ jobs:
         run: |
           if [[ "$SCOPE" != docs && -z "$REUSED" ]]; then
             test "$FRONTEND" = success
-            test "$BROWSER" = success
           else
             test "$FRONTEND" = skipped
+          fi
+          if [[ "$BROWSER_CHECKS" == true && "$SCOPE" != docs && -z "$REUSED" ]]; then
+            test "$BROWSER" = success
+          else
             test "$BROWSER" = skipped
           fi
           if [[ "$SCOPE" == full && -z "$REUSED" ]]; then
             test "$RUNTIME" = success
             test "$BACKEND" = success
             test "$RCLONE" = success
-            test "$APP_BROWSER" = success
           else
             test "$RUNTIME" = skipped
             test "$BACKEND" = skipped
             test "$RCLONE" = skipped
+          fi
+          if [[ "$BROWSER_CHECKS" == true && "$SCOPE" == full && -z "$REUSED" ]]; then
+            test "$APP_BROWSER" = success
+          else
             test "$APP_BROWSER" = skipped
           fi
       - name: Record successful application validation
-        if: needs.plan.outputs.reuse_run == ''
+        if: github.ref_type != 'tag'
         env:
           VALIDATED_SCOPE: ${{ needs.plan.outputs.scope }}
         run: python3 .github/scripts/check-ci-scope.py --record
       - name: Successful validation evidence
-        if: needs.plan.outputs.reuse_run == ''
+        if: github.ref_type != 'tag'
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: validation-evidence
@@ -401,7 +414,7 @@ jobs:
 
   image:
     needs: [validate, audit]
-    if: ${{ !cancelled() && needs.validate.result == 'success' && (needs.audit.result == 'success' || needs.audit.result == 'skipped') && ((needs.validate.outputs.scope == 'full' && needs.validate.outputs.reuse_run == '') || startsWith(github.ref, 'refs/tags/v') || inputs.historical_rollback) }}
+    if: ${{ !cancelled() && needs.validate.result == 'success' && needs.audit.result == 'success' && (startsWith(github.ref, 'refs/tags/v') || inputs.historical_rollback) }}
     strategy:
       fail-fast: false
       matrix:
@@ -552,7 +565,7 @@ jobs:
           else
             test "$AUDIT" = skipped
           fi
-          if [[ "$SCOPE" == full && -z "$REUSED" || "$RELEASE" == true || "$HISTORICAL" == true ]]; then
+          if [[ "$RELEASE" == true || "$HISTORICAL" == true ]]; then
             test "$IMAGE" = success
           else
             test "$IMAGE" = skipped

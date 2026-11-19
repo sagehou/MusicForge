@@ -22,7 +22,7 @@ import (
 type artworkEditState struct {
 	artworkMu       sync.Mutex
 	artworkChoices  map[string]artworkChoice
-	artworkSearched time.Time
+	artworkSearched map[string]time.Time
 }
 
 type artworkChoice struct {

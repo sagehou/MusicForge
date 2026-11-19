@@ -320,11 +320,10 @@ test("lyrics filters compose with audio status and library coverage survives new
 
   await page.goto("/library?view=artists");
   await openLyricsMaintenance(page);
-  await expect(page.locator(".maintenance-count")).toHaveText("6 / 7");
   const inventory = page.locator(".lyrics-library-summary");
   await expect(inventory).toHaveAccessibleName("Library lyrics status");
   await expect(inventory).toContainText("Library checked 6/7 tracks");
-  await expect(inventory).toContainText("Available 2 · No match 1 · Instrumental 1 · Review 1 · Failed 1 · Unchecked 1");
+  await expect(inventory.locator(".lyrics-inventory dd")).toHaveText(["2", "1", "1", "1", "1", "1"]);
   const lyricsFilter = page.getByLabel("Filter by lyrics status", { exact: true });
   await openLibraryOptions(page);
   await lyricsFilter.selectOption("failed");

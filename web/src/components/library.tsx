@@ -473,7 +473,7 @@ export function Library({ notify }: { notify: Notice }) {
     {tool && tool.kind !== "tags" && <LibraryTools key={tool.kind} tool={tool.kind} scopeQuery={scopeParams.toString()} selected={chosen} select={reviewTracks} notify={notify} close={() => setTool(undefined)} returnFocusID={tool.trigger} onBusyChange={setEditorBusy} />}
     <div className="library-maintenance">
       {!scope.artist && !isAlbum && <LibraryComparison counts={data.counts} notify={notify} />}
-      <MaintenanceWorkbench active={organizing} scopeQuery={scopeParams.toString()} scope={isAlbum ? "album" : scope.artist ? "artist" : undefined} inventory={data.lyrics} attention={data.attention} selected={chosen} notify={notify} select={reviewTracks} busy={editorBusy} onBusyChange={setEditorBusy} openEditor={clearDetails} />
+      <MaintenanceWorkbench active={organizing} scopeQuery={scopeParams.toString()} scope={isAlbum ? "album" : scope.artist ? "artist" : undefined} inventory={data.lyrics} selected={chosen} notify={notify} select={reviewTracks} busy={editorBusy} onBusyChange={setEditorBusy} openEditor={clearDetails} />
     </div>
     </div>
       <div className="library-selection-toolbar">

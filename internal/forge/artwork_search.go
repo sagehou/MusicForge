@@ -23,7 +23,9 @@ func coverURLAllowed(u *url.URL) bool {
 		return false
 	}
 	host := strings.ToLower(u.Hostname())
-	return host == "musicbrainz.org" || host == "coverartarchive.org" || host == "archive.org" || strings.HasSuffix(host, ".archive.org")
+	return host == "itunes.apple.com" || strings.HasSuffix(host, ".mzstatic.com") || host == "music.163.com" ||
+		host == "p1.music.126.net" || host == "p2.music.126.net" || host == "p3.music.126.net" || host == "p4.music.126.net" ||
+		host == "musicbrainz.org" || host == "coverartarchive.org" || host == "archive.org" || strings.HasSuffix(host, ".archive.org")
 }
 
 func fetchCoverData(ctx context.Context, endpoint string, limit int64) ([]byte, error) {
@@ -35,7 +37,10 @@ func fetchCoverData(ctx context.Context, endpoint string, limit int64) ([]byte, 
 	if err != nil {
 		return nil, err
 	}
-	request.Header.Set("User-Agent", "MusicForge/0.2 (https://github.com/sagehou/MusicForge)")
+	request.Header.Set("User-Agent", "MusicForge (https://github.com/sagehou/MusicForge)")
+	if u.Hostname() == "music.163.com" {
+		request.Header.Set("Referer", "https://music.163.com/")
+	}
 	client := &http.Client{Timeout: 10 * time.Second, CheckRedirect: func(r *http.Request, via []*http.Request) error {
 		if len(via) > 4 || !coverURLAllowed(r.URL) {
 			return errors.New("Unsupported cover provider redirect")
@@ -53,9 +58,138 @@ func fetchCoverData(ctx context.Context, endpoint string, limit int64) ([]byte, 
 	return readLimited(response.Body, limit)
 }
 
+type artworkCandidate struct {
+	ID      string `json:"id"`
+	Title   string `json:"title"`
+	Artist  string `json:"artist"`
+	Date    string `json:"date"`
+	Country string `json:"country"`
+	Source  string `json:"source"`
+	URL     string `json:"url"`
+}
+
+type appleArtworkResult struct {
+	Results []struct {
+		ID      int64  `json:"collectionId"`
+		Title   string `json:"collectionName"`
+		Artist  string `json:"artistName"`
+		Date    string `json:"releaseDate"`
+		Country string `json:"country"`
+		Image   string `json:"artworkUrl100"`
+	} `json:"results"`
+}
+
+type neteaseArtworkAlbum struct {
+	ID      int64  `json:"id"`
+	Title   string `json:"name"`
+	Image   string `json:"picUrl"`
+	Date    int64  `json:"publishTime"`
+	Artists []struct {
+		Name string `json:"name"`
+	} `json:"artists"`
+}
+
+func artworkImageURL(raw string) string {
+	u, err := url.Parse(raw)
+	if err != nil {
+		return ""
+	}
+	// Album APIs still return HTTP CDN links; always download over HTTPS.
+	if u.Scheme == "http" {
+		u.Scheme = "https"
+	}
+	host := strings.ToLower(u.Hostname())
+	if !coverURLAllowed(u) || !(strings.HasSuffix(host, ".mzstatic.com") || host == "p1.music.126.net" || host == "p2.music.126.net" || host == "p3.music.126.net" || host == "p4.music.126.net") {
+		return ""
+	}
+	return strings.Replace(u.String(), "/100x100bb.jpg", "/1200x1200bb.jpg", 1)
+}
+
+func searchCatalogArtwork(ctx context.Context, provider, query string) ([]artworkCandidate, error) {
+	candidates := []artworkCandidate{}
+	if provider == "itunes" {
+		data, err := fetchCoverData(ctx, "https://itunes.apple.com/search?"+url.Values{"term": {query}, "entity": {"album"}, "limit": {"12"}}.Encode(), 2*1024*1024)
+		if err != nil {
+			return nil, err
+		}
+		var result appleArtworkResult
+		if err = json.Unmarshal(data, &result); err != nil {
+			return nil, errors.New("Cover provider returned invalid data")
+		}
+		for _, album := range result.Results {
+			if album.ID < 1 || artworkImageURL(album.Image) == "" {
+				continue
+			}
+			id := strconv.FormatInt(album.ID, 10)
+			candidates = append(candidates, artworkCandidate{ID: "itunes:" + id, Title: album.Title, Artist: album.Artist, Date: strings.Split(album.Date, "T")[0], Country: album.Country, Source: "Apple Music / iTunes", URL: "https://music.apple.com/album/" + id})
+		}
+		return candidates, nil
+	}
+	data, err := fetchCoverData(ctx, "https://music.163.com/api/search/get?"+url.Values{"s": {query}, "type": {"10"}, "limit": {"12"}, "offset": {"0"}}.Encode(), 2*1024*1024)
+	if err != nil {
+		return nil, err
+	}
+	var result struct {
+		Code   int `json:"code"`
+		Result struct {
+			Albums []neteaseArtworkAlbum `json:"albums"`
+		} `json:"result"`
+	}
+	if json.Unmarshal(data, &result) != nil || result.Code != 200 {
+		return nil, errors.New("Cover provider returned invalid data")
+	}
+	for _, album := range result.Result.Albums {
+		if album.ID < 1 || artworkImageURL(album.Image) == "" {
+			continue
+		}
+		artists := []string{}
+		for _, artist := range album.Artists {
+			artists = append(artists, artist.Name)
+		}
+		date := ""
+		if album.Date > 0 {
+			date = time.UnixMilli(album.Date).UTC().Format("2006-01-02")
+		}
+		id := strconv.FormatInt(album.ID, 10)
+		candidates = append(candidates, artworkCandidate{ID: "netease:" + id, Title: album.Title, Artist: strings.Join(artists, ", "), Date: date, Source: "NetEase Music", URL: "https://music.163.com/album?id=" + id})
+	}
+	return candidates, nil
+}
+
+func catalogArtworkImage(ctx context.Context, provider, id string) (string, error) {
+	if provider == "itunes" {
+		data, err := fetchCoverData(ctx, "https://itunes.apple.com/lookup?id="+id+"&entity=album", 2*1024*1024)
+		if err != nil {
+			return "", err
+		}
+		var result appleArtworkResult
+		if json.Unmarshal(data, &result) == nil {
+			for _, album := range result.Results {
+				if strconv.FormatInt(album.ID, 10) == id && artworkImageURL(album.Image) != "" {
+					return artworkImageURL(album.Image), nil
+				}
+			}
+		}
+	} else {
+		data, err := fetchCoverData(ctx, "https://music.163.com/api/album/"+id, 2*1024*1024)
+		if err != nil {
+			return "", err
+		}
+		var result struct {
+			Code  int                 `json:"code"`
+			Album neteaseArtworkAlbum `json:"album"`
+		}
+		if json.Unmarshal(data, &result) == nil && result.Code == 200 && strconv.FormatInt(result.Album.ID, 10) == id && artworkImageURL(result.Album.Image) != "" {
+			return artworkImageURL(result.Album.Image), nil
+		}
+	}
+	return "", errors.New("Cover candidate is no longer available; search again")
+}
+
 func (a *App) searchArtwork(w http.ResponseWriter, r *http.Request) {
 	var body struct {
-		Query string `json:"query"`
+		Query    string `json:"query"`
+		Provider string `json:"provider"`
 	}
 	if !decode(w, r, &body) {
 		return
@@ -74,14 +208,33 @@ func (a *App) searchArtwork(w http.ResponseWriter, r *http.Request) {
 		apiError(w, 400, errors.New("Enter an artist and album, at most 500 bytes"))
 		return
 	}
+	if body.Provider == "" {
+		body.Provider = "itunes"
+	}
+	if body.Provider != "itunes" && body.Provider != "netease" && body.Provider != "musicbrainz" {
+		apiError(w, 400, errors.New("Unsupported cover provider"))
+		return
+	}
 	a.artworkMu.Lock()
-	if time.Since(a.artworkSearched) < time.Second {
+	if a.artworkSearched == nil {
+		a.artworkSearched = make(map[string]time.Time)
+	}
+	if time.Since(a.artworkSearched[body.Provider]) < time.Second {
 		a.artworkMu.Unlock()
 		apiError(w, 429, errors.New("Wait a second before searching for covers again"))
 		return
 	}
-	a.artworkSearched = time.Now()
+	a.artworkSearched[body.Provider] = time.Now()
 	a.artworkMu.Unlock()
+	if body.Provider != "musicbrainz" {
+		candidates, err := searchCatalogArtwork(r.Context(), body.Provider, body.Query)
+		if err != nil {
+			apiError(w, 502, err)
+			return
+		}
+		respond(w, 200, map[string]any{"candidates": candidates})
+		return
+	}
 	data, err := fetchCoverData(r.Context(), "https://musicbrainz.org/ws/2/release/?"+url.Values{"query": {body.Query}, "fmt": {"json"}, "limit": {"8"}}.Encode(), 2*1024*1024)
 	if err != nil {
 		apiError(w, 502, err)
@@ -119,7 +272,9 @@ func (a *App) searchArtwork(w http.ResponseWriter, r *http.Request) {
 func (a *App) previewArtwork(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	release := r.URL.Query().Get("release")
-	if err != nil || id < 1 || !releaseID.MatchString(release) {
+	provider, catalogID, catalog := strings.Cut(release, ":")
+	numericID, numericErr := strconv.ParseInt(catalogID, 10, 64)
+	if err != nil || id < 1 || !releaseID.MatchString(release) && (!catalog || provider != "itunes" && provider != "netease" || numericErr != nil || numericID < 1 || strconv.FormatInt(numericID, 10) != catalogID) {
 		apiError(w, 400, errors.New("Invalid cover candidate"))
 		return
 	}
@@ -127,7 +282,19 @@ func (a *App) previewArtwork(w http.ResponseWriter, r *http.Request) {
 		apiError(w, 404, err)
 		return
 	}
-	data, err := fetchCoverData(r.Context(), "https://coverartarchive.org/release/"+release+"/front-1200", 8*1024*1024)
+	endpoint, source, sourceURL := "https://coverartarchive.org/release/"+release+"/front-1200", "MusicBrainz / Cover Art Archive", "https://musicbrainz.org/release/"+release
+	if catalog {
+		endpoint, err = catalogArtworkImage(r.Context(), provider, catalogID)
+		if err != nil {
+			apiError(w, 502, err)
+			return
+		}
+		source, sourceURL = "Apple Music / iTunes", "https://music.apple.com/album/"+catalogID
+		if provider == "netease" {
+			source, sourceURL = "NetEase Music", "https://music.163.com/album?id="+catalogID
+		}
+	}
+	data, err := fetchCoverData(r.Context(), endpoint, 8*1024*1024)
 	if err != nil {
 		apiError(w, 502, err)
 		return
@@ -142,5 +309,5 @@ func (a *App) previewArtwork(w http.ResponseWriter, r *http.Request) {
 		apiError(w, 400, err)
 		return
 	}
-	respond(w, 200, map[string]any{"image": base64.StdEncoding.EncodeToString(canonical), "width": config.Width, "height": config.Height, "source": "MusicBrainz / Cover Art Archive", "url": "https://musicbrainz.org/release/" + release})
+	respond(w, 200, map[string]any{"image": base64.StdEncoding.EncodeToString(canonical), "width": config.Width, "height": config.Height, "source": source, "url": sourceURL})
 }

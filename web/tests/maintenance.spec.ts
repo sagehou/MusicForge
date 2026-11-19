@@ -1,7 +1,7 @@
 import { routeLibrary } from "./library-fixture";
 import { test, expect, type Page } from "@playwright/test";
 import type { MaintenanceOptions, Source } from "../src/types";
-import { libraryQuality } from "../src/library-quality";
+import { libraryQuality, numberingIssues } from "../src/library-quality";
 import { shiftLyrics } from "../src/lyrics-timeline";
 import { openWorkbench, setPreference } from "./preferences";
 
@@ -36,9 +36,14 @@ test("quality decisions require an ignore reason and can be reopened", async ({ 
   await page.goto("/library?view=tracks&mode=organize");
   await openWorkbench(page, "issues");
   const quality = page.getByRole("region", { name: "Library quality report", exact: true });
+  await expect(quality.locator(".source-check-list")).toContainText("Album missing numbers: 2");
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.locator("#maintenance-workbench").screenshot({ path: "test-results/workbench-source-checks-desktop.png", animations: "disabled" });
   await quality.getByRole("button", { name: "Identical source file hashes 2", exact: true }).click();
+  await expect(quality.locator(".source-check-list")).toContainText("Identical contents at 1 other source paths");
+  await expect(quality.locator(".source-check-list")).toContainText(sources[1].path);
   await expect(page.locator(".selection-bar")).toHaveCount(0);
-  await quality.getByRole("button", { name: "Select listed issue tracks", exact: true }).click();
+  await quality.getByRole("button", { name: "Select this page of issues", exact: true }).click();
   await quality.getByRole("combobox", { name: "Decision", exact: true }).selectOption("ignored");
   await expect(quality.getByRole("button", { name: "Save decision", exact: true })).toBeDisabled();
   await quality.getByLabel("Reason / note", { exact: true }).fill("Intentional duplicate edition");
@@ -61,25 +66,30 @@ test("quality decisions require an ignore reason and can be reopened", async ({ 
   await expect(quality.getByRole("textbox", { name: "Reason / note", exact: true })).toHaveValue("Intentional duplicate edition");
 });
 
-test("maintenance suggestions preview exact groups and retain failed selections", async ({ page }) => {
+test("audio conversion has one preview flow and never queues lyrics or loudness", async ({ page }) => {
   await mock(page);
-  const third: Source = { ...sources[0], id: 3, path: "Artist/Album/04.flac", title: "Fourth track", track: 4, output: "Artist/Album/04.opus", lyrics: { state: "ready", output: "Artist/Album/04.opus", signature: "fourth", checked: 77 } };
-  await routeLibrary(page, route => route.fulfill({ json: [...sources, third] }));
-  const writes: { path: string; ids: number[] }[] = [];
-  for (const path of ["/library/rebuild", "/lyrics/search", "/maintenance/loudness"]) await page.route(`**/api${path}`, route => {
-    if (route.request().method() === "GET") return route.fulfill({ json: { state: "idle" } });
-    writes.push({ path, ids: route.request().postDataJSON().ids });
-    return route.fulfill(path === "/lyrics/search" ? { status: 409, json: { error: "Lyrics maintenance is already running" } } : { status: 202, json: { ok: true } });
+  let plans = 0, builds = 0;
+  const otherWrites: string[] = [];
+  await page.route("**/api/library/plan", route => {
+    plans++; expect(route.request().postDataJSON()).toEqual({ ids: [1, 2] });
+    return route.fulfill({ json: { encoding: settings.encoding, tracks: 1, skipped: 1, unverified: 0, input_bytes: 1000000, estimated_output_bytes: 2880000, current_output_bytes: 123, largest_source_bytes: 1000000, staging_limit_bytes: 4294967296, unknown_duration: 0, reasons: { missing: 1 } } });
+  });
+  await page.route("**/api/library/rebuild", route => { builds++; expect(route.request().postDataJSON()).toEqual({ ids: [1, 2] }); return route.fulfill({ status: 202, json: { ok: true } }); });
+  for (const path of ["/lyrics/search", "/maintenance/loudness"]) await page.route(`**/api${path}`, route => {
+    if (route.request().method() === "POST") otherWrites.push(path);
+    return route.fulfill({ json: { state: "idle" } });
   });
   await page.goto("/library?mode=organize"); await openWorkbench(page, "suggestions");
-  const review = page.getByRole("region", { name: "Maintenance suggestions", exact: true });
-  await review.getByRole("button", { name: "Preview maintenance suggestions", exact: true }).click();
-  await expect(review).toContainText("3 suggested actions"); expect(writes).toHaveLength(0);
-  await review.getByLabel("Select all suggestions", { exact: true }).check();
-  await review.getByRole("button", { name: "Start 3 selected actions", exact: true }).click();
-  await expect(review.getByRole("alert")).toContainText("already running");
-  await expect(review.getByRole("button", { name: "Start 1 selected actions", exact: true })).toBeEnabled();
-  expect(writes).toEqual([{ path: "/library/rebuild", ids: [2] }, { path: "/lyrics/search", ids: [1] }, { path: "/maintenance/loudness", ids: [3] }]);
+  const conversion = page.getByRole("region", { name: "Audio conversion", exact: true });
+  await expect(conversion).toContainText("No output1");
+  expect(plans + builds).toBe(0);
+  await expect(conversion.getByRole("button", { name: "Start this build", exact: true })).toHaveCount(0);
+  await conversion.getByRole("button", { name: "Preview current scope", exact: true }).click();
+  await expect(conversion).toContainText("1 tracks need building · 1 skipped");
+  expect(builds).toBe(0);
+  await conversion.getByRole("button", { name: "Start this build", exact: true }).click();
+  await expect.poll(() => builds).toBe(1);
+  expect(plans).toBe(1); expect(otherWrites).toEqual([]);
 });
 
 test("operation snapshots precede explicit undo and conflicts stay visible", async ({ page }) => {
@@ -91,15 +101,50 @@ test("operation snapshots precede explicit undo and conflicts stay visible", asy
   await page.route("**/api/maintenance/operations/operation/undo", route => { expect(route.request().postDataJSON()).toEqual({ items: [0] }); writes++; return route.fulfill({ status: 202, json: { ok: true } }); });
   await page.route("**/api/maintenance/undo", route => route.fulfill({ json: writes ? { state: "complete", total: 1, processed: 1, updated: 0, failed: 1, skipped: 0, issues: [{ id: 1, error: "Maintenance undo conflict: lyrics changed; current file preserved" }] } : { state: "idle" } }));
   await page.goto("/library?mode=organize"); await openWorkbench(page, "history");
-  const log = page.getByRole("region", { name: "Operation records and undo", exact: true });
-  await log.getByRole("button", { name: "Review operation", exact: true }).click();
+  const log = page.getByRole("region", { name: "Change log", exact: true });
+  await log.getByRole("button", { name: "View changes", exact: true }).click();
   await log.getByRole("button", { name: "Compare saved snapshots", exact: true }).click();
   await expect(log.getByRole("textbox", { name: "Before", exact: true })).toHaveValue("[00:01]Original");
   await expect(log.getByRole("textbox", { name: "After", exact: true })).toHaveValue("[00:02]New"); expect(writes).toBe(0);
   await page.setViewportSize({ width: 1440, height: 1000 });
   await log.screenshot({ path: "test-results/maintenance-undo-desktop.png", animations: "disabled" });
+  await expect(log.getByRole("button", { name: "Confirm undo of 0 items", exact: true })).toBeDisabled();
+  await log.getByRole("checkbox").check();
   await log.getByRole("button", { name: "Confirm undo of 1 items", exact: true }).click();
   await expect(log.getByRole("status")).toContainText("current file preserved"); expect(writes).toBe(1);
+});
+
+test("change log searches paths and filters results without editing files", async ({ page }) => {
+  await mock(page);
+  const operations = Array.from({ length: 12 }, (_, index) => ({ id: `change-${index}`, kind: index % 2 ? "artwork" : "lyrics", created: 1700000000000000000 + index * 1e9, items: [{ id: index + 1, path: `Artist/Album/${index}.flac`, output: `Artist/Album/${index}.opus`, state: index === 2 ? "failed" : "applied", undoable: index !== 2, error: index === 2 ? "Lyrics changed; current file preserved" : undefined }] }));
+  let writes = 0;
+  await page.route("**/api/maintenance/operations", route => route.fulfill({ json: operations }));
+  await page.route("**/api/maintenance/operations/*/undo", route => { writes++; return route.fulfill({ json: {} }); });
+  await page.route("**/api/maintenance/undo", route => route.fulfill({ json: { state: "idle" } }));
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.goto("/library?mode=organize"); await openWorkbench(page, "history");
+  const log = page.locator("#workbench-panel-history .operation-log");
+  await expect(log.locator("tbody tr")).toHaveCount(10);
+  await expect(log.locator(".maintenance-report")).toHaveCount(0);
+  await page.locator("#maintenance-workbench").screenshot({ path: "test-results/workbench-change-log-desktop.png", animations: "disabled" });
+  await log.getByRole("button", { name: "Next changes page", exact: true }).click();
+  await expect(log.locator("tbody tr")).toHaveCount(2);
+  await log.getByRole("searchbox", { name: "Search paths or errors", exact: true }).fill("2.flac");
+  await expect(log.locator("tbody tr")).toHaveCount(1);
+  await expect(log.locator("tbody")).toContainText("Failed 1");
+  await log.getByRole("combobox", { name: "Change type", exact: true }).selectOption("artwork");
+  await expect(log).toContainText("No changes match these filters");
+  await log.getByRole("combobox", { name: "Change type", exact: true }).selectOption("all");
+  await log.getByRole("searchbox", { name: "Search paths or errors", exact: true }).fill("");
+  await log.getByRole("combobox", { name: "Result", exact: true }).selectOption("failed");
+  await expect(log.locator("tbody tr")).toHaveCount(1);
+  await expect(log.getByRole("link", { name: "Open task logs", exact: true })).toHaveAttribute("href", "/jobs");
+  expect(writes).toBe(0);
+  await page.setViewportSize({ width: 320, height: 844 });
+  await setPreference(page, "language", "zh-CN"); await setPreference(page, "theme", "dark");
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
+  await expect(log.locator("tbody")).toContainText("失败 1");
+  await page.locator("#maintenance-workbench").screenshot({ path: "test-results/workbench-change-log-phone-dark-zh.png", animations: "disabled" });
 });
 
 test("storage checks and migration previews keep settings unchanged on desktop and phone", async ({ page }) => {
@@ -138,6 +183,9 @@ test("quality report flags exact duplicates and numbering without changing sourc
   const report = libraryQuality(sources);
   expect(report.duplicates.map(source => source.id)).toEqual([1, 2]);
   expect(report.numbering.map(source => source.id)).toEqual([1, 2]);
+  expect(numberingIssues(sources)).toEqual({ missing: ["2"], repeated: [], untagged: 0 });
+  expect(numberingIssues([{ ...sources[0], track: 0 }, { ...sources[1], track: 3 }, { ...sources[1], id: 3, track: 3 }])).toEqual({ missing: ["1–2"], repeated: [3], untagged: 1 });
+  expect(libraryQuality([{ ...sources[0], path: "Root/Artist/Album A/01.flac" }, { ...sources[0], id: 3, path: "Root/Artist/Album B/01.flac" }]).numbering).toHaveLength(0);
   expect(report.duration).toHaveLength(0);
   expect(report.lyrics.map(source => source.id)).toEqual([1]);
   expect(JSON.stringify(sources)).toBe(before);
@@ -335,11 +383,19 @@ test("output cover correction previews a crop and sends an owned replacement exp
   await expect(editor.getByLabel("Artist / album search", { exact: true })).toBeVisible();
   const png = await page.evaluate(() => { const canvas = document.createElement("canvas"); canvas.width = 64; canvas.height = 32; const ctx = canvas.getContext("2d")!; ctx.fillStyle = "#4ca3b2"; ctx.fillRect(0, 0, 64, 32); return canvas.toDataURL("image/png").split(",")[1]; });
   await page.route("**/api/library/1/artwork/search", route => {
-    expect(route.request().postDataJSON()).toEqual({ query: "Artist Album" });
-    return route.fulfill({ json: { candidates: [{ id: "album", title: "Album", artist: "Artist", country: "GB", date: "2026", source: "Cover Art Archive", url: "https://coverartarchive.org/release/album" }] } });
+    const body = route.request().postDataJSON();
+    expect(body.query).toBe("Artist Album");
+    if (body.provider === "itunes") return route.fulfill({ status: 502, json: { error: "Cover provider returned HTTP 503" } });
+    expect(body.provider).toBe("netease");
+    return route.fulfill({ json: { candidates: [{ id: "netease:23505", title: "Album", artist: "Artist", country: "", date: "2026", source: "NetEase Music", url: "https://music.163.com/album?id=23505" }] } });
   });
-  await page.route("**/api/library/1/artwork/preview?release=album", route => route.fulfill({ json: { image: png, width: 64, height: 32, source: "Cover Art Archive", url: "https://coverartarchive.org/release/album" } }));
+  await page.route("**/api/library/1/artwork/preview?release=netease%3A23505", route => route.fulfill({ json: { image: png, width: 64, height: 32, source: "NetEase Music", url: "https://music.163.com/album?id=23505" } }));
+  await expect(editor.getByLabel("Cover source", { exact: true })).toHaveValue("itunes");
   await editor.getByLabel("Artist / album search", { exact: true }).press("Enter");
+  await expect(editor.getByRole("alert")).toContainText("503");
+  await editor.getByRole("button", { name: "Search the other source", exact: true }).click();
+  await expect(editor.getByLabel("Cover source", { exact: true })).toHaveValue("netease");
+  await expect(editor.getByRole("alert")).toHaveCount(0);
   await editor.getByRole("button", { name: "Preview this cover", exact: true }).click();
   await expect(editor.getByRole("status")).toContainText("64 × 32 px");
   expect(writes).toBe(0);

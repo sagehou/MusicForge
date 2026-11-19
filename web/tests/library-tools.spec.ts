@@ -152,8 +152,8 @@ test("online cover preview shows dimensions and requires a separate save", async
     await saving;
     return route.fulfill({ json: { ok: true } });
   });
-  await page.route("**/api/library/1/artwork/search", route => { expect(route.request().postDataJSON()).toEqual({ query: "Artist Album" }); return route.fulfill({ json: { candidates: [{ id: "release", title: "Album", artist: "Artist", country: "GB", date: "2026", source: "MusicBrainz / Cover Art Archive", url: "https://musicbrainz.org/release/release" }] } }); });
-  await page.route("**/api/library/1/artwork/preview?release=release", route => route.fulfill({ json: { image, width: 64, height: 32, source: "MusicBrainz / Cover Art Archive", url: "https://musicbrainz.org/release/release" } }));
+  await page.route("**/api/library/1/artwork/search", route => { expect(route.request().postDataJSON()).toEqual({ query: "Artist Album", provider: "itunes" }); return route.fulfill({ json: { candidates: [{ id: "itunes:123", title: "Album", artist: "Artist", country: "GB", date: "2026", source: "Apple Music / iTunes", url: "https://music.apple.com/album/123" }] } }); });
+  await page.route("**/api/library/1/artwork/preview?release=itunes%3A123", route => route.fulfill({ json: { image, width: 64, height: 32, source: "Apple Music / iTunes", url: "https://music.apple.com/album/123" } }));
   await page.goto("/library?view=albums&artist=Artist&album=Artist%2FAlbum");
   await page.getByRole("button", { name: "Correct output cover", exact: true }).click();
   await expect(page.locator(".artwork-editor")).toBeVisible();

@@ -43,14 +43,14 @@ export function LyricsSearchButton({ ids, getIDs, all = false, refresh = false, 
 }
 
 export function LyricsMaintenance({ inventory, scopeQuery, scope, notify }: { inventory: LyricsInventory; scopeQuery: string; scope?: "album" | "artist"; notify: Notice }) {
-  const { t } = useI18n();
+  const { t, number } = useI18n();
   const coverage = scope === "album" ? "lyrics.albumCoverage" : scope === "artist" ? "lyrics.artistCoverage" : "lyrics.coverage";
   const getIDs = scope ? async () => (await api<{ ids: number[] }>("/library/selection", "POST", { query: scopeQuery, ids_only: true, playable: true })).ids : undefined;
-  return <section className="library-comparison lyrics-panel" id="lyrics-maintenance">
-    <div className="lyrics-settings"><div className="section-heading"><h3>{t("lyrics.manage")}</h3><div className="actions"><small className="maintenance-count" aria-label={t(coverage, { done: inventory.checked, total: inventory.total })}>{inventory.checked} / {inventory.total}</small><InfoHint>{t("lyrics.inventoryHint")}</InfoHint></div></div>
+  return <section className="lyrics-panel" id="lyrics-maintenance" aria-label={t("lyrics.manage")}>
+    <div className="lyrics-settings">
       <section className="lyrics-library-summary" aria-label={t(scope === "album" ? "lyrics.albumStatus" : scope === "artist" ? "lyrics.artistStatus" : "lyrics.libraryStatus")}>
-        <strong>{t(coverage, { done: inventory.checked, total: inventory.total })}</strong>
-        <p>{t("lyrics.inventory", { found: inventory.counts.ready, missing: inventory.counts.not_found, instrumental: inventory.counts.instrumental, review: inventory.counts.needs_review, failed: inventory.counts.failed, unchecked: inventory.counts.unchecked })}</p>
+        <div className="section-heading"><strong>{t(coverage, { done: inventory.checked, total: inventory.total })}</strong><InfoHint>{t("lyrics.inventoryHint")}</InfoHint></div>
+        <dl className="lyrics-inventory">{(["ready", "not_found", "instrumental", "needs_review", "failed", "unchecked"] as const).map(state => <div key={state} data-state={state}><dt>{t(`lyrics.state.${state}`)}</dt><dd>{number(inventory.counts[state])}</dd></div>)}</dl>
       </section>
       <LyricsControls notify={notify} disabled={!!scope && inventory.total === 0} getIDs={getIDs} label={scope === "album" ? "lyrics.searchAlbum" : scope === "artist" ? "lyrics.searchArtist" : "lyrics.searchAll"} />
     </div>

@@ -859,7 +859,7 @@
   "buildPlan.unknown": "{count} tracks have unknown duration and are excluded from the output estimate.",
   "buildPlan.stagingWarning": "A source file exceeds the staging limit. Increase MUSICFORGE_STAGING_MAX_BYTES before starting.",
   "buildPlan.start": "Confirm conversion",
-  "quality.title": "Library quality report",
+  "quality.title": "Source checks",
   "quality.hint": "These checks use the indexed source information. Marking an issue as a to-do or ignoring it records your decision; it does not repair audio or tags.",
   "quality.metadata": "Missing title / artist / album",
   "quality.duration": "Unknown or unusual duration",

@@ -2707,6 +2707,8 @@ input[role="switch"]:checked::after { transform: translateX(20px); background: v
 .conversion-summary dt { font-size: var(--font-size-small); color: var(--muted); }
 .conversion-summary dd { margin: 4px 0 0; font-size: 1.5rem; font-weight: 600; font-variant-numeric: tabular-nums; }
 .operation-log { min-width: 0; }
+.operation-log > .section-heading { flex-wrap: wrap; }
+.operation-log > .section-heading > h3 { flex-shrink: 0; }
 .operation-filters .field:not(:first-child) { flex: 0 1 180px; }
 .operation-table-wrap { container-type: inline-size; overflow: auto; border-radius: 10px; }
 .operation-table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: var(--font-size-small); }

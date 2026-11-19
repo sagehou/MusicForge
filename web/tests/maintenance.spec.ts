@@ -35,7 +35,7 @@ test("quality decisions require an ignore reason and can be reopened", async ({ 
   });
   await page.goto("/library?view=tracks&mode=organize");
   await openWorkbench(page, "issues");
-  const quality = page.getByRole("region", { name: "Library quality report", exact: true });
+  const quality = page.getByRole("region", { name: "Source checks", exact: true });
   await expect(quality.locator(".source-check-list")).toContainText("Album missing numbers: 2");
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.locator("#maintenance-workbench").screenshot({ path: "test-results/workbench-source-checks-desktop.png", animations: "disabled" });
@@ -390,11 +390,11 @@ test("output cover correction previews a crop and sends an owned replacement exp
     return route.fulfill({ json: { candidates: [{ id: "netease:23505", title: "Album", artist: "Artist", country: "", date: "2026", source: "NetEase Music", url: "https://music.163.com/album?id=23505" }] } });
   });
   await page.route("**/api/library/1/artwork/preview?release=netease%3A23505", route => route.fulfill({ json: { image: png, width: 64, height: 32, source: "NetEase Music", url: "https://music.163.com/album?id=23505" } }));
-  await expect(editor.getByLabel("Cover source", { exact: true })).toHaveValue("itunes");
+  await expect(editor.getByRole("combobox", { name: "Cover source", exact: true })).toHaveValue("itunes");
   await editor.getByLabel("Artist / album search", { exact: true }).press("Enter");
   await expect(editor.getByRole("alert")).toContainText("503");
   await editor.getByRole("button", { name: "Search the other source", exact: true }).click();
-  await expect(editor.getByLabel("Cover source", { exact: true })).toHaveValue("netease");
+  await expect(editor.getByRole("combobox", { name: "Cover source", exact: true })).toHaveValue("netease");
   await expect(editor.getByRole("alert")).toHaveCount(0);
   await editor.getByRole("button", { name: "Preview this cover", exact: true }).click();
   await expect(editor.getByRole("status")).toContainText("64 × 32 px");

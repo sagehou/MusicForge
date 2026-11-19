@@ -133,9 +133,10 @@ test("album and artist lyrics actions use all playable tracks in their scope, in
   await expect(page.getByLabel("Search library", { exact: true })).toHaveValue("Song 01");
   await expect(page.getByRole("button", { name: "Fill lyrics for all artifacts", exact: true })).toHaveCount(0);
   await openLyricsMaintenance(page);
-  await expect(page.locator(".lyrics-settings")).toContainText("0 / 63");
+  await expect(page.locator(".lyrics-library-summary")).toContainText("Album checked 0/63 tracks");
   const pending = page.locator("#workbench-panel-lyrics .content-maintenance");
   await expect(pending.locator(".content-maintenance-list > li")).toHaveCount(20);
+  await page.locator("#maintenance-workbench").screenshot({ path: "test-results/workbench-lyrics-list-desktop.png", animations: "disabled" });
   await pending.getByRole("button", { name: "Next lyrics page", exact: true }).click();
   await expect(pending.locator(".content-maintenance-list > li").first()).toContainText("Song 21");
   await pending.getByLabel("Find a track", { exact: true }).fill("Song 63");

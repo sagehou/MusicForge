@@ -10,6 +10,7 @@ import { InfoHint } from "./info-hint";
 import { InlineDetails } from "./inline-details";
 import { LyricsProviderDiagnostics } from "./lyrics-provider-diagnostics";
 import { CandidateAudition } from "./artifact-audition";
+import { useRevealPreview } from "./use-reveal-preview";
 
 type LyricsResponse = {
   options: { auto_search: boolean; min_score: number; providers?: OnlineProvider[] };
@@ -205,6 +206,8 @@ export function LyricsPicker({ source, notify, close, saved, previous, next, onB
   const [diagnostic, setDiagnostic] = useState<CandidateDiagnostic>();
   const [previewing, setPreviewing] = useState(false);
   const [previewError, setPreviewError] = useState("");
+  const [manualPreview, setManualPreview] = useState(false);
+  const previewPane = useRevealPreview<HTMLDivElement>(!standalone && manualPreview && (preview || diagnostic || previewError));
   const [translation, setTranslation] = useState(false);
   const [romanization, setRomanization] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -257,8 +260,9 @@ export function LyricsPicker({ source, notify, close, saved, previous, next, onB
     searchController.current?.abort();
     setGroups(old => old.map(group => ({ ...group, loading: false })));
   }
-  const choose = useCallback(async (choice: CandidateChoice) => {
+  const choose = useCallback(async (choice: CandidateChoice, manual = false) => {
     autoSelect.current = false;
+    setManualPreview(manual);
     previewController.current?.abort();
     const controller = new AbortController(); previewController.current = controller;
     setSavedSelection(false); setSelected(choice); setPreview(undefined); setDiagnostic(undefined); setPreviewing(true); setPreviewError(""); setTranslation(false); setRomanization(false);
@@ -328,14 +332,14 @@ export function LyricsPicker({ source, notify, close, saved, previous, next, onB
     </div>
     <div className="lyrics-candidate-groups">
     {instrumental && <div className="lyrics-candidate-row"><label className="lyrics-candidate lyrics-instrumental" data-selected={!!selected?.instrumental}>
-      <input type="radio" name={`lyrics-candidate-${source.id}`} aria-label={t("lyrics.chooseInstrumental")} disabled={saving || restoring || !instrumental?.token} checked={!!selected?.instrumental} onChange={() => instrumental && instrumental.candidates[0] && void choose({ token: instrumental.token, candidate: instrumental.candidates[0], instrumental: true })} />
+      <input type="radio" name={`lyrics-candidate-${source.id}`} aria-label={t("lyrics.chooseInstrumental")} disabled={saving || restoring || !instrumental?.token} checked={!!selected?.instrumental} onChange={() => instrumental && instrumental.candidates[0] && void choose({ token: instrumental.token, candidate: instrumental.candidates[0], instrumental: true }, true)} />
       <Music2 size={18} aria-hidden="true" /><span><strong>{t("lyrics.instrumental")}</strong></span>
     </label><InfoHint label={t("lyrics.chooseInstrumental")}>{t("lyrics.instrumentalHint")}</InfoHint></div>}
     <label className="candidate-source-filter"><span>{t("lyrics.sourceFilter")}</span><select value={providerFilter} disabled={saving} onChange={event => setProviderFilter(event.target.value)}><option value="all">{t("lyrics.allCandidates")}</option>{providers.map(provider => <option key={provider} value={provider}>{t(`lyrics.name.${provider}`)}</option>)}</select></label>{choices.filter(choice => providerFilter === "all" || choice.candidate.provider === providerFilter).map(({ token, candidate }) => <div className="lyrics-candidate-row" key={`${token}:${candidate.index}`}><label className="lyrics-candidate" data-recommended={recommended?.token === token && recommended?.candidate.index === candidate.index} data-selected={selected?.token === token && selected?.candidate.index === candidate.index}>
-      <input type="radio" name={`lyrics-candidate-${source.id}`} aria-label={t("lyrics.previewCandidate", { title: candidate.title, artist: candidate.artist, provider: t(`lyrics.name.${candidate.provider}`) })} disabled={saving || !token} checked={!!selected && selected.token === token && selected.candidate.index === candidate.index} onChange={() => token && void choose({ token, candidate })} />
+      <input type="radio" name={`lyrics-candidate-${source.id}`} aria-label={t("lyrics.previewCandidate", { title: candidate.title, artist: candidate.artist, provider: t(`lyrics.name.${candidate.provider}`) })} disabled={saving || !token} checked={!!selected && selected.token === token && selected.candidate.index === candidate.index} onChange={() => token && void choose({ token, candidate }, true)} />
       <span><strong dir="auto">{candidate.title}{recommended?.token === token && recommended?.candidate.index === candidate.index && <em className="lyrics-recommended">{t("lyrics.recommended")}</em>}</strong><span dir="auto">{candidate.artist} · {candidate.album || "—"} · {candidateDuration(candidate.duration)}</span><span className="candidate-source">{t(`lyrics.name.${candidate.provider}`)}</span><small className="candidate-confidence" data-high={candidate.high_confidence}>{t(candidate.high_confidence ? "lyrics.matchHigh" : "lyrics.matchReview")}{candidate.match_score !== undefined && <> · {t("lyrics.matchScore", { score: candidate.match_score })}</>}{candidate.duration_delta !== undefined && <> · {t("lyrics.durationDelta", { seconds: Math.round(candidate.duration_delta * 100) / 100 })}</>}</small>{candidate.script === "simplified" && <small className="script-chip">{t("lyrics.simplified")}</small>}{candidate.script === "traditional" && <small className="script-chip">{t("lyrics.traditional")}</small>}{candidate.translation_script === "simplified" && <small className="script-chip">{t("lyrics.simplifiedTranslation")}</small>}</span>
     </label>{(!!candidate.match_reasons?.length || candidate.match_score < minScore) && <InfoHint label={t("lyrics.matchDetails", { title: candidate.title })}>{candidate.match_reasons?.map(reason => <p key={reason}>{t(`lyrics.reason.${reason}`)}</p>)}{candidate.match_score < minScore && <p>{t("lyrics.reason.threshold", { score: minScore })}</p>}</InfoHint>}</div>)}</div>
-    <div className="lyrics-preview-pane">
+    <div ref={previewPane} className="lyrics-preview-pane preview-reveal">
     {previewing && <p role="status">{t("lyrics.loadingPreview")}</p>}
     {previewError && <div className="repair-warning" role="alert"><p>{errorMessage(previewError)}</p><Button type="button" variant="ghost" size="sm" disabled={saving} onClick={reloadCandidates}>{t("lyrics.reloadCandidates")}</Button></div>}
     {preview && <section className="lyrics-preview" aria-label={t("lyrics.preview")}>

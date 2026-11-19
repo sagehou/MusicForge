@@ -5,14 +5,16 @@ import { useI18n } from "../i18n";
 import type { Source } from "../types";
 import { Button } from "./ui/button";
 import { EditHistory } from "./edit-history";
-import { ArtworkSearch, artworkFile } from "./artwork-search";
+import { ArtworkSearch, artworkFile, type ArtworkPreview } from "./artwork-search";
 import { InlineDetails } from "./inline-details";
 import { InfoHint } from "./info-hint";
+import { useRevealPreview } from "./use-reveal-preview";
 
 export function ArtworkEditor({ source, saved, close, returnFocusID, onBusyChange, panelID = `artwork-editor-${source.id}` }: { source: Source; saved: () => void; close: () => void; returnFocusID: string; panelID?: string; onBusyChange: (busy: boolean) => void }) {
   const { t, errorMessage } = useI18n();
   const [data, setData] = useState<{ token: string; override: boolean }>();
   const [file, setFile] = useState<File>();
+  const [origin, setOrigin] = useState<ArtworkPreview>();
   const [crop, setCrop] = useState(false);
   const [image, setImage] = useState("");
   const [busy, setBusy] = useState(false);
@@ -21,6 +23,7 @@ export function ArtworkEditor({ source, saved, close, returnFocusID, onBusyChang
   const [error, setError] = useState<Error>();
   const [attempt, setAttempt] = useState(0);
   const generation = useRef(0);
+  const preview = useRevealPreview<HTMLDivElement>(file, true);
   useEffect(() => { onBusyChange(busy || searching || processing); return () => onBusyChange(false); }, [busy, searching, processing, onBusyChange]);
   useEffect(() => {
     const controller = new AbortController();
@@ -61,6 +64,22 @@ export function ArtworkEditor({ source, saved, close, returnFocusID, onBusyChang
   return <InlineDetails className="artwork-editor" id={panelID} title={t("coverEdit.title")} subtitle={source.album || source.path} close={close} returnFocusID={returnFocusID} busy={busy || searching || processing} actions={<InfoHint>{t("coverEdit.hint", { path: source.path.split("/").slice(0, -1).join("/") || "." })} {t("coverEdit.limit")}</InfoHint>}>
     {error && <div role="alert" className="error-box"><p>{errorMessage(error.message)}</p>{!data && <Button size="sm" variant="outline" onClick={() => setAttempt(value => value + 1)}>{t("audition.reload")}</Button>}</div>}
     {!data && !error && <Loader2 size={18} className="animate-spin" />}
-    {data && <><ArtworkSearch source={source} disabled={busy || processing} loading={setSearching} choose={file => { setFile(file); setCrop(false); }} /><div className="artwork-editor-preview">{(image || source.artwork_url) && <img src={image || source.artwork_url} alt={t("coverEdit.preview")} />}</div><div className="actions"><label className="maintenance-upload"><Upload size={14} />{t("coverEdit.upload")}<input type="file" accept="image/jpeg,image/png" disabled={busy || processing || searching} onChange={event => { setFile(event.target.files?.[0]); event.target.value = ""; }} /></label><label className="check-field"><input type="checkbox" checked={crop} disabled={busy || processing || searching} onChange={event => setCrop(event.target.checked)} />{t("coverEdit.crop")}</label></div><div className="actions"><Button size="sm" disabled={busy || processing || searching || !image} onClick={() => void save()}>{busy || processing ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}{t("coverEdit.save")}</Button><Button size="sm" variant="outline" disabled={busy || searching || !data.override} onClick={() => { if (confirm(t("coverEdit.resetConfirm"))) void save(true); }}><RotateCcw size={14} />{t("coverEdit.reset")}</Button></div><EditHistory id={source.id} kind="artwork" disabled={busy || processing || searching} restore={content => { if (content.image) { setFile(artworkFile(content.image)); setCrop(false); } }} /></>}
+    {data && <>
+      <ArtworkSearch source={source} disabled={busy || processing} loading={setSearching} choose={(file, origin) => { setFile(file); setOrigin(origin); setCrop(false); }}>
+        <div ref={preview} className="artwork-editor-preview preview-reveal" tabIndex={-1} role="group" aria-label={t("coverEdit.preview")}>
+          {(file || source.artwork_url) && <div className="artwork-preview-image">{(image || source.artwork_url) && <img src={image || source.artwork_url} width={180} height={180} alt={t("coverEdit.preview")} />}</div>}
+          {origin && <p role="status">{t("coverSearch.loaded", { width: origin.width, height: origin.height })} · <a href={origin.url} target="_blank" rel="noreferrer">{origin.source}</a></p>}
+          <div className="actions">
+            <label className="maintenance-upload"><Upload size={14} />{t("coverEdit.upload")}<input type="file" accept="image/jpeg,image/png" disabled={busy || processing || searching} onChange={event => { const file = event.target.files?.[0]; if (file) { setFile(file); setOrigin(undefined); } event.target.value = ""; }} /></label>
+            <label className="check-field"><input type="checkbox" checked={crop} disabled={busy || processing || searching} onChange={event => setCrop(event.target.checked)} />{t("coverEdit.crop")}</label>
+          </div>
+          <div className="actions">
+            <Button size="sm" disabled={busy || processing || searching || !image} onClick={() => void save()}>{busy || processing ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}{t("coverEdit.save")}</Button>
+            <Button size="sm" variant="outline" disabled={busy || searching || !data.override} onClick={() => { if (confirm(t("coverEdit.resetConfirm"))) void save(true); }}><RotateCcw size={14} />{t("coverEdit.reset")}</Button>
+          </div>
+        </div>
+      </ArtworkSearch>
+      <EditHistory id={source.id} kind="artwork" disabled={busy || processing || searching} restore={content => { if (content.image) { setFile(artworkFile(content.image)); setOrigin(undefined); setCrop(false); } }} />
+    </>}
   </InlineDetails>;
 }

@@ -945,7 +945,7 @@
   "coverSearch.search": "Search cover candidates",
   "coverSearch.preview": "Preview this cover",
   "coverSearch.empty": "No covers found from this source.",
-  "coverSearch.loaded": "Preview loaded: {width} × {height} px. Save the output cover to apply.",
+  "coverSearch.loaded": "{width} × {height} px",
   "tools.stop": "Stop this operation",
   "tags.title": "Correct output tags",
   "tags.hint": "Select fields, then preview and apply. A checked empty field removes that tag. Up to 1000 tracks per batch, without re-encoding or changing source files.",

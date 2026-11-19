@@ -10,6 +10,7 @@ import { InfoHint } from "./info-hint";
 import { LyricsMaintenance } from "./lyrics";
 import { ContentMaintenance } from "./content-maintenance";
 import type { LyricsInventory } from "../library-data";
+import { useRevealPreview } from "./use-reveal-preview";
 
 export function storageSize(bytes: number, locale: string) {
   const unit = Math.min(4, Math.floor(Math.log2(Math.max(bytes, 1)) / 10));
@@ -22,6 +23,7 @@ type Plan = { encoding: Encoding; tracks: number; skipped: number; unverified: n
 export function BuildPreview({ selection, notify, currentScope = false }: { selection: Selection; notify: Notice; currentScope?: boolean }) {
   const { t, locale, number, status } = useI18n();
   const [plan, setPlan] = useState<Plan>();
+  const planPreview = useRevealPreview<HTMLElement>(plan);
   const [scope, setScope] = useState<Selection>();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<Error>();
@@ -40,7 +42,7 @@ export function BuildPreview({ selection, notify, currentScope = false }: { sele
   return <div className="build-preview">
     <Button size="sm" variant="outline" disabled={busy || "ids" in selection && !selection.ids.length} onClick={() => void preview()}>{busy ? <Loader2 size={14} className="animate-spin" /> : <ClipboardList size={14} />}{t(currentScope ? "buildPlan.currentScope" : "all" in selection ? "buildPlan.all" : "buildPlan.selected")}</Button>
     {error && <p role="alert">{error.message}</p>}
-    {plan && <section className="maintenance-report" aria-label={t("buildPlan.title")}>
+    {plan && <section ref={planPreview} className="maintenance-report preview-reveal" aria-label={t("buildPlan.title")}>
       <div className="section-heading"><h3>{t("buildPlan.title")}</h3><Button size="icon" variant="ghost" disabled={busy} aria-label={t("app.dismiss")} onClick={() => setPlan(undefined)}><X size={16} /></Button></div>
       <p>{t("buildPlan.scope", { count: number(plan.tracks), skipped: number(plan.skipped) })}</p>
       <dl className="comparison-metrics">{([ ["input", plan.input_bytes], ["output", plan.estimated_output_bytes], ["current", plan.current_output_bytes], ["staging", plan.staging_limit_bytes] ] as const).map(([key, value]) => <div key={key}><dt>{t(`buildPlan.${key}`)}</dt><dd>{storageSize(value, locale)}</dd></div>)}</dl>

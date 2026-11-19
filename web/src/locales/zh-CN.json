@@ -900,7 +900,7 @@
   "coverSearch.search": "搜索封面候选",
   "coverSearch.preview": "预览此封面",
   "coverSearch.empty": "此来源没有找到封面。",
-  "coverSearch.loaded": "预览已载入：{width} × {height} 像素。保存输出封面后生效。",
+  "coverSearch.loaded": "{width} × {height} 像素",
   "tools.stop": "停止此操作",
   "tags.title": "修正输出标签",
   "tags.hint": "选择要修改的字段，预览后应用。勾选后留空会删除该标签。每批最多 1000 首，不重编码或修改源文件。",

@@ -6,6 +6,7 @@ import { audioTime, editLyricRow, lyricRows, lyricsTimeline, shiftLyrics, type L
 import { Button } from "./ui/button";
 import { EditHistory } from "./edit-history";
 import { InfoHint } from "./info-hint";
+import { useRevealPreview } from "./use-reveal-preview";
 
 type LyricsAssociation = { path: string; text: string; fingerprint: string; required: boolean };
 
@@ -21,6 +22,7 @@ export function LyricsEditor({ id, position, audition, canAudition, preview, sav
   const [error, setError] = useState<Error>();
   const [attempt, setAttempt] = useState(0);
   const [association, setAssociation] = useState<LyricsAssociation>();
+  const associationPreview = useRevealPreview<HTMLDivElement>(association);
   const cues = useMemo(() => lyricsTimeline(text), [text]);
   const timedText = useMemo(() => shiftLyrics(text, delay), [text, delay]);
   const rows = useMemo(() => lyricRows(timedText), [timedText]);
@@ -71,7 +73,7 @@ export function LyricsEditor({ id, position, audition, canAudition, preview, sav
     {!embedded && <div className="section-heading"><div className="actions"><h3>{t("lyricsEdit.title")}</h3><InfoHint>{t("lyricsEdit.hint")}</InfoHint></div><Button variant="ghost" size="icon" disabled={busy} aria-label={t("lyricsEdit.cancel")} onClick={close}><X size={16} /></Button></div>}
     <div className="actions"><Button size="sm" variant="outline" disabled={busy || !!token && (text !== initial || delay !== 0)} onClick={() => void reviewAssociation()}>{t("lyricsAssociation.review")}</Button><InfoHint>{t("lyricsAssociation.hint")}</InfoHint></div>
     {error && <div role="alert" className="error-box"><p>{errorMessage(error.message)}</p>{!token && !association && <Button size="sm" variant="outline" onClick={() => setAttempt(value => value + 1)}>{t("audition.reload")}</Button>}</div>}
-    {association && <div className="maintenance-report" role="region" aria-label={t("lyricsAssociation.title")}>
+    {association && <div ref={associationPreview} className="maintenance-report preview-reveal" role="region" aria-label={t("lyricsAssociation.title")}>
       <code>{association.path}</code>
       <label className="field"><span className="field-label">{t("lyricsAssociation.preview")}</span><textarea readOnly dir="auto" rows={7} aria-label={t("lyricsAssociation.preview")} value={association.text} /></label>
       {!association.required && <p role="status">{t("lyricsAssociation.current")}</p>}
